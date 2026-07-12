@@ -12,7 +12,14 @@ const compat = new FlatCompat({
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript", "prettier"),
   {
-    ignores: ["node_modules/**", ".next/**", "coverage/**", "playwright-report/**"],
+    ignores: [
+      "node_modules/**",
+      ".next/**",
+      "coverage/**",
+      "playwright-report/**",
+      // Archivo generado por Next.js (referencias triple-slash a tipos internos).
+      "next-env.d.ts",
+    ],
   },
   {
     rules: {
