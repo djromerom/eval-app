@@ -8,7 +8,9 @@ services:
       POSTGRES_PASSWORD: eval
       POSTGRES_DB: eval
     ports:
-      - "5432:5432"
+      # Puerto del host configurable (POSTGRES_PORT en .env) para evitar
+      # choques con otros Postgres locales. Default: 5432.
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +22,8 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      # Configurable (REDIS_PORT en .env). Default: 6379.
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redisdata:/data
     healthcheck:
