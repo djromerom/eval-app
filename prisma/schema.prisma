@@ -1,0 +1,565 @@
+// Modelo de datos — ver REQUERIMIENTOS_v2.md §4.
+// Convenciones: UUID v7 (ordenable), timestamps automáticos,
+// multi-tenant: toda tabla de negocio lleva institutionId + índice compuesto.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========== TENANT ==========
+
+model Institution {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  name      String
+  slug      String   @unique // para subdominio
+  code      String   @unique
+  logo      String?
+  colors    Json? // {primary, secondary, accent}
+  address   String?
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  academicYears AcademicYear[]
+  courses       Course[]
+  subjects      Subject[] // catálogo propio (null en Subject = global)
+  groups        Group[]
+  periods       Period[]
+  students      Student[]
+  evaluations   Evaluation[]
+  questionBank  QuestionBank[]
+  templates     EvaluationTemplate[]
+  scanBatches   ScanBatch[]
+}
+
+// ========== AUTH & USERS ==========
+
+model User {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  email         String      @unique
+  name          String
+  password      String? // hash bcrypt — solo para provider credentials
+  image         String?
+  emailVerified DateTime?
+  institutionId String      @db.Uuid
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  isActive      Boolean     @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  roles          UserRole[]
+  accounts       Account[]
+  teacherProfile Teacher?
+  evaluations    Evaluation[]
+  questionBank   QuestionBank[]
+  templates      EvaluationTemplate[]
+  scanBatches    ScanBatch[]
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+
+  @@index([institutionId])
+}
+
+// Requerido por @auth/prisma-adapter para vincular cuentas OAuth (Google/Microsoft)
+model Account {
+  id                String  @id @default(uuid(7)) @db.Uuid
+  userId            String  @db.Uuid
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model UserRole {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      RoleType
+  createdAt DateTime @default(now())
+
+  @@unique([userId, role])
+  @@index([userId])
+}
+
+enum RoleType {
+  SUPER_ADMIN
+  ADMIN
+  COORDINATOR
+  TEACHER
+}
+
+model Teacher {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @unique @db.Uuid
+  user      User     @relation(fields: [userId], references: [id])
+  idType    String // C.C., C.E.
+  idNumber  String
+  phone     String?
+  createdAt DateTime @default(now())
+
+  subjectAssignments TeacherSubjectAssignment[]
+}
+
+// ========== ACADEMIC STRUCTURE ==========
+
+model AcademicYear {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  year          Int // 2025, 2026
+  institutionId String      @db.Uuid
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  startDate     DateTime
+  endDate       DateTime
+  isCurrent     Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+
+  courses     Course[]
+  periods     Period[]
+  evaluations Evaluation[]
+
+  @@unique([institutionId, year])
+  @@index([institutionId])
+}
+
+model Course {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  name           String // "8°", "11°"
+  code           String
+  academicYearId String       @db.Uuid
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  institutionId  String       @db.Uuid
+  institution    Institution  @relation(fields: [institutionId], references: [id])
+  createdAt      DateTime     @default(now())
+
+  subjects CourseSubject[]
+  groups   Group[]
+
+  @@index([institutionId, academicYearId])
+}
+
+model Subject {
+  id            String       @id @default(uuid(7)) @db.Uuid
+  name          String // "Matemáticas", "Física"
+  code          String
+  icon          String?
+  institutionId String?      @db.Uuid // null = catálogo global
+  institution   Institution? @relation(fields: [institutionId], references: [id])
+  createdAt     DateTime     @default(now())
+
+  courses      CourseSubject[]
+  questionBank QuestionBank[]
+
+  @@index([institutionId])
+}
+
+model CourseSubject {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  courseId  String  @db.Uuid
+  course    Course  @relation(fields: [courseId], references: [id])
+  subjectId String  @db.Uuid
+  subject   Subject @relation(fields: [subjectId], references: [id])
+
+  teachers    TeacherSubjectAssignment[]
+  evaluations Evaluation[]
+  templates   EvaluationTemplate[]
+
+  @@unique([courseId, subjectId])
+  @@index([courseId])
+  @@index([subjectId])
+}
+
+model TeacherSubjectAssignment {
+  id              String        @id @default(uuid(7)) @db.Uuid
+  teacherId       String        @db.Uuid
+  teacher         Teacher       @relation(fields: [teacherId], references: [id])
+  courseSubjectId String        @db.Uuid
+  courseSubject   CourseSubject @relation(fields: [courseSubjectId], references: [id])
+
+  @@unique([teacherId, courseSubjectId])
+  @@index([teacherId])
+  @@index([courseSubjectId])
+}
+
+model Group {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  name          String // "2-01", "11-03"
+  courseId      String      @db.Uuid
+  course        Course      @relation(fields: [courseId], references: [id])
+  institutionId String      @db.Uuid
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  createdAt     DateTime    @default(now())
+
+  students    Student[]
+  evaluations EvaluationGroup[]
+
+  @@index([courseId])
+  @@index([institutionId])
+}
+
+model Period {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  name           String // "I Periodo", ..., "Final", "Diagnóstico"
+  academicYearId String       @db.Uuid
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  institutionId  String       @db.Uuid
+  institution    Institution  @relation(fields: [institutionId], references: [id])
+  startDate      DateTime
+  endDate        DateTime
+  order          Int // 1, 2, 3, 4
+  createdAt      DateTime     @default(now())
+
+  evaluations Evaluation[]
+
+  @@unique([institutionId, academicYearId, name])
+  @@index([institutionId, academicYearId])
+}
+
+model Student {
+  id             String      @id @default(uuid(7)) @db.Uuid
+  name           String
+  idType         String // T.I., C.C., NUI, R.C.
+  idNumber       String
+  code           String // código estudiantil único por institución (va en el QR)
+  groupId        String      @db.Uuid
+  group          Group       @relation(fields: [groupId], references: [id])
+  institutionId  String      @db.Uuid
+  institution    Institution @relation(fields: [institutionId], references: [id])
+  enrollmentYear Int
+  isActive       Boolean     @default(true)
+  deletedAt      DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  answerSheets AnswerSheet[]
+  codeHistory  StudentCodeHistory[]
+
+  @@unique([institutionId, code])
+  @@index([groupId])
+  @@index([institutionId])
+}
+
+// Si un estudiante cambia de código, el QR viejo debe seguir funcionando
+model StudentCodeHistory {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  studentId String   @db.Uuid
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  oldCode   String
+  newCode   String
+  changedAt DateTime @default(now())
+
+  @@index([studentId])
+}
+
+// ========== EVALUATIONS ==========
+
+model Evaluation {
+  id              String              @id @default(uuid(7)) @db.Uuid
+  title           String
+  description     String?
+  version         Int                 @default(1)
+  courseSubjectId String              @db.Uuid
+  courseSubject   CourseSubject       @relation(fields: [courseSubjectId], references: [id])
+  periodId        String?             @db.Uuid // null = no ligada a periodo (final, diagnóstico)
+  period          Period?             @relation(fields: [periodId], references: [id])
+  academicYearId  String              @db.Uuid
+  academicYear    AcademicYear        @relation(fields: [academicYearId], references: [id])
+  institutionId   String              @db.Uuid
+  institution     Institution         @relation(fields: [institutionId], references: [id])
+  teacherId       String              @db.Uuid
+  teacher         User                @relation(fields: [teacherId], references: [id])
+  status          DraftStatus         @default(DRAFT)
+  bookletNumber   Int? // null = único; 1, 2, 3… para múltiples cuadernillos
+  totalQuestions  Int                 @default(0)
+  templateId      String?             @db.Uuid
+  template        EvaluationTemplate? @relation(fields: [templateId], references: [id])
+  parentVersionId String?             @db.Uuid // versión anterior (historial inmutable)
+  parentVersion   Evaluation?         @relation("VersionHistory", fields: [parentVersionId], references: [id])
+  revisions       Evaluation[]        @relation("VersionHistory")
+  deletedAt       DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  sections     EvaluationSection[]
+  answerSheets AnswerSheet[]
+  groups       EvaluationGroup[]
+  scanBatches  ScanBatch[]
+
+  @@index([courseSubjectId, academicYearId])
+  @@index([institutionId, status])
+  @@index([teacherId])
+}
+
+enum DraftStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  PUBLISHED
+}
+
+model EvaluationGroup {
+  evaluationId String     @db.Uuid
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  groupId      String     @db.Uuid
+  group        Group      @relation(fields: [groupId], references: [id])
+
+  @@id([evaluationId, groupId])
+}
+
+model EvaluationSection {
+  id           String     @id @default(uuid(7)) @db.Uuid
+  evaluationId String     @db.Uuid
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  title        String?
+  content      Json // TipTap JSON (rich text con KaTeX, imágenes, tablas)
+  order        Int
+  createdAt    DateTime   @default(now())
+
+  questions Question[]
+
+  @@index([evaluationId, order])
+}
+
+model Question {
+  id            String            @id @default(uuid(7)) @db.Uuid
+  sectionId     String            @db.Uuid
+  section       EvaluationSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  number        Int
+  text          Json // TipTap JSON (puede contener KaTeX)
+  image         String?
+  correctAnswer String // "A", "B", "C", "D"
+  justification String? // clave de respuestas, no se imprime en cartilla
+  weight        Float             @default(1.0)
+  soloLevel     SoloLevel?
+  menComponent  String?
+  competency    String?
+  evidence      String?
+  bankOriginId  String?           @db.Uuid // si se importó del banco (copia independiente)
+  createdAt     DateTime          @default(now())
+
+  options QuestionOption[]
+  answers StudentAnswer[]
+
+  @@index([sectionId, number])
+}
+
+model QuestionOption {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  questionId String   @db.Uuid
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  key        String // "A", "B", "C", "D"
+  text       Json // TipTap JSON
+
+  @@index([questionId])
+}
+
+enum SoloLevel {
+  UNI_ESTRUCTURAL
+  MULTIESTRUCTURAL
+  RELACIONAL
+  ABSTRACTO_EXTENDIDO
+}
+
+// ========== QUESTION BANK ==========
+
+model QuestionBank {
+  id            String             @id @default(uuid(7)) @db.Uuid
+  text          Json // TipTap JSON
+  image         String?
+  correctAnswer String
+  justification String?
+  soloLevel     SoloLevel?
+  menComponent  String?
+  competency    String?
+  evidence      String?
+  difficulty    QuestionDifficulty @default(MEDIUM)
+  subjectId     String             @db.Uuid
+  subject       Subject            @relation(fields: [subjectId], references: [id])
+  institutionId String             @db.Uuid
+  institution   Institution        @relation(fields: [institutionId], references: [id])
+  createdBy     String             @db.Uuid
+  creator       User               @relation(fields: [createdBy], references: [id])
+  tags          String[]
+  isPersonal    Boolean            @default(false) // true = solo visible para el creador
+  deletedAt     DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  options QuestionBankOption[]
+
+  @@index([institutionId, subjectId])
+  @@index([createdBy])
+}
+
+model QuestionBankOption {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  questionBankId String       @db.Uuid
+  questionBank   QuestionBank @relation(fields: [questionBankId], references: [id], onDelete: Cascade)
+  key            String // "A", "B", "C", "D"
+  text           Json // TipTap JSON
+
+  @@index([questionBankId])
+}
+
+enum QuestionDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+// ========== EVALUATION TEMPLATES ==========
+
+model EvaluationTemplate {
+  id              String        @id @default(uuid(7)) @db.Uuid
+  name            String
+  description     String?
+  courseSubjectId String        @db.Uuid
+  courseSubject   CourseSubject @relation(fields: [courseSubjectId], references: [id])
+  institutionId   String        @db.Uuid
+  institution     Institution   @relation(fields: [institutionId], references: [id])
+  createdBy       String        @db.Uuid
+  creator         User          @relation(fields: [createdBy], references: [id])
+  structure       Json // [{title, numQuestions, order}]
+  createdAt       DateTime      @default(now())
+
+  evaluations Evaluation[]
+
+  @@index([institutionId])
+}
+
+// ========== ANSWER SHEETS & GRADING ==========
+
+// Lote de escaneo: hasta 200 hojas por carga, procesado asíncronamente (BullMQ)
+model ScanBatch {
+  id              String      @id @default(uuid(7)) @db.Uuid
+  institutionId   String      @db.Uuid
+  institution     Institution @relation(fields: [institutionId], references: [id])
+  evaluationId    String?     @db.Uuid
+  evaluation      Evaluation? @relation(fields: [evaluationId], references: [id])
+  uploadedBy      String      @db.Uuid
+  uploader        User        @relation(fields: [uploadedBy], references: [id])
+  status          ScanStatus  @default(PENDING)
+  totalSheets     Int         @default(0)
+  processedSheets Int         @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  sheets AnswerSheet[]
+
+  @@index([institutionId])
+  @@index([evaluationId])
+}
+
+model AnswerSheet {
+  id             String     @id @default(uuid(7)) @db.Uuid
+  evaluationId   String     @db.Uuid
+  evaluation     Evaluation @relation(fields: [evaluationId], references: [id])
+  studentId      String?    @db.Uuid // null si es hoja genérica o QR no identificable
+  student        Student?   @relation(fields: [studentId], references: [id])
+  studentName    String? // respaldo: nombre escrito a mano en la hoja
+  studentCode    String? // respaldo: código escrito en la hoja
+  qrContent      String // contenido completo del QR (JSON)
+  qrSignature    String // HMAC-SHA256 para verificar integridad
+  scannedImage   String? // ruta de la imagen escaneada original
+  processedImage String? // ruta de la imagen procesada (binaria, con detecciones)
+  scanBatchId    String?    @db.Uuid
+  scanBatch      ScanBatch? @relation(fields: [scanBatchId], references: [id])
+  status         ScanStatus @default(PENDING)
+  score          Float?
+  totalCorrect   Int?
+  totalQuestions Int?
+  reviewedBy     String?    @db.Uuid // usuario que revisó manualmente
+  reviewedAt     DateTime?
+  notes          String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  answers StudentAnswer[]
+
+  @@index([evaluationId, status])
+  @@index([studentId])
+  @@index([scanBatchId])
+}
+
+enum ScanStatus {
+  PENDING // sin escanear
+  SCANNED // imagen subida, pendiente de procesar
+  PROCESSING // procesándose
+  GRADED // calificado automáticamente
+  REVIEW // necesita revisión manual (QR dañado, marcas ambiguas)
+  COMPLETED // revisado y confirmado
+}
+
+model StudentAnswer {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  answerSheetId String      @db.Uuid
+  answerSheet   AnswerSheet @relation(fields: [answerSheetId], references: [id], onDelete: Cascade)
+  questionId    String      @db.Uuid
+  question      Question    @relation(fields: [questionId], references: [id])
+  selectedKey   String? // "A", "B", "C", "D" o null si sin responder
+  isCorrect     Boolean?
+  isAmbiguous   Boolean     @default(false) // múltiple marca
+  confidence    Float? // 0-1 confianza de la detección OMR
+
+  @@index([answerSheetId])
+  @@index([questionId])
+}
+
+// ========== AUDIT & NOTIFICATIONS ==========
+
+model AuditLog {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  userId     String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id])
+  action     String // "EVALUATION_CREATED", "EVALUATION_APPROVED", ...
+  entityType String // "Evaluation", "Question", "User", ...
+  entityId   String   @db.Uuid
+  metadata   Json? // {changes: {field: {from, to}}}
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String           @id @default(uuid(7)) @db.Uuid
+  userId    String           @db.Uuid
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String?
+  link      String? // ej: /teacher/evaluations/{id}
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  EVALUATION_PENDING_REVIEW
+  EVALUATION_APPROVED
+  EVALUATION_REJECTED
+  SCANNING_COMPLETED
+  SCANNING_ERROR
+  NEW_STUDENT_ASSIGNED
+}

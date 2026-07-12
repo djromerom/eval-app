@@ -1,0 +1,107 @@
+/*
+ * Estilos de impresión — plantilla ICFES institucional (REQUERIMIENTOS_v2.md §3.4 y §8).
+ * Método primario de generación de PDF: el docente imprime desde el navegador.
+ * Validar TODO cambio contra el PDF de referencia: Prueba__11º_I_periodo_C3__1_.pdf
+ */
+
+@page {
+  /* Doble carta (Tabloid) horizontal: 17 × 11 in */
+  size: 17in 11in landscape;
+  margin: 2cm;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10pt;
+    line-height: 1.15;
+    color: #000;
+    background: #fff;
+  }
+
+  /* ===== Portada (página 1) ===== */
+  .cover-institution {
+    font-size: 14pt;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .cover-booklet-number {
+    font-size: 22pt;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .cover-greeting {
+    font-size: 14pt;
+    font-weight: 700;
+  }
+
+  .cover-instructions-title {
+    font-size: 12pt;
+    font-weight: 700;
+  }
+
+  /* ===== Páginas de preguntas ===== */
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10pt;
+    font-weight: 700;
+  }
+
+  .subject-title {
+    font-size: 12pt;
+    font-weight: 700;
+    text-align: left;
+  }
+
+  /* "RESPONDA LAS PREGUNTAS X A LA Y..." */
+  .block-lead {
+    font-size: 11pt;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .block-text-title {
+    font-size: 12pt;
+    font-weight: 700;
+    font-style: italic;
+    text-align: center;
+  }
+
+  .context-paragraph {
+    text-align: justify;
+  }
+
+  /* Preguntas en columna única (NO dos columnas) */
+  .question {
+    break-inside: avoid;
+  }
+
+  .question-text {
+    font-weight: 700;
+  }
+
+  .question-options {
+    padding-left: 1.5em;
+  }
+
+  /* ===== Hoja de respuestas OMR ===== */
+  .omr-bubble {
+    /* 6 mm de diámetro, 10 mm centro a centro (§11) */
+    width: 6mm;
+    height: 6mm;
+    border: 0.5mm solid #000;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .omr-fiducial {
+    background: #000;
+  }
+}
