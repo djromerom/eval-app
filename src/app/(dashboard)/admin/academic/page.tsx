@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import type { AuthenticatedUser } from "@/shared/application/authenticated-user";
 import {
   makeListAcademicYears,
+  makeListCourseSubjects,
   makeListCourses,
   makeListGroups,
   makeListPeriods,
@@ -13,6 +14,7 @@ import { EntityForm } from "./entity-form";
 import {
   createAcademicYearAction,
   createCourseAction,
+  createCourseSubjectAction,
   createGroupAction,
   createPeriodAction,
   createSubjectAction,
@@ -23,12 +25,13 @@ export const metadata: Metadata = { title: "Estructura académica" };
 const df = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
 
 async function loadAll(actor: AuthenticatedUser) {
-  const [years, periods, courses, subjects, groups] = await Promise.all([
+  const [years, periods, courses, subjects, groups, courseSubjects] = await Promise.all([
     makeListAcademicYears().execute({ actor }),
     makeListPeriods().execute({ actor }),
     makeListCourses().execute({ actor }),
     makeListSubjects().execute({ actor }),
     makeListGroups().execute({ actor }),
+    makeListCourseSubjects().execute({ actor }),
   ]);
   return {
     years: years.ok ? years.value : [],
@@ -36,6 +39,7 @@ async function loadAll(actor: AuthenticatedUser) {
     courses: courses.ok ? courses.value : [],
     subjects: subjects.ok ? subjects.value : [],
     groups: groups.ok ? groups.value : [],
+    courseSubjects: courseSubjects.ok ? courseSubjects.value : [],
   };
 }
 
@@ -54,10 +58,11 @@ function Empty({ label }: { label: string }) {
 
 export default async function AcademicPage() {
   const actor = await requireAuthenticatedUser("ADMIN");
-  const { years, periods, courses, subjects, groups } = await loadAll(actor);
+  const { years, periods, courses, subjects, groups, courseSubjects } = await loadAll(actor);
 
   const yearOptions = years.map((y) => ({ value: y.id, label: String(y.year) }));
   const courseOptions = courses.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }));
+  const subjectOptions = subjects.map((s) => ({ value: s.id, label: `${s.name} (${s.code})` }));
   const yearLabel = new Map(years.map((y) => [y.id, String(y.year)]));
   const courseLabel = new Map(courses.map((c) => [c.id, c.name]));
 
@@ -204,6 +209,47 @@ export default async function AcademicPage() {
                       Global
                     </span>
                   ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+
+        <Section title="Asignaturas por curso">
+          <EntityForm
+            action={createCourseSubjectAction}
+            submitLabel="Enlazar"
+            disabledReason={
+              courses.length === 0 || subjects.length === 0
+                ? "Necesitas al menos un curso y una asignatura."
+                : undefined
+            }
+            fields={[
+              {
+                name: "courseId",
+                label: "Curso",
+                type: "select",
+                required: true,
+                options: courseOptions,
+              },
+              {
+                name: "subjectId",
+                label: "Asignatura",
+                type: "select",
+                required: true,
+                options: subjectOptions,
+              },
+            ]}
+          />
+          {courseSubjects.length === 0 ? (
+            <Empty label="Aún no hay asignaturas enlazadas a cursos." />
+          ) : (
+            <ul className="divide-y text-sm">
+              {courseSubjects.map((cs) => (
+                <li key={cs.id} className="flex items-center gap-3 py-2">
+                  <span className="font-medium">{cs.courseName}</span>
+                  <span className="text-muted-foreground">·</span>
+                  <span>{cs.subjectName}</span>
                 </li>
               ))}
             </ul>

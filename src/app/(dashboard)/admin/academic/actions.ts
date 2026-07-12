@@ -6,6 +6,7 @@ import type { Result } from "@/shared/domain/result";
 import {
   makeCreateAcademicYear,
   makeCreateCourse,
+  makeCreateCourseSubject,
   makeCreateGroup,
   makeCreatePeriod,
   makeCreateSubject,
@@ -87,6 +88,18 @@ export async function createGroupAction(_p: FormState, formData: FormData): Prom
   const result = await makeCreateGroup().execute({
     actor,
     data: { courseId: str(formData, "courseId"), name: str(formData, "name") },
+  });
+  return finish(result);
+}
+
+export async function createCourseSubjectAction(
+  _p: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireAuthenticatedUser("ADMIN");
+  const result = await makeCreateCourseSubject().execute({
+    actor,
+    data: { courseId: str(formData, "courseId"), subjectId: str(formData, "subjectId") },
   });
   return finish(result);
 }

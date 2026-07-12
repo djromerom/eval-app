@@ -1,4 +1,5 @@
 import { CreateAcademicYear, ListAcademicYears } from "../application/academic-years";
+import { CreateCourseSubject, ListCourseSubjects } from "../application/course-subjects";
 import { CreateCourse, ListCourses } from "../application/courses";
 import { CreateGroup, ListGroups } from "../application/groups";
 import { CreatePeriod, ListPeriods } from "../application/periods";
@@ -6,6 +7,7 @@ import { CreateSubject, ListSubjects } from "../application/subjects";
 import {
   PrismaAcademicYearRepository,
   PrismaCourseRepository,
+  PrismaCourseSubjectRepository,
   PrismaGroupRepository,
   PrismaPeriodRepository,
   PrismaSubjectRepository,
@@ -17,6 +19,7 @@ const courses = new PrismaCourseRepository();
 const subjects = new PrismaSubjectRepository();
 const groups = new PrismaGroupRepository();
 const periods = new PrismaPeriodRepository();
+const courseSubjects = new PrismaCourseSubjectRepository();
 
 export const makeCreateAcademicYear = () => new CreateAcademicYear(years);
 export const makeListAcademicYears = () => new ListAcademicYears(years);
@@ -32,3 +35,7 @@ export const makeListGroups = () => new ListGroups(groups);
 
 export const makeCreatePeriod = () => new CreatePeriod(periods, years);
 export const makeListPeriods = () => new ListPeriods(periods);
+
+export const makeCreateCourseSubject = () =>
+  new CreateCourseSubject(courseSubjects, courses, subjects);
+export const makeListCourseSubjects = () => new ListCourseSubjects(courseSubjects);

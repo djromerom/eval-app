@@ -11,8 +11,12 @@ import type {
   AcademicYearRepository,
   Course,
   CourseRepository,
+  CourseSubject,
+  CourseSubjectRepository,
+  CourseSubjectView,
   CreateAcademicYearData,
   CreateCourseData,
+  CreateCourseSubjectData,
   CreateGroupData,
   CreatePeriodData,
   CreateSubjectData,
@@ -161,6 +165,39 @@ export class PrismaGroupRepository implements GroupRepository {
   }
   async create(institutionId: string, data: CreateGroupData): Promise<Group> {
     return toGroup(await prisma.group.create({ data: { institutionId, ...data } }));
+  }
+}
+
+export class PrismaCourseSubjectRepository implements CourseSubjectRepository {
+  async findAll(institutionId: string): Promise<CourseSubjectView[]> {
+    const rows = await prisma.courseSubject.findMany({
+      where: { course: { institutionId } },
+      include: { course: { select: { name: true } }, subject: { select: { name: true } } },
+      orderBy: [{ course: { name: "asc" } }, { subject: { name: "asc" } }],
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      courseId: r.courseId,
+      subjectId: r.subjectId,
+      courseName: r.course.name,
+      subjectName: r.subject.name,
+    }));
+  }
+  async findById(institutionId: string, id: string): Promise<CourseSubject | null> {
+    const row = await prisma.courseSubject.findFirst({
+      where: { id, course: { institutionId } },
+    });
+    return row && { id: row.id, courseId: row.courseId, subjectId: row.subjectId };
+  }
+  async exists(courseId: string, subjectId: string): Promise<boolean> {
+    const row = await prisma.courseSubject.findUnique({
+      where: { courseId_subjectId: { courseId, subjectId } },
+    });
+    return row !== null;
+  }
+  async create(data: CreateCourseSubjectData): Promise<CourseSubject> {
+    const row = await prisma.courseSubject.create({ data });
+    return { id: row.id, courseId: row.courseId, subjectId: row.subjectId };
   }
 }
 

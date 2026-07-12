@@ -19,6 +19,7 @@ function navFor(roles: Role[]): NavItem[] {
       { href: "/admin/institutions", label: "Instituciones" },
       { href: "/admin/users", label: "Usuarios" },
       { href: "/admin/academic", label: "Estructura académica" },
+      { href: "/admin/teachers", label: "Docentes" },
       { href: "/admin/students", label: "Estudiantes" },
     );
   }

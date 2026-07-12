@@ -42,6 +42,19 @@ export interface Period {
   endDate: Date;
 }
 
+/** Enlace asignatura ↔ curso (un curso tiene N asignaturas). §3.2 */
+export interface CourseSubject {
+  id: string;
+  courseId: string;
+  subjectId: string;
+}
+
+/** Vista enriquecida con nombres, para listados. */
+export interface CourseSubjectView extends CourseSubject {
+  courseName: string;
+  subjectName: string;
+}
+
 // ===== Datos de creación =====
 
 export interface CreateAcademicYearData {
@@ -67,6 +80,11 @@ export interface CreateSubjectData {
 export interface CreateGroupData {
   courseId: string;
   name: string;
+}
+
+export interface CreateCourseSubjectData {
+  courseId: string;
+  subjectId: string;
 }
 
 export interface CreatePeriodData {
@@ -111,6 +129,14 @@ export interface PeriodRepository {
   findAll(institutionId: string, academicYearId?: string): Promise<Period[]>;
   findById(institutionId: string, id: string): Promise<Period | null>;
   create(institutionId: string, data: CreatePeriodData): Promise<Period>;
+}
+
+export interface CourseSubjectRepository {
+  /** Enlaces de la institución (vía course.institutionId), con nombres. */
+  findAll(institutionId: string): Promise<CourseSubjectView[]>;
+  findById(institutionId: string, id: string): Promise<CourseSubject | null>;
+  exists(courseId: string, subjectId: string): Promise<boolean>;
+  create(data: CreateCourseSubjectData): Promise<CourseSubject>;
 }
 
 // ===== Validación de dominio =====
