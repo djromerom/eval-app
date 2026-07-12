@@ -89,6 +89,8 @@ export interface CreateQuestionData {
   soloLevel?: SoloLevel | null;
   menComponent?: string | null;
   image?: string;
+  /** Si se importó del banco: id de la pregunta origen (copia independiente). */
+  bankOriginId?: string;
 }
 
 // ===== Puerto de persistencia =====
@@ -122,7 +124,10 @@ export interface EvaluationRepository {
 const ANSWER_KEYS: AnswerKey[] = ["A", "B", "C", "D"];
 
 /** Una pregunta ICFES válida: 4 opciones A–D distintas y una correcta entre ellas. */
-export function validateQuestionShape(data: CreateQuestionData): string | null {
+export function validateQuestionShape(data: {
+  options: { key: AnswerKey }[];
+  correctAnswer: AnswerKey;
+}): string | null {
   if (data.options.length !== 4) return "La pregunta debe tener exactamente 4 opciones (A–D).";
   const keys = data.options.map((o) => o.key);
   const unique = new Set(keys);

@@ -218,6 +218,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
           weight: data.weight ?? 1,
           soloLevel: (data.soloLevel as PrismaSoloLevel | null) ?? null,
           menComponent: data.menComponent ?? null,
+          bankOriginId: data.bankOriginId ?? null,
           options: { create: data.options.map((o) => ({ key: o.key, text: json(o.text) })) },
         },
         include: { options: true },
