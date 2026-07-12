@@ -11,7 +11,6 @@ import type {
   CreateBankQuestionData,
 } from "@/modules/question-bank/domain/bank-question";
 import type {
-  CreateEvaluationData,
   CreateQuestionData,
   Evaluation,
   EvaluationDetail,

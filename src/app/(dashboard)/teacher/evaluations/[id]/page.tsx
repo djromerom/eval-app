@@ -54,9 +54,13 @@ export default async function EvaluationDetailPage({
           {evaluation.totalQuestions} pregunta(s)
         </span>
         <Link
-          href="/teacher/evaluations"
+          href={`/print/evaluation/${evaluation.id}`}
+          target="_blank"
           className="text-muted-foreground ml-auto text-sm hover:underline"
         >
+          Vista previa de impresión ↗
+        </Link>
+        <Link href="/teacher/evaluations" className="text-muted-foreground text-sm hover:underline">
           ← Volver
         </Link>
       </div>

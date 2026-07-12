@@ -1,4 +1,5 @@
 import { CreateInstitution } from "../application/create-institution";
+import { GetMyInstitution } from "../application/get-institution";
 import { ListInstitutions } from "../application/list-institutions";
 import { SetInstitutionActive } from "../application/set-institution-active";
 import { PrismaInstitutionRepository } from "./prisma-institution-repository";
@@ -13,3 +14,4 @@ const repository = new PrismaInstitutionRepository();
 export const makeCreateInstitution = () => new CreateInstitution(repository);
 export const makeListInstitutions = () => new ListInstitutions(repository);
 export const makeSetInstitutionActive = () => new SetInstitutionActive(repository);
+export const makeGetMyInstitution = () => new GetMyInstitution(repository);

@@ -23,6 +23,11 @@ const eslintConfig = [
   },
   {
     rules: {
+      // Permite parámetros/variables intencionalmente sin usar con prefijo "_".
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
       // La regla de la arquitectura: el dominio no importa infraestructura.
       // (Se puede endurecer con eslint-plugin-boundaries cuando crezca el proyecto.)
       "no-restricted-imports": [
