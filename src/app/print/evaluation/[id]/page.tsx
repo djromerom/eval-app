@@ -82,7 +82,7 @@ export default async function PrintEvaluationPage({ params }: { params: Promise<
         <div className="mark-example">
           <span>Marca así:</span>
           {KEYS.map((k) => (
-            <span key={k} className={`omr-bubble${k === "A" ? "filled" : ""}`}>
+            <span key={k} className={`omr-bubble ${k === "A" ? "filled" : ""}`}>
               {k}
             </span>
           ))}
