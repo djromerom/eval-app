@@ -45,10 +45,20 @@ async function main() {
       name: "Super Administrador",
       password: passwordHash,
       institutionId: institution.id,
-      roles: { create: { role: RoleType.SUPER_ADMIN } },
+      // Roles combinables (§2): SUPER_ADMIN para gestionar instituciones y
+      // ADMIN para administrar la estructura académica de la institución demo.
+      roles: {
+        create: [{ role: RoleType.SUPER_ADMIN }, { role: RoleType.ADMIN }],
+      },
     },
   });
-  console.log(`✔ Super admin: ${admin.email} (contraseña: ${password})`);
+  // Idempotencia: asegura el rol ADMIN aunque el usuario ya existiera.
+  await prisma.userRole.upsert({
+    where: { userId_role: { userId: admin.id, role: RoleType.ADMIN } },
+    update: {},
+    create: { userId: admin.id, role: RoleType.ADMIN },
+  });
+  console.log(`✔ Super admin + admin: ${admin.email} (contraseña: ${password})`);
 
   const currentYear = new Date().getFullYear();
   const academicYear = await prisma.academicYear.upsert({

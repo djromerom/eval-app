@@ -1,3 +1,6 @@
+// Estructura académica por institución (REQUERIMIENTOS_v2.md §3.2).
+// Todas las entidades (salvo Subject global) están acotadas por institutionId.
+
 export interface AcademicYear {
   id: string;
   institutionId: string;
@@ -37,4 +40,86 @@ export interface Period {
   order: number;
   startDate: Date;
   endDate: Date;
+}
+
+// ===== Datos de creación =====
+
+export interface CreateAcademicYearData {
+  year: number;
+  startDate: Date;
+  endDate: Date;
+  isCurrent?: boolean;
+}
+
+export interface CreateCourseData {
+  academicYearId: string;
+  name: string;
+  code: string;
+}
+
+export interface CreateSubjectData {
+  name: string;
+  code: string;
+  /** true = catálogo global (institutionId null); solo SUPER_ADMIN debería crearlas. */
+  global?: boolean;
+}
+
+export interface CreateGroupData {
+  courseId: string;
+  name: string;
+}
+
+export interface CreatePeriodData {
+  academicYearId: string;
+  name: string;
+  order: number;
+  startDate: Date;
+  endDate: Date;
+}
+
+// ===== Puertos de persistencia (acotados por institución) =====
+
+export interface AcademicYearRepository {
+  findAll(institutionId: string): Promise<AcademicYear[]>;
+  findById(institutionId: string, id: string): Promise<AcademicYear | null>;
+  findByYear(institutionId: string, year: number): Promise<AcademicYear | null>;
+  create(institutionId: string, data: CreateAcademicYearData): Promise<AcademicYear>;
+  /** Marca uno como actual y desmarca el resto de la institución. */
+  setCurrent(institutionId: string, id: string): Promise<void>;
+}
+
+export interface CourseRepository {
+  findAll(institutionId: string, academicYearId?: string): Promise<Course[]>;
+  findById(institutionId: string, id: string): Promise<Course | null>;
+  create(institutionId: string, data: CreateCourseData): Promise<Course>;
+}
+
+export interface SubjectRepository {
+  /** Catálogo visible para la institución: sus asignaturas + las globales. */
+  findAllForInstitution(institutionId: string): Promise<Subject[]>;
+  findById(id: string): Promise<Subject | null>;
+  create(institutionId: string | null, data: CreateSubjectData): Promise<Subject>;
+}
+
+export interface GroupRepository {
+  findAll(institutionId: string, courseId?: string): Promise<Group[]>;
+  findById(institutionId: string, id: string): Promise<Group | null>;
+  create(institutionId: string, data: CreateGroupData): Promise<Group>;
+}
+
+export interface PeriodRepository {
+  findAll(institutionId: string, academicYearId?: string): Promise<Period[]>;
+  findById(institutionId: string, id: string): Promise<Period | null>;
+  create(institutionId: string, data: CreatePeriodData): Promise<Period>;
+}
+
+// ===== Validación de dominio =====
+
+/** Un código académico corto: 1-20 caracteres visibles, sin espacios en los bordes. */
+export function isValidCode(code: string): boolean {
+  return code.trim().length >= 1 && code.trim().length <= 20;
+}
+
+export function isValidDateRange(start: Date, end: Date): boolean {
+  return start.getTime() < end.getTime();
 }

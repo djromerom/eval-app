@@ -1,0 +1,182 @@
+import type {
+  AcademicYear as PrismaAcademicYear,
+  Course as PrismaCourse,
+  Group as PrismaGroup,
+  Period as PrismaPeriod,
+  Subject as PrismaSubject,
+} from "@prisma/client";
+import { prisma } from "@/shared/infrastructure/db/prisma";
+import type {
+  AcademicYear,
+  AcademicYearRepository,
+  Course,
+  CourseRepository,
+  CreateAcademicYearData,
+  CreateCourseData,
+  CreateGroupData,
+  CreatePeriodData,
+  CreateSubjectData,
+  Group,
+  GroupRepository,
+  Period,
+  PeriodRepository,
+  Subject,
+  SubjectRepository,
+} from "../domain/types";
+
+// ===== Mappers (fila Prisma → shape del dominio) =====
+
+const toYear = (r: PrismaAcademicYear): AcademicYear => ({
+  id: r.id,
+  institutionId: r.institutionId,
+  year: r.year,
+  startDate: r.startDate,
+  endDate: r.endDate,
+  isCurrent: r.isCurrent,
+});
+
+const toCourse = (r: PrismaCourse): Course => ({
+  id: r.id,
+  institutionId: r.institutionId,
+  academicYearId: r.academicYearId,
+  name: r.name,
+  code: r.code,
+});
+
+const toSubject = (r: PrismaSubject): Subject => ({
+  id: r.id,
+  institutionId: r.institutionId,
+  name: r.name,
+  code: r.code,
+});
+
+const toGroup = (r: PrismaGroup): Group => ({
+  id: r.id,
+  institutionId: r.institutionId,
+  courseId: r.courseId,
+  name: r.name,
+});
+
+const toPeriod = (r: PrismaPeriod): Period => ({
+  id: r.id,
+  institutionId: r.institutionId,
+  academicYearId: r.academicYearId,
+  name: r.name,
+  order: r.order,
+  startDate: r.startDate,
+  endDate: r.endDate,
+});
+
+// ===== Adaptadores =====
+
+export class PrismaAcademicYearRepository implements AcademicYearRepository {
+  async findAll(institutionId: string): Promise<AcademicYear[]> {
+    const rows = await prisma.academicYear.findMany({
+      where: { institutionId },
+      orderBy: { year: "desc" },
+    });
+    return rows.map(toYear);
+  }
+  async findById(institutionId: string, id: string): Promise<AcademicYear | null> {
+    const row = await prisma.academicYear.findFirst({ where: { id, institutionId } });
+    return row && toYear(row);
+  }
+  async findByYear(institutionId: string, year: number): Promise<AcademicYear | null> {
+    const row = await prisma.academicYear.findFirst({ where: { institutionId, year } });
+    return row && toYear(row);
+  }
+  async create(institutionId: string, data: CreateAcademicYearData): Promise<AcademicYear> {
+    return toYear(
+      await prisma.academicYear.create({
+        data: {
+          institutionId,
+          year: data.year,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          isCurrent: data.isCurrent ?? false,
+        },
+      }),
+    );
+  }
+  async setCurrent(institutionId: string, id: string): Promise<void> {
+    await prisma.$transaction([
+      prisma.academicYear.updateMany({
+        where: { institutionId, NOT: { id } },
+        data: { isCurrent: false },
+      }),
+      prisma.academicYear.update({ where: { id }, data: { isCurrent: true } }),
+    ]);
+  }
+}
+
+export class PrismaCourseRepository implements CourseRepository {
+  async findAll(institutionId: string, academicYearId?: string): Promise<Course[]> {
+    const rows = await prisma.course.findMany({
+      where: { institutionId, ...(academicYearId ? { academicYearId } : {}) },
+      orderBy: { name: "asc" },
+    });
+    return rows.map(toCourse);
+  }
+  async findById(institutionId: string, id: string): Promise<Course | null> {
+    const row = await prisma.course.findFirst({ where: { id, institutionId } });
+    return row && toCourse(row);
+  }
+  async create(institutionId: string, data: CreateCourseData): Promise<Course> {
+    return toCourse(await prisma.course.create({ data: { institutionId, ...data } }));
+  }
+}
+
+export class PrismaSubjectRepository implements SubjectRepository {
+  async findAllForInstitution(institutionId: string): Promise<Subject[]> {
+    const rows = await prisma.subject.findMany({
+      where: { OR: [{ institutionId }, { institutionId: null }] },
+      orderBy: { name: "asc" },
+    });
+    return rows.map(toSubject);
+  }
+  async findById(id: string): Promise<Subject | null> {
+    const row = await prisma.subject.findUnique({ where: { id } });
+    return row && toSubject(row);
+  }
+  async create(institutionId: string | null, data: CreateSubjectData): Promise<Subject> {
+    return toSubject(
+      await prisma.subject.create({
+        data: { institutionId, name: data.name, code: data.code },
+      }),
+    );
+  }
+}
+
+export class PrismaGroupRepository implements GroupRepository {
+  async findAll(institutionId: string, courseId?: string): Promise<Group[]> {
+    const rows = await prisma.group.findMany({
+      where: { institutionId, ...(courseId ? { courseId } : {}) },
+      orderBy: { name: "asc" },
+    });
+    return rows.map(toGroup);
+  }
+  async findById(institutionId: string, id: string): Promise<Group | null> {
+    const row = await prisma.group.findFirst({ where: { id, institutionId } });
+    return row && toGroup(row);
+  }
+  async create(institutionId: string, data: CreateGroupData): Promise<Group> {
+    return toGroup(await prisma.group.create({ data: { institutionId, ...data } }));
+  }
+}
+
+export class PrismaPeriodRepository implements PeriodRepository {
+  async findAll(institutionId: string, academicYearId?: string): Promise<Period[]> {
+    const rows = await prisma.period.findMany({
+      where: { institutionId, ...(academicYearId ? { academicYearId } : {}) },
+      orderBy: { order: "asc" },
+    });
+    return rows.map(toPeriod);
+  }
+  async findById(institutionId: string, id: string): Promise<Period | null> {
+    const row = await prisma.period.findFirst({ where: { id, institutionId } });
+    return row && toPeriod(row);
+  }
+  async create(institutionId: string, data: CreatePeriodData): Promise<Period> {
+    return toPeriod(await prisma.period.create({ data: { institutionId, ...data } }));
+  }
+}

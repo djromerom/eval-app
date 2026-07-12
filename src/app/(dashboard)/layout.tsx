@@ -18,7 +18,8 @@ function navFor(roles: Role[]): NavItem[] {
       { href: "/admin", label: "Panel" },
       { href: "/admin/institutions", label: "Instituciones" },
       { href: "/admin/users", label: "Usuarios" },
-      { href: "/admin/courses", label: "Cursos y asignaturas" },
+      { href: "/admin/academic", label: "Estructura académica" },
+      { href: "/admin/students", label: "Estudiantes" },
     );
   }
   if (hasRole(user, "COORDINATOR")) {

@@ -1,0 +1,66 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { requireAuthenticatedUser } from "@/lib/session";
+import type { AdminFormState } from "@/components/admin/entity-form";
+import type { ImportError } from "@/modules/students/domain/student";
+import { makeCreateStudent, makeImportStudents } from "@/modules/students/infrastructure/container";
+import { parseStudentsCsv } from "@/modules/students/infrastructure/csv";
+
+const PATH = "/admin/students";
+
+function str(formData: FormData, key: string): string {
+  return String(formData.get(key) ?? "").trim();
+}
+
+export async function createStudentAction(
+  _prev: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
+  const actor = await requireAuthenticatedUser("ADMIN");
+  const result = await makeCreateStudent().execute({
+    actor,
+    data: {
+      groupId: str(formData, "groupId"),
+      name: str(formData, "name"),
+      idType: str(formData, "idType"),
+      idNumber: str(formData, "idNumber"),
+      code: str(formData, "code"),
+      enrollmentYear: Number(str(formData, "enrollmentYear")),
+    },
+  });
+  if (!result.ok) return { error: result.error.message };
+  revalidatePath(PATH);
+  return { success: true };
+}
+
+export interface ImportState {
+  error?: string;
+  created?: number;
+  errors?: ImportError[];
+  done?: boolean;
+}
+
+/** Importación masiva: recibe el archivo CSV, lo parsea y lo procesa. */
+export async function importStudentsAction(
+  _prev: ImportState,
+  formData: FormData,
+): Promise<ImportState> {
+  const actor = await requireAuthenticatedUser("ADMIN");
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Selecciona un archivo CSV." };
+  }
+
+  const { rows, missing } = parseStudentsCsv(await file.text());
+  if (missing.length > 0) {
+    return { error: `Faltan columnas en el CSV: ${missing.join(", ")}.` };
+  }
+
+  const result = await makeImportStudents().execute({ actor, rows });
+  if (!result.ok) return { error: result.error.message };
+
+  revalidatePath(PATH);
+  return { done: true, created: result.value.created, errors: result.value.errors };
+}
