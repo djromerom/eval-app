@@ -43,6 +43,28 @@ fallos de infraestructura inesperados. Los route handlers mapean el `code` del
 - Todo caso de uso recibe el `AuthenticatedUser` explícitamente y filtra por
   `institutionId`. PostgreSQL RLS es la segunda barrera (defensa en profundidad).
 
+### Row Level Security (RLS)
+
+La migración `enable_rls` habilita RLS y una política `tenant_isolation` en cada
+tabla de negocio (`User`, `AcademicYear`, `Course`, `Group`, `Period`, `Student`,
+`Evaluation`, `QuestionBank`, `EvaluationTemplate`, `ScanBatch`; `Subject` además
+deja ver el catálogo global `institutionId IS NULL`). Las políticas filtran por la
+variable de sesión `app.current_institution`.
+
+Modelo de dos roles:
+
+- **`eval` (dueño)** — corre migraciones y, por ahora, la app. Omite RLS (no se usa
+  FORCE), así el aislamiento lo garantiza el filtrado por `institutionId` de la capa
+  de aplicación.
+- **`eval_app` (restringido)** — creado por la migración; **sí** aplica las políticas.
+  Es el rol al que apunta la app en producción, fijando `app.current_institution`
+  por request con las utilidades de `src/shared/infrastructure/db/tenant-context.ts`
+  (`runWithInstitution`, `withInstitutionRLS`).
+
+Verificado: con `eval_app` y sin variable no se ve ninguna fila; fijando una
+institución solo se ven sus filas; otra institución ve cero; las globales de
+`Subject` se ven siempre.
+
 ## Presentación (App Router)
 
 ```

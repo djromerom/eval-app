@@ -3,7 +3,8 @@ import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { makeListUsers } from "@/modules/users/infrastructure/container";
-import { InviteUserForm, RolesEditor, ROLE_OPTIONS } from "./users-forms";
+import { InviteUserForm, RolesEditor } from "./users-forms";
+import { ROLE_OPTIONS } from "./roles";
 import { setUserActiveAction } from "./actions";
 
 export const metadata: Metadata = { title: "Usuarios" };

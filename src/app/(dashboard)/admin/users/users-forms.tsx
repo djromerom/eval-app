@@ -6,12 +6,7 @@ import type { Role } from "@/shared/application/authenticated-user";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { inviteUserAction, setUserRolesAction, type UserFormState } from "./actions";
-
-export const ROLE_OPTIONS: { value: Role; label: string }[] = [
-  { value: "ADMIN", label: "Administrador" },
-  { value: "COORDINATOR", label: "Coordinador" },
-  { value: "TEACHER", label: "Profesor" },
-];
+import { ROLE_OPTIONS } from "./roles";
 
 function RoleCheckboxes({ selected }: { selected?: Role[] }) {
   const set = new Set(selected ?? []);
