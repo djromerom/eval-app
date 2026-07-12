@@ -14,6 +14,11 @@ class InMemoryUsers implements UserRepository {
   async findAll(institutionId: string) {
     return this.items.filter((u) => u.institutionId === institutionId);
   }
+  async findIdsByRole(institutionId: string, role: Role) {
+    return this.items
+      .filter((u) => u.institutionId === institutionId && u.isActive && u.roles.includes(role))
+      .map((u) => u.id);
+  }
   async invite(institutionId: string, email: string, name: string, roles: Role[]) {
     const u: User = {
       id: `u-${this.items.length + 1}`,

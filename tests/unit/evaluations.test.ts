@@ -1,0 +1,237 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { ChangeEvaluationStatus } from "@/modules/evaluations/application/change-status";
+import {
+  AddQuestion,
+  CreateEvaluation,
+} from "@/modules/evaluations/application/manage-evaluations";
+import { validateQuestionShape } from "@/modules/evaluations/domain/evaluation";
+import type { EvaluationStatus } from "@/modules/evaluations/domain/evaluation-status";
+import type { AuthenticatedUser } from "@/shared/application/authenticated-user";
+import type {
+  CreateEvaluationData,
+  CreateQuestionData,
+  Evaluation,
+  EvaluationDetail,
+  EvaluationListItem,
+  EvaluationRepository,
+  EvaluationSection,
+  Question,
+} from "@/modules/evaluations/domain/evaluation";
+import type {
+  CourseSubject,
+  CourseSubjectRepository,
+  CourseSubjectView,
+  Period,
+  PeriodRepository,
+} from "@/modules/academic/domain/types";
+import type {
+  NotificationMessage,
+  NotificationSender,
+} from "@/modules/notifications/domain/notification";
+
+class FakeEvaluations implements EvaluationRepository {
+  items: Evaluation[] = [];
+  async create(institutionId: string, teacherId: string, data: CreateEvaluationData) {
+    const e: Evaluation = {
+      id: `e-${this.items.length + 1}`,
+      institutionId,
+      teacherId,
+      title: data.title,
+      description: data.description ?? null,
+      version: 1,
+      status: "DRAFT",
+      courseSubjectId: data.courseSubjectId,
+      academicYearId: "ay1",
+      periodId: data.periodId ?? null,
+      bookletNumber: data.bookletNumber ?? null,
+      totalQuestions: 0,
+    };
+    this.items.push(e);
+    return e;
+  }
+  async findById(institutionId: string, id: string) {
+    return this.items.find((e) => e.institutionId === institutionId && e.id === id) ?? null;
+  }
+  async getDetail(): Promise<EvaluationDetail | null> {
+    return null;
+  }
+  async findByTeacher(): Promise<EvaluationListItem[]> {
+    return [];
+  }
+  async findByInstitution(): Promise<EvaluationListItem[]> {
+    return [];
+  }
+  async addSection(): Promise<EvaluationSection> {
+    throw new Error("no usado");
+  }
+  async addQuestion(institutionId: string, evaluationId: string): Promise<Question> {
+    const e = this.items.find((x) => x.id === evaluationId)!;
+    e.totalQuestions += 1;
+    return {
+      id: `q-${e.totalQuestions}`,
+      number: e.totalQuestions,
+      text: "t",
+      image: null,
+      options: [],
+      correctAnswer: "A",
+      justification: null,
+      weight: 1,
+      soloLevel: null,
+      menComponent: null,
+    };
+  }
+  async updateStatus(institutionId: string, id: string, status: EvaluationStatus) {
+    const e = this.items.find((x) => x.id === id);
+    if (e) e.status = status;
+  }
+  async createNewVersion(): Promise<Evaluation> {
+    throw new Error("no usado");
+  }
+}
+
+class FakeCourseSubjects implements CourseSubjectRepository {
+  constructor(private readonly items: CourseSubject[]) {}
+  async findAll(): Promise<CourseSubjectView[]> {
+    return [];
+  }
+  async findById(_i: string, id: string) {
+    return this.items.find((c) => c.id === id) ?? null;
+  }
+  async exists() {
+    return false;
+  }
+  async create(): Promise<CourseSubject> {
+    throw new Error("no usado");
+  }
+}
+
+const noPeriods: PeriodRepository = {
+  async findAll(): Promise<Period[]> {
+    return [];
+  },
+  async findById() {
+    return null;
+  },
+  async create(): Promise<Period> {
+    throw new Error("no usado");
+  },
+};
+
+class SpySender implements NotificationSender {
+  sent: NotificationMessage[] = [];
+  async send(m: NotificationMessage) {
+    this.sent.push(m);
+  }
+}
+
+const teacher: AuthenticatedUser = { userId: "t1", institutionId: "i1", roles: ["TEACHER"] };
+const coordinator: AuthenticatedUser = {
+  userId: "c1",
+  institutionId: "i1",
+  roles: ["COORDINATOR"],
+};
+
+const question = (over: Partial<CreateQuestionData> = {}): CreateQuestionData => ({
+  text: "¿2+2?",
+  options: (["A", "B", "C", "D"] as const).map((key) => ({ key, text: key })),
+  correctAnswer: "B",
+  ...over,
+});
+
+describe("validateQuestionShape", () => {
+  it("acepta 4 opciones A-D con correcta válida", () => {
+    expect(validateQuestionShape(question())).toBeNull();
+  });
+  it("rechaza número incorrecto de opciones", () => {
+    expect(validateQuestionShape(question({ options: [{ key: "A", text: "a" }] }))).not.toBeNull();
+  });
+});
+
+describe("CreateEvaluation", () => {
+  it("crea BORRADOR cuando la asignatura-curso existe", async () => {
+    const repo = new FakeEvaluations();
+    const cs = new FakeCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
+    const uc = new CreateEvaluation(repo, cs, noPeriods);
+    const r = await uc.execute({ actor: teacher, data: { title: "P1", courseSubjectId: "cs1" } });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.status).toBe("DRAFT");
+  });
+  it("rechaza asignatura-curso inexistente", async () => {
+    const uc = new CreateEvaluation(new FakeEvaluations(), new FakeCourseSubjects([]), noPeriods);
+    const r = await uc.execute({ actor: teacher, data: { title: "P1", courseSubjectId: "nope" } });
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe("Flujo de aprobación", () => {
+  let repo: FakeEvaluations;
+  let sender: SpySender;
+  let workflow: ChangeEvaluationStatus;
+  let evalId: string;
+
+  beforeEach(async () => {
+    repo = new FakeEvaluations();
+    sender = new SpySender();
+    workflow = new ChangeEvaluationStatus(repo, sender, {
+      coordinatorIds: async () => ["c1"],
+    });
+    const created = await repo.create("i1", "t1", { title: "P", courseSubjectId: "cs1" });
+    evalId = created.id;
+    // Necesita una pregunta para ser realista, pero el flujo no lo exige aquí.
+    await new AddQuestion(repo).execute({
+      actor: teacher,
+      evaluationId: evalId,
+      sectionId: "sec1",
+      data: question(),
+    });
+  });
+
+  it("enviar a revisión notifica a los coordinadores", async () => {
+    const r = await workflow.execute({ actor: teacher, evaluationId: evalId, to: "IN_REVIEW" });
+    expect(r.ok).toBe(true);
+    expect(sender.sent).toHaveLength(1);
+    expect(sender.sent[0]!.type).toBe("EVALUATION_PENDING_REVIEW");
+    expect(sender.sent[0]!.userId).toBe("c1");
+  });
+
+  it("rechazo exige comentario y notifica al docente", async () => {
+    await workflow.execute({ actor: teacher, evaluationId: evalId, to: "IN_REVIEW" });
+    const noComment = await workflow.execute({
+      actor: coordinator,
+      evaluationId: evalId,
+      to: "DRAFT",
+    });
+    expect(noComment.ok).toBe(false);
+    const rejected = await workflow.execute({
+      actor: coordinator,
+      evaluationId: evalId,
+      to: "DRAFT",
+      comment: "Corrige la pregunta 1",
+    });
+    expect(rejected.ok).toBe(true);
+    expect(sender.sent.some((m) => m.type === "EVALUATION_REJECTED")).toBe(true);
+  });
+
+  it("un docente no puede aprobar", async () => {
+    await workflow.execute({ actor: teacher, evaluationId: evalId, to: "IN_REVIEW" });
+    const r = await workflow.execute({ actor: teacher, evaluationId: evalId, to: "APPROVED" });
+    expect(r.ok).toBe(false);
+  });
+
+  it("ruta completa: revisión → aprobar → publicar", async () => {
+    await workflow.execute({ actor: teacher, evaluationId: evalId, to: "IN_REVIEW" });
+    const approved = await workflow.execute({
+      actor: coordinator,
+      evaluationId: evalId,
+      to: "APPROVED",
+    });
+    expect(approved.ok).toBe(true);
+    const published = await workflow.execute({
+      actor: coordinator,
+      evaluationId: evalId,
+      to: "PUBLISHED",
+    });
+    expect(published.ok).toBe(true);
+    if (published.ok) expect(published.value.status).toBe("PUBLISHED");
+  });
+});

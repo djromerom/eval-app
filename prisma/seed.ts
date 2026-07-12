@@ -45,20 +45,22 @@ async function main() {
       name: "Super Administrador",
       password: passwordHash,
       institutionId: institution.id,
-      // Roles combinables (§2): SUPER_ADMIN para gestionar instituciones y
-      // ADMIN para administrar la estructura académica de la institución demo.
+      // Roles combinables (§2): la cuenta demo lleva los 4 roles para poder
+      // recorrer todos los paneles (admin, coordinador, docente) con un login.
       roles: {
-        create: [{ role: RoleType.SUPER_ADMIN }, { role: RoleType.ADMIN }],
+        create: [{ role: RoleType.SUPER_ADMIN }],
       },
     },
   });
-  // Idempotencia: asegura el rol ADMIN aunque el usuario ya existiera.
-  await prisma.userRole.upsert({
-    where: { userId_role: { userId: admin.id, role: RoleType.ADMIN } },
-    update: {},
-    create: { userId: admin.id, role: RoleType.ADMIN },
-  });
-  console.log(`✔ Super admin + admin: ${admin.email} (contraseña: ${password})`);
+  // Idempotencia: asegura todos los roles aunque el usuario ya existiera.
+  for (const role of [RoleType.ADMIN, RoleType.COORDINATOR, RoleType.TEACHER]) {
+    await prisma.userRole.upsert({
+      where: { userId_role: { userId: admin.id, role } },
+      update: {},
+      create: { userId: admin.id, role },
+    });
+  }
+  console.log(`✔ Usuario demo (4 roles): ${admin.email} (contraseña: ${password})`);
 
   const currentYear = new Date().getFullYear();
   const academicYear = await prisma.academicYear.upsert({

@@ -14,6 +14,8 @@ export interface UserRepository {
   findByEmail(email: string): Promise<User | null>;
   findById(institutionId: string, id: string): Promise<User | null>;
   findAll(institutionId: string): Promise<User[]>;
+  /** IDs de los usuarios activos con un rol dado (para notificaciones dirigidas). */
+  findIdsByRole(institutionId: string, role: Role): Promise<string[]>;
   /** Invitación: crea el usuario inactivo hasta que vincule cuenta o cree contraseña (§3.1). */
   invite(institutionId: string, email: string, name: string, roles: Role[]): Promise<User>;
   setRoles(institutionId: string, userId: string, roles: Role[]): Promise<void>;
