@@ -53,6 +53,8 @@ const eslintConfig = [
       "src/auth.ts",
       "prisma/**",
       "workers/**",
+      // E2E y globalSetup necesitan Prisma para sembrar/verificar fixtures.
+      "tests/e2e/**",
     ],
     rules: {
       "no-restricted-imports": "off",
