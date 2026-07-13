@@ -35,6 +35,7 @@ class FakeBank implements BankQuestionRepository {
       justification: data.justification ?? null,
       soloLevel: data.soloLevel ?? null,
       menComponent: data.menComponent ?? null,
+      competency: data.competency ?? null,
       difficulty: data.difficulty ?? "MEDIUM",
       tags: data.tags ?? [],
       isPersonal: data.isPersonal ?? false,
@@ -99,6 +100,7 @@ class FakeEvaluations implements EvaluationRepository {
       weight: 1,
       soloLevel: data.soloLevel ?? null,
       menComponent: data.menComponent ?? null,
+      competency: data.competency ?? null,
     };
   }
   async updateStatus(_i: string, _id: string, _s: EvaluationStatus) {}

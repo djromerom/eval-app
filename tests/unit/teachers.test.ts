@@ -37,6 +37,9 @@ class InMemoryTeachers implements TeacherRepository {
     this.items.push(t);
     return t;
   }
+  async setInviteToken(_userId: string, _tokenHash: string, _expiresAt: Date): Promise<void> {
+    // no-op para tests
+  }
   async assign(teacherId: string, courseSubjectId: string) {
     this.assignments.push({
       id: `a-${this.assignments.length + 1}`,
@@ -73,6 +76,7 @@ class InMemoryCourseSubjects implements CourseSubjectRepository {
 }
 
 const admin: AuthenticatedUser = { userId: "a", institutionId: "i1", roles: ["ADMIN"] };
+const institutionName = "Colegio Test";
 
 describe("CreateTeacher", () => {
   let repo: InMemoryTeachers;
@@ -91,7 +95,7 @@ describe("CreateTeacher", () => {
   });
 
   it("crea el docente con cuenta inactiva y email normalizado", async () => {
-    const r = await uc.execute({ actor: admin, data: data() });
+    const r = await uc.execute({ actor: admin, data: data(), institutionName });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.value.email).toBe("prof@colegio.edu.co");
@@ -100,13 +104,17 @@ describe("CreateTeacher", () => {
   });
 
   it("rechaza tipo de documento inválido", async () => {
-    const r = await uc.execute({ actor: admin, data: data({ idType: "T.I." }) });
+    const r = await uc.execute({ actor: admin, data: data({ idType: "T.I." }), institutionName });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe("VALIDATION");
   });
 
   it("rechaza a un no-ADMIN", async () => {
-    const r = await uc.execute({ actor: { ...admin, roles: ["TEACHER"] }, data: data() });
+    const r = await uc.execute({
+      actor: { ...admin, roles: ["TEACHER"] },
+      data: data(),
+      institutionName,
+    });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe("FORBIDDEN");
   });

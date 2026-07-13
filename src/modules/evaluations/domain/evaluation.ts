@@ -40,6 +40,7 @@ export interface Question {
   weight: number;
   soloLevel: SoloLevel | null;
   menComponent: string | null;
+  competency: string | null;
 }
 
 export interface QuestionOption {
@@ -88,6 +89,7 @@ export interface CreateQuestionData {
   weight?: number;
   soloLevel?: SoloLevel | null;
   menComponent?: string | null;
+  competency?: string | null;
   image?: string;
   /** Si se importó del banco: id de la pregunta origen (copia independiente). */
   bankOriginId?: string;

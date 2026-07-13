@@ -125,6 +125,10 @@ export function BankQuestionForm({ subjects }: { subjects: { id: string; name: s
           <Input name="menComponent" placeholder="(opcional)" className="w-40" />
         </div>
         <div className="space-y-1">
+          <label className="text-muted-foreground block text-xs font-medium">Competencia</label>
+          <Input name="competency" placeholder="(opcional)" className="w-40" />
+        </div>
+        <div className="space-y-1">
           <label className="text-muted-foreground block text-xs font-medium">
             Tags (separados por coma)
           </label>

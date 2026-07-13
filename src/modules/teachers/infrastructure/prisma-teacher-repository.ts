@@ -76,6 +76,13 @@ export class PrismaTeacherRepository implements TeacherRepository {
     return toTeacher(row);
   }
 
+  async setInviteToken(userId: string, tokenHash: string, expiresAt: Date): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { inviteToken: tokenHash, inviteTokenExpiresAt: expiresAt },
+    });
+  }
+
   async assign(teacherId: string, courseSubjectId: string): Promise<void> {
     await prisma.teacherSubjectAssignment.create({ data: { teacherId, courseSubjectId } });
   }

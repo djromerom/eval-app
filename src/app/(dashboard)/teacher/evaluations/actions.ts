@@ -16,6 +16,17 @@ function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
 }
 
+/** Parsea el JSON del editor rico; si no es JSON válido, lo trata como texto. */
+function rich(formData: FormData, key: string): unknown {
+  const raw = str(formData, key);
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
 export async function createEvaluationAction(
   _prev: AdminFormState,
   formData: FormData,
@@ -35,16 +46,20 @@ export async function createEvaluationAction(
   redirect(`/teacher/evaluations/${result.value.id}`);
 }
 
-export async function addSectionAction(formData: FormData): Promise<void> {
+export async function addSectionAction(
+  _prev: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
   const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
   const evaluationId = str(formData, "evaluationId");
   const result = await makeAddSection().execute({
     actor,
     evaluationId,
-    data: { title: str(formData, "title") || undefined },
+    data: { title: str(formData, "title") || undefined, content: rich(formData, "content") },
   });
-  if (!result.ok) throw new Error(result.error.message);
+  if (!result.ok) return { error: result.error.message };
   revalidatePath(`/teacher/evaluations/${evaluationId}`);
+  return { success: true };
 }
 
 export async function addQuestionAction(
@@ -61,7 +76,7 @@ export async function addQuestionAction(
     evaluationId,
     sectionId: str(formData, "sectionId"),
     data: {
-      text: str(formData, "text"),
+      text: rich(formData, "text"),
       options: (["A", "B", "C", "D"] as AnswerKey[]).map((key) => ({
         key,
         text: str(formData, `option${key}`),
@@ -71,6 +86,7 @@ export async function addQuestionAction(
       weight: weightRaw ? Number(weightRaw) : undefined,
       soloLevel: (soloLevel || null) as SoloLevel | null,
       menComponent: str(formData, "menComponent") || undefined,
+      competency: str(formData, "competency") || undefined,
     },
   });
   if (!result.ok) return { error: result.error.message };

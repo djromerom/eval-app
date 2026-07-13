@@ -5,11 +5,14 @@ import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/evaluations/status-badge";
+import { RichText, RichTextInline } from "@/components/editor/rich-text";
+import { richTextToPlain } from "@/components/editor/render";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
 import { makeListCourseSubjects } from "@/modules/academic/infrastructure/container";
 import { makeSearchBankQuestions } from "@/modules/question-bank/infrastructure/container";
 import { QuestionForm } from "../question-form";
-import { addSectionAction, submitForReviewAction } from "../actions";
+import { SectionForm } from "../section-form";
+import { submitForReviewAction } from "../actions";
 import { exportQuestionToBankAction, importBankQuestionAction } from "../../question-bank/actions";
 
 const controlClass =
@@ -54,11 +57,37 @@ export default async function EvaluationDetailPage({
           {evaluation.totalQuestions} pregunta(s)
         </span>
         <Link
-          href={`/print/evaluation/${evaluation.id}`}
-          target="_blank"
+          href={`/teacher/evaluations/${evaluation.id}/generate-sheets`}
           className="text-muted-foreground ml-auto text-sm hover:underline"
         >
-          Vista previa de impresión ↗
+          Generar hojas →
+        </Link>
+        <Link
+          href={`/teacher/evaluations/${evaluation.id}/results`}
+          className="text-muted-foreground text-sm hover:underline"
+        >
+          Resultados →
+        </Link>
+        <Link
+          href={`/print/evaluation/${evaluation.id}`}
+          target="_blank"
+          className="text-muted-foreground text-sm hover:underline"
+        >
+          Cartilla ↗
+        </Link>
+        <Link
+          href={`/print/answer-sheet/${evaluation.id}`}
+          target="_blank"
+          className="text-muted-foreground text-sm hover:underline"
+        >
+          Hoja respuestas ↗
+        </Link>
+        <Link
+          href={`/print/answer-key/${evaluation.id}`}
+          target="_blank"
+          className="text-muted-foreground text-sm hover:underline"
+        >
+          Clave ↗
         </Link>
         <Link href="/teacher/evaluations" className="text-muted-foreground text-sm hover:underline">
           ← Volver
@@ -66,26 +95,10 @@ export default async function EvaluationDetailPage({
       </div>
 
       {editable ? (
-        <div className="bg-card mb-6 flex flex-wrap items-center gap-3 rounded-xl border p-4">
-          <form action={addSectionAction} className="flex items-end gap-2">
-            <input type="hidden" name="evaluationId" value={evaluation.id} />
-            <div className="space-y-1">
-              <label className="text-muted-foreground block text-xs font-medium">
-                Título del bloque (opcional)
-              </label>
-              <input
-                name="title"
-                placeholder="Bloque de contexto"
-                className="border-input bg-background focus-visible:ring-ring h-9 rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
-              />
-            </div>
-            <Button type="submit" size="sm" variant="outline">
-              + Agregar bloque
-            </Button>
-          </form>
-
+        <div className="bg-card mb-6 space-y-4 rounded-xl border p-4">
+          <SectionForm evaluationId={evaluation.id} />
           {evaluation.totalQuestions > 0 ? (
-            <form action={submitForReviewAction} className="ml-auto">
+            <form action={submitForReviewAction}>
               <input type="hidden" name="evaluationId" value={evaluation.id} />
               <Button type="submit" size="sm">
                 Enviar a revisión
@@ -108,12 +121,14 @@ export default async function EvaluationDetailPage({
               <h2 className="border-b pb-2 font-semibold">
                 {section.title ?? `Bloque ${section.order + 1}`}
               </h2>
+              <RichText value={section.content} className="text-muted-foreground" />
 
               {section.questions.map((q) => (
                 <div key={q.id} className="rounded-lg border p-4">
-                  <p className="font-medium">
-                    {q.number}. {String(q.text)}
-                  </p>
+                  <div className="flex gap-1 font-medium">
+                    <span>{q.number}.</span>
+                    <RichTextInline value={q.text} />
+                  </div>
                   <ul className="mt-2 space-y-1 text-sm">
                     {q.options.map((o) => (
                       <li
@@ -124,7 +139,7 @@ export default async function EvaluationDetailPage({
                             : "text-muted-foreground"
                         }
                       >
-                        {o.key}) {String(o.text)}
+                        {o.key}) <RichTextInline value={o.text} />
                         {o.key === q.correctAnswer ? " ✓" : ""}
                       </li>
                     ))}
@@ -154,7 +169,7 @@ export default async function EvaluationDetailPage({
                   <select name="bankQuestionId" required className={controlClass}>
                     {bankQuestions.map((bq) => (
                       <option key={bq.id} value={bq.id}>
-                        {String(bq.text).slice(0, 70)}
+                        {richTextToPlain(bq.text).slice(0, 70)}
                       </option>
                     ))}
                   </select>

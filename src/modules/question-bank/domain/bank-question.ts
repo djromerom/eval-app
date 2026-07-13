@@ -13,6 +13,7 @@ export interface BankQuestion {
   justification: string | null;
   soloLevel: SoloLevel | null;
   menComponent: string | null;
+  competency: string | null;
   difficulty: Difficulty;
   tags: string[];
   isPersonal: boolean; // true = solo visible para su creador
@@ -27,6 +28,7 @@ export interface CreateBankQuestionData {
   justification?: string;
   soloLevel?: SoloLevel | null;
   menComponent?: string | null;
+  competency?: string | null;
   difficulty?: Difficulty;
   tags?: string[];
   isPersonal?: boolean;

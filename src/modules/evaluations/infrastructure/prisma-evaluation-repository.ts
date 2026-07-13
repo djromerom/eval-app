@@ -62,6 +62,7 @@ type SectionRow = {
     weight: number;
     soloLevel: PrismaSoloLevel | null;
     menComponent: string | null;
+    competency: string | null;
     options: { key: string; text: Prisma.JsonValue }[];
   }[];
 };
@@ -82,6 +83,7 @@ function toSection(s: SectionRow): EvaluationSection {
       weight: q.weight,
       soloLevel: (q.soloLevel as SoloLevel | null) ?? null,
       menComponent: q.menComponent,
+      competency: q.competency,
       options: q.options.map((o) => ({ key: o.key as AnswerKey, text: o.text })),
     })),
   };
@@ -218,6 +220,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
           weight: data.weight ?? 1,
           soloLevel: (data.soloLevel as PrismaSoloLevel | null) ?? null,
           menComponent: data.menComponent ?? null,
+          competency: data.competency ?? null,
           bankOriginId: data.bankOriginId ?? null,
           options: { create: data.options.map((o) => ({ key: o.key, text: json(o.text) })) },
         },
@@ -234,6 +237,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         weight: q.weight,
         soloLevel: (q.soloLevel as SoloLevel | null) ?? null,
         menComponent: q.menComponent,
+        competency: q.competency,
         options: q.options.map((o) => ({ key: o.key as AnswerKey, text: o.text })),
       };
     });

@@ -11,6 +11,12 @@
   /* Doble carta (Tabloid) horizontal: 17 × 11 in */
   size: 17in 11in landscape;
   margin: 2cm;
+  @bottom-center {
+    content: counter(page);
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 9pt;
+    color: #555;
+  }
 }
 
 /* ===== Contenedor y hoja (tipografía común) ===== */
@@ -19,21 +25,28 @@
   font-size: 10pt;
   line-height: 1.15;
   color: #000;
+  /* Espacio para el doblez central */
+  padding: 0 1.5cm;
+  position: relative;
 }
 
 .sheet {
   background: #fff;
   color: #000;
+  position: relative;
 }
 
+/* ===== PORTADA ===== */
 .cover-institution {
   font-size: 14pt;
   font-weight: 700;
   text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .cover-test-title {
-  margin-top: 0.4rem;
+  margin-top: 0.3rem;
   font-size: 12pt;
   font-weight: 700;
   text-align: center;
@@ -42,10 +55,46 @@
 .cover-grade {
   font-size: 11pt;
   text-align: center;
+  margin-top: 0.2rem;
+}
+
+/* Tabla de competencias (ICFES) */
+.competencies-section {
+  margin: 0.8rem 0;
+}
+
+.competencies-title {
+  font-size: 11pt;
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+  text-align: center;
+}
+
+.competencies-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10pt;
+}
+
+.competencies-table th,
+.competencies-table td {
+  border: 1px solid #000;
+  padding: 0.2rem 0.5rem;
+  text-align: left;
+}
+
+.competencies-table th {
+  font-weight: 700;
+  background: #f0f0f0;
+  text-align: center;
+}
+
+.competencies-table td.text-center {
+  text-align: center;
 }
 
 .cover-booklet-number {
-  margin: 1.2rem 0;
+  margin: 1rem 0;
   font-size: 22pt;
   font-weight: 700;
   text-align: center;
@@ -58,22 +107,25 @@
 }
 
 .cover-instructions-title {
-  margin-top: 0.6rem;
+  margin-top: 0.5rem;
   font-size: 12pt;
   font-weight: 700;
 }
 
 .cover-instructions-intro {
+  margin-top: 0.2rem;
   font-style: italic;
+  text-align: justify;
 }
 
 .cover-instructions-list {
-  margin: 0.4rem 0 0 1.2rem;
+  margin: 0.3rem 0 0 1.2rem;
   list-style: disc;
 }
 
 .cover-instructions-list li {
-  margin-bottom: 0.2rem;
+  margin-bottom: 0.3rem;
+  text-align: justify;
 }
 
 .mark-example {
@@ -88,27 +140,38 @@
   margin-top: 1rem;
 }
 
-.student-fields div {
+.student-field {
+  display: flex;
+  align-items: baseline;
   margin-bottom: 0.6rem;
+}
+
+.student-field-label {
+  font-weight: 700;
+  font-size: 10pt;
+  white-space: nowrap;
+  margin-right: 0.5rem;
+}
+
+.student-field-line {
+  flex: 1;
   border-bottom: 1px solid #000;
-  padding-bottom: 0.15rem;
+  height: 1.2rem;
+}
+
+/* ===== Línea de doblez al centro (pliegue del cuadernillo) ===== */
+.fold-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 21.59cm + 2cm);
+  width: 0.5pt;
+  border-left: 0.5pt dashed #999;
+  opacity: 0.3;
+  pointer-events: none;
 }
 
 /* ===== Áreas / preguntas ===== */
-.areas-table {
-  width: 100%;
-  margin: 0.8rem 0;
-  border-collapse: collapse;
-  font-size: 10pt;
-}
-
-.areas-table th,
-.areas-table td {
-  border: 1px solid #000;
-  padding: 0.25rem 0.5rem;
-  text-align: left;
-}
-
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -132,6 +195,7 @@
   font-weight: 700;
   text-transform: uppercase;
   margin: 0.6rem 0;
+  letter-spacing: 0.02em;
 }
 
 .block-text-title {
@@ -184,8 +248,26 @@
   color: #fff;
 }
 
-.omr-fiducial {
-  background: #000;
+/* ===== Número de página (solo en impresión) ===== */
+@page :first {
+  @bottom-center {
+    content: none;
+  }
+}
+
+.page-number {
+  text-align: center;
+  font-size: 9pt;
+  color: #555;
+  margin-top: 1rem;
+  border-top: 1px solid #ccc;
+  padding-top: 0.3rem;
+}
+
+@media print {
+  .page-number {
+    border-top: none;
+  }
 }
 
 /* ===== Vista previa en pantalla ===== */
@@ -204,6 +286,9 @@
     border: 1px solid var(--border);
     border-radius: 0.5rem;
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+  }
+  .fold-line {
+    display: none;
   }
 }
 
@@ -229,5 +314,8 @@
   }
   .sheet:last-child {
     break-after: auto;
+  }
+  .fold-line {
+    opacity: 0.15;
   }
 }

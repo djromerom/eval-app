@@ -26,3 +26,7 @@ test-results/
 
 # uploads locales (hojas escaneadas, PDFs generados)
 storage/
+
+# directorios temporales de verificación OMR (mkdtempSync)
+omr-verify-*/
+scanning-test-*/

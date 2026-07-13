@@ -78,6 +78,7 @@ class FakeEvaluations implements EvaluationRepository {
       weight: 1,
       soloLevel: null,
       menComponent: null,
+      competency: null,
     };
   }
   async updateStatus(institutionId: string, id: string, status: EvaluationStatus) {

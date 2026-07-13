@@ -37,6 +37,7 @@ export async function createBankQuestionAction(
       correctAnswer: str(formData, "correctAnswer") as AnswerKey,
       soloLevel: (str(formData, "soloLevel") || null) as SoloLevel | null,
       menComponent: str(formData, "menComponent") || undefined,
+      competency: str(formData, "competency") || undefined,
       difficulty: (str(formData, "difficulty") || "MEDIUM") as Difficulty,
       tags,
       isPersonal: formData.get("isPersonal") === "on",

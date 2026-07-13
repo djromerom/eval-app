@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { addQuestionAction } from "./actions";
 
 const KEYS = ["A", "B", "C", "D"] as const;
@@ -36,12 +37,14 @@ export function QuestionForm({
 }) {
   const [state, formAction] = useActionState<AdminFormState, FormData>(addQuestionAction, {});
   const [correct, setCorrect] = useState<string>("A");
+  const [resetKey, setResetKey] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (state.success) {
       formRef.current?.reset();
       setCorrect("A");
+      setResetKey((k) => k + 1); // remonta el editor para limpiarlo
     }
   }, [state.success]);
 
@@ -55,16 +58,8 @@ export function QuestionForm({
       <input type="hidden" name="sectionId" value={sectionId} />
 
       <div className="space-y-1">
-        <label className="text-muted-foreground text-xs font-medium">
-          Enunciado (soporta KaTeX $...$)
-        </label>
-        <textarea
-          name="text"
-          required
-          rows={2}
-          className="border-input bg-background focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
-          placeholder="Escribe el enunciado…"
-        />
+        <label className="text-muted-foreground text-xs font-medium">Enunciado</label>
+        <RichTextEditor key={resetKey} name="text" minHeightClass="min-h-16" />
       </div>
 
       <div className="space-y-2">
@@ -106,6 +101,10 @@ export function QuestionForm({
         <div className="space-y-1">
           <label className="text-muted-foreground block text-xs font-medium">Componente MEN</label>
           <Input name="menComponent" placeholder="(opcional)" className="w-40" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-muted-foreground block text-xs font-medium">Competencia</label>
+          <Input name="competency" placeholder="(opcional)" className="w-40" />
         </div>
         <div className="space-y-1">
           <label className="text-muted-foreground block text-xs font-medium">Puntaje</label>

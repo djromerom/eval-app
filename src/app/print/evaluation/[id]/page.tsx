@@ -6,6 +6,8 @@ import { isPrintable } from "@/modules/evaluations/domain/evaluation-status";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
 import { makeGetMyInstitution } from "@/modules/institutions/infrastructure/container";
 import { makeListCourseSubjects } from "@/modules/academic/infrastructure/container";
+import { RichText, RichTextInline } from "@/components/editor/rich-text";
+import { richTextToPlain } from "@/components/editor/render";
 import { PrintButton } from "./print-button";
 
 export const metadata: Metadata = { title: "Vista previa de impresión" };
@@ -19,16 +21,29 @@ const INSTRUCTIONS = [
 
 const KEYS = ["A", "B", "C", "D"] as const;
 
-function contextText(content: unknown): string | null {
-  return typeof content === "string" && content.trim() ? content : null;
+interface CompetencyRow {
+  competency: string;
+  questions: number[];
 }
 
-/**
- * Vista previa / impresión de una evaluación como cartilla ICFES (§3.4).
- * El mismo marcado se ve como hojas en pantalla y se imprime en doble carta
- * horizontal (Print CSS @page). Validar el formato contra
- * Prueba__11º_I_periodo_C3__1_.pdf.
- */
+function buildCompetencyRows(
+  sections: { questions: { number: number; competency: string | null }[] }[],
+): CompetencyRow[] {
+  const map = new Map<string, number[]>();
+  for (const section of sections) {
+    for (const q of section.questions) {
+      const key = q.competency || "Sin especificar";
+      const list = map.get(key) ?? [];
+      list.push(q.number);
+      map.set(key, list);
+    }
+  }
+  return Array.from(map.entries()).map(([competency, questions]) => ({
+    competency,
+    questions,
+  }));
+}
+
 export default async function PrintEvaluationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const actor = await requireAuthenticatedUser();
@@ -47,6 +62,8 @@ export default async function PrintEvaluationPage({ params }: { params: Promise<
   const area = cs?.subjectName ?? "";
   const bookletLabel = `CUADERNILLO ${evaluation.bookletNumber ?? 1}`;
 
+  const competencyRows = buildCompetencyRows(evaluation.sections);
+
   return (
     <div className="booklet">
       <div className="no-print bg-card sticky top-0 z-10 flex w-full max-w-[900px] items-center gap-3 rounded-lg border p-3 text-sm">
@@ -63,15 +80,56 @@ export default async function PrintEvaluationPage({ params }: { params: Promise<
       <section className="sheet cover">
         <p className="cover-institution">{institutionName}</p>
         <p className="cover-test-title">{evaluation.title}</p>
-        <p className="cover-grade">{grade ? `Grado ${grade}` : ""}</p>
+        {grade ? <p className="cover-grade">Grado {grade}</p> : null}
+
+        {/* ¿Qué competencias evaluamos? — tabla ICFES */}
+        {competencyRows.length > 0 && (
+          <div className="competencies-section">
+            <p className="competencies-title">¿Qué competencias evaluamos?</p>
+            <table className="competencies-table">
+              <thead>
+                <tr>
+                  <th>Competencia</th>
+                  <th>Preguntas</th>
+                  <th>Cantidad</th>
+                </tr>
+              </thead>
+              <tbody>
+                {competencyRows.map((row) => (
+                  <tr key={row.competency}>
+                    <td>{row.competency}</td>
+                    <td className="text-center">
+                      {row.questions
+                        .sort((a, b) => a - b)
+                        .map((n, i) => (
+                          <span key={n}>
+                            {i > 0 && row.questions.length > 3
+                              ? i < row.questions.length - 1
+                                ? ", "
+                                : " y "
+                              : i > 0
+                                ? ", "
+                                : ""}
+                            {n}
+                          </span>
+                        ))}
+                    </td>
+                    <td className="text-center">{row.questions.length}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         <p className="cover-booklet-number">{bookletLabel}</p>
 
         <p className="cover-greeting">¡Hola!</p>
+
         <p className="cover-instructions-title">Instrucciones</p>
         <p className="cover-instructions-intro">
-          A continuación encontrarás una serie de preguntas de selección múltiple. Lee con atención
-          y responde en la hoja de respuestas.
+          A continuación encontrarás una serie de preguntas de selección múltiple con única
+          respuesta. Lee con atención cada pregunta y responde en la hoja de respuestas.
         </p>
         <ul className="cover-instructions-list">
           {INSTRUCTIONS.map((line) => (
@@ -89,58 +147,66 @@ export default async function PrintEvaluationPage({ params }: { params: Promise<
         </div>
 
         <div className="student-fields">
-          <div>Nombre:</div>
-          <div>Grado:</div>
-          <div>Fecha:</div>
+          <div className="student-field">
+            <span className="student-field-label">Nombres y apellidos:</span>
+            <span className="student-field-line" />
+          </div>
+          <div className="student-field">
+            <span className="student-field-label">Grado:</span>
+            <span className="student-field-line" />
+          </div>
+          <div className="student-field">
+            <span className="student-field-label">Fecha:</span>
+            <span className="student-field-line" />
+          </div>
         </div>
+
+        {/* Línea de doblez al centro */}
+        <div className="fold-line" />
       </section>
 
       {/* ===== Páginas 2+: preguntas ===== */}
-      <section className="sheet questions">
-        <div className="page-header">
-          <span>{institutionName}</span>
-          <span>{bookletLabel}</span>
-        </div>
-        {area ? <p className="subject-title">{area}</p> : null}
+      {evaluation.sections.map((section) => {
+        const numbers = section.questions.map((q) => q.number);
+        const first = numbers[0];
+        const last = numbers[numbers.length - 1];
+        const hasContext = richTextToPlain(section.content).length > 0;
+        return (
+          <section key={section.id} className="sheet questions">
+            <div className="page-header">
+              <span>{institutionName}</span>
+              <span>{bookletLabel}</span>
+            </div>
+            {area ? <p className="subject-title">{area}</p> : null}
 
-        {evaluation.sections.length === 0 ? (
-          <p className="context-paragraph">Esta evaluación aún no tiene contenido.</p>
-        ) : (
-          evaluation.sections.map((section) => {
-            const numbers = section.questions.map((q) => q.number);
-            const first = numbers[0];
-            const last = numbers[numbers.length - 1];
-            const context = contextText(section.content);
-            return (
-              <div key={section.id}>
-                {numbers.length > 0 ? (
-                  <p className="block-lead">
-                    Responda las preguntas {first} a la {last}
-                    {context || section.title ? " de acuerdo con la siguiente información" : ""}
-                  </p>
-                ) : null}
-                {section.title ? <p className="block-text-title">«{section.title}»</p> : null}
-                {context ? <p className="context-paragraph">{context}</p> : null}
+            {numbers.length > 0 && (
+              <p className="block-lead">
+                RESPONDA LAS PREGUNTAS {first} A LA {last}
+                {hasContext || section.title ? " DE ACUERDO CON LA SIGUIENTE INFORMACIÓN" : ""}
+              </p>
+            )}
+            {section.title ? <p className="block-text-title">«{section.title}»</p> : null}
+            {hasContext ? <RichText value={section.content} className="context-paragraph" /> : null}
 
-                {section.questions.map((q) => (
-                  <div key={q.id} className="question">
-                    <p className="question-text">
-                      {q.number}. {String(q.text)}
-                    </p>
-                    <ul className="question-options">
-                      {q.options.map((o) => (
-                        <li key={o.key}>
-                          {o.key}. {String(o.text)}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
+            {section.questions.map((q) => (
+              <div key={q.id} className="question">
+                <p className="question-text">
+                  {q.number}. <RichTextInline value={q.text} />
+                </p>
+                <ul className="question-options">
+                  {q.options.map((o) => (
+                    <li key={o.key}>
+                      {o.key}. <RichTextInline value={o.text} />
+                    </li>
+                  ))}
+                </ul>
               </div>
-            );
-          })
-        )}
-      </section>
+            ))}
+
+            <div className="fold-line" />
+          </section>
+        );
+      })}
     </div>
   );
 }

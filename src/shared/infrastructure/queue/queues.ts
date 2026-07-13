@@ -16,6 +16,7 @@ export const QUEUE_NAMES = {
 export interface OmrScanJob {
   answerSheetId: string;
   scanBatchId: string;
+  institutionId: string;
   imagePath: string;
 }
 

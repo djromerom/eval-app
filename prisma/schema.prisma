@@ -49,6 +49,8 @@ model User {
   password      String? // hash bcrypt — solo para provider credentials
   image         String?
   emailVerified DateTime?
+  inviteToken   String? // bcrypt del token de invitación
+  inviteTokenExpiresAt DateTime?
   institutionId String      @db.Uuid
   institution   Institution @relation(fields: [institutionId], references: [id])
   isActive      Boolean     @default(true)

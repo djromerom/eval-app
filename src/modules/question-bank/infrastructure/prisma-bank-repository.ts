@@ -23,6 +23,7 @@ type BankRow = {
   justification: string | null;
   soloLevel: PrismaSoloLevel | null;
   menComponent: string | null;
+  competency: string | null;
   difficulty: QuestionDifficulty;
   tags: string[];
   isPersonal: boolean;
@@ -42,6 +43,7 @@ function toBankQuestion(r: BankRow): BankQuestion {
     justification: r.justification,
     soloLevel: (r.soloLevel as SoloLevel | null) ?? null,
     menComponent: r.menComponent,
+    competency: r.competency,
     difficulty: r.difficulty as Difficulty,
     tags: r.tags,
     isPersonal: r.isPersonal,
@@ -81,6 +83,7 @@ export class PrismaBankQuestionRepository implements BankQuestionRepository {
         justification: data.justification ?? null,
         soloLevel: (data.soloLevel as PrismaSoloLevel | null) ?? null,
         menComponent: data.menComponent ?? null,
+        competency: data.competency ?? null,
         difficulty: (data.difficulty as QuestionDifficulty | undefined) ?? "MEDIUM",
         tags: data.tags ?? [],
         isPersonal: data.isPersonal ?? false,

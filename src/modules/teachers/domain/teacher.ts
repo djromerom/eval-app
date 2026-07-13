@@ -37,6 +37,8 @@ export interface TeacherRepository {
   findById(institutionId: string, id: string): Promise<Teacher | null>;
   /** Crea la cuenta (TEACHER, inactiva) + el perfil docente en una transacción. */
   createWithUser(institutionId: string, data: CreateTeacherData): Promise<Teacher>;
+  /** Guarda el hash del token de invitación y su expiración en el usuario. */
+  setInviteToken(userId: string, tokenHash: string, expiresAt: Date): Promise<void>;
   assign(teacherId: string, courseSubjectId: string): Promise<void>;
   isAssigned(teacherId: string, courseSubjectId: string): Promise<boolean>;
   listAssignments(institutionId: string, teacherId?: string): Promise<TeacherAssignment[]>;
