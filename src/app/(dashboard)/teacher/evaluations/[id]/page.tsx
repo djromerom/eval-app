@@ -10,6 +10,7 @@ import { richTextToPlain } from "@/components/editor/render";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
 import { makeListCourseSubjects } from "@/modules/academic/infrastructure/container";
 import { makeSearchBankQuestions } from "@/modules/question-bank/infrastructure/container";
+import { DownloadPdfButton } from "./download-pdf-button";
 import { QuestionForm } from "../question-form";
 import { SectionForm } from "../section-form";
 import { submitForReviewAction } from "../actions";
@@ -75,6 +76,7 @@ export default async function EvaluationDetailPage({
         >
           Cartilla ↗
         </Link>
+        <DownloadPdfButton evaluationId={evaluation.id} />
         <Link
           href={`/print/answer-sheet/${evaluation.id}`}
           target="_blank"

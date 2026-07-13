@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "@/styles/print.css";
 import "@/styles/answer-sheet.css";
 import { notFound } from "next/navigation";
-import { requireAuthenticatedUser } from "@/lib/session";
+import { resolvePrintActor } from "@/lib/print-access";
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
 import { makeGetMyInstitution } from "@/modules/institutions/infrastructure/container";
@@ -17,14 +17,14 @@ const KEYS = ["A", "B", "C", "D"] as const;
 
 interface Props {
   params: Promise<{ evaluationId: string }>;
-  searchParams: Promise<{ students?: string }>;
+  searchParams: Promise<{ students?: string; t?: string }>;
 }
 
 export default async function BulkAnswerSheetsPage({ params, searchParams }: Props) {
   const { evaluationId } = await params;
-  const { students: studentIds } = await searchParams;
+  const { students: studentIds, t } = await searchParams;
 
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await resolvePrintActor(t, { evaluationId, kind: "answer-sheets" });
 
   const [evalRes, instRes] = await Promise.all([
     makeGetEvaluation().execute({ actor, id: evaluationId }),

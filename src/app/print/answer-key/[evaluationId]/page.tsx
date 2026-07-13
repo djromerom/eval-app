@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "@/styles/print.css";
 import "@/styles/answer-sheet.css";
 import { notFound } from "next/navigation";
-import { requireAuthenticatedUser } from "@/lib/session";
+import { resolvePrintActor } from "@/lib/print-access";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
 import { PrintButton } from "../../evaluation/[id]/print-button";
 
@@ -10,11 +10,13 @@ export const metadata: Metadata = { title: "Clave de respuestas" };
 
 interface Props {
   params: Promise<{ evaluationId: string }>;
+  searchParams: Promise<{ t?: string }>;
 }
 
-export default async function AnswerKeyPage({ params }: Props) {
+export default async function AnswerKeyPage({ params, searchParams }: Props) {
   const { evaluationId } = await params;
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const { t } = await searchParams;
+  const actor = await resolvePrintActor(t, { evaluationId, kind: "answer-key" });
 
   const evalRes = await makeGetEvaluation().execute({ actor, id: evaluationId });
   if (!evalRes.ok) notFound();

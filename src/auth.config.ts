@@ -25,7 +25,10 @@ export const authConfig = {
         pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/api/auth");
       if (isPublic) return true;
 
-      // /print/* requiere sesión: las cartillas contienen contenido de evaluación
+      // /print/* se auto-protege dentro de cada página (sesión O token de
+      // impresión firmado), para permitir el acceso sin sesión del worker de PDF.
+      if (pathname.startsWith("/print/")) return true;
+
       return isLoggedIn;
     },
   },

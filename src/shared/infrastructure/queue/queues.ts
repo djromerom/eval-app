@@ -1,4 +1,4 @@
-import { Queue } from "bullmq";
+import { Queue, QueueEvents } from "bullmq";
 import IORedis from "ioredis";
 import { env } from "@/config/env";
 
@@ -22,7 +22,15 @@ export interface OmrScanJob {
 
 export interface PdfGenerationJob {
   evaluationId: string;
+  institutionId: string;
   kind: "booklet" | "answer-sheets" | "answer-key";
+}
+
+/** Resultado que el worker devuelve al completar el job. */
+export interface PdfGenerationResult {
+  evaluationId: string;
+  kind: PdfGenerationJob["kind"];
+  path: string;
 }
 
 let connection: IORedis | undefined;
@@ -44,4 +52,14 @@ export function getOmrScanQueue(): Queue<OmrScanJob> {
 export function getPdfGenerationQueue(): Queue<PdfGenerationJob> {
   pdfQueue ??= new Queue(QUEUE_NAMES.pdfGeneration, { connection: getRedisConnection() });
   return pdfQueue;
+}
+
+let pdfQueueEvents: QueueEvents | undefined;
+
+/** Necesario para esperar el resultado de un job (Job.waitUntilFinished). */
+export function getPdfQueueEvents(): QueueEvents {
+  pdfQueueEvents ??= new QueueEvents(QUEUE_NAMES.pdfGeneration, {
+    connection: getRedisConnection(),
+  });
+  return pdfQueueEvents;
 }

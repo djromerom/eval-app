@@ -1,3 +1,4 @@
+import "./load-env";
 import { Worker } from "bullmq";
 import {
   QUEUE_NAMES,

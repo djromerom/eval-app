@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "@/styles/print.css";
 import { notFound } from "next/navigation";
-import { requireAuthenticatedUser } from "@/lib/session";
+import { resolvePrintActor } from "@/lib/print-access";
 import { isPrintable } from "@/modules/evaluations/domain/evaluation-status";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
 import { makeGetMyInstitution } from "@/modules/institutions/infrastructure/container";
@@ -44,9 +44,16 @@ function buildCompetencyRows(
   }));
 }
 
-export default async function PrintEvaluationPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PrintEvaluationPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ t?: string }>;
+}) {
   const { id } = await params;
-  const actor = await requireAuthenticatedUser();
+  const { t } = await searchParams;
+  const actor = await resolvePrintActor(t, { evaluationId: id, kind: "booklet" });
 
   const [evalRes, instRes, csRes] = await Promise.all([
     makeGetEvaluation().execute({ actor, id }),

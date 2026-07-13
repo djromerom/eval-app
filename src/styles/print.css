@@ -8,8 +8,16 @@
  */
 
 @page {
-  /* Doble carta (Tabloid) horizontal: 17 × 11 in */
-  size: 17in 11in landscape;
+  /*
+   * Método primario de impresión (REQUERIMIENTOS_v2.md §3.4): el profesor
+   * imprime desde el navegador. Para esto usamos carta (Letter), que es lo
+   * que una impresora de oficina puede manejar.
+   *
+   * El cuadernillo doble carta ya impuesto se descarga aparte con el botón
+   * "Descargar PDF", que produce un PDF server-side (Puppeteer + pdf-lib)
+   * listo para llevar a imprenta.
+   */
+  size: letter portrait;
   margin: 2cm;
   @bottom-center {
     content: counter(page);
@@ -25,8 +33,6 @@
   font-size: 10pt;
   line-height: 1.15;
   color: #000;
-  /* Espacio para el doblez central */
-  padding: 0 1.5cm;
   position: relative;
 }
 
@@ -159,16 +165,11 @@
   height: 1.2rem;
 }
 
-/* ===== Línea de doblez al centro (pliegue del cuadernillo) ===== */
+/* ===== Línea de doblez al centro =====
+ * Solo aplica al cuadernillo doble carta (worker PDF). En carta se oculta.
+ */
 .fold-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(50% - 21.59cm + 2cm);
-  width: 0.5pt;
-  border-left: 0.5pt dashed #999;
-  opacity: 0.3;
-  pointer-events: none;
+  display: none;
 }
 
 /* ===== Áreas / preguntas ===== */
@@ -270,7 +271,10 @@
   }
 }
 
-/* ===== Vista previa en pantalla ===== */
+/* ===== Vista previa en pantalla =====
+ * Simula hojas carta apiladas. El cuadernillo doble carta se ve aparte en
+ * la página de descarga.
+ */
 @media screen {
   .booklet {
     display: flex;
@@ -281,18 +285,18 @@
   }
   .sheet {
     width: 100%;
-    max-width: 900px;
+    max-width: 800px; /* ancho carta aprox */
+    aspect-ratio: 8.5 / 11;
     padding: 2.5rem 3rem;
     border: 1px solid var(--border);
     border-radius: 0.5rem;
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
   }
-  .fold-line {
-    display: none;
-  }
 }
 
-/* ===== Impresión real ===== */
+/* ===== Impresión real =====
+ * Carta vertical (portrait), una hoja por página lógica.
+ */
 @media print {
   .no-print {
     display: none !important;
@@ -309,13 +313,9 @@
     border: none;
     border-radius: 0;
     box-shadow: none;
-    /* Cada hoja del cuadernillo en su propia página */
     break-after: page;
   }
   .sheet:last-child {
     break-after: auto;
-  }
-  .fold-line {
-    opacity: 0.15;
   }
 }
