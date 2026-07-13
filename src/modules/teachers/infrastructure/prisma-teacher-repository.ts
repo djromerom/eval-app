@@ -4,6 +4,7 @@ import type {
   CreateTeacherData,
   Teacher,
   TeacherAssignment,
+  TeacherProfileData,
   TeacherRepository,
 } from "../domain/teacher";
 
@@ -50,6 +51,36 @@ export class PrismaTeacherRepository implements TeacherRepository {
       include: withUser,
     });
     return row && toTeacher(row);
+  }
+
+  async findByUserId(institutionId: string, userId: string): Promise<Teacher | null> {
+    const row = await prisma.teacher.findFirst({
+      where: { userId, user: { institutionId, deletedAt: null } },
+      include: withUser,
+    });
+    return row && toTeacher(row);
+  }
+
+  async emailTaken(email: string): Promise<boolean> {
+    const row = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    return row !== null;
+  }
+
+  async createProfileForUser(userId: string, data: TeacherProfileData): Promise<Teacher> {
+    const row = await prisma.teacher.create({
+      data: { userId, idType: data.idType, idNumber: data.idNumber, phone: data.phone },
+      include: withUser,
+    });
+    return toTeacher(row);
+  }
+
+  async updateProfile(teacherId: string, data: TeacherProfileData): Promise<Teacher> {
+    const row = await prisma.teacher.update({
+      where: { id: teacherId },
+      data: { idType: data.idType, idNumber: data.idNumber, phone: data.phone },
+      include: withUser,
+    });
+    return toTeacher(row);
   }
 
   async createWithUser(institutionId: string, data: CreateTeacherData): Promise<Teacher> {

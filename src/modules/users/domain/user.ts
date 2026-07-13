@@ -18,6 +18,8 @@ export interface UserRepository {
   findIdsByRole(institutionId: string, role: Role): Promise<string[]>;
   /** Invitación: crea el usuario inactivo hasta que vincule cuenta o cree contraseña (§3.1). */
   invite(institutionId: string, email: string, name: string, roles: Role[]): Promise<User>;
+  /** Guarda el hash del token de invitación y su expiración en el usuario. */
+  setInviteToken(userId: string, tokenHash: string, expiresAt: Date): Promise<void>;
   setRoles(institutionId: string, userId: string, roles: Role[]): Promise<void>;
   setActive(institutionId: string, userId: string, isActive: boolean): Promise<void>;
 }

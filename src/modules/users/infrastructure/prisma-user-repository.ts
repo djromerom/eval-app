@@ -80,6 +80,13 @@ export class PrismaUserRepository implements UserRepository {
     return toUser(row);
   }
 
+  async setInviteToken(userId: string, tokenHash: string, expiresAt: Date): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { inviteToken: tokenHash, inviteTokenExpiresAt: expiresAt },
+    });
+  }
+
   async setRoles(institutionId: string, userId: string, roles: Role[]): Promise<void> {
     await prisma.$transaction([
       prisma.userRole.deleteMany({ where: { userId } }),

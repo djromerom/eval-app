@@ -2,13 +2,15 @@ import type { Metadata } from "next";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { EntityForm } from "@/components/admin/entity-form";
-import { TEACHER_ID_TYPES } from "@/modules/teachers/domain/teacher";
+import { TEACHER_ID_TYPES, isProfileComplete } from "@/modules/teachers/domain/teacher";
 import {
   makeListTeacherAssignments,
   makeListTeachers,
 } from "@/modules/teachers/infrastructure/container";
 import { makeListCourseSubjects } from "@/modules/academic/infrastructure/container";
 import { assignTeacherAction, createTeacherAction } from "./actions";
+import { CompleteProfileForm } from "./complete-profile-form";
+import { ResendInviteButton } from "./resend-invite-button";
 
 export const metadata: Metadata = { title: "Docentes" };
 
@@ -114,41 +116,61 @@ export default async function TeachersPage() {
                 <th className="px-4 py-3 font-medium">Documento</th>
                 <th className="px-4 py-3 font-medium">Estado</th>
                 <th className="px-4 py-3 font-medium">Asignaturas-curso</th>
+                <th className="px-4 py-3 font-medium">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {teachers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-muted-foreground px-4 py-8 text-center">
+                  <td colSpan={6} className="text-muted-foreground px-4 py-8 text-center">
                     Aún no hay docentes.
                   </td>
                 </tr>
               ) : (
-                teachers.map((t) => (
-                  <tr key={t.id} className="border-b align-top last:border-0">
-                    <td className="px-4 py-3 font-medium">{t.name}</td>
-                    <td className="text-muted-foreground px-4 py-3">{t.email}</td>
-                    <td className="text-muted-foreground px-4 py-3">
-                      {t.idType} {t.idNumber}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={
-                          t.isActive
-                            ? "bg-primary/10 text-primary inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
-                            : "bg-muted text-muted-foreground inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
-                        }
-                      >
-                        {t.isActive ? "Activo" : "Invitado"}
-                      </span>
-                    </td>
-                    <td className="text-muted-foreground px-4 py-3">
-                      {(byTeacher.get(t.id) ?? [])
-                        .map((a) => `${a.courseName}·${a.subjectName}`)
-                        .join(", ") || "—"}
-                    </td>
-                  </tr>
-                ))
+                teachers.map((t) => {
+                  const complete = isProfileComplete(t);
+                  return (
+                    <tr key={t.id} className="border-b align-top last:border-0">
+                      <td className="px-4 py-3 font-medium">{t.name}</td>
+                      <td className="text-muted-foreground px-4 py-3">{t.email}</td>
+                      <td className="text-muted-foreground px-4 py-3">
+                        {complete ? `${t.idType} ${t.idNumber}` : "Sin documento"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col items-start gap-1">
+                          <span
+                            className={
+                              t.isActive
+                                ? "bg-primary/10 text-primary inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
+                                : "bg-muted text-muted-foreground inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
+                            }
+                          >
+                            {t.isActive ? "Activo" : "Invitado"}
+                          </span>
+                          {!complete ? (
+                            <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+                              Perfil incompleto
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="text-muted-foreground px-4 py-3">
+                        {(byTeacher.get(t.id) ?? [])
+                          .map((a) => `${a.courseName}·${a.subjectName}`)
+                          .join(", ") || "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col items-start gap-2">
+                          {!complete ? <CompleteProfileForm teacherId={t.id} /> : null}
+                          {!t.isActive ? <ResendInviteButton teacherId={t.id} /> : null}
+                          {complete && t.isActive ? (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

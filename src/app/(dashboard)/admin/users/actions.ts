@@ -2,15 +2,42 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAuthenticatedUser } from "@/lib/session";
-import type { Role } from "@/shared/application/authenticated-user";
+import type { AuthenticatedUser, Role } from "@/shared/application/authenticated-user";
+import { prisma } from "@/shared/infrastructure/db/prisma";
 import { ADMIN_ASSIGNABLE_ROLES } from "@/modules/users/domain/user";
 import {
   makeInviteUser,
+  makeResendUserInvitation,
   makeSetUserActive,
   makeSetUserRoles,
 } from "@/modules/users/infrastructure/container";
+import { makeEnsureTeacherProfile } from "@/modules/teachers/infrastructure/container";
 
 const PATH = "/admin/users";
+const TEACHERS_PATH = "/admin/teachers";
+
+/**
+ * El rol Profesor implica un perfil docente: si se asigna desde Usuarios, se crea
+ * un perfil incompleto (sin documento) para que aparezca en el módulo Docentes,
+ * donde se completa. Quitar el rol no borra el perfil.
+ */
+async function ensureTeacherProfileIfNeeded(
+  actor: AuthenticatedUser,
+  userId: string,
+  roles: Role[],
+) {
+  if (!roles.includes("TEACHER")) return;
+  await makeEnsureTeacherProfile().execute({ actor, userId });
+  revalidatePath(TEACHERS_PATH);
+}
+
+async function institutionNameOf(institutionId: string): Promise<string> {
+  const inst = await prisma.institution.findUnique({
+    where: { id: institutionId },
+    select: { name: true },
+  });
+  return inst?.name ?? "Institución";
+}
 
 export interface UserFormState {
   error?: string;
@@ -30,11 +57,29 @@ export async function inviteUserAction(
   formData: FormData,
 ): Promise<UserFormState> {
   const actor = await requireAuthenticatedUser("ADMIN");
+  const roles = rolesFrom(formData);
   const result = await makeInviteUser().execute({
     actor,
     name: String(formData.get("name") ?? "").trim(),
     email: String(formData.get("email") ?? "").trim(),
-    roles: rolesFrom(formData),
+    roles,
+    institutionName: await institutionNameOf(actor.institutionId),
+  });
+  if (!result.ok) return { error: result.error.message };
+  await ensureTeacherProfileIfNeeded(actor, result.value.id, roles);
+  revalidatePath(PATH);
+  return { success: true };
+}
+
+export async function resendUserInvitationAction(
+  _prev: UserFormState,
+  formData: FormData,
+): Promise<UserFormState> {
+  const actor = await requireAuthenticatedUser("ADMIN");
+  const result = await makeResendUserInvitation().execute({
+    actor,
+    userId: String(formData.get("userId") ?? ""),
+    institutionName: await institutionNameOf(actor.institutionId),
   });
   if (!result.ok) return { error: result.error.message };
   revalidatePath(PATH);
@@ -46,12 +91,11 @@ export async function setUserRolesAction(
   formData: FormData,
 ): Promise<UserFormState> {
   const actor = await requireAuthenticatedUser("ADMIN");
-  const result = await makeSetUserRoles().execute({
-    actor,
-    userId: String(formData.get("userId") ?? ""),
-    roles: rolesFrom(formData),
-  });
+  const userId = String(formData.get("userId") ?? "");
+  const roles = rolesFrom(formData);
+  const result = await makeSetUserRoles().execute({ actor, userId, roles });
   if (!result.ok) return { error: result.error.message };
+  await ensureTeacherProfileIfNeeded(actor, userId, roles);
   revalidatePath(PATH);
   return { success: true };
 }

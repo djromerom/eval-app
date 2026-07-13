@@ -1,11 +1,20 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { AssignTeacher, CreateTeacher } from "@/modules/teachers/application/teachers";
+import {
+  AssignTeacher,
+  CompleteTeacherProfile,
+  CreateTeacher,
+  EnsureTeacherProfile,
+  ResendTeacherInvitation,
+} from "@/modules/teachers/application/teachers";
 import type { AuthenticatedUser } from "@/shared/application/authenticated-user";
-import type {
-  CreateTeacherData,
-  Teacher,
-  TeacherAssignment,
-  TeacherRepository,
+import type { Email, EmailService } from "@/shared/domain/email";
+import {
+  type CreateTeacherData,
+  type Teacher,
+  type TeacherAssignment,
+  type TeacherProfileData,
+  type TeacherRepository,
+  isProfileComplete,
 } from "@/modules/teachers/domain/teacher";
 import type {
   CourseSubject,
@@ -22,6 +31,33 @@ class InMemoryTeachers implements TeacherRepository {
   async findById(institutionId: string, id: string) {
     return this.items.find((t) => t.institutionId === institutionId && t.id === id) ?? null;
   }
+  async emailTaken(email: string) {
+    return this.items.some((t) => t.email === email);
+  }
+  async findByUserId(institutionId: string, userId: string) {
+    return this.items.find((t) => t.institutionId === institutionId && t.userId === userId) ?? null;
+  }
+  async createProfileForUser(userId: string, data: TeacherProfileData) {
+    const t: Teacher = {
+      id: `t-${this.items.length + 1}`,
+      userId,
+      institutionId: "i1",
+      name: "Usuario",
+      email: `${userId}@c.co`,
+      idType: data.idType,
+      idNumber: data.idNumber,
+      phone: data.phone,
+      isActive: false,
+    };
+    this.items.push(t);
+    return t;
+  }
+  async updateProfile(teacherId: string, data: TeacherProfileData) {
+    const t = this.items.find((x) => x.id === teacherId);
+    if (!t) throw new Error("no encontrado");
+    Object.assign(t, data);
+    return t;
+  }
   async createWithUser(institutionId: string, data: CreateTeacherData) {
     const t: Teacher = {
       id: `t-${this.items.length + 1}`,
@@ -37,8 +73,13 @@ class InMemoryTeachers implements TeacherRepository {
     this.items.push(t);
     return t;
   }
-  async setInviteToken(_userId: string, _tokenHash: string, _expiresAt: Date): Promise<void> {
-    // no-op para tests
+  tokens: { userId: string; tokenHash: string }[] = [];
+  async setInviteToken(userId: string, tokenHash: string, _expiresAt: Date): Promise<void> {
+    this.tokens.push({ userId, tokenHash });
+  }
+  activate(id: string) {
+    const t = this.items.find((x) => x.id === id);
+    if (t) t.isActive = true;
   }
   async assign(teacherId: string, courseSubjectId: string) {
     this.assignments.push({
@@ -103,6 +144,18 @@ describe("CreateTeacher", () => {
     }
   });
 
+  it("rechaza un correo ya registrado (sin reventar la BD)", async () => {
+    const first = await uc.execute({ actor: admin, data: data(), institutionName });
+    expect(first.ok).toBe(true);
+    const dup = await uc.execute({
+      actor: admin,
+      data: data({ email: "PROF@colegio.edu.co" }),
+      institutionName,
+    });
+    expect(dup.ok).toBe(false);
+    if (!dup.ok) expect(dup.error.code).toBe("VALIDATION");
+  });
+
   it("rechaza tipo de documento inválido", async () => {
     const r = await uc.execute({ actor: admin, data: data({ idType: "T.I." }), institutionName });
     expect(r.ok).toBe(false);
@@ -117,6 +170,168 @@ describe("CreateTeacher", () => {
     });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe("FORBIDDEN");
+  });
+});
+
+class FakeEmail implements EmailService {
+  sent: Email[] = [];
+  constructor(private readonly fails = false) {}
+  async send(email: Email): Promise<void> {
+    if (this.fails) throw new Error("SMTP caído");
+    this.sent.push(email);
+  }
+}
+
+describe("ResendTeacherInvitation", () => {
+  let repo: InMemoryTeachers;
+  beforeEach(async () => {
+    repo = new InMemoryTeachers();
+    await repo.createWithUser("i1", {
+      name: "Prof. Uno",
+      email: "prof@colegio.edu.co",
+      idType: "C.C.",
+      idNumber: "999",
+    });
+  });
+
+  it("reenvía la invitación a un docente invitado (nuevo token + correo)", async () => {
+    const email = new FakeEmail();
+    const r = await new ResendTeacherInvitation(repo, email).execute({
+      actor: admin,
+      teacherId: "t-1",
+      institutionName,
+    });
+    expect(r.ok).toBe(true);
+    expect(email.sent).toHaveLength(1);
+    expect(email.sent[0]?.to).toBe("prof@colegio.edu.co");
+    // El enlace apunta a /accept-invite (el route group (auth) no va en la URL).
+    expect(email.sent[0]?.html).toContain("/accept-invite?token=");
+    expect(email.sent[0]?.html).not.toContain("/auth/accept-invite");
+    expect(repo.tokens).toHaveLength(1);
+  });
+
+  it("falla si el SMTP no está configurado", async () => {
+    const r = await new ResendTeacherInvitation(repo, undefined).execute({
+      actor: admin,
+      teacherId: "t-1",
+      institutionName,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("VALIDATION");
+  });
+
+  it("falla si el docente ya activó su cuenta", async () => {
+    repo.activate("t-1");
+    const r = await new ResendTeacherInvitation(repo, new FakeEmail()).execute({
+      actor: admin,
+      teacherId: "t-1",
+      institutionName,
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it("falla si el docente no existe", async () => {
+    const r = await new ResendTeacherInvitation(repo, new FakeEmail()).execute({
+      actor: admin,
+      teacherId: "nope",
+      institutionName,
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it("surfacea el error cuando el envío falla", async () => {
+    const r = await new ResendTeacherInvitation(repo, new FakeEmail(true)).execute({
+      actor: admin,
+      teacherId: "t-1",
+      institutionName,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.message).toMatch(/no se pudo enviar/i);
+  });
+
+  it("rechaza a un no-ADMIN", async () => {
+    const r = await new ResendTeacherInvitation(repo, new FakeEmail()).execute({
+      actor: { ...admin, roles: ["TEACHER"] },
+      teacherId: "t-1",
+      institutionName,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("FORBIDDEN");
+  });
+});
+
+describe("EnsureTeacherProfile", () => {
+  it("crea un perfil incompleto para un usuario con rol Profesor", async () => {
+    const repo = new InMemoryTeachers();
+    const r = await new EnsureTeacherProfile(repo).execute({ actor: admin, userId: "u-99" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(isProfileComplete(r.value)).toBe(false);
+    expect(repo.items).toHaveLength(1);
+  });
+
+  it("es idempotente: no duplica si el perfil ya existe", async () => {
+    const repo = new InMemoryTeachers();
+    const teacher = await repo.createWithUser("i1", {
+      name: "P",
+      email: "p@c.co",
+      idType: "C.C.",
+      idNumber: "1",
+    });
+    const r = await new EnsureTeacherProfile(repo).execute({
+      actor: admin,
+      userId: teacher.userId,
+    });
+    expect(r.ok).toBe(true);
+    expect(repo.items).toHaveLength(1);
+  });
+
+  it("rechaza a un no-ADMIN", async () => {
+    const r = await new EnsureTeacherProfile(new InMemoryTeachers()).execute({
+      actor: { ...admin, roles: ["TEACHER"] },
+      userId: "u-1",
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("FORBIDDEN");
+  });
+});
+
+describe("CompleteTeacherProfile", () => {
+  it("completa el documento de un perfil incompleto", async () => {
+    const repo = new InMemoryTeachers();
+    const ensured = await new EnsureTeacherProfile(repo).execute({ actor: admin, userId: "u-1" });
+    if (!ensured.ok) throw new Error("setup falló");
+    const r = await new CompleteTeacherProfile(repo).execute({
+      actor: admin,
+      teacherId: ensured.value.id,
+      idType: "C.C.",
+      idNumber: "123",
+      phone: "300",
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(isProfileComplete(r.value)).toBe(true);
+  });
+
+  it("rechaza documento vacío", async () => {
+    const repo = new InMemoryTeachers();
+    const ensured = await new EnsureTeacherProfile(repo).execute({ actor: admin, userId: "u-1" });
+    if (!ensured.ok) throw new Error("setup falló");
+    const r = await new CompleteTeacherProfile(repo).execute({
+      actor: admin,
+      teacherId: ensured.value.id,
+      idType: "C.C.",
+      idNumber: "   ",
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it("rechaza si el docente no existe", async () => {
+    const r = await new CompleteTeacherProfile(new InMemoryTeachers()).execute({
+      actor: admin,
+      teacherId: "nope",
+      idType: "C.C.",
+      idNumber: "1",
+    });
+    expect(r.ok).toBe(false);
   });
 });
 

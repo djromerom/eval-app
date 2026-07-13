@@ -3,6 +3,9 @@ import {
   type Role,
   requireRole,
 } from "@/shared/application/authenticated-user";
+import type { EmailService } from "@/shared/domain/email";
+import { sendUserInvitation } from "@/shared/application/user-invitation";
+import { logger } from "@/shared/infrastructure/logger";
 import type { UseCase } from "@/shared/application/use-case";
 import { type Result, ValidationError, fail, ok } from "@/shared/domain/result";
 import { type User, type UserRepository, areAssignableRoles, isValidEmail } from "../domain/user";
@@ -12,17 +15,27 @@ export interface InviteUserInput {
   email: string;
   name: string;
   roles: Role[];
+  institutionName?: string;
 }
 
 /**
  * Invita a un usuario a la institución del ADMIN con uno o más roles
  * combinables (§2, §3.1). Queda inactivo hasta que vincule cuenta OAuth o
- * defina contraseña.
+ * defina contraseña; se le envía el correo con el enlace de invitación.
  */
 export class InviteUser implements UseCase<InviteUserInput, User> {
-  constructor(private readonly users: UserRepository) {}
+  constructor(
+    private readonly users: UserRepository,
+    private readonly email?: EmailService,
+  ) {}
 
-  async execute({ actor, email, name, roles }: InviteUserInput): Promise<Result<User>> {
+  async execute({
+    actor,
+    email,
+    name,
+    roles,
+    institutionName,
+  }: InviteUserInput): Promise<Result<User>> {
     const authorized = requireRole(actor, "ADMIN");
     if (!authorized.ok) return authorized;
 
@@ -37,9 +50,93 @@ export class InviteUser implements UseCase<InviteUserInput, User> {
       return fail(new ValidationError(`Ya existe un usuario con el correo "${email}".`));
     }
 
-    return ok(
-      await this.users.invite(actor.institutionId, email.toLowerCase(), name.trim(), roles),
+    const user = await this.users.invite(
+      actor.institutionId,
+      email.toLowerCase(),
+      name.trim(),
+      roles,
     );
+
+    if (this.email) {
+      try {
+        await sendUserInvitation(
+          this.email,
+          (userId, tokenHash, expiresAt) => this.users.setInviteToken(userId, tokenHash, expiresAt),
+          {
+            userId: user.id,
+            email: user.email,
+            name: user.name,
+            institutionName: institutionName ?? "Institución",
+          },
+        );
+      } catch (error) {
+        // El usuario se creó igual; el correo se puede reintentar.
+        logger.error(
+          { err: error, userId: user.id, to: user.email },
+          "No se pudo enviar el correo de invitación al usuario",
+        );
+      }
+    }
+
+    return ok(user);
+  }
+}
+
+export interface ResendUserInvitationInput {
+  actor: AuthenticatedUser;
+  userId: string;
+  institutionName?: string;
+}
+
+/** Reenvía el correo de invitación a un usuario que aún no ha activado su cuenta. §3.1 */
+export class ResendUserInvitation implements UseCase<ResendUserInvitationInput, void> {
+  constructor(
+    private readonly users: UserRepository,
+    private readonly email?: EmailService,
+  ) {}
+
+  async execute({
+    actor,
+    userId,
+    institutionName,
+  }: ResendUserInvitationInput): Promise<Result<void>> {
+    const authorized = requireRole(actor, "ADMIN");
+    if (!authorized.ok) return authorized;
+
+    if (!this.email) {
+      return fail(new ValidationError("El envío de correos no está configurado (SMTP)."));
+    }
+
+    const user = await this.users.findById(actor.institutionId, userId);
+    if (!user) return fail(new ValidationError("El usuario no existe en tu institución."));
+    if (user.isActive) {
+      return fail(new ValidationError("El usuario ya activó su cuenta; no requiere invitación."));
+    }
+
+    try {
+      await sendUserInvitation(
+        this.email,
+        (uid, tokenHash, expiresAt) => this.users.setInviteToken(uid, tokenHash, expiresAt),
+        {
+          userId: user.id,
+          email: user.email,
+          name: user.name,
+          institutionName: institutionName ?? "Institución",
+        },
+      );
+    } catch (error) {
+      logger.error(
+        { err: error, userId: user.id, to: user.email },
+        "No se pudo reenviar el correo de invitación al usuario",
+      );
+      return fail(
+        new ValidationError(
+          "No se pudo enviar el correo. Verifica la configuración SMTP e inténtalo de nuevo.",
+        ),
+      );
+    }
+
+    return ok(undefined);
   }
 }
 

@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { InviteUser, SetUserActive, SetUserRoles } from "@/modules/users/application/users";
+import {
+  InviteUser,
+  ResendUserInvitation,
+  SetUserActive,
+  SetUserRoles,
+} from "@/modules/users/application/users";
 import type { AuthenticatedUser, Role } from "@/shared/application/authenticated-user";
+import type { Email, EmailService } from "@/shared/domain/email";
 import type { User, UserRepository } from "@/modules/users/domain/user";
 
 class InMemoryUsers implements UserRepository {
@@ -31,6 +37,10 @@ class InMemoryUsers implements UserRepository {
     };
     this.items.push(u);
     return u;
+  }
+  tokens: { userId: string; tokenHash: string }[] = [];
+  async setInviteToken(userId: string, tokenHash: string, _expiresAt: Date) {
+    this.tokens.push({ userId, tokenHash });
   }
   async setRoles(institutionId: string, userId: string, roles: Role[]) {
     const u = this.items.find((x) => x.id === userId);
@@ -68,6 +78,43 @@ describe("InviteUser", () => {
     }
   });
 
+  it("envía el correo de invitación cuando hay servicio de email", async () => {
+    const sent: Email[] = [];
+    const email: EmailService = {
+      async send(e) {
+        sent.push(e);
+      },
+    };
+    const r = await new InviteUser(repo, email).execute({
+      actor: admin,
+      email: "nuevo@colegio.edu.co",
+      name: "Nuevo",
+      roles: ["COORDINATOR"],
+      institutionName: "Colegio Test",
+    });
+    expect(r.ok).toBe(true);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.to).toBe("nuevo@colegio.edu.co");
+    expect(sent[0]?.html).toContain("/accept-invite?token=");
+    expect(repo.tokens).toHaveLength(1);
+  });
+
+  it("crea el usuario aunque falle el envío del correo", async () => {
+    const email: EmailService = {
+      async send() {
+        throw new Error("SMTP caído");
+      },
+    };
+    const r = await new InviteUser(repo, email).execute({
+      actor: admin,
+      email: "x@colegio.edu.co",
+      name: "X",
+      roles: ["COORDINATOR"],
+      institutionName: "Colegio Test",
+    });
+    expect(r.ok).toBe(true);
+  });
+
   it("rechaza asignar SUPER_ADMIN", async () => {
     const r = await uc.execute({
       actor: admin,
@@ -96,6 +143,67 @@ describe("InviteUser", () => {
     });
     expect(forbidden.ok).toBe(false);
     if (!forbidden.ok) expect(forbidden.error.code).toBe("FORBIDDEN");
+  });
+});
+
+describe("ResendUserInvitation", () => {
+  let repo: InMemoryUsers;
+  beforeEach(async () => {
+    repo = new InMemoryUsers();
+    await repo.invite("i1", "invitado@c.co", "Invitado", ["COORDINATOR"]);
+  });
+
+  it("reenvía la invitación a un usuario inactivo", async () => {
+    const sent: Email[] = [];
+    const email: EmailService = {
+      async send(e) {
+        sent.push(e);
+      },
+    };
+    const r = await new ResendUserInvitation(repo, email).execute({
+      actor: admin,
+      userId: "u-1",
+      institutionName: "Colegio Test",
+    });
+    expect(r.ok).toBe(true);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.to).toBe("invitado@c.co");
+    expect(repo.tokens).toHaveLength(1);
+  });
+
+  it("falla si el SMTP no está configurado", async () => {
+    const r = await new ResendUserInvitation(repo, undefined).execute({
+      actor: admin,
+      userId: "u-1",
+      institutionName: "Colegio Test",
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it("falla si el usuario ya está activo", async () => {
+    await repo.setActive("i1", "u-1", true);
+    const email: EmailService = { async send() {} };
+    const r = await new ResendUserInvitation(repo, email).execute({
+      actor: admin,
+      userId: "u-1",
+      institutionName: "Colegio Test",
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it("surfacea el error cuando el envío falla", async () => {
+    const email: EmailService = {
+      async send() {
+        throw new Error("SMTP caído");
+      },
+    };
+    const r = await new ResendUserInvitation(repo, email).execute({
+      actor: admin,
+      userId: "u-1",
+      institutionName: "Colegio Test",
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.message).toMatch(/no se pudo enviar/i);
   });
 });
 

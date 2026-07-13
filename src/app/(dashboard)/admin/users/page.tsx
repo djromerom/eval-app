@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { makeListUsers } from "@/modules/users/infrastructure/container";
 import { InviteUserForm, RolesEditor } from "./users-forms";
+import { ResendInviteButton } from "./resend-invite-button";
 import { ROLE_OPTIONS } from "./roles";
 import { setUserActiveAction } from "./actions";
 
@@ -76,13 +77,16 @@ export default async function UsersPage() {
                     {u.id === actor.userId ? (
                       <span className="text-muted-foreground text-xs">—</span>
                     ) : (
-                      <form action={setUserActiveAction}>
-                        <input type="hidden" name="userId" value={u.id} />
-                        <input type="hidden" name="isActive" value={String(!u.isActive)} />
-                        <Button type="submit" variant="outline" size="sm">
-                          {u.isActive ? "Desactivar" : "Activar"}
-                        </Button>
-                      </form>
+                      <div className="flex flex-col items-start gap-2">
+                        <form action={setUserActiveAction}>
+                          <input type="hidden" name="userId" value={u.id} />
+                          <input type="hidden" name="isActive" value={String(!u.isActive)} />
+                          <Button type="submit" variant="outline" size="sm">
+                            {u.isActive ? "Desactivar" : "Activar"}
+                          </Button>
+                        </form>
+                        {!u.isActive ? <ResendInviteButton userId={u.id} /> : null}
+                      </div>
                     )}
                   </td>
                 </tr>

@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { requireAuthenticatedUser } from "@/lib/session";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import { prisma } from "@/shared/infrastructure/db/prisma";
-import { makeAssignTeacher, makeCreateTeacher } from "@/modules/teachers/infrastructure/container";
+import {
+  makeAssignTeacher,
+  makeCompleteTeacherProfile,
+  makeCreateTeacher,
+  makeResendTeacherInvitation,
+} from "@/modules/teachers/infrastructure/container";
 
 const PATH = "/admin/teachers";
 
@@ -31,6 +36,42 @@ export async function createTeacherAction(
       idNumber: str(formData, "idNumber"),
       phone: str(formData, "phone") || undefined,
     },
+  });
+  if (!result.ok) return { error: result.error.message };
+  revalidatePath(PATH);
+  return { success: true };
+}
+
+export async function resendTeacherInvitationAction(
+  _prev: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
+  const actor = await requireAuthenticatedUser("ADMIN");
+  const institution = await prisma.institution.findUnique({
+    where: { id: actor.institutionId },
+    select: { name: true },
+  });
+  const result = await makeResendTeacherInvitation().execute({
+    actor,
+    teacherId: str(formData, "teacherId"),
+    institutionName: institution?.name ?? "Institución",
+  });
+  if (!result.ok) return { error: result.error.message };
+  revalidatePath(PATH);
+  return { success: true };
+}
+
+export async function completeTeacherProfileAction(
+  _prev: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
+  const actor = await requireAuthenticatedUser("ADMIN");
+  const result = await makeCompleteTeacherProfile().execute({
+    actor,
+    teacherId: str(formData, "teacherId"),
+    idType: str(formData, "idType"),
+    idNumber: str(formData, "idNumber"),
+    phone: str(formData, "phone") || undefined,
   });
   if (!result.ok) return { error: result.error.message };
   revalidatePath(PATH);

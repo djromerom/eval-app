@@ -1,7 +1,7 @@
-import crypto from "node:crypto";
-import bcrypt from "bcryptjs";
 import { type AuthenticatedUser, requireRole } from "@/shared/application/authenticated-user";
 import type { EmailService } from "@/shared/domain/email";
+import { sendUserInvitation } from "@/shared/application/user-invitation";
+import { logger } from "@/shared/infrastructure/logger";
 import type { UseCase } from "@/shared/application/use-case";
 import { type Result, ValidationError, fail, ok } from "@/shared/domain/result";
 import { isValidEmail } from "@/modules/users/domain/user";
@@ -13,6 +13,74 @@ import {
   type TeacherRepository,
   isValidTeacherIdType,
 } from "../domain/teacher";
+
+export interface EnsureTeacherProfileInput {
+  actor: AuthenticatedUser;
+  userId: string;
+}
+
+/**
+ * Garantiza que un usuario con rol Profesor tenga perfil docente. Se invoca al
+ * asignar el rol desde el módulo Usuarios; crea un perfil incompleto (sin
+ * documento) que luego se completa en Docentes. Idempotente. §3.1/§3.2
+ */
+export class EnsureTeacherProfile implements UseCase<EnsureTeacherProfileInput, Teacher> {
+  constructor(private readonly teachers: TeacherRepository) {}
+
+  async execute({ actor, userId }: EnsureTeacherProfileInput): Promise<Result<Teacher>> {
+    const authorized = requireRole(actor, "ADMIN");
+    if (!authorized.ok) return authorized;
+
+    const existing = await this.teachers.findByUserId(actor.institutionId, userId);
+    if (existing) return ok(existing);
+
+    return ok(
+      await this.teachers.createProfileForUser(userId, { idType: "", idNumber: "", phone: null }),
+    );
+  }
+}
+
+export interface CompleteTeacherProfileInput {
+  actor: AuthenticatedUser;
+  teacherId: string;
+  idType: string;
+  idNumber: string;
+  phone?: string;
+}
+
+/** Completa el documento/teléfono de un perfil docente incompleto. §3.2 */
+export class CompleteTeacherProfile implements UseCase<CompleteTeacherProfileInput, Teacher> {
+  constructor(private readonly teachers: TeacherRepository) {}
+
+  async execute({
+    actor,
+    teacherId,
+    idType,
+    idNumber,
+    phone,
+  }: CompleteTeacherProfileInput): Promise<Result<Teacher>> {
+    const authorized = requireRole(actor, "ADMIN");
+    if (!authorized.ok) return authorized;
+
+    if (!isValidTeacherIdType(idType)) {
+      return fail(new ValidationError(`Tipo de documento inválido: "${idType}".`));
+    }
+    if (!idNumber.trim()) {
+      return fail(new ValidationError("El número de documento es obligatorio."));
+    }
+
+    const teacher = await this.teachers.findById(actor.institutionId, teacherId);
+    if (!teacher) return fail(new ValidationError("El docente no existe en tu institución."));
+
+    return ok(
+      await this.teachers.updateProfile(teacherId, {
+        idType,
+        idNumber: idNumber.trim(),
+        phone: phone?.trim() || null,
+      }),
+    );
+  }
+}
 
 export interface CreateTeacherInput {
   actor: AuthenticatedUser;
@@ -39,32 +107,26 @@ export class CreateTeacher implements UseCase<CreateTeacherInput, Teacher> {
     if (!data.idNumber.trim())
       return fail(new ValidationError("El número de documento es obligatorio."));
 
+    const email = data.email.trim().toLowerCase();
+    if (await this.teachers.emailTaken(email)) {
+      return fail(new ValidationError(`Ya existe un usuario con el correo "${email}".`));
+    }
+
     const teacher = await this.teachers.createWithUser(actor.institutionId, {
       ...data,
-      email: data.email.toLowerCase(),
+      email,
       name: data.name.trim(),
     });
 
     if (this.email) {
-      const rawToken = crypto.randomBytes(32).toString("hex");
-      const tokenHash = await bcrypt.hash(rawToken, 10);
-      const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48h
-      await this.teachers.setInviteToken(teacher.userId, tokenHash, expiresAt);
-
-      const inviteUrl = `${process.env.AUTH_URL ?? "http://localhost:3000"}/auth/accept-invite?token=${rawToken}&email=${encodeURIComponent(teacher.email)}`;
-
       try {
-        await this.email.send({
-          to: teacher.email,
-          subject: `Has sido invitado a ${institutionName} — Eval`,
-          html: buildInvitationHtml({
-            institutionName,
-            teacherName: teacher.name,
-            inviteUrl,
-          }),
-        });
-      } catch {
-        // Si falla el envío, el docente se creó igual. Se puede reintentar desde el panel.
+        await sendTeacherInvitation(this.teachers, this.email, teacher, institutionName);
+      } catch (error) {
+        // El docente se creó igual; el envío se puede reintentar desde el panel.
+        logger.error(
+          { err: error, teacherId: teacher.userId, to: teacher.email },
+          "No se pudo enviar el correo de invitación al docente",
+        );
       }
     }
 
@@ -72,48 +134,68 @@ export class CreateTeacher implements UseCase<CreateTeacherInput, Teacher> {
   }
 }
 
-function buildInvitationHtml(params: {
+export interface ResendTeacherInvitationInput {
+  actor: AuthenticatedUser;
+  teacherId: string;
   institutionName: string;
-  teacherName: string;
-  inviteUrl: string;
-}): string {
-  return `<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:system-ui,sans-serif">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0">
-    <tr><td align="center">
-      <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden">
-        <tr>
-          <td style="background:#2563eb;padding:24px;text-align:center">
-            <h1 style="color:#fff;margin:0;font-size:20px;font-weight:600">${params.institutionName}</h1>
-          </td>
-        </tr>
-        <tr><td style="padding:32px 24px">
-          <p style="margin:0 0 16px;font-size:16px;color:#18181b">Hola <strong>${params.teacherName}</strong>,</p>
-          <p style="margin:0 0 16px;font-size:14px;color:#52525b;line-height:1.6">
-            Has sido invitado a la plataforma <strong>Eval</strong> de
-            <strong>${params.institutionName}</strong>.
-            Haz clic en el siguiente botón para establecer tu contraseña y acceder:
-          </p>
-          <table cellpadding="0" cellspacing="0" style="margin:24px 0">
-            <tr>
-              <td align="center" style="background:#2563eb;border-radius:8px;padding:12px 32px">
-                <a href="${params.inviteUrl}" style="color:#fff;text-decoration:none;font-size:15px;font-weight:500;display:block">Aceptar invitación</a>
-              </td>
-            </tr>
-          </table>
-          <p style="margin:16px 0 0;font-size:13px;color:#a1a1aa;line-height:1.4">
-            Si no esperabas esta invitación, ignora este correo.<br>
-            Este enlace expira en 48 horas.
-          </p>
-        </td></tr>
-        <tr><td style="background:#f4f4f5;padding:16px 24px;text-align:center;font-size:12px;color:#a1a1aa">Eval — Plataforma de evaluaciones tipo ICFES</td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
+}
+
+/** Reenvía el correo de invitación a un docente que aún no ha activado su cuenta. §3.2 */
+export class ResendTeacherInvitation implements UseCase<ResendTeacherInvitationInput, void> {
+  constructor(
+    private readonly teachers: TeacherRepository,
+    private readonly email?: EmailService,
+  ) {}
+
+  async execute({
+    actor,
+    teacherId,
+    institutionName,
+  }: ResendTeacherInvitationInput): Promise<Result<void>> {
+    const authorized = requireRole(actor, "ADMIN");
+    if (!authorized.ok) return authorized;
+
+    if (!this.email) {
+      return fail(new ValidationError("El envío de correos no está configurado (SMTP)."));
+    }
+
+    const teacher = await this.teachers.findById(actor.institutionId, teacherId);
+    if (!teacher) return fail(new ValidationError("El docente no existe en tu institución."));
+    if (teacher.isActive) {
+      return fail(new ValidationError("El docente ya activó su cuenta; no requiere invitación."));
+    }
+
+    try {
+      await sendTeacherInvitation(this.teachers, this.email, teacher, institutionName);
+    } catch (error) {
+      // A diferencia del alta, aquí el envío es el objetivo: se surfacea el fallo.
+      logger.error(
+        { err: error, teacherId: teacher.userId, to: teacher.email },
+        "No se pudo reenviar el correo de invitación al docente",
+      );
+      return fail(
+        new ValidationError(
+          "No se pudo enviar el correo. Verifica la configuración SMTP e inténtalo de nuevo.",
+        ),
+      );
+    }
+
+    return ok(undefined);
+  }
+}
+
+/** Envía el correo de invitación al docente reutilizando el helper compartido. */
+async function sendTeacherInvitation(
+  teachers: TeacherRepository,
+  email: EmailService,
+  teacher: Pick<Teacher, "userId" | "email" | "name">,
+  institutionName: string,
+): Promise<void> {
+  await sendUserInvitation(
+    email,
+    (userId, tokenHash, expiresAt) => teachers.setInviteToken(userId, tokenHash, expiresAt),
+    { userId: teacher.userId, email: teacher.email, name: teacher.name, institutionName },
+  );
 }
 
 export interface ListTeachersInput {
