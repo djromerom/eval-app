@@ -6,6 +6,7 @@ import { readQuestion } from "../domain/bubble-classification";
 import { preprocessScan, measureFillRatio } from "../infrastructure/preprocess-image";
 import type { AnswerKey } from "../domain/answer-sheet";
 import type { ScanningRepository, QrDecoder, StudentAnswerRecord } from "../domain/answer-sheet";
+import { ANSWER_KEYS_ORDER } from "@/modules/evaluations/domain/evaluation";
 
 export interface EvaluationQuestionsProvider {
   getCorrectAnswers(
@@ -168,7 +169,7 @@ export class ProcessAnswerSheet {
     const hasReview = correctAnswers.some((q, idx) => {
       const row = idx;
       const colStart = 0;
-      const answers = ["A", "B", "C", "D"] as const;
+      const answers = ANSWER_KEYS_ORDER;
       const readings = answers.map((key, col) => {
         const cx = Math.round(imgW * (layout.startXPct + (colStart + col) * layout.spacingXPct));
         const cy = Math.round(imgH * (layout.startYPct + row * layout.spacingYPct));
@@ -198,7 +199,7 @@ export class ProcessAnswerSheet {
     for (let idx = 0; idx < correctAnswers.length; idx++) {
       const q = correctAnswers[idx]!;
       const row = idx;
-      const keys = ["A", "B", "C", "D"] as const;
+      const keys = ANSWER_KEYS_ORDER;
 
       const bubbleReadings = [];
       for (let col = 0; col < keys.length; col++) {

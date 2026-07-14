@@ -153,7 +153,7 @@ describe("validateQuestionShape", () => {
     });
     expect(validateQuestionShape(q)).toBeNull();
   });
-  it("acepta 3 opciones ( tricotomía) con correcta válida", () => {
+  it("acepta 3 opciones (tricotomía) con correcta válida", () => {
     const q = question({
       options: [
         { key: "A", text: "a" },
@@ -164,18 +164,54 @@ describe("validateQuestionShape", () => {
     });
     expect(validateQuestionShape(q)).toBeNull();
   });
+  it("acepta 5 opciones", () => {
+    const q = question({
+      options: (
+        [
+          { key: "A", text: "a" },
+          { key: "B", text: "b" },
+          { key: "C", text: "c" },
+          { key: "D", text: "d" },
+          { key: "E", text: "e" },
+        ] as const
+      ).map((o) => ({ key: o.key, text: o.text })),
+      correctAnswer: "E",
+    });
+    expect(validateQuestionShape(q)).toBeNull();
+  });
+  it("acepta 8 opciones (máximo, todas las letras A–H)", () => {
+    const q = question({
+      options: (
+        [
+          { key: "A", text: "a" },
+          { key: "B", text: "b" },
+          { key: "C", text: "c" },
+          { key: "D", text: "d" },
+          { key: "E", text: "e" },
+          { key: "F", text: "f" },
+          { key: "G", text: "g" },
+          { key: "H", text: "h" },
+        ] as const
+      ).map((o) => ({ key: o.key, text: o.text })),
+      correctAnswer: "H",
+    });
+    expect(validateQuestionShape(q)).toBeNull();
+  });
   it("rechaza 1 opción (muy pocas)", () => {
     expect(validateQuestionShape(question({ options: [{ key: "A", text: "a" }] }))).not.toBeNull();
   });
-  it("rechaza 5+ opciones (excede hoja A–D)", () => {
-    // Cast: estamos probando rechazo de una forma que el tipo AnswerKey
-    // no permite en compile-time (E no es AnswerKey válido).
+  it("rechaza 9 opciones (excede A–H)", () => {
+    // Cast: probando rechazo de una forma no representable en AnswerKey.
     const badOptions = [
       { key: "A", text: "a" },
       { key: "B", text: "b" },
       { key: "C", text: "c" },
       { key: "D", text: "d" },
       { key: "E", text: "e" },
+      { key: "F", text: "f" },
+      { key: "G", text: "g" },
+      { key: "H", text: "h" },
+      { key: "I" as const, text: "i" },
     ] as unknown as { key: import("@/modules/evaluations/domain/evaluation").AnswerKey }[];
     expect(validateQuestionShape({ ...question(), options: badOptions })).not.toBeNull();
   });

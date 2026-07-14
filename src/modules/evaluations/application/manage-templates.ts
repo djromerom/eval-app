@@ -3,6 +3,7 @@ import type { UseCase } from "@/shared/application/use-case";
 import { type Result, ValidationError, fail, ok } from "@/shared/domain/result";
 import type { CourseSubjectRepository } from "@/modules/academic/domain/types";
 import type { EvaluationRepository } from "../domain/evaluation";
+import { ANSWER_KEYS_ORDER } from "../domain/evaluation";
 import {
   type CreateTemplateData,
   type EvaluationTemplate,
@@ -125,12 +126,7 @@ export class ApplyTemplate implements UseCase<ApplyTemplateInput, void> {
       for (let i = 0; i < sec.numQuestions; i++) {
         await this.evaluations.addQuestion(actor.institutionId, evaluationId, section.id, {
           text: "",
-          options: [
-            { key: "A", text: "" },
-            { key: "B", text: "" },
-            { key: "C", text: "" },
-            { key: "D", text: "" },
-          ],
+          options: ANSWER_KEYS_ORDER.slice(0, 4).map((key) => ({ key, text: "" })),
           correctAnswer: "A",
         });
       }

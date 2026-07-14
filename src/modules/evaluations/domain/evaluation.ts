@@ -1,6 +1,6 @@
 import type { EvaluationStatus } from "./evaluation-status";
 
-export type AnswerKey = "A" | "B" | "C" | "D";
+export type AnswerKey = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
 
 export type SoloLevel =
   "UNI_ESTRUCTURAL" | "MULTIESTRUCTURAL" | "RELACIONAL" | "ABSTRACTO_EXTENDIDO";
@@ -123,28 +123,28 @@ export interface EvaluationRepository {
   createNewVersion(institutionId: string, id: string): Promise<Evaluation>;
 }
 
-const ANSWER_KEYS: AnswerKey[] = ["A", "B", "C", "D"];
-/** Lista ordenada de las claves posibles (A→D). Útil para construir
+const ANSWER_KEYS: AnswerKey[] = ["A", "B", "C", "D", "E", "F", "G", "H"];
+/** Lista ordenada de las claves posibles (A→H). Útil para construir
  *  inputs en formularios y validar formas. */
 export const ANSWER_KEYS_ORDER: readonly AnswerKey[] = ANSWER_KEYS;
 
 /** Mínimo y máximo de opciones por pregunta.
  *  - Mín. 2: para verdadero/falso o tricotomía.
- *  - Máx. 4: la hoja de respuestas institucional y el detector OMR solo
- *    tienen columnas A–D (plantilla ICFES); exceder 4 produciría una
- *    pregunta que el estudiante no puede marcar ni el scanner detectar.
- *  Si en el futuro se imprime una hoja con más columnas, basta con
- *  extender AnswerKey + ANSWER_KEYS y subir este tope. */
+ *  - Máx. 8: la hoja de respuestas tiene 8 columnas (A–H) fijas; las
+ *    preguntas con menos opciones simplemente dejan las restantes en
+ *    blanco. Esto simplifica la impresión (grilla uniforme) y el OMR
+ *    (siempre escanea 8 columnas por pregunta). */
 export const MIN_OPTIONS = 2;
-export const MAX_OPTIONS = 4;
+export const MAX_OPTIONS = 8;
 
-/** Una pregunta ICFES válida: entre 2 y 4 opciones (A–D) con una correcta entre ellas. */
+/** Una pregunta válida: entre MIN_OPTIONS y MAX_OPTIONS opciones (A–H)
+ *  con una correcta entre ellas. */
 export function validateQuestionShape(data: {
   options: { key: AnswerKey }[];
   correctAnswer: AnswerKey;
 }): string | null {
   if (data.options.length < MIN_OPTIONS || data.options.length > MAX_OPTIONS) {
-    return `La pregunta debe tener entre ${MIN_OPTIONS} y ${MAX_OPTIONS} opciones (A–D).`;
+    return `La pregunta debe tener entre ${MIN_OPTIONS} y ${MAX_OPTIONS} opciones (A–H).`;
   }
   const keys = data.options.map((o) => o.key);
   const unique = new Set(keys);

@@ -10,7 +10,7 @@ export const EMPTY_THRESHOLD = 0.2;
 
 export type BubbleState = "MARKED" | "EMPTY" | "AMBIGUOUS";
 
-export type AnswerKey = "A" | "B" | "C" | "D";
+export type AnswerKey = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
 
 export interface BubbleReading {
   key: AnswerKey;

@@ -1,4 +1,4 @@
-export type AnswerKey = "A" | "B" | "C" | "D";
+export type AnswerKey = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
 
 export type AnswerSheetStatus =
   "PENDING" | "SCANNED" | "PROCESSING" | "GRADED" | "REVIEW" | "COMPLETED";
