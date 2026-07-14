@@ -42,6 +42,7 @@ function navFor(roles: Role[]): NavItem[] {
       { href: "/admin/academic", label: "Estructura académica" },
       { href: "/admin/teachers", label: "Docentes" },
       { href: "/admin/students", label: "Estudiantes" },
+      { href: "/admin/theme", label: "Tema institucional" },
     );
   }
   if (hasRole(user, "COORDINATOR")) {

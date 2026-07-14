@@ -192,17 +192,72 @@ export function mergeTheme(
 }
 
 /**
- * Parsea seguro un JSON que llega de Prisma. Devuelve el objeto del schema o
- * un objeto vacío (que `mergeTheme()` rellenará con defaults).
+ * Parsea seguro un JSON que llega de Prisma. Valida campo por campo con
+ * `safeParse` para NO descartar todo el objeto si UN solo campo está mal.
+ *
+ * Estrategia: extraer `raw` como objeto genérico, validar cada campo contra
+ * su mini-schema, descartar los inválidos. Lo que sobrevive es un objeto
+ * `Partial<>` que `mergeTheme()` rellenará con defaults.
+ *
+ * Esto es importante para el flujo admin: si el usuario escribe "#0B5C2"
+ * (hex de 5 dígitos) no queremos que toda la configuración se resetee —
+ * solo ese campo cae al default.
  */
+type RawTheme = Record<string, unknown>;
+
+const HEX_COLOR_SCHEMA = z.string().regex(HEX_COLOR);
+const FONT_SCHEMA = z.enum(FONT_FAMILIES);
+const DENSITY_SCHEMA = z.enum(DENSITIES);
+const BOOL_SCHEMA = z.boolean();
+const DIVIDER_SCHEMA = z.enum(SECTION_DIVIDERS);
+
+function pickString(o: RawTheme, key: string, max?: number): string | undefined {
+  const v = o[key];
+  if (typeof v !== "string") return undefined;
+  const r = max ? z.string().max(max).safeParse(v) : z.string().safeParse(v);
+  return r.success ? r.data : undefined;
+}
+
+function pickAndValidate<T>(o: RawTheme, key: string, schema: z.ZodType<T>): T | undefined {
+  const v = o[key];
+  if (v === undefined || v === null) return undefined;
+  const r = schema.safeParse(v);
+  return r.success ? r.data : undefined;
+}
+
 export function parseInstitutionalTheme(raw: unknown): Partial<InstitutionalTheme> {
-  const result = InstitutionalThemeSchema.safeParse(raw);
-  return result.success ? result.data : {};
+  if (!raw || typeof raw !== "object") return {};
+  const o = raw as RawTheme;
+  const out: Partial<InstitutionalTheme> = {};
+  const primary = pickAndValidate(o, "primary", HEX_COLOR_SCHEMA);
+  if (primary !== undefined) out.primary = primary;
+  const ff = pickAndValidate(o, "fontFamily", FONT_SCHEMA);
+  if (ff !== undefined) out.fontFamily = ff;
+  const d = pickAndValidate(o, "density", DENSITY_SCHEMA);
+  if (d !== undefined) out.density = d;
+  const ft = pickString(o, "footerText", 200);
+  if (ft !== undefined) out.footerText = ft;
+  const sl = pickAndValidate(o, "showLogo", BOOL_SCHEMA);
+  if (sl !== undefined) out.showLogo = sl;
+  return out;
 }
 
 export function parseEvaluationTheme(raw: unknown): Partial<EvaluationTheme> {
-  const result = EvaluationThemeSchema.safeParse(raw);
-  return result.success ? result.data : {};
+  if (!raw || typeof raw !== "object") return {};
+  const o = raw as RawTheme;
+  // Base + extras de evaluación.
+  const base = parseInstitutionalTheme(raw);
+  const out: Partial<EvaluationTheme> = { ...base };
+  const cs = pickString(o, "coverSubtitle", 200);
+  if (cs !== undefined) out.coverSubtitle = cs;
+  const sd = pickAndValidate(o, "sectionDivider", DIVIDER_SCHEMA);
+  if (sd !== undefined) out.sectionDivider = sd;
+  // TipTap JSON: acepta cualquier objeto no nulo. Validación más profunda
+  // se hace en el cliente al renderizar el editor.
+  if (o.introText && typeof o.introText === "object") {
+    out.introText = o.introText as Record<string, unknown>;
+  }
+  return out;
 }
 
 // ===== CSS bridge =====
