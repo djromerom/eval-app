@@ -15,6 +15,7 @@ import { QuestionForm } from "../question-form";
 import { SectionForm } from "../section-form";
 import { submitForReviewAction } from "../actions";
 import { exportQuestionToBankAction, importBankQuestionAction } from "../../question-bank/actions";
+import { env } from "@/config/env";
 
 const controlClass =
   "h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none";
@@ -182,7 +183,12 @@ export default async function EvaluationDetailPage({
               ) : null}
 
               {editable ? (
-                <QuestionForm evaluationId={evaluation.id} sectionId={section.id} />
+                <QuestionForm
+                  evaluationId={evaluation.id}
+                  sectionId={section.id}
+                  defaultOptions={env.EVAL_DEFAULT_OPTIONS}
+                  maxOptions={env.EVAL_MAX_OPTIONS}
+                />
               ) : null}
             </section>
           ))}

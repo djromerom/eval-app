@@ -39,16 +39,26 @@ function SubmitButton() {
  *  correcta, el cursor salta automáticamente a la primera visible.
  *  El tope MAX_OPTIONS está acotado por la hoja de respuestas
  *  institucional (plantilla ICFES) que solo tiene columnas A–D.
+ *
+ *  Los valores de `defaultOptions` y `maxOptions` vienen del .env
+ *  (EVAL_DEFAULT_OPTIONS y EVAL_MAX_OPTIONS) inyectados por el
+ *  server component padre. Permiten a la institución bajar el
+ *  rango sin tocar código. El tope absoluto sigue siendo MAX_OPTIONS=8
+ *  (la librería solo conoce claves A–H).
  */
 export function QuestionForm({
   evaluationId,
   sectionId,
+  defaultOptions = DEFAULT_COUNT,
+  maxOptions = MAX_OPTIONS,
 }: {
   evaluationId: string;
   sectionId: string;
+  defaultOptions?: number;
+  maxOptions?: number;
 }) {
   const [state, formAction] = useActionState<AdminFormState, FormData>(addQuestionAction, {});
-  const [optionCount, setOptionCount] = useState<number>(DEFAULT_COUNT);
+  const [optionCount, setOptionCount] = useState<number>(defaultOptions);
   const [correct, setCorrect] = useState<string>(ANSWER_KEYS_ORDER[0]!);
   const [resetKey, setResetKey] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
@@ -56,16 +66,16 @@ export function QuestionForm({
   useEffect(() => {
     if (state.success) {
       formRef.current?.reset();
-      setOptionCount(DEFAULT_COUNT);
+      setOptionCount(defaultOptions);
       setCorrect(ANSWER_KEYS_ORDER[0]!);
       setResetKey((k) => k + 1); // remonta el editor para limpiarlo
     }
-  }, [state.success]);
+  }, [state.success, defaultOptions]);
 
   const visibleKeys = ANSWER_KEYS_ORDER.slice(0, optionCount);
 
   function addOption() {
-    if (optionCount < MAX_OPTIONS) setOptionCount((n) => n + 1);
+    if (optionCount < maxOptions) setOptionCount((n) => n + 1);
   }
   function removeOption() {
     if (optionCount <= MIN_OPTIONS) return;
@@ -120,10 +130,10 @@ export function QuestionForm({
           size="sm"
           variant="outline"
           onClick={addOption}
-          disabled={optionCount >= MAX_OPTIONS}
+          disabled={optionCount >= maxOptions}
           title={
-            optionCount >= MAX_OPTIONS
-              ? `Máximo ${MAX_OPTIONS} opciones (la hoja de respuestas solo tiene A–D)`
+            optionCount >= maxOptions
+              ? `Máximo ${maxOptions} opciones (configurado en EVAL_MAX_OPTIONS)`
               : "Agregar opción"
           }
         >
@@ -140,7 +150,7 @@ export function QuestionForm({
           − Opción
         </Button>
         <span className="text-muted-foreground text-xs">
-          {optionCount} de {MAX_OPTIONS} opciones
+          {optionCount} de {maxOptions} opciones
         </span>
       </div>
 

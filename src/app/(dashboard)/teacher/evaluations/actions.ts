@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/session";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import type { AnswerKey, SoloLevel } from "@/modules/evaluations/domain/evaluation";
-import { MAX_OPTIONS, ANSWER_KEYS_ORDER } from "@/modules/evaluations/domain/evaluation";
+import { MIN_OPTIONS, ANSWER_KEYS_ORDER } from "@/modules/evaluations/domain/evaluation";
+import { env } from "@/config/env";
 import {
   makeAddQuestion,
   makeAddSection,
@@ -72,15 +73,17 @@ export async function addQuestionAction(
   const soloLevel = str(formData, "soloLevel");
   const weightRaw = str(formData, "weight");
 
-  // Lee la cantidad de opciones del formulario (clamp a [2, MAX_OPTIONS]).
-  // El form siempre envía `optionCount` con el total actual de opciones
-  // visibles; `optionA..optionD` se envían como strings (vacíos si la fila
-  // no se renderiza, pero como el form solo renderiza hasta `optionCount`
-  // inputs, los ausentes llegan como null → "").
+  // Lee la cantidad de opciones del formulario y la clampa a
+  // [MIN_OPTIONS, env.EVAL_MAX_OPTIONS]. El form siempre envía
+  // `optionCount` con el total actual de opciones visibles; el clamp
+  // cubre dos casos: el cliente envía basura, o el admin bajó el
+  // tope en .env y alguien tenía un form abierto con más opciones.
+  // La librería tiene como techo absoluto 8 (AnswerKey A–H); la
+  // cota real la pone la institución con EVAL_MAX_OPTIONS.
   const optionCountRaw = Number(str(formData, "optionCount"));
   const optionCount = Number.isInteger(optionCountRaw)
-    ? Math.min(MAX_OPTIONS, Math.max(2, optionCountRaw))
-    : MAX_OPTIONS;
+    ? Math.min(env.EVAL_MAX_OPTIONS, Math.max(MIN_OPTIONS, optionCountRaw))
+    : env.EVAL_DEFAULT_OPTIONS;
   const keys = ANSWER_KEYS_ORDER.slice(0, optionCount) as AnswerKey[];
 
   const result = await makeAddQuestion().execute({
