@@ -19,7 +19,10 @@ model Institution {
   slug      String   @unique // para subdominio
   code      String   @unique
   logo      String?
-  colors    Json? // {primary, secondary, accent}
+  // Tema visual institucional para la impresión del cuadernillo. Ver
+  // src/modules/theme/domain/theme.ts (zod schema) y el helper mergeTheme()
+  // que combina este JSON con el de Evaluation.theme (override por eval).
+  theme     Json?
   address   String?
   phone     String?
   email     String?
@@ -292,6 +295,10 @@ model Evaluation {
   totalQuestions  Int                 @default(0)
   templateId      String?             @db.Uuid
   template        EvaluationTemplate? @relation(fields: [templateId], references: [id])
+  // Override del tema institucional para esta evaluación. Se combina con
+  // Institution.theme en runtime; cualquier campo ausente cae al institucional
+  // y luego al default. Ver src/modules/theme/domain/theme.ts.
+  theme           Json?
   parentVersionId String?             @db.Uuid // versión anterior (historial inmutable)
   parentVersion   Evaluation?         @relation("VersionHistory", fields: [parentVersionId], references: [id])
   revisions       Evaluation[]        @relation("VersionHistory")

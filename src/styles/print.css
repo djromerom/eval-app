@@ -27,13 +27,68 @@
   }
 }
 
-/* ===== Contenedor y hoja (tipografía común) ===== */
+/* ===== Contenedor y hoja (tipografía común) =====
+ *
+ * Variables CSS inyectadas desde src/app/print/evaluation/[id]/page.tsx en
+ * runtime con `themeToCssVars()` del módulo theme (REQUERIMIENTOS_v2 §3.4 + §2.10).
+ * Defaults seguros: Liberation Serif (igual al PDF de referencia),
+ * line-height 1.2. Si la institución/evaluación define otro tema, estas
+ * variables se sobreescriben.
+ *
+ * Las que NO son variables (bordes 1px #000, tamaños 10pt, etc.) están
+ * fijadas por el spec §3.4 — no se varían por tema.
+ */
 .booklet {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--print-font-family, "Liberation Serif", "Times New Roman", Times, serif);
   font-size: 10pt;
-  line-height: 1.15;
+  line-height: var(--print-line-height, 1.2);
   color: #000;
   position: relative;
+}
+
+/* Logo en portada: si showLogo=false se oculta. */
+.cover-logo {
+  display: var(--print-show-logo, block);
+  max-height: 1.5cm;
+  margin: 0 auto 0.4rem;
+}
+
+/* Acento institucional: instituciones pueden personalizarlo desde
+ * /admin/theme. Se usa solo en headings fuertes y separadores decorativos;
+ * el cuerpo y los bordes de tabla se mantienen negros por spec. */
+.print-accent {
+  color: var(--print-primary, #0b5c2e);
+}
+.print-accent-border {
+  border-color: var(--print-primary, #0b5c2e);
+}
+
+/* Pie de página institucional (footer text del tema). */
+.print-footer {
+  font-size: 8pt;
+  text-align: center;
+  color: #555;
+  margin-top: 1.5rem;
+  border-top: 1px solid #ccc;
+  padding-top: 0.3rem;
+}
+
+/* Separador de sección configurable: line / double / dots. */
+.section-divider {
+  margin: 1.2rem auto 0.8rem;
+  border: 0;
+  height: 0;
+  width: 100%;
+}
+.section-divider.line {
+  border-top: 1px solid #000;
+}
+.section-divider.double {
+  border-top: 3px double #000;
+}
+.section-divider.dots {
+  border-top: 1px dotted #000;
+  border-top-style: dotted;
 }
 
 .sheet {

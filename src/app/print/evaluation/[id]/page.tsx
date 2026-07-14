@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import "@/styles/print.css";
+import { readFile } from "node:fs/promises";
 import { notFound } from "next/navigation";
 import { resolvePrintActor } from "@/lib/print-access";
 import { isPrintable } from "@/modules/evaluations/domain/evaluation-status";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
 import { makeGetMyInstitution } from "@/modules/institutions/infrastructure/container";
 import { makeListCourseSubjects } from "@/modules/academic/infrastructure/container";
+import { getResolvedTheme } from "@/modules/theme/application/get-resolved-theme";
+import { themeToCssVars } from "@/modules/theme/domain/theme";
 import { RichText, RichTextInline } from "@/components/editor/rich-text";
 import { richTextToPlain } from "@/components/editor/render";
 import { PrintButton } from "./print-button";
@@ -55,24 +58,31 @@ export default async function PrintEvaluationPage({
   const { t } = await searchParams;
   const actor = await resolvePrintActor(t, { evaluationId: id, kind: "booklet" });
 
-  const [evalRes, instRes, csRes] = await Promise.all([
+  const [evalRes, instRes, csRes, theme] = await Promise.all([
     makeGetEvaluation().execute({ actor, id }),
     makeGetMyInstitution().execute({ actor }),
     makeListCourseSubjects().execute({ actor }),
+    getResolvedTheme(actor.institutionId, id),
   ]);
   if (!evalRes.ok) notFound();
 
   const evaluation = evalRes.value;
-  const institutionName = instRes.ok ? instRes.value.name : "";
+  const institution = instRes.ok ? instRes.value : null;
+  const institutionName = institution?.name ?? "";
   const cs = csRes.ok ? csRes.value.find((c) => c.id === evaluation.courseSubjectId) : undefined;
   const grade = cs?.courseName ?? "";
   const area = cs?.subjectName ?? "";
   const bookletLabel = `CUADERNILLO ${evaluation.bookletNumber ?? 1}`;
 
+  // Logo: si el tema lo permite y la institución tiene uno en disco, lo
+  // embebemos como data URL para que el print no dependa de una ruta servida.
+  const logoSrc = await readLogoIfNeeded(institution?.logo, theme.showLogo);
+
   const competencyRows = buildCompetencyRows(evaluation.sections);
+  const cssVars = themeToCssVars(theme) as Record<string, string>;
 
   return (
-    <div className="booklet">
+    <div className="booklet" style={cssVars}>
       <div className="no-print bg-card sticky top-0 z-10 flex w-full max-w-[900px] items-center gap-3 rounded-lg border p-3 text-sm">
         <span className="text-muted-foreground">
           Vista previa de impresión
@@ -85,9 +95,19 @@ export default async function PrintEvaluationPage({
 
       {/* ===== Página 1: portada ===== */}
       <section className="sheet cover">
-        <p className="cover-institution">{institutionName}</p>
+        {logoSrc ? <img src={logoSrc} alt="" className="cover-logo" /> : null}
+        <p className="cover-institution print-accent">{institutionName}</p>
         <p className="cover-test-title">{evaluation.title}</p>
-        {grade ? <p className="cover-grade">Grado {grade}</p> : null}
+        {theme.coverSubtitle ? (
+          <p className="cover-grade">{theme.coverSubtitle}</p>
+        ) : grade ? (
+          <p className="cover-grade">Grado {grade}</p>
+        ) : null}
+        {introParagraphs(theme.introText).map((p, i) => (
+          <p key={i} className="cover-grade">
+            {p}
+          </p>
+        ))}
 
         {/* ¿Qué competencias evaluamos? — tabla ICFES */}
         {competencyRows.length > 0 && (
@@ -173,7 +193,7 @@ export default async function PrintEvaluationPage({
       </section>
 
       {/* ===== Páginas 2+: preguntas ===== */}
-      {evaluation.sections.map((section) => {
+      {evaluation.sections.map((section, idx) => {
         const numbers = section.questions.map((q) => q.number);
         const first = numbers[0];
         const last = numbers[numbers.length - 1];
@@ -185,6 +205,10 @@ export default async function PrintEvaluationPage({
               <span>{bookletLabel}</span>
             </div>
             {area ? <p className="subject-title">{area}</p> : null}
+
+            {/* Separador configurable (line / double / dots) — primer bloque
+                después de portada no lleva, los demás sí. */}
+            {idx > 0 ? <hr className={`section-divider ${theme.sectionDivider}`} /> : null}
 
             {numbers.length > 0 && (
               <p className="block-lead">
@@ -214,6 +238,63 @@ export default async function PrintEvaluationPage({
           </section>
         );
       })}
+
+      {theme.footerText ? <div className="print-footer">{theme.footerText}</div> : null}
     </div>
   );
+}
+
+/**
+ * Si `path` apunta a un archivo de imagen accesible y el tema lo permite,
+ * lo lee y devuelve un data URL para incrustar en el <img>. Si el tema dice
+ * "no logo" o el archivo no existe, devuelve null (no se renderiza <img>).
+ */
+async function readLogoIfNeeded(
+  path: string | null | undefined,
+  showLogo: boolean,
+): Promise<string | null> {
+  if (!showLogo || !path) return null;
+  const { existsSync } = await import("node:fs");
+  const candidates = [
+    path,
+    path.startsWith("/") ? path : `${process.env.STORAGE_DIR ?? "./storage"}/${path}`,
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      try {
+        const buf = await readFile(candidate);
+        const ext = candidate.toLowerCase().endsWith(".png") ? "png" : "jpeg";
+        return `data:image/${ext};base64,${buf.toString("base64")}`;
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Extrae párrafos en texto plano de un doc TipTap (lo que el usuario escribió
+ * en el editor de intro). Por ahora solo plain text — no imágenes ni tablas;
+ * se renderizará con más detalle cuando se conecte al RichText component.
+ */
+function introParagraphs(json: Record<string, unknown> | null): string[] {
+  if (!json || typeof json !== "object") return [];
+  const content = (json as { content?: unknown }).content;
+  if (!Array.isArray(content)) return [];
+  const out: string[] = [];
+  for (const node of content) {
+    if (node && typeof node === "object" && (node as { type?: string }).type === "paragraph") {
+      const para = ((node as { content?: unknown[] }).content ?? []) as Array<{
+        type?: string;
+        text?: string;
+      }>;
+      const text = para
+        .filter((c) => c.type === "text")
+        .map((c) => c.text ?? "")
+        .join("");
+      if (text) out.push(text);
+    }
+  }
+  return out;
 }
