@@ -36,6 +36,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "seed:reference": "tsx prisma/seed-reference-evaluation.ts",
+    "visual-diff": "tsx scripts/visual-diff.ts",
     "db:studio": "prisma studio",
     "worker:omr": "tsx workers/omr.worker.ts",
     "worker:pdf": "tsx workers/pdf.worker.ts",
