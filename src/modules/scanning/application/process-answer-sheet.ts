@@ -25,14 +25,22 @@ export interface BubbleLayout {
   bubbleSizePct: number;
 }
 
+/** Layout calibrado para la hoja de respuestas impresa (carta).
+ *  Coordenadas como fracción del ancho/alto de la imagen escaneada.
+ *  Refleja la grilla CSS de answer-sheet.css:
+ *    - 8 columnas fijas (A–H); las preguntas con menos opciones dejan
+ *      las restantes en blanco.
+ *    - Burbujas 4mm con paso centro-a-centro 10mm.
+ *    - Hoja carta: 8.5 × 11 in (215.9 × 279.4 mm).
+ *  10mm / 215.9mm ≈ 0.046 por columna. */
 const DEFAULT_BUBBLE_LAYOUT: BubbleLayout = {
   rows: 50,
-  columns: 4,
+  columns: 8,
   startXPct: 0.35,
   startYPct: 0.05,
-  spacingXPct: 0.04,
+  spacingXPct: 0.046,
   spacingYPct: 0.018,
-  bubbleSizePct: 0.012,
+  bubbleSizePct: 0.018,
 };
 
 export interface ProcessAnswerSheetInput {
