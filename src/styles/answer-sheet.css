@@ -82,13 +82,14 @@
 }
 
 .as-grid-corner {
-  width: 2rem;
+  width: 1.6rem;
   font-weight: 700;
   font-size: 9pt;
 }
 
 .as-grid-key {
-  width: 1.2rem;
+  /* 8 columnas (A–H) × ~10mm centro a centro = ~80mm de ancho de grilla. */
+  width: 10mm;
   text-align: center;
   font-weight: 700;
   font-size: 9pt;
@@ -101,7 +102,7 @@
 }
 
 .as-grid-num {
-  width: 2rem;
+  width: 1.6rem;
   font-size: 9pt;
   color: #555;
   text-align: right;
@@ -109,16 +110,19 @@
 }
 
 .as-grid-bubble {
-  width: 1.2rem;
+  width: 10mm;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .as-grid-bubble .omr-bubble {
-  width: 5mm;
-  height: 5mm;
-  border: 0.4mm solid #000;
+  /* 4mm de diámetro, 10mm centro a centro (§11) — la columna visual
+     reserva el espacio, la burbuja es más pequeña para que la cuadrícula
+     no se sature con 8 columnas. */
+  width: 4mm;
+  height: 4mm;
+  border: 0.3mm solid #000;
   border-radius: 50%;
 }
 

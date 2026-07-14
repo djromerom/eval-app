@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
 import { makeGetMyInstitution } from "@/modules/institutions/infrastructure/container";
+import { ANSWER_KEYS_ORDER } from "@/modules/evaluations/domain/evaluation";
 import {
   buildSignedQrContent,
   generateQrDataUrl,
@@ -12,7 +13,9 @@ import {
 
 export const metadata: Metadata = { title: "Hoja de respuestas" };
 
-const KEYS = ["A", "B", "C", "D"] as const;
+/** 8 columnas fijas (A–H). Las preguntas con menos opciones dejan las
+ *  restantes en blanco. Ver evaluations/domain/evaluation.ts. */
+const KEYS = ANSWER_KEYS_ORDER;
 
 interface Props {
   params: Promise<{ evaluationId: string }>;
