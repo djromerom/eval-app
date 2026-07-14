@@ -30,3 +30,8 @@ storage/
 # directorios temporales de verificación OMR (mkdtempSync)
 omr-verify-*/
 scanning-test-*/
+
+# Assets binarios del seed (se generan localmente desde el PDF de referencia;
+# ver prisma/assets/README.md). Solo se commitea el README.
+prisma/assets/*
+!prisma/assets/README.md
