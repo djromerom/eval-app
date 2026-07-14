@@ -7,8 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { addQuestionAction } from "./actions";
-
-const KEYS = ["A", "B", "C", "D"] as const;
+import {
+  MAX_OPTIONS,
+  MIN_OPTIONS,
+  ANSWER_KEYS_ORDER,
+} from "@/modules/evaluations/domain/evaluation";
 
 const SOLO_OPTIONS = [
   { value: "", label: "Nivel SOLO (opcional)" },
@@ -17,6 +20,8 @@ const SOLO_OPTIONS = [
   { value: "RELACIONAL", label: "Relacional" },
   { value: "ABSTRACTO_EXTENDIDO", label: "Abstracto extendido" },
 ];
+
+const DEFAULT_COUNT = MAX_OPTIONS; // 4 por defecto
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -27,7 +32,14 @@ function SubmitButton() {
   );
 }
 
-/** Editor estructurado por pregunta (§3.3 v2.0): enunciado + A/B/C/D + correcta + metadatos. */
+/** Editor estructurado por pregunta (§3.3 v2.0): enunciado + N opciones + correcta + metadatos.
+ *
+ *  El usuario puede ajustar el número de opciones entre MIN_OPTIONS y
+ *  MAX_OPTIONS con los botones +/−. Al quitar la opción marcada como
+ *  correcta, el cursor salta automáticamente a la primera visible.
+ *  El tope MAX_OPTIONS está acotado por la hoja de respuestas
+ *  institucional (plantilla ICFES) que solo tiene columnas A–D.
+ */
 export function QuestionForm({
   evaluationId,
   sectionId,
@@ -36,17 +48,34 @@ export function QuestionForm({
   sectionId: string;
 }) {
   const [state, formAction] = useActionState<AdminFormState, FormData>(addQuestionAction, {});
-  const [correct, setCorrect] = useState<string>("A");
+  const [optionCount, setOptionCount] = useState<number>(DEFAULT_COUNT);
+  const [correct, setCorrect] = useState<string>(ANSWER_KEYS_ORDER[0]!);
   const [resetKey, setResetKey] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (state.success) {
       formRef.current?.reset();
-      setCorrect("A");
+      setOptionCount(DEFAULT_COUNT);
+      setCorrect(ANSWER_KEYS_ORDER[0]!);
       setResetKey((k) => k + 1); // remonta el editor para limpiarlo
     }
   }, [state.success]);
+
+  const visibleKeys = ANSWER_KEYS_ORDER.slice(0, optionCount);
+
+  function addOption() {
+    if (optionCount < MAX_OPTIONS) setOptionCount((n) => n + 1);
+  }
+  function removeOption() {
+    if (optionCount <= MIN_OPTIONS) return;
+    const removedKey = ANSWER_KEYS_ORDER[optionCount - 1];
+    setOptionCount((n) => n - 1);
+    // Si la opción eliminada era la correcta, salta a la primera visible.
+    if (correct === removedKey) {
+      setCorrect(ANSWER_KEYS_ORDER[optionCount - 2]!);
+    }
+  }
 
   return (
     <form
@@ -56,6 +85,7 @@ export function QuestionForm({
     >
       <input type="hidden" name="evaluationId" value={evaluationId} />
       <input type="hidden" name="sectionId" value={sectionId} />
+      <input type="hidden" name="optionCount" value={optionCount} />
 
       <div className="space-y-1">
         <label className="text-muted-foreground text-xs font-medium">Enunciado</label>
@@ -63,7 +93,7 @@ export function QuestionForm({
       </div>
 
       <div className="space-y-2">
-        {KEYS.map((k) => (
+        {visibleKeys.map((k) => (
           <div key={k} className="flex items-center gap-2">
             <label className="flex items-center gap-1.5 text-sm font-medium">
               <input
@@ -82,6 +112,36 @@ export function QuestionForm({
             ) : null}
           </div>
         ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={addOption}
+          disabled={optionCount >= MAX_OPTIONS}
+          title={
+            optionCount >= MAX_OPTIONS
+              ? `Máximo ${MAX_OPTIONS} opciones (la hoja de respuestas solo tiene A–D)`
+              : "Agregar opción"
+          }
+        >
+          + Opción
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={removeOption}
+          disabled={optionCount <= MIN_OPTIONS}
+          title={optionCount <= MIN_OPTIONS ? `Mínimo ${MIN_OPTIONS} opciones` : "Quitar última"}
+        >
+          − Opción
+        </Button>
+        <span className="text-muted-foreground text-xs">
+          {optionCount} de {MAX_OPTIONS} opciones
+        </span>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">

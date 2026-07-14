@@ -124,20 +124,36 @@ export interface EvaluationRepository {
 }
 
 const ANSWER_KEYS: AnswerKey[] = ["A", "B", "C", "D"];
+/** Lista ordenada de las claves posibles (A→D). Útil para construir
+ *  inputs en formularios y validar formas. */
+export const ANSWER_KEYS_ORDER: readonly AnswerKey[] = ANSWER_KEYS;
 
-/** Una pregunta ICFES válida: 4 opciones A–D distintas y una correcta entre ellas. */
+/** Mínimo y máximo de opciones por pregunta.
+ *  - Mín. 2: para verdadero/falso o tricotomía.
+ *  - Máx. 4: la hoja de respuestas institucional y el detector OMR solo
+ *    tienen columnas A–D (plantilla ICFES); exceder 4 produciría una
+ *    pregunta que el estudiante no puede marcar ni el scanner detectar.
+ *  Si en el futuro se imprime una hoja con más columnas, basta con
+ *  extender AnswerKey + ANSWER_KEYS y subir este tope. */
+export const MIN_OPTIONS = 2;
+export const MAX_OPTIONS = 4;
+
+/** Una pregunta ICFES válida: entre 2 y 4 opciones (A–D) con una correcta entre ellas. */
 export function validateQuestionShape(data: {
   options: { key: AnswerKey }[];
   correctAnswer: AnswerKey;
 }): string | null {
-  if (data.options.length !== 4) return "La pregunta debe tener exactamente 4 opciones (A–D).";
+  if (data.options.length < MIN_OPTIONS || data.options.length > MAX_OPTIONS) {
+    return `La pregunta debe tener entre ${MIN_OPTIONS} y ${MAX_OPTIONS} opciones (A–D).`;
+  }
   const keys = data.options.map((o) => o.key);
   const unique = new Set(keys);
-  if (unique.size !== 4 || !ANSWER_KEYS.every((k) => unique.has(k))) {
-    return "Las opciones deben ser exactamente A, B, C y D.";
+  const expected = ANSWER_KEYS.slice(0, data.options.length);
+  if (unique.size !== data.options.length || !expected.every((k) => unique.has(k))) {
+    return `Las opciones deben ser ${expected.join(", ")}.`;
   }
-  if (!ANSWER_KEYS.includes(data.correctAnswer)) {
-    return "La respuesta correcta debe ser A, B, C o D.";
+  if (!keys.includes(data.correctAnswer)) {
+    return `La respuesta correcta debe estar entre las opciones definidas (${expected.join(", ")}).`;
   }
   return null;
 }

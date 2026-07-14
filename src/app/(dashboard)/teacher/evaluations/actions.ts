@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/session";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import type { AnswerKey, SoloLevel } from "@/modules/evaluations/domain/evaluation";
+import { MAX_OPTIONS, ANSWER_KEYS_ORDER } from "@/modules/evaluations/domain/evaluation";
 import {
   makeAddQuestion,
   makeAddSection,
@@ -71,13 +72,24 @@ export async function addQuestionAction(
   const soloLevel = str(formData, "soloLevel");
   const weightRaw = str(formData, "weight");
 
+  // Lee la cantidad de opciones del formulario (clamp a [2, MAX_OPTIONS]).
+  // El form siempre envía `optionCount` con el total actual de opciones
+  // visibles; `optionA..optionD` se envían como strings (vacíos si la fila
+  // no se renderiza, pero como el form solo renderiza hasta `optionCount`
+  // inputs, los ausentes llegan como null → "").
+  const optionCountRaw = Number(str(formData, "optionCount"));
+  const optionCount = Number.isInteger(optionCountRaw)
+    ? Math.min(MAX_OPTIONS, Math.max(2, optionCountRaw))
+    : MAX_OPTIONS;
+  const keys = ANSWER_KEYS_ORDER.slice(0, optionCount) as AnswerKey[];
+
   const result = await makeAddQuestion().execute({
     actor,
     evaluationId,
     sectionId: str(formData, "sectionId"),
     data: {
       text: rich(formData, "text"),
-      options: (["A", "B", "C", "D"] as AnswerKey[]).map((key) => ({
+      options: keys.map((key) => ({
         key,
         text: str(formData, `option${key}`),
       })),

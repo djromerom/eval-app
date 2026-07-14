@@ -143,8 +143,51 @@ describe("validateQuestionShape", () => {
   it("acepta 4 opciones A-D con correcta válida", () => {
     expect(validateQuestionShape(question())).toBeNull();
   });
-  it("rechaza número incorrecto de opciones", () => {
+  it("acepta 2 opciones (verdadero/falso) con correcta válida", () => {
+    const q = question({
+      options: [
+        { key: "A", text: "a" },
+        { key: "B", text: "b" },
+      ],
+      correctAnswer: "A",
+    });
+    expect(validateQuestionShape(q)).toBeNull();
+  });
+  it("acepta 3 opciones ( tricotomía) con correcta válida", () => {
+    const q = question({
+      options: [
+        { key: "A", text: "a" },
+        { key: "B", text: "b" },
+        { key: "C", text: "c" },
+      ],
+      correctAnswer: "C",
+    });
+    expect(validateQuestionShape(q)).toBeNull();
+  });
+  it("rechaza 1 opción (muy pocas)", () => {
     expect(validateQuestionShape(question({ options: [{ key: "A", text: "a" }] }))).not.toBeNull();
+  });
+  it("rechaza 5+ opciones (excede hoja A–D)", () => {
+    // Cast: estamos probando rechazo de una forma que el tipo AnswerKey
+    // no permite en compile-time (E no es AnswerKey válido).
+    const badOptions = [
+      { key: "A", text: "a" },
+      { key: "B", text: "b" },
+      { key: "C", text: "c" },
+      { key: "D", text: "d" },
+      { key: "E", text: "e" },
+    ] as unknown as { key: import("@/modules/evaluations/domain/evaluation").AnswerKey }[];
+    expect(validateQuestionShape({ ...question(), options: badOptions })).not.toBeNull();
+  });
+  it("rechaza correcta que no está entre las opciones declaradas", () => {
+    const bad = question({
+      options: [
+        { key: "A", text: "a" },
+        { key: "B", text: "b" },
+      ],
+      correctAnswer: "C",
+    });
+    expect(validateQuestionShape(bad)).not.toBeNull();
   });
 });
 
