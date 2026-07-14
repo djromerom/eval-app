@@ -18,6 +18,8 @@ export interface Evaluation {
   teacherId: string;
   bookletNumber: number | null;
   totalQuestions: number;
+  /** Override visual por evaluación (modo Diseñador). JSON crudo de la BD. */
+  theme: unknown;
 }
 
 /** Bloque de contexto: agrupa preguntas bajo un texto/imagen/tabla común. */

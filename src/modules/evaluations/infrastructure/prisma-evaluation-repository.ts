@@ -28,6 +28,7 @@ type EvaluationRow = {
   teacherId: string;
   bookletNumber: number | null;
   totalQuestions: number;
+  theme: Prisma.JsonValue;
 };
 
 function toEvaluation(r: EvaluationRow): Evaluation {
@@ -44,6 +45,7 @@ function toEvaluation(r: EvaluationRow): Evaluation {
     teacherId: r.teacherId,
     bookletNumber: r.bookletNumber,
     totalQuestions: r.totalQuestions,
+    theme: r.theme,
   };
 }
 

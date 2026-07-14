@@ -133,6 +133,7 @@ const draft: Evaluation = {
   teacherId: "t1",
   bookletNumber: null,
   totalQuestions: 0,
+  theme: null,
 };
 
 describe("CreateBankQuestion", () => {

@@ -45,6 +45,7 @@ class FakeEvaluations implements EvaluationRepository {
       periodId: data.periodId ?? null,
       bookletNumber: data.bookletNumber ?? null,
       totalQuestions: 0,
+      theme: null,
     };
     this.items.push(e);
     return e;

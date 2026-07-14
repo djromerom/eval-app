@@ -65,6 +65,12 @@ export default async function EvaluationDetailPage({
           Generar hojas →
         </Link>
         <Link
+          href={`/teacher/evaluations/${evaluation.id}/designer`}
+          className="text-muted-foreground text-sm hover:underline"
+        >
+          Diseñador →
+        </Link>
+        <Link
           href={`/teacher/evaluations/${evaluation.id}/results`}
           className="text-muted-foreground text-sm hover:underline"
         >
