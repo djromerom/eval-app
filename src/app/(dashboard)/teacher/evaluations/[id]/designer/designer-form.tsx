@@ -4,6 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import {
   type EvaluationTheme,
   type ResolvedTheme,
@@ -67,6 +68,12 @@ export function DesignerForm({ evaluationId, initial, resolved, editable }: Prop
   const [sectionDivider, setSectionDivider] = useState(
     initial.sectionDivider ?? resolved.sectionDivider,
   );
+  // El editor TipTap maneja su propio estado interno (RichTextEditor) y solo
+  // expone un hidden input con el JSON. Lo mantenemos aquí también para
+  // poder pintar el preview en vivo sin re-renderizar el editor.
+  const [introText, setIntroText] = useState<Record<string, unknown> | null>(
+    initial.introText ?? resolved.introText,
+  );
 
   // Resolved theme con los valores actuales del form para el preview en vivo.
   const liveResolved: ResolvedTheme = useMemo(
@@ -79,8 +86,19 @@ export function DesignerForm({ evaluationId, initial, resolved, editable }: Prop
         showLogo,
         coverSubtitle,
         sectionDivider,
+        introText,
       }),
-    [resolved, primary, fontFamily, density, footerText, showLogo, coverSubtitle, sectionDivider],
+    [
+      resolved,
+      primary,
+      fontFamily,
+      density,
+      footerText,
+      showLogo,
+      coverSubtitle,
+      sectionDivider,
+      introText,
+    ],
   );
 
   const cssVars = useMemo(() => themeToCssVars(liveResolved), [liveResolved]);
@@ -205,6 +223,32 @@ export function DesignerForm({ evaluationId, initial, resolved, editable }: Prop
               />
               <span className="text-sm">Mostrar logo del colegio en portada</span>
             </label>
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Bloque intro (antes de las preguntas)</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIntroText(null)}
+                  disabled={!introText}
+                >
+                  Quitar
+                </Button>
+              </div>
+              <p className="text-muted-foreground text-xs">
+                Aparece en la primera página del cuadernillo, antes de las preguntas. Útil para
+                lecturas, fórmulas o instrucciones largas. Soporta fórmulas LaTeX con{" "}
+                <code>$…$</code>.
+              </p>
+              <RichTextEditor
+                name="introText"
+                defaultValue={initial.introText ?? resolved.introText}
+                onChange={(json) => setIntroText(json)}
+                minHeightClass="min-h-32"
+              />
+            </div>
           </fieldset>
 
           {!editable ? (
@@ -285,6 +329,10 @@ function buildPreviewHtml(theme: ResolvedTheme): string {
   const vars = Object.entries(cssVars)
     .map(([k, v]) => `${k}: ${v};`)
     .join(" ");
+  // Render plano del TipTap JSON para el preview (no necesitamos rich-text
+  // exacto, solo que el docente vea que su bloque aparece antes de las
+  // preguntas). La página real usa el `RichText` component.
+  const introHtml = theme.introText ? renderTipTapPreview(theme.introText) : "";
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -316,6 +364,16 @@ function buildPreviewHtml(theme: ResolvedTheme): string {
   .cover h1 { color: var(--print-primary); font-size: 22px; margin: 8px 0; }
   .cover h2 { font-size: 14px; margin: 4px 0; font-weight: normal; }
   .cover .subtitle { color: var(--print-primary); font-weight: bold; }
+  .intro {
+    background: #fafafa;
+    border-left: 3px solid var(--print-primary);
+    padding: 10px 14px;
+    margin: 18px 0;
+    font-size: 13px;
+  }
+  .intro p { margin: 4px 0; }
+  .intro h3 { color: var(--print-primary); font-size: 14px; margin: 6px 0 4px; }
+  .intro ul, .intro ol { margin: 4px 0 4px 20px; }
   .section-divider {
     border: 0;
     margin: 18px 0;
@@ -342,6 +400,7 @@ function buildPreviewHtml(theme: ResolvedTheme): string {
     <h2>Prueba de Matemáticas — 11°</h2>
     ${theme.coverSubtitle ? `<p class="subtitle">${escapeHtml(theme.coverSubtitle)}</p>` : ""}
   </div>
+  ${introHtml}
   <hr class="section-divider ${theme.sectionDivider}" />
   <div class="q"><strong>1.</strong> ¿Cuál es el resultado de 2 + 2?</div>
   <div class="q"><strong>2.</strong> Pregunta de opción múltiple con 4 alternativas…</div>
@@ -350,6 +409,67 @@ function buildPreviewHtml(theme: ResolvedTheme): string {
   <div class="footer"></div>
 </body>
 </html>`;
+}
+
+/**
+ * Render minimalista de TipTap JSON para el preview. Solo necesitamos los
+ * nodos que el docente típicamente usa en un intro (paragraph, heading,
+ * bulletList, orderedList). Los nodos desconocidos se ignoran.
+ */
+function renderTipTapPreview(doc: Record<string, unknown>): string {
+  const out: string[] = [];
+  const content = Array.isArray(doc.content) ? (doc.content as unknown[]) : [];
+  for (const node of content) {
+    if (!node || typeof node !== "object") continue;
+    const n = node as Record<string, unknown>;
+    const text = collectText(n);
+    switch (n.type) {
+      case "paragraph":
+        out.push(`<p>${escapeHtml(text)}</p>`);
+        break;
+      case "heading": {
+        const level =
+          typeof n.attrs === "object" && n.attrs && "level" in n.attrs
+            ? ((n.attrs as { level?: number }).level ?? 3)
+            : 3;
+        out.push(`<h${level}>${escapeHtml(text)}</h${level}>`);
+        break;
+      }
+      case "bulletList":
+        out.push(renderList(n, "ul"));
+        break;
+      case "orderedList":
+        out.push(renderList(n, "ol"));
+        break;
+      default:
+        // Bloque desconocido (blockquote, codeBlock, etc.) → solo el texto.
+        if (text) out.push(`<p>${escapeHtml(text)}</p>`);
+        break;
+    }
+  }
+  return out.length ? `<div class="intro">${out.join("")}</div>` : "";
+}
+
+function renderList(n: Record<string, unknown>, tag: "ul" | "ol"): string {
+  const items = Array.isArray(n.content) ? (n.content as unknown[]) : [];
+  const li = items
+    .map((it) => {
+      if (!it || typeof it !== "object") return "";
+      const item = it as Record<string, unknown>;
+      return `<li>${escapeHtml(collectText(item))}</li>`;
+    })
+    .join("");
+  return `<${tag}>${li}</${tag}>`;
+}
+
+function collectText(node: Record<string, unknown>): string {
+  if (typeof node.text === "string") return node.text;
+  if (Array.isArray(node.content)) {
+    return (node.content as unknown[])
+      .map((c) => (c && typeof c === "object" ? collectText(c as Record<string, unknown>) : ""))
+      .join("");
+  }
+  return "";
 }
 
 function escapeHtml(s: string): string {

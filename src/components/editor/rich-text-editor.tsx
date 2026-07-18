@@ -124,10 +124,18 @@ export function RichTextEditor({
   name,
   defaultValue,
   minHeightClass = "min-h-24",
+  onChange,
 }: {
   name: string;
   defaultValue?: unknown;
   minHeightClass?: string;
+  /**
+   * Callback opcional con el JSON parseado en cada edición. Útil cuando el
+   * padre necesita el documento (por ejemplo para reflejarlo en una preview
+   * en vivo). Si no se pasa, el editor funciona igual — solo emite el hidden
+   * input y no notifica al padre.
+   */
+  onChange?: (json: Record<string, unknown>) => void;
 }) {
   const [json, setJson] = useState(() => JSON.stringify(initialContent(defaultValue)));
 
@@ -140,7 +148,11 @@ export function RichTextEditor({
         class: `prose-eval ${minHeightClass} w-full px-3 py-2 focus:outline-none`,
       },
     },
-    onUpdate: ({ editor }) => setJson(JSON.stringify(editor.getJSON())),
+    onUpdate: ({ editor }) => {
+      const next = editor.getJSON() as Record<string, unknown>;
+      setJson(JSON.stringify(next));
+      onChange?.(next);
+    },
   });
 
   return (

@@ -39,6 +39,23 @@ export async function saveEvaluationThemeAction(
       : undefined,
   };
 
+  // introText es JSON serializado de TipTap. Si viene vacío lo descartamos;
+  // si viene JSON inválido lo registramos como error de validación en lugar
+  // de tirar la request (un docente pegando texto crudo no debe tirar todo).
+  const introRaw = String(formData.get("introText") ?? "").trim();
+  if (introRaw) {
+    try {
+      const parsed = JSON.parse(introRaw) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        theme.introText = parsed as Record<string, unknown>;
+      } else {
+        return { error: "Bloque intro: el contenido no es un documento TipTap válido." };
+      }
+    } catch {
+      return { error: "Bloque intro: JSON inválido. ¿Se modificó el editor manualmente?" };
+    }
+  }
+
   const result = await makeUpdateEvaluationTheme().execute({
     actor,
     evaluationId,
