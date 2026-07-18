@@ -1,0 +1,241 @@
+# =============================================================================
+# eval-app — stack de producción (VPS único: ecognia.pro)
+#
+# Uso:
+#   alias dp='docker compose -f docker-compose.prod.yml'
+#   dp build                          # construye la imagen eval-app:latest
+#   dp up -d postgres redis            # primero la infra de datos
+#   dp run --rm migrate                # aplica migraciones (profile: init)
+#   dp run --rm certbot certonly ...   # emite el primer cert (profile: init)
+#   dp up -d                           # nginx, web y workers
+#
+# Volúmenes nombrados (creados en el primer up):
+#   pgdata          → Postgres 16
+#   redisdata       → Redis 7 (con AOF desactivado por defecto)
+#   storage         → logos, hojas escaneadas, PDFs generados
+#   certs           → /etc/letsencrypt (vive en el volumen, NO en el host)
+#   certbot-webroot → /.well-known/acme-challenge/
+#
+# `.env.prod` vive en el HOST, no en el repo. Cada servicio lo carga con
+# `env_file` para que las vars sensibles (AUTH_SECRET, QR_SIGNING_SECRET,
+# contraseñas) NO queden en la imagen ni en el compose commiteado.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Postgres 16 — solo accesible dentro de la red `eval-net`.
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-eval}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-eval}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-eval} -d ${POSTGRES_DB:-eval}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - eval-net
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 — cola BullMQ. Contraseña vía requirepass si REDIS_PASSWORD está
+  # definida (recomendado en prod). REDIS_URL en .env.prod debe incluirla.
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$${REDIS_PASSWORD:-}" ]; then
+          exec redis-server --requirepass "$${REDIS_PASSWORD}" --appendonly no
+        else
+          exec redis-server --appendonly no
+        fi
+    env_file:
+      - .env.prod
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - |
+          if [ -n "$${REDIS_PASSWORD:-}" ]; then
+            redis-cli -a "$${REDIS_PASSWORD}" ping | grep -q PONG
+          else
+            redis-cli ping | grep -q PONG
+          fi
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - eval-net
+
+  # ---------------------------------------------------------------------------
+  # Migrate — one-shot init container (profile: init).
+  # Lanza Prisma CLI apuntando al schema del repo (montado desde el contexto
+  # de build). Se ejecuta manualmente con:
+  #   dp run --rm migrate
+  # El propio script de entrypoint valida que la DB esté lista antes de
+  # correr `prisma migrate deploy`.
+  # ---------------------------------------------------------------------------
+  migrate:
+    image: eval-app:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["init"]
+    restart: "no"
+    user: "1001:1001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env.prod
+    environment:
+      # Para el CLI de Prisma: el schema vive dentro de la imagen.
+      PRISMA_SCHEMA_PATH: /app/eval-app/prisma/schema.prisma
+    entrypoint: ["/usr/bin/tini", "--"]
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        echo "[migrate] Waiting for Postgres to be reachable…"
+        # El healthcheck de postgres ya garantiza pg_isready; este sleep es solo
+        # defensivo para la primera carrera.
+        for i in 1 2 3 4 5 6 7 8 9 10; do
+          if node -e "require('net').connect(5432,'postgres').on('error',()=>process.exit(1)).on('connect',()=>process.exit(0))" >/dev/null 2>&1; then
+            break
+          fi
+          sleep 2
+        done
+        echo "[migrate] Running prisma migrate deploy…"
+        cd /app/eval-app
+        # `prisma` está instalado globalmente en la imagen runtime (Dockerfile).
+        # Apuntamos al schema explícitamente por si la búsqueda automática falla.
+        prisma migrate deploy --schema=/app/eval-app/prisma/schema.prisma
+    networks:
+      - eval-net
+
+  # ---------------------------------------------------------------------------
+  # NOTA: nginx y certbot corren en el HOST (no en Docker). El compose sólo
+  # contiene la app + workers + Postgres + Redis. La razón está documentada
+  # en deploy/README.md (Hostinger firewall policy + certbot --nginx plugin).
+  # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # Web — Next.js standalone. El entrypoint-web.sh copia .next/static y
+  # public/ al output standalone antes de `exec node server.js`.
+  # ---------------------------------------------------------------------------
+  web:
+    image: eval-app:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    user: "1001:1001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env.prod
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+    # Publica 3000 solo en loopback del host → el nginx del host (apt) hace
+    # proxy_pass a http://127.0.0.1:3000. No exponemos 3000 al exterior.
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - storage:/var/eval/storage
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - eval-net
+    # Override del entrypoint default (que es tini -- + node -e echo). El
+    # script del repo hace su propio `exec node server.js`.
+    entrypoint: ["/usr/bin/tini", "--"]
+    command: ["/entrypoint/entrypoint-web.sh"]
+
+  # ---------------------------------------------------------------------------
+  # Worker OMR — calificación de hojas escaneadas. Concurrencia 2.
+  # ---------------------------------------------------------------------------
+  worker-omr:
+    image: eval-app:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    user: "1001:1001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env.prod
+    environment:
+      NODE_ENV: production
+      WORKER_NAME: omr
+    volumes:
+      - storage:/var/eval/storage
+    entrypoint: ["/usr/bin/tini", "--"]
+    command: ["/entrypoint/entrypoint-worker.sh"]
+    networks:
+      - eval-net
+
+  # ---------------------------------------------------------------------------
+  # Worker PDF — generación de cuadernillos server-side (Puppeteer).
+  # Concurrencia 1 (Puppeteer es pesado: ~400MB por instancia).
+  # ---------------------------------------------------------------------------
+  worker-pdf:
+    image: eval-app:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    user: "1001:1001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    env_file:
+      - .env.prod
+    environment:
+      NODE_ENV: production
+      WORKER_NAME: pdf
+      # El bundle de Chromium vive en $PUPPETEER_CACHE_DIR dentro de la imagen
+      # (configurado en el Dockerfile runtime). Si se necesita sobreescribir:
+      # PUPPETEER_EXECUTABLE_PATH=/path/to/chrome
+    volumes:
+      - storage:/var/eval/storage
+    entrypoint: ["/usr/bin/tini", "--"]
+    command: ["/entrypoint/entrypoint-worker.sh"]
+    networks:
+      - eval-net
+
+networks:
+  eval-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:
+  storage:

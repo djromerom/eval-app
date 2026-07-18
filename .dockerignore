@@ -1,0 +1,64 @@
+# ============================================================================
+# .dockerignore para el Dockerfile de producción
+# Mantiene la imagen delgada y evita filtrar artefactos locales al build.
+# ============================================================================
+
+# Dependencias (se reinstalan dentro del builder)
+node_modules
+.pnpm-store
+
+# Artefactos de Next (se regeneran)
+.next
+out
+
+# Tests y reportes
+coverage
+playwright-report
+test-results
+
+# Estado de TS
+*.tsbuildinfo
+
+# Editor / OS
+.DS_Store
+.vscode
+.idea
+
+# Variables y secretos (NUNCA al contexto de build)
+.env
+.env.*
+!.env.example
+
+# Uploads locales y temporales de OMR
+storage/
+omr-verify-*/
+scanning-test-*/
+
+# Assets binarios del seed (regenerables localmente)
+prisma/assets/*
+!prisma/assets/README.md
+
+# git (no se necesita en la imagen; el entrypoint no usa git)
+.git
+.gitignore
+
+# Documentación de raíz — útil en dev pero no en la imagen
+# (la app no la referencia en runtime)
+README.md
+CHANGELOG.md
+LICENSE
+
+# Tests unitarios — no se necesitan en runtime
+tests
+vitest.config.ts
+playwright.config.ts
+
+# Este archivo y archivos del deploy local (el repo del VPS los trae fuera
+# del contexto de build vía git clone + compose).
+Dockerfile
+.dockerignore
+docker-compose.prod.yml
+deploy/
+
+# NOTA: NO excluimos docker/ — los entrypoint-web.sh y entrypoint-worker.sh
+# viven ahí y la imagen runtime los necesita en /entrypoint/.

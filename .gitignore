@@ -35,3 +35,14 @@ scanning-test-*/
 # ver prisma/assets/README.md). Solo se commitea el README.
 prisma/assets/*
 !prisma/assets/README.md
+
+# Producción: el archivo real con secretos vive en el VPS. El template
+# commiteado está en deploy/.env.prod.example.
+.env.prod
+.env.prod.local
+
+# Override local de compose (útil en dev; nunca commitear).
+docker-compose.override.yml
+
+# Salidas del compilador de workers (regenerables con `pnpm tsc -p tsconfig.worker.json`).
+dist-workers/

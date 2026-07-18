@@ -58,6 +58,26 @@ pnpm worker:pdf
 | `pnpm worker:omr`      | Worker de calificación OMR                      |
 | `pnpm worker:pdf`      | Worker de generación de PDF                     |
 
+## Deploy en producción
+
+El deploy corre como Docker Compose en un VPS único con Nginx + Let's Encrypt
+delante. Una sola imagen (`eval-app:latest`) con 3 entrypoints distintos
+(`web`, `worker-omr`, `worker-pdf`).
+
+Runbook completo + scripts + cron de renovación: **[`deploy/README.md`](./deploy/README.md)**.
+
+Resumen rápido:
+
+```bash
+cd /opt/eval/eval-app
+cp deploy/.env.prod.example .env.prod && chmod 600 .env.prod   # llenar secretos
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml up -d postgres redis
+docker compose -f docker-compose.prod.yml run --rm migrate
+bash deploy/scripts/first-cert.sh                              # emite cert Let's Encrypt
+docker compose -f docker-compose.prod.yml up -d
+```
+
 ## Estado
 
 Scaffold inicial (Fase 0/1). Los módulos de negocio están estructurados por
