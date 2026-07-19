@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Usuarios" };
 const roleLabel = new Map(ROLE_OPTIONS.map((o) => [o.value, o.label]));
 
 export default async function UsersPage() {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const result = await makeListUsers().execute({ actor });
   const users = result.ok ? result.value : [];
 

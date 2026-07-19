@@ -17,6 +17,12 @@ const serverEnvSchema = z
     AUTH_MICROSOFT_ENTRA_ID_SECRET: z.string().optional(),
     AUTH_MICROSOFT_ENTRA_ID_ISSUER: z.string().optional(),
     REDIS_URL: z.string().default("redis://localhost:6379"),
+    /** URL base desde la que los workers (PDF/OMR) hacen fetch de las
+     *  rutas /print/*. Si está definida, tiene prioridad sobre AUTH_URL.
+     *  Útil cuando AUTH_URL apunta al público (https://ecognia.pro) pero
+     *  los workers deben apuntar al servidor interno donde corre Next.
+     *  Si no está definida, los workers usan AUTH_URL. */
+    PRINT_BASE_URL: z.string().url().optional(),
     STORAGE_DIR: z.string().default("./storage"),
     QR_SIGNING_SECRET: z.string().min(16, "QR_SIGNING_SECRET debe tener al menos 16 caracteres"),
     /** Opciones con las que se inicializa el editor de preguntas nuevas. */

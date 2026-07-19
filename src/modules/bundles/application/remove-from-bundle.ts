@@ -17,7 +17,7 @@ export class RemoveFromBundle implements UseCase<RemoveFromBundleInput, void> {
   constructor(private readonly bundles: BundleRepository) {}
 
   async execute({ actor, bundleId, itemId }: RemoveFromBundleInput): Promise<Result<void>> {
-    const authorized = requireRole(actor, "SUPER_ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     const bundle = await this.bundles.findById(actor.institutionId, bundleId);

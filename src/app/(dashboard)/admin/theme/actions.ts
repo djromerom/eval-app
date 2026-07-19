@@ -27,7 +27,7 @@ export async function saveThemeAction(
   _prev: ThemeFormState,
   formData: FormData,
 ): Promise<ThemeFormState> {
-  const actor = await requireAuthenticatedUser("ADMIN", "SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER", "SUPER_ADMIN");
   const theme = readForm(formData);
   const result = await makeUpdateInstitutionTheme().execute({ actor, theme });
   if (!result.ok) return { error: result.error.message };
@@ -39,7 +39,7 @@ export async function saveThemeAction(
 
 /** Aplica un preset (clasico | moderno | compacto). */
 export async function applyPresetAction(preset: string): Promise<ThemeFormState> {
-  const actor = await requireAuthenticatedUser("ADMIN", "SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER", "SUPER_ADMIN");
   const chosen = THEME_PRESETS[preset];
   if (!chosen) return { error: `Preset "${preset}" no existe.` };
 

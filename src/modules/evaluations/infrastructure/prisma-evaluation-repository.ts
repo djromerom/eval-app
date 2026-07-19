@@ -13,6 +13,7 @@ import type {
   EvaluationSection,
   Question,
   SoloLevel,
+  UpdateEvaluationSettingsData,
 } from "../domain/evaluation";
 
 type EvaluationRow = {
@@ -28,6 +29,7 @@ type EvaluationRow = {
   teacherId: string;
   bookletNumber: number | null;
   totalQuestions: number;
+  durationMinutes: number | null;
   theme: Prisma.JsonValue;
 };
 
@@ -45,6 +47,7 @@ function toEvaluation(r: EvaluationRow): Evaluation {
     teacherId: r.teacherId,
     bookletNumber: r.bookletNumber,
     totalQuestions: r.totalQuestions,
+    durationMinutes: r.durationMinutes,
     theme: r.theme,
   };
 }
@@ -113,6 +116,8 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         title: data.title,
         description: data.description ?? null,
         bookletNumber: data.bookletNumber ?? null,
+        // Sprint 7: si no se envió, queda null → heurístico en la portada.
+        durationMinutes: data.durationMinutes ?? null,
         status: DraftStatus.DRAFT,
       },
     });
@@ -252,6 +257,23 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
     });
   }
 
+  async updateSettings(
+    institutionId: string,
+    id: string,
+    data: UpdateEvaluationSettingsData,
+  ): Promise<Evaluation> {
+    const row = await prisma.evaluation.update({
+      where: { id },
+      data: { durationMinutes: data.durationMinutes },
+    });
+    // Doble check institutionId para evitar leaks cross-tenant (mismo patrón
+    // que el resto de repos).
+    if (row.institutionId !== institutionId) {
+      throw new Error(`Evaluation ${id} no pertenece a la institución ${institutionId}`);
+    }
+    return toEvaluation(row);
+  }
+
   async createNewVersion(institutionId: string, id: string): Promise<Evaluation> {
     const detail = await this.getDetail(institutionId, id);
     if (!detail) throw new Error(`Evaluación no encontrada: ${id}`);
@@ -273,6 +295,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
           parentVersionId: source.id,
           status: DraftStatus.DRAFT,
           totalQuestions: source.totalQuestions,
+          durationMinutes: source.durationMinutes,
         },
       });
       for (const section of detail.sections) {

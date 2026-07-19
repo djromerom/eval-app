@@ -18,7 +18,7 @@ export class CreateAcademicYear implements UseCase<CreateAcademicYearInput, Acad
   constructor(private readonly years: AcademicYearRepository) {}
 
   async execute({ actor, data }: CreateAcademicYearInput): Promise<Result<AcademicYear>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     if (!Number.isInteger(data.year) || data.year < 2000 || data.year > 2100) {
@@ -45,7 +45,7 @@ export class ListAcademicYears implements UseCase<ListAcademicYearsInput, Academ
   constructor(private readonly years: AcademicYearRepository) {}
 
   async execute({ actor }: ListAcademicYearsInput): Promise<Result<AcademicYear[]>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
     return ok(await this.years.findAll(actor.institutionId));
   }

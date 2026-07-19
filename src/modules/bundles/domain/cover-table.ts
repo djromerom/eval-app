@@ -4,7 +4,7 @@
  * (jerarquía Subject ⊃ Biología/Física/Química).
  *
  * Ver docs/compendios.md §"Portada del bundle" + decisión 10
- * (Subject.parentSubjectId agregado).
+ * (Subject.parentSubjectId agregado) + Sprint 7 (durationMinutes).
  */
 import { DEFAULT_MINUTES_PER_QUESTION } from "./bundle-rules";
 import type { BundleItemDetail } from "./bundle";
@@ -21,7 +21,8 @@ export interface CoverArea {
   }>;
   /** Suma de questions de todos los subjects del área. */
   totalQuestions: number;
-  /** totalQuestions * minutesPerQuestion. */
+  /** Suma de los minutos de los subjects del área (cada subject lleva
+   *  su propio `minutes`, capturado en Settings o calculado si null). */
   totalMinutes: number;
 }
 
@@ -44,6 +45,14 @@ export interface CoverTable {
  *   - Las áreas se ordenan por nombre alfabético para consistencia visual.
  *   - Los subjects dentro de cada área también se ordenan alfabéticamente.
  *   - Las áreas sin items (subject hoja sin questions) se ignoran.
+ *
+ * Duración estimada (Sprint 7):
+ *   - Si el item tiene `durationMinutes` capturado por el docente en Settings,
+ *     se usa ESE valor para los minutos del subject/área y del total.
+ *   - Si no, cae al cálculo viejo: `totalQuestions * minutesPerQuestion`
+ *     (con `minutesPerQuestion = DEFAULT_MINUTES_PER_QUESTION` por defecto).
+ *   - Esto preserva el comportamiento para evaluations existentes: el
+ *     docente no se ve forzado a capturar la duración al adoptarse el Sprint 7.
  */
 export function computeCoverTable(
   items: BundleItemDetail[],
@@ -62,7 +71,7 @@ export function computeCoverTable(
     string,
     {
       areaName: string;
-      subjects: Map<string, { name: string; questions: number }>;
+      subjects: Map<string, { name: string; questions: number; minutes: number }>;
     }
   >();
 
@@ -74,18 +83,24 @@ export function computeCoverTable(
     const areaName = item.parentSubjectName ?? item.subjectName ?? "Sin área";
     const subjectName = item.subjectName ?? "Sin asignatura";
     const questions = item.totalQuestions;
+    // Sprint 7: si el docente capturó duración explícita por evaluation,
+    // gana sobre la heurística `questions * minutesPerQuestion`.
+    const minutes = item.durationMinutes ?? Math.round(questions * minutesPerQuestion);
 
     if (!byArea.has(areaName)) {
       byArea.set(areaName, { areaName, subjects: new Map() });
     }
     const area = byArea.get(areaName)!;
-    // Si dos items comparten el mismo subject (ej: dos parciales de Biología),
-    // sumamos las questions.
+    // Si dos items comparten el mismo subject (ej: dos parciales de Bio),
+    // sumamos questions y minutos por separado. Importante: NO se mezclan
+    // preguntas+minutos heterogéneos — para mantener coherencia con el PDF
+    // de referencia real (cada evaluación con su tiempo).
     const existing = area.subjects.get(subjectName);
     if (existing) {
       existing.questions += questions;
+      existing.minutes += minutes;
     } else {
-      area.subjects.set(subjectName, { name: subjectName, questions });
+      area.subjects.set(subjectName, { name: subjectName, questions, minutes });
     }
   }
 
@@ -97,22 +112,24 @@ export function computeCoverTable(
         .map((s) => ({
           name: s.name,
           questions: s.questions,
-          minutes: Math.round(s.questions * minutesPerQuestion),
+          minutes: s.minutes,
         }));
       const totalQuestions = subjects.reduce((acc, s) => acc + s.questions, 0);
+      const totalMinutes = subjects.reduce((acc, s) => acc + s.minutes, 0);
       return {
         name: area.areaName,
         subjects,
         totalQuestions,
-        totalMinutes: Math.round(totalQuestions * minutesPerQuestion),
+        totalMinutes,
       };
     });
 
   const totalQuestions = areas.reduce((acc, a) => acc + a.totalQuestions, 0);
+  const totalMinutes = areas.reduce((acc, a) => acc + a.totalMinutes, 0);
   return {
     areas,
     totalQuestions,
-    totalMinutes: Math.round(totalQuestions * minutesPerQuestion),
+    totalMinutes,
     totalEvaluations: items.length,
   };
 }

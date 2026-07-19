@@ -16,6 +16,7 @@ import type {
   EvaluationRepository,
   EvaluationSection,
   Question,
+  UpdateEvaluationSettingsData,
 } from "@/modules/evaluations/domain/evaluation";
 import type {
   CourseSubject,
@@ -45,6 +46,7 @@ class FakeEvaluations implements EvaluationRepository {
       periodId: data.periodId ?? null,
       bookletNumber: data.bookletNumber ?? null,
       totalQuestions: 0,
+      durationMinutes: data.durationMinutes ?? null,
       theme: null,
     };
     this.items.push(e);
@@ -85,6 +87,16 @@ class FakeEvaluations implements EvaluationRepository {
   async updateStatus(institutionId: string, id: string, status: EvaluationStatus) {
     const e = this.items.find((x) => x.id === id);
     if (e) e.status = status;
+  }
+  async updateSettings(
+    _i: string,
+    id: string,
+    data: UpdateEvaluationSettingsData,
+  ): Promise<Evaluation> {
+    const e = this.items.find((x) => x.id === id);
+    if (!e) throw new Error(`Evaluation ${id} no encontrada`);
+    e.durationMinutes = data.durationMinutes;
+    return e;
   }
   async createNewVersion(): Promise<Evaluation> {
     throw new Error("no usado");
@@ -241,6 +253,65 @@ describe("CreateEvaluation", () => {
     const uc = new CreateEvaluation(new FakeEvaluations(), new FakeCourseSubjects([]), noPeriods);
     const r = await uc.execute({ actor: teacher, data: { title: "P1", courseSubjectId: "nope" } });
     expect(r.ok).toBe(false);
+  });
+
+  // Sprint 7: duración estimada al crear (captura temprana para que el
+  // docente no se salte el dato en la portada del compendio).
+  it("persiste durationMinutes cuando se envía al crear", async () => {
+    const repo = new FakeEvaluations();
+    const cs = new FakeCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
+    const uc = new CreateEvaluation(repo, cs, noPeriods);
+    const r = await uc.execute({
+      actor: teacher,
+      data: { title: "P1", courseSubjectId: "cs1", durationMinutes: 90 },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.durationMinutes).toBe(90);
+      const stored = await repo.findById("i1", r.value.id);
+      expect(stored?.durationMinutes).toBe(90);
+    }
+  });
+  it("omite durationMinutes cuando no se envía (queda null → heurístico)", async () => {
+    const repo = new FakeEvaluations();
+    const cs = new FakeCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
+    const uc = new CreateEvaluation(repo, cs, noPeriods);
+    const r = await uc.execute({ actor: teacher, data: { title: "P1", courseSubjectId: "cs1" } });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.durationMinutes).toBeNull();
+  });
+  it("acepta durationMinutes explícitamente null al crear", async () => {
+    const repo = new FakeEvaluations();
+    const cs = new FakeCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
+    const uc = new CreateEvaluation(repo, cs, noPeriods);
+    const r = await uc.execute({
+      actor: teacher,
+      data: { title: "P1", courseSubjectId: "cs1", durationMinutes: null },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.durationMinutes).toBeNull();
+  });
+  it("rechaza durationMinutes fuera de rango al crear (VALIDATION)", async () => {
+    const repo = new FakeEvaluations();
+    const cs = new FakeCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
+    const uc = new CreateEvaluation(repo, cs, noPeriods);
+    const r = await uc.execute({
+      actor: teacher,
+      data: { title: "P1", courseSubjectId: "cs1", durationMinutes: 0 },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("VALIDATION");
+  });
+  it("rechaza durationMinutes no-entero al crear", async () => {
+    const repo = new FakeEvaluations();
+    const cs = new FakeCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
+    const uc = new CreateEvaluation(repo, cs, noPeriods);
+    const r = await uc.execute({
+      actor: teacher,
+      data: { title: "P1", courseSubjectId: "cs1", durationMinutes: 45.5 },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("VALIDATION");
   });
 });
 

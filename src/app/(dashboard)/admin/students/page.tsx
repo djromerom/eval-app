@@ -11,7 +11,7 @@ import { ImportForm } from "./import-form";
 export const metadata: Metadata = { title: "Estudiantes" };
 
 export default async function StudentsPage() {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const [studentsRes, groupsRes] = await Promise.all([
     makeListStudents().execute({ actor }),
     makeListGroups().execute({ actor }),

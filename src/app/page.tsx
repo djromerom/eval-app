@@ -7,7 +7,7 @@ export default async function HomePage() {
   if (!user) redirect("/login");
 
   // Redirige al panel según el rol principal
-  if (hasRole(user, "SUPER_ADMIN", "ADMIN")) redirect("/admin");
+  if (hasRole(user, "SUPER_ADMIN", "ECU_MASTER")) redirect("/admin");
   if (hasRole(user, "COORDINATOR")) redirect("/coordinator");
   redirect("/teacher");
 }

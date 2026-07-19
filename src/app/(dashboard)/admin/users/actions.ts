@@ -56,7 +56,7 @@ export async function inviteUserAction(
   _prev: UserFormState,
   formData: FormData,
 ): Promise<UserFormState> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const roles = rolesFrom(formData);
   const result = await makeInviteUser().execute({
     actor,
@@ -75,7 +75,7 @@ export async function resendUserInvitationAction(
   _prev: UserFormState,
   formData: FormData,
 ): Promise<UserFormState> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const result = await makeResendUserInvitation().execute({
     actor,
     userId: String(formData.get("userId") ?? ""),
@@ -90,7 +90,7 @@ export async function setUserRolesAction(
   _prev: UserFormState,
   formData: FormData,
 ): Promise<UserFormState> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const userId = String(formData.get("userId") ?? "");
   const roles = rolesFrom(formData);
   const result = await makeSetUserRoles().execute({ actor, userId, roles });
@@ -101,7 +101,7 @@ export async function setUserRolesAction(
 }
 
 export async function setUserActiveAction(formData: FormData): Promise<void> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const result = await makeSetUserActive().execute({
     actor,
     userId: String(formData.get("userId") ?? ""),

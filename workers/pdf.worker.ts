@@ -173,7 +173,12 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
     log.info({ jobId: job.id, targetId, kind }, "Generando PDF");
 
     const token = signPrintToken(tokenAccess);
-    const baseUrl = env.AUTH_URL ?? "http://localhost:3000";
+    // PRINT_BASE_URL tiene prioridad sobre AUTH_URL: en prod AUTH_URL apunta al
+    // público (https://ecognia.pro) pero los workers deben fetchear del
+    // servidor interno donde corre Next (donde están las rutas /print/*).
+    // En dev permite evitar el conflicto de puertos (e.g. otro contenedor
+    // tiene 3000 pero Next corre en 3002).
+    const baseUrl = env.PRINT_BASE_URL ?? env.AUTH_URL ?? "http://localhost:3000";
     const queryString = extraQuery ? `&${extraQuery}` : "";
     const url = `${baseUrl}${ROUTE_BY_KIND[kind]}/${targetId}?t=${encodeURIComponent(token)}${queryString}`;
 

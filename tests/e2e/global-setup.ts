@@ -42,14 +42,14 @@ export default async function globalSetup(): Promise<void> {
         roles: {
           create: [
             { role: RoleType.SUPER_ADMIN },
-            { role: RoleType.ADMIN },
+            { role: RoleType.ECU_MASTER },
             { role: RoleType.COORDINATOR },
             { role: RoleType.TEACHER },
           ],
         },
       },
     });
-    for (const role of [RoleType.ADMIN, RoleType.COORDINATOR, RoleType.TEACHER] as const) {
+    for (const role of [RoleType.ECU_MASTER, RoleType.COORDINATOR, RoleType.TEACHER] as const) {
       await prisma.userRole.upsert({
         where: { userId_role: { userId: admin.id, role } },
         update: {},

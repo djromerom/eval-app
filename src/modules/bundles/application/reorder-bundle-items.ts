@@ -25,7 +25,7 @@ export class ReorderBundleItems implements UseCase<ReorderBundleItemsInput, void
   constructor(private readonly bundles: BundleRepository) {}
 
   async execute({ actor, bundleId, itemIds }: ReorderBundleItemsInput): Promise<Result<void>> {
-    const authorized = requireRole(actor, "SUPER_ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     const bundle = await this.bundles.findById(actor.institutionId, bundleId);

@@ -67,7 +67,7 @@ export class UpdateInstitutionTheme implements UseCase<
     actor,
     theme,
   }: UpdateInstitutionThemeInput): Promise<Result<InstitutionalTheme>> {
-    const authorized = requireRole(actor, "ADMIN", "SUPER_ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER", "SUPER_ADMIN");
     if (!authorized.ok) return authorized;
 
     const parsed = InstitutionalThemeSchema.partial().safeParse(theme);

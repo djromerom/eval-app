@@ -23,6 +23,14 @@ export interface Field {
   placeholder?: string;
   required?: boolean;
   options?: FieldOption[];
+  /** Solo aplica cuando type === "number". Se pasa como `min` al <input>. */
+  min?: number;
+  /** Solo aplica cuando type === "number". Se pasa como `max` al <input>. */
+  max?: number;
+  /** Texto de ayuda debajo del label (e.g. "Si lo dejas vacío, se calcula
+   *  automáticamente con preguntas × 2.5 min"). No rompe layout: se
+   *  renderiza en una línea aparte. */
+  helpText?: string;
 }
 
 type Action = (state: AdminFormState, formData: FormData) => Promise<AdminFormState>;
@@ -94,9 +102,14 @@ export function EntityForm({
               type={field.type}
               required={field.required}
               placeholder={field.placeholder}
+              min={field.type === "number" ? field.min : undefined}
+              max={field.type === "number" ? field.max : undefined}
               className="w-40"
             />
           )}
+          {field.helpText ? (
+            <p className="text-muted-foreground text-xs">{field.helpText}</p>
+          ) : null}
         </div>
       ))}
       <SubmitButton label={submitLabel} />

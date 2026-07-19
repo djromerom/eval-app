@@ -42,6 +42,8 @@ export type SeedEvaluation = {
   title: string;
   status: "DRAFT" | "IN_REVIEW" | "APPROVED" | "PUBLISHED";
   totalQuestions: number;
+  /** Sprint 7 — duración capturada en Settings; nullable. */
+  durationMinutes: number | null;
   institutionId: string;
   subjectId: string;
   subjectName: string;
@@ -54,6 +56,14 @@ export class InMemoryBundleRepository implements BundleRepository {
   bundles = new Map<string, Bundle>();
   items = new Map<string, BundleItem & { institutionId: string }>();
   evaluations = new Map<string, SeedEvaluation>();
+  /**
+   * Contador monotónico para generar IDs de item. NO usar `this.items.size + 1`
+   * porque tras un remove el tamaño baja y el siguiente add reciclaría un ID
+   * existente → `items.set(id, ...)` sobrescribe la fila previa en vez de
+   * añadir (bug latente en este repo de tests: tras `removeItem` + `addItem`
+   * el item previo desaparecía del Map). Este contador solo sube.
+   */
+  private nextItemSeq = 0;
 
   seedEvaluation(ev: SeedEvaluation): void {
     this.evaluations.set(ev.id, ev);
@@ -83,7 +93,7 @@ export class InMemoryBundleRepository implements BundleRepository {
     for (const evId of data.evaluationIds) {
       const ev = evaluationsById.get(evId);
       if (!ev) throw new Error(`Evaluation ${evId} no encontrada`);
-      const itemId = `item-${this.items.size + 1}`;
+      const itemId = `item-${++this.nextItemSeq}`;
       this.items.set(itemId, {
         id: itemId,
         bundleId: id,
@@ -152,6 +162,7 @@ export class InMemoryBundleRepository implements BundleRepository {
         evaluationTitle: ev.title,
         evaluationStatus: ev.status,
         totalQuestions: ev.totalQuestions,
+        durationMinutes: ev.durationMinutes,
         subjectName: ev.subjectName,
         subjectIsArea: ev.subjectIsArea,
         parentSubjectId: ev.parentSubjectId,
@@ -162,11 +173,17 @@ export class InMemoryBundleRepository implements BundleRepository {
 
   async addItem(institutionId: string, bundleId: string, data: AddItemInput): Promise<BundleItem> {
     const items = await this.listItemsOrdered(bundleId);
-    const order = data.order ?? items.length + 1;
+    // Para el append usamos `max(order) + 1`, NO `items.length + 1`.
+    // Si los items quedan con orders no contiguos (e.g. tras una eliminación
+    // intermedia), `count + 1` apuntaría a un slot ya ocupado y el
+    // `@@unique([bundleId, order])` de Postgres rechazaría el INSERT. Con
+    // max+1 siempre cae en un slot libre. (Fix en línea con Sprint 5.)
+    const order =
+      data.order ?? (items.length === 0 ? 1 : Math.max(...items.map((i) => i.order)) + 1);
     if (items.some((i) => i.order === order)) {
       throw new Error(`Order ${order} ya existe en el bundle`);
     }
-    const id = `item-${this.items.size + 1}`;
+    const id = `item-${++this.nextItemSeq}`;
     this.items.set(id, { id, bundleId, evaluationId: data.evaluationId, order, institutionId });
     return { id, bundleId, evaluationId: data.evaluationId, order };
   }
@@ -248,7 +265,7 @@ export class InMemoryBundleRepository implements BundleRepository {
 export const superAdmin: AuthenticatedUser = {
   userId: "u-super",
   institutionId: "inst-1",
-  roles: ["SUPER_ADMIN"],
+  roles: ["ECU_MASTER"],
 };
 
 export const teacher: AuthenticatedUser = {
@@ -266,7 +283,7 @@ export const coordinator: AuthenticatedUser = {
 export const adminOtherInstitution: AuthenticatedUser = {
   userId: "u-super-2",
   institutionId: "inst-2",
-  roles: ["SUPER_ADMIN"],
+  roles: ["ECU_MASTER"],
 };
 
 /** Seeds de evaluations de ejemplo (grado 6°, Ciencias Naturales). */
@@ -279,6 +296,7 @@ export function seedEvaluationGrado6(
     title: options?.title ?? "Biología 6°",
     status: options?.status ?? "APPROVED",
     totalQuestions: options?.totalQuestions ?? 33,
+    durationMinutes: options?.durationMinutes ?? null,
     institutionId: options?.institutionId ?? "inst-1",
     subjectId: options?.subjectId ?? "subj-bio",
     subjectName: options?.subjectName ?? "Biología",

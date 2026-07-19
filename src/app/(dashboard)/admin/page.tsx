@@ -7,7 +7,7 @@ import { prisma } from "@/shared/infrastructure/db/prisma";
 export const metadata: Metadata = { title: "Panel de administración" };
 
 export default async function AdminDashboardPage() {
-  const actor = await requireAuthenticatedUser("SUPER_ADMIN", "ADMIN");
+  const actor = await requireAuthenticatedUser("SUPER_ADMIN", "ECU_MASTER");
 
   const [usersCount, teachersCount, studentsCount, evaluationsCount] = await Promise.all([
     prisma.user.count({ where: { institutionId: actor.institutionId, isActive: true } }),

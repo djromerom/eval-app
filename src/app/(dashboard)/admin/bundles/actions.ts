@@ -24,7 +24,7 @@ export async function createBundleAction(
   _prev: BundleFormState,
   formData: FormData,
 ): Promise<BundleFormState> {
-  const actor = await requireAuthenticatedUser("SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
 
   const name = String(formData.get("name") ?? "").trim();
   const bookletNumberRaw = String(formData.get("bookletNumber") ?? "").trim();
@@ -59,7 +59,7 @@ export async function updateBundleAction(
   _prev: BundleFormState,
   formData: FormData,
 ): Promise<BundleFormState> {
-  const actor = await requireAuthenticatedUser("SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -87,7 +87,7 @@ export async function toggleBundleReadyAction(
   _prev: BundleFormState,
   formData: FormData,
 ): Promise<BundleFormState> {
-  const actor = await requireAuthenticatedUser("SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const id = String(formData.get("id") ?? "");
   const next = String(formData.get("next") ?? "");
 
@@ -107,7 +107,7 @@ export async function deleteBundleAction(
   _prev: BundleFormState,
   formData: FormData,
 ): Promise<BundleFormState> {
-  const actor = await requireAuthenticatedUser("SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const id = String(formData.get("id") ?? "");
 
   const result = await makeDeleteBundle().execute({ actor, bundleId: id });

@@ -18,6 +18,7 @@ function item(
     evaluationTitle: partial.evaluationTitle ?? "T",
     evaluationStatus: partial.evaluationStatus ?? "APPROVED",
     totalQuestions: partial.totalQuestions,
+    durationMinutes: partial.durationMinutes ?? null,
     subjectName: partial.subjectName,
     subjectIsArea: partial.subjectIsArea ?? false,
     parentSubjectId: partial.parentSubjectId ?? null,
@@ -53,10 +54,13 @@ describe("computeCoverTable — agrupa por parent subject", () => {
       "Química",
     ]);
     expect(t.areas[0]!.totalQuestions).toBe(55);
-    // 55 * 2.5 = 137.5 → 138
-    expect(t.areas[0]!.totalMinutes).toBe(138);
+    // Sprint 7: area.totalMinutes = suma de los subject.minutes.
+    // Bio: round(33*2.5)=83; Fis: round(11*2.5)=28; Qui: round(11*2.5)=28 → 139.
+    // (Antes era round(55*2.5)=138 — rounding-level distinto. Este es el nuevo
+    // comportamiento: totalMinutes interno-consistente con subjects.)
+    expect(t.areas[0]!.totalMinutes).toBe(139);
     expect(t.totalQuestions).toBe(55);
-    expect(t.totalMinutes).toBe(138);
+    expect(t.totalMinutes).toBe(139);
     expect(t.totalEvaluations).toBe(3);
   });
 
@@ -135,6 +139,62 @@ describe("computeCoverTable — agrupa por parent subject", () => {
     const t = computeCoverTable(items, 3);
     expect(t.areas[0]!.totalMinutes).toBe(60);
     expect(t.totalMinutes).toBe(60);
+  });
+});
+
+describe("computeCoverTable — Sprint 7: durationMinutes explícito", () => {
+  it("usa durationMinutes del item cuando está seteado, no el cálculo heurístico", () => {
+    const items: BundleItemDetail[] = [
+      // 33 preguntas pero el docente capturó 90 min explícitamente.
+      item({
+        subjectName: "Biología",
+        parentSubjectName: "Ciencias Naturales",
+        totalQuestions: 33,
+        durationMinutes: 90,
+      }),
+    ];
+    const t = computeCoverTable(items);
+    expect(t.areas[0]!.subjects[0]!.minutes).toBe(90);
+    expect(t.areas[0]!.totalMinutes).toBe(90);
+    expect(t.totalMinutes).toBe(90);
+  });
+
+  it("mezcla items con y sin durationMinutes: cada uno usa su valor real", () => {
+    const items: BundleItemDetail[] = [
+      // Item A: 20 preg con duración explícita de 45 min.
+      item({
+        subjectName: "Biología",
+        parentSubjectName: "Ciencias Naturales",
+        totalQuestions: 20,
+        durationMinutes: 45,
+      }),
+      // Item B: 10 preg sin duración explícita → cae a round(10*2.5)=25.
+      item({
+        subjectName: "Física",
+        parentSubjectName: "Ciencias Naturales",
+        totalQuestions: 10,
+      }),
+    ];
+    const t = computeCoverTable(items);
+    expect(t.areas[0]!.subjects.find((s) => s.name === "Biología")!.minutes).toBe(45);
+    expect(t.areas[0]!.subjects.find((s) => s.name === "Física")!.minutes).toBe(25);
+    // Total: 45 + 25 = 70 (consistente con la suma de subjects).
+    expect(t.areas[0]!.totalMinutes).toBe(70);
+    expect(t.totalMinutes).toBe(70);
+  });
+
+  it("durationMinutes=null en todos los items = comportamiento legacy (heurístico)", () => {
+    const items: BundleItemDetail[] = [
+      item({
+        subjectName: "Biología",
+        parentSubjectName: "Ciencias Naturales",
+        totalQuestions: 10,
+      }),
+    ];
+    // Sin durationMinutes y minutesPerQuestion=2 → round(10*2)=20.
+    const t = computeCoverTable(items, 2);
+    expect(t.areas[0]!.subjects[0]!.minutes).toBe(20);
+    expect(t.totalMinutes).toBe(20);
   });
 });
 

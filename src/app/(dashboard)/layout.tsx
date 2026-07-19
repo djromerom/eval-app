@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireAuthenticatedUser } from "@/lib/session";
-import { hasRole, type Role } from "@/shared/application/authenticated-user";
+import { type Role } from "@/shared/application/authenticated-user";
+import { can, type Capability } from "@/shared/application/capabilities";
 import { signOut } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { PrismaNotificationReader } from "@/modules/notifications/infrastructure/prisma-notification-reader";
@@ -8,9 +9,16 @@ import { PrismaNotificationReader } from "@/modules/notifications/infrastructure
 interface NavItem {
   href: string;
   label: string;
+  /** Capability necesaria para ver el item. Sprint 8C: el menú ya no
+   *  chequea roles directamente; consulta capabilities (ver
+   *  `@/shared/application/capabilities`). Si mañana cambia quién puede
+   *  gestionar bundles, solo se toca `can("manage-bundles", roles)` y
+   *  este menú se actualiza sin editar `navFor`. */
+  requires: Capability;
 }
 
-/** Navegación por rol. Cada rol ve solo lo que le corresponde (§2). */
+/** Navegación por capability. Cada item declara qué necesita; el menú
+ *  filtra según los roles del actor. */
 function BellIcon() {
   return (
     <svg
@@ -31,41 +39,32 @@ function BellIcon() {
   );
 }
 
+const NAV_ITEMS: readonly NavItem[] = [
+  // Sección admin (SUPER_ADMIN y ECU_MASTER).
+  { href: "/admin", label: "Panel", requires: "manage-users" },
+  { href: "/admin/institutions", label: "Instituciones", requires: "manage-institutions" },
+  { href: "/admin/users", label: "Usuarios", requires: "manage-users" },
+  { href: "/admin/academic", label: "Estructura académica", requires: "manage-academic-structure" },
+  { href: "/admin/teachers", label: "Docentes", requires: "manage-users" },
+  { href: "/admin/students", label: "Estudiantes", requires: "manage-users" },
+  { href: "/admin/theme", label: "Tema institucional", requires: "manage-institutional-theme" },
+  // Compendios: hoy ECU_MASTER. Si SUPER_ADMIN debe poder gestionarlos
+  // (multi-rol), se añade a `can("manage-bundles", roles)` en
+  // capabilities.ts — NO se toca este menú.
+  { href: "/admin/bundles", label: "Compendios", requires: "manage-bundles" },
+  // Sección coordinador.
+  { href: "/coordinator", label: "Panel", requires: "review-evaluations" },
+  { href: "/coordinator/review", label: "Revisión", requires: "review-evaluations" },
+  // Sección docente.
+  { href: "/teacher", label: "Panel", requires: "create-evaluations" },
+  { href: "/teacher/evaluations", label: "Evaluaciones", requires: "create-evaluations" },
+  { href: "/teacher/templates", label: "Plantillas", requires: "create-evaluations" },
+  { href: "/teacher/question-bank", label: "Banco de preguntas", requires: "create-evaluations" },
+  { href: "/teacher/scan", label: "Escanear", requires: "create-evaluations" },
+] as const;
+
 function navFor(roles: Role[]): NavItem[] {
-  const user = { userId: "", institutionId: "", roles };
-  const items: NavItem[] = [];
-  if (hasRole(user, "SUPER_ADMIN", "ADMIN")) {
-    items.push(
-      { href: "/admin", label: "Panel" },
-      { href: "/admin/institutions", label: "Instituciones" },
-      { href: "/admin/users", label: "Usuarios" },
-      { href: "/admin/academic", label: "Estructura académica" },
-      { href: "/admin/teachers", label: "Docentes" },
-      { href: "/admin/students", label: "Estudiantes" },
-      { href: "/admin/theme", label: "Tema institucional" },
-    );
-  }
-  if (hasRole(user, "SUPER_ADMIN")) {
-    // Los compendios multi-evaluación los arma el SUPER_ADMIN; el resto de
-    // roles solo los consume (descarga PDF) desde /print.
-    items.push({ href: "/admin/bundles", label: "Compendios" });
-  }
-  if (hasRole(user, "COORDINATOR")) {
-    items.push(
-      { href: "/coordinator", label: "Panel" },
-      { href: "/coordinator/review", label: "Revisión" },
-    );
-  }
-  if (hasRole(user, "TEACHER")) {
-    items.push(
-      { href: "/teacher", label: "Panel" },
-      { href: "/teacher/evaluations", label: "Evaluaciones" },
-      { href: "/teacher/templates", label: "Plantillas" },
-      { href: "/teacher/question-bank", label: "Banco de preguntas" },
-      { href: "/teacher/scan", label: "Escanear" },
-    );
-  }
-  return items;
+  return NAV_ITEMS.filter((item) => can(item.requires, roles));
 }
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {

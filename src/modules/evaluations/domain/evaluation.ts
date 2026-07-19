@@ -18,6 +18,13 @@ export interface Evaluation {
   teacherId: string;
   bookletNumber: number | null;
   totalQuestions: number;
+  /**
+   * Duración estimada en minutos, capturada por el docente en el panel
+   * Settings. Nullable: si es null, la portada del compendio cae al cálculo
+   * heurístico (`totalQuestions * DEFAULT_MINUTES_PER_QUESTION`). Editable
+   * mientras la evaluation esté en DRAFT; inmutable desde APPROVED.
+   */
+  durationMinutes: number | null;
   /** Override visual por evaluación (modo Diseñador). JSON crudo de la BD. */
   theme: unknown;
 }
@@ -76,6 +83,10 @@ export interface CreateEvaluationData {
   periodId?: string;
   bookletNumber?: number;
   description?: string;
+  /** Duración estimada en minutos. Si es `null` o se omite, cae al cálculo
+   *  heurístico `totalQuestions * DEFAULT_MINUTES_PER_QUESTION`. Mismas
+   *  reglas de validación que `UpdateEvaluationSettingsData`. Sprint 7. */
+  durationMinutes?: number | null;
 }
 
 export interface CreateSectionData {
@@ -99,6 +110,14 @@ export interface CreateQuestionData {
 
 // ===== Puerto de persistencia =====
 
+/** Datos editables desde el panel Settings de la evaluation (Sprint 7).
+ *  Solo `durationMinutes` por ahora. Si en el futuro hay más campos del
+ *  "metadata" (e.g. instrucciones de portada), se añaden aquí manteniendo
+ *  la regla "editable en DRAFT, congelado desde APPROVED". */
+export interface UpdateEvaluationSettingsData {
+  durationMinutes: number | null;
+}
+
 export interface EvaluationRepository {
   create(institutionId: string, teacherId: string, data: CreateEvaluationData): Promise<Evaluation>;
   findById(institutionId: string, id: string): Promise<Evaluation | null>;
@@ -121,8 +140,42 @@ export interface EvaluationRepository {
     data: CreateQuestionData,
   ): Promise<Question>;
   updateStatus(institutionId: string, id: string, status: EvaluationStatus): Promise<void>;
+  /**
+   * Actualiza los campos de metadata editables desde el panel Settings
+   * (hoy solo `durationMinutes`). El use case `UpdateEvaluationSettings`
+   * se encarga de validar DRAFT-only antes de invocar este método.
+   */
+  updateSettings(
+    institutionId: string,
+    id: string,
+    data: UpdateEvaluationSettingsData,
+  ): Promise<Evaluation>;
   /** Cada aprobación crea una copia inmutable con version + 1 (§3.3). */
   createNewVersion(institutionId: string, id: string): Promise<Evaluation>;
+}
+
+/** Cota inferior y superior para `durationMinutes` (Sprint 7).
+ *  - Mín 1: una evaluation sin tiempo no se imprime.
+ *  - Máx 600 min = 10h: tope defensivo contra valores absurdos que rompan
+ *    la maquetación del booklet. Ninguna clase real dura más. */
+export const MIN_DURATION_MINUTES = 1;
+export const MAX_DURATION_MINUTES = 600;
+
+/** Valida `durationMinutes` para `UpdateEvaluationSettingsData`.
+ *  Devuelve `null` si es válido, mensaje de error si no.
+ *  Trata `null` como válido (la portada cae al cálculo heurístico). */
+export function validateDurationMinutes(value: number | null): string | null {
+  if (value === null) return null;
+  if (!Number.isInteger(value)) {
+    return "La duración debe ser un número entero de minutos.";
+  }
+  if (value < MIN_DURATION_MINUTES) {
+    return `La duración mínima es ${MIN_DURATION_MINUTES} minuto.`;
+  }
+  if (value > MAX_DURATION_MINUTES) {
+    return `La duración máxima es ${MAX_DURATION_MINUTES} minutos (10 horas).`;
+  }
+  return null;
 }
 
 const ANSWER_KEYS: AnswerKey[] = ["A", "B", "C", "D", "E", "F", "G", "H"];

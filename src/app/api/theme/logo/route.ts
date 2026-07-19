@@ -16,7 +16,7 @@ const ALLOWED_MIME = new Set(["image/png", "image/jpeg"]);
  * (segura para servir luego desde el print page sin exponer el FS).
  */
 export async function POST(request: Request) {
-  const actor = await requireAuthenticatedUser("ADMIN", "SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER", "SUPER_ADMIN");
 
   const form = await request.formData().catch(() => null);
   const file = form?.get("file");
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
-  const actor = await requireAuthenticatedUser("ADMIN", "SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER", "SUPER_ADMIN");
 
   const inst = await prisma.institution.findUnique({
     where: { id: actor.institutionId },

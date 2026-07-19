@@ -51,7 +51,7 @@ class InMemoryGroups implements GroupRepository {
   }
 }
 
-const admin: AuthenticatedUser = { userId: "u", institutionId: "i1", roles: ["ADMIN"] };
+const admin: AuthenticatedUser = { userId: "u", institutionId: "i1", roles: ["ECU_MASTER"] };
 const groups: Group[] = [{ id: "g1", institutionId: "i1", courseId: "c1", name: "11-03" }];
 
 const CSV = `nombre;tipo_doc;num_doc;codigo;grupo;anio_ingreso

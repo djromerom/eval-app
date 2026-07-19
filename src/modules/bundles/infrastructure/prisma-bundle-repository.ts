@@ -26,6 +26,7 @@ type BundleItemRow = PrismaBundleItem & {
     title: string;
     status: DraftStatus;
     totalQuestions: number;
+    durationMinutes: number | null;
     institutionId: string;
     courseSubject: {
       subject: {
@@ -63,6 +64,7 @@ function toItemDetail(row: BundleItemRow): BundleItemDetail {
     evaluationTitle: row.evaluation.title,
     evaluationStatus: row.evaluation.status,
     totalQuestions: row.evaluation.totalQuestions,
+    durationMinutes: row.evaluation.durationMinutes,
     subjectName: subj.name,
     subjectIsArea: subj.isArea,
     parentSubjectId: subj.parentSubjectId,
@@ -82,6 +84,7 @@ export class PrismaBundleRepository implements BundleRepository {
         title: string;
         status: string;
         totalQuestions: number;
+        durationMinutes: number | null;
         institutionId: string;
         subjectId: string;
         subjectName: string;
@@ -193,6 +196,7 @@ export class PrismaBundleRepository implements BundleRepository {
             title: true,
             status: true,
             totalQuestions: true,
+            durationMinutes: true,
             institutionId: true,
             courseSubject: {
               select: {
@@ -215,8 +219,20 @@ export class PrismaBundleRepository implements BundleRepository {
   }
 
   async addItem(institutionId: string, bundleId: string, data: AddItemInput): Promise<BundleItem> {
-    const order =
-      data.order ?? (await prisma.evaluationBundleItem.count({ where: { bundleId } })) + 1;
+    // Para el append usamos `max(order) + 1`, NO `count + 1` — si los items
+    // quedan con orders no contiguos (típico tras una eliminación intermedia),
+    // `count + 1` apuntaría a un slot ya ocupado y dispararía
+    // `Unique constraint failed on (bundleId, order)`. Con max+1 siempre
+    // cae en un slot libre. Mismo fix que en `InMemoryBundleRepository.addItem`
+    // para mantener paridad de comportamiento entre tests y prod.
+    let order = data.order;
+    if (order === undefined) {
+      const max = await prisma.evaluationBundleItem.aggregate({
+        where: { bundleId },
+        _max: { order: true },
+      });
+      order = (max._max.order ?? 0) + 1;
+    }
     // Verificamos pertenencia vía el bundle.
     await prisma.evaluationBundle.findFirstOrThrow({ where: { id: bundleId, institutionId } });
     const row = await prisma.evaluationBundleItem.create({
@@ -310,6 +326,7 @@ export class PrismaBundleRepository implements BundleRepository {
       title: string;
       status: string;
       totalQuestions: number;
+      durationMinutes: number | null;
       institutionId: string;
       subjectId: string;
       subjectName: string;
@@ -326,6 +343,7 @@ export class PrismaBundleRepository implements BundleRepository {
         title: true,
         status: true,
         totalQuestions: true,
+        durationMinutes: true,
         institutionId: true,
         courseSubject: {
           select: {
@@ -347,6 +365,7 @@ export class PrismaBundleRepository implements BundleRepository {
       title: r.title,
       status: r.status,
       totalQuestions: r.totalQuestions,
+      durationMinutes: r.durationMinutes,
       institutionId: r.institutionId,
       subjectId: r.courseSubject.subject.id,
       subjectName: r.courseSubject.subject.name,

@@ -42,7 +42,7 @@ export class CreateStudent implements UseCase<CreateStudentInput, Student> {
   ) {}
 
   async execute({ actor, data }: CreateStudentInput): Promise<Result<Student>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     const error = validateBasics(data);
@@ -68,7 +68,7 @@ export class ListStudents implements UseCase<ListStudentsInput, Student[]> {
   constructor(private readonly students: StudentRepository) {}
 
   async execute({ actor, groupId }: ListStudentsInput): Promise<Result<Student[]>> {
-    const authorized = requireRole(actor, "ADMIN", "TEACHER");
+    const authorized = requireRole(actor, "ECU_MASTER", "TEACHER");
     if (!authorized.ok) return authorized;
     const list = groupId
       ? await this.students.findByGroup(actor.institutionId, groupId)
@@ -88,7 +88,7 @@ export class ChangeStudentCode implements UseCase<ChangeStudentCodeInput, Studen
   constructor(private readonly students: StudentRepository) {}
 
   async execute({ actor, studentId, newCode }: ChangeStudentCodeInput): Promise<Result<Student>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     if (!isValidStudentCode(newCode)) {
@@ -122,7 +122,7 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
   ) {}
 
   async execute({ actor, rows }: ImportStudentsInput): Promise<Result<ImportResult>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     if (rows.length === 0) return fail(new ValidationError("El archivo no tiene filas."));

@@ -17,7 +17,7 @@ export async function createStudentAction(
   _prev: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const result = await makeCreateStudent().execute({
     actor,
     data: {
@@ -46,7 +46,7 @@ export async function importStudentsAction(
   _prev: ImportState,
   formData: FormData,
 ): Promise<ImportState> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {

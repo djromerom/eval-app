@@ -84,7 +84,7 @@ class InMemorySubjects implements SubjectRepository {
   }
 }
 
-const admin: AuthenticatedUser = { userId: "u", institutionId: "i1", roles: ["ADMIN"] };
+const admin: AuthenticatedUser = { userId: "u", institutionId: "i1", roles: ["ECU_MASTER"] };
 const teacher: AuthenticatedUser = { userId: "t", institutionId: "i1", roles: ["TEACHER"] };
 const superAdmin: AuthenticatedUser = { userId: "s", institutionId: "i1", roles: ["SUPER_ADMIN"] };
 

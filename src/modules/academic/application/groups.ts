@@ -21,7 +21,7 @@ export class CreateGroup implements UseCase<CreateGroupInput, Group> {
   ) {}
 
   async execute({ actor, data }: CreateGroupInput): Promise<Result<Group>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     if (!data.name.trim()) return fail(new ValidationError("El nombre del grupo es obligatorio."));
@@ -44,7 +44,7 @@ export class ListGroups implements UseCase<ListGroupsInput, Group[]> {
   constructor(private readonly groups: GroupRepository) {}
 
   async execute({ actor, courseId }: ListGroupsInput): Promise<Result<Group[]>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
     return ok(await this.groups.findAll(actor.institutionId, courseId));
   }

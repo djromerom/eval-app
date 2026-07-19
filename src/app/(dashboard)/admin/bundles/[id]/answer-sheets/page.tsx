@@ -24,7 +24,12 @@ export default async function BundleAnswerSheetsPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR", "ADMIN", "SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser(
+    "TEACHER",
+    "COORDINATOR",
+    "ECU_MASTER",
+    "SUPER_ADMIN",
+  );
   const { id } = await params;
 
   const bundleRes = await makeGetBundle().execute({ actor, bundleId: id });

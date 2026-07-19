@@ -29,7 +29,7 @@ export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
   constructor(private readonly bundles: BundleRepository) {}
 
   async execute({ actor, data }: CreateBundleInput): Promise<Result<Bundle>> {
-    const authorized = requireRole(actor, "SUPER_ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     if (!isValidBundleName(data.name)) {

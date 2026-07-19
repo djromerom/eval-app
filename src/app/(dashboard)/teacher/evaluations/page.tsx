@@ -66,6 +66,16 @@ export default async function EvaluationsPage() {
             },
             { name: "periodId", label: "Periodo", type: "select", options: periodOptions },
             { name: "bookletNumber", label: "Cuadernillo", type: "number", placeholder: "1" },
+            {
+              name: "durationMinutes",
+              label: "Duración estimada (min)",
+              type: "number",
+              placeholder: "ej. 90",
+              min: 1,
+              max: 600,
+              helpText:
+                "Aparece en la portada del compendio. Si la dejas vacía, se calcula con preguntas × 2.5 min. Editable después en Configuración.",
+            },
           ]}
         />
       </section>

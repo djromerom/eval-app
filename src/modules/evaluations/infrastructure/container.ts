@@ -11,6 +11,7 @@ import {
   CreateEvaluation,
   GetEvaluation,
   ListEvaluations,
+  UpdateEvaluationSettings,
 } from "../application/manage-evaluations";
 import {
   ApplyTemplate,
@@ -39,6 +40,7 @@ export const makeListEvaluations = () => new ListEvaluations(evaluations);
 export const makeGetEvaluation = () => new GetEvaluation(evaluations);
 export const makeAddSection = () => new AddSection(evaluations);
 export const makeAddQuestion = () => new AddQuestion(evaluations);
+export const makeUpdateEvaluationSettings = () => new UpdateEvaluationSettings(evaluations);
 export const makeChangeEvaluationStatus = () =>
   new ChangeEvaluationStatus(evaluations, notificationSender, coordinatorDirectory);
 

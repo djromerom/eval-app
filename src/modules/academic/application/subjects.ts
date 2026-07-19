@@ -30,7 +30,7 @@ export class CreateSubject implements UseCase<CreateSubjectInput, Subject> {
       return ok(await this.subjects.create(null, data));
     }
 
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
     return ok(await this.subjects.create(actor.institutionId, data));
   }
@@ -45,7 +45,7 @@ export class ListSubjects implements UseCase<ListSubjectsInput, Subject[]> {
   constructor(private readonly subjects: SubjectRepository) {}
 
   async execute({ actor }: ListSubjectsInput): Promise<Result<Subject[]>> {
-    const authorized = requireRole(actor, "ADMIN", "COORDINATOR", "TEACHER");
+    const authorized = requireRole(actor, "ECU_MASTER", "COORDINATOR", "TEACHER");
     if (!authorized.ok) return authorized;
     return ok(await this.subjects.findAllForInstitution(actor.institutionId));
   }

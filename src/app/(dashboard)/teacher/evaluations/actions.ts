@@ -35,6 +35,17 @@ export async function createEvaluationAction(
 ): Promise<AdminFormState> {
   const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
   const bookletRaw = str(formData, "bookletNumber");
+  // Sprint 7: duración estimada opcional al crear. "" → null (recae al
+  // cálculo heurístico en la portada del compendio). Si el input trae
+  // basura no-entera, se omite (undefined → use case no valida).
+  const durationRaw = str(formData, "durationMinutes");
+  let durationMinutes: number | null | undefined;
+  if (durationRaw === "") {
+    durationMinutes = null;
+  } else {
+    const parsed = Number(durationRaw);
+    durationMinutes = Number.isInteger(parsed) ? parsed : undefined;
+  }
   const result = await makeCreateEvaluation().execute({
     actor,
     data: {
@@ -42,6 +53,7 @@ export async function createEvaluationAction(
       courseSubjectId: str(formData, "courseSubjectId"),
       periodId: str(formData, "periodId") || undefined,
       bookletNumber: bookletRaw ? Number(bookletRaw) : undefined,
+      durationMinutes,
     },
   });
   if (!result.ok) return { error: result.error.message };

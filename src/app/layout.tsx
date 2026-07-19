@@ -15,7 +15,16 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" suppressHydrationWarning>
-      <body className="min-h-screen antialiased">
+      {/*
+       * `suppressHydrationWarning` también en <body> — algunas extensiones
+       * del navegador (CommandersAct / CZ Shortcuts, ColorZilla, etc.)
+       * inyectan atributos en `<body>` antes de que React hidrate
+       * (`cz-shortcut-listen="true"`, `data-new-gr-c-s-check-loaded`, etc.)
+       * y eso dispara un React hydration error. Con este flag, React
+       * ignora SOLO los cambios de atributos en <body> y mantiene el árbol
+       * de componentes intacto. No afecta contenido.
+       */}
+      <body className="min-h-screen antialiased" suppressHydrationWarning>
         <ServerActionRecovery />
         {children}
       </body>

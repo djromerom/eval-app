@@ -116,7 +116,7 @@ class InMemoryCourseSubjects implements CourseSubjectRepository {
   }
 }
 
-const admin: AuthenticatedUser = { userId: "a", institutionId: "i1", roles: ["ADMIN"] };
+const admin: AuthenticatedUser = { userId: "a", institutionId: "i1", roles: ["ECU_MASTER"] };
 const institutionName = "Colegio Test";
 
 describe("CreateTeacher", () => {

@@ -18,6 +18,7 @@ import type {
   EvaluationRepository,
   EvaluationSection,
   Question,
+  UpdateEvaluationSettingsData,
 } from "@/modules/evaluations/domain/evaluation";
 import type { EvaluationStatus } from "@/modules/evaluations/domain/evaluation-status";
 
@@ -104,6 +105,13 @@ class FakeEvaluations implements EvaluationRepository {
     };
   }
   async updateStatus(_i: string, _id: string, _s: EvaluationStatus) {}
+  async updateSettings(
+    _i: string,
+    _id: string,
+    _d: UpdateEvaluationSettingsData,
+  ): Promise<Evaluation> {
+    throw new Error("no usado");
+  }
   async createNewVersion(): Promise<Evaluation> {
     throw new Error("no usado");
   }
@@ -133,6 +141,7 @@ const draft: Evaluation = {
   teacherId: "t1",
   bookletNumber: null,
   totalQuestions: 0,
+  durationMinutes: null,
   theme: null,
 };
 

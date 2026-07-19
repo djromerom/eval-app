@@ -28,7 +28,7 @@ export class EnsureTeacherProfile implements UseCase<EnsureTeacherProfileInput, 
   constructor(private readonly teachers: TeacherRepository) {}
 
   async execute({ actor, userId }: EnsureTeacherProfileInput): Promise<Result<Teacher>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     const existing = await this.teachers.findByUserId(actor.institutionId, userId);
@@ -59,7 +59,7 @@ export class CompleteTeacherProfile implements UseCase<CompleteTeacherProfileInp
     idNumber,
     phone,
   }: CompleteTeacherProfileInput): Promise<Result<Teacher>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     if (!isValidTeacherIdType(idType)) {
@@ -96,7 +96,7 @@ export class CreateTeacher implements UseCase<CreateTeacherInput, Teacher> {
   ) {}
 
   async execute({ actor, data, institutionName }: CreateTeacherInput): Promise<Result<Teacher>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     if (!data.name.trim()) return fail(new ValidationError("El nombre es obligatorio."));
@@ -152,7 +152,7 @@ export class ResendTeacherInvitation implements UseCase<ResendTeacherInvitationI
     teacherId,
     institutionName,
   }: ResendTeacherInvitationInput): Promise<Result<void>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     if (!this.email) {
@@ -206,7 +206,7 @@ export class ListTeachers implements UseCase<ListTeachersInput, Teacher[]> {
   constructor(private readonly teachers: TeacherRepository) {}
 
   async execute({ actor }: ListTeachersInput): Promise<Result<Teacher[]>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
     return ok(await this.teachers.findAll(actor.institutionId));
   }
@@ -226,7 +226,7 @@ export class AssignTeacher implements UseCase<AssignTeacherInput, void> {
   ) {}
 
   async execute({ actor, teacherId, courseSubjectId }: AssignTeacherInput): Promise<Result<void>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     const teacher = await this.teachers.findById(actor.institutionId, teacherId);
@@ -261,7 +261,7 @@ export class ListTeacherAssignments implements UseCase<
     actor,
     teacherId,
   }: ListTeacherAssignmentsInput): Promise<Result<TeacherAssignment[]>> {
-    const authorized = requireRole(actor, "ADMIN", "TEACHER");
+    const authorized = requireRole(actor, "ECU_MASTER", "TEACHER");
     if (!authorized.ok) return authorized;
     return ok(await this.teachers.listAssignments(actor.institutionId, teacherId));
   }

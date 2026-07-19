@@ -22,7 +22,7 @@ export class CreateCourse implements UseCase<CreateCourseInput, Course> {
   ) {}
 
   async execute({ actor, data }: CreateCourseInput): Promise<Result<Course>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     if (!data.name.trim()) return fail(new ValidationError("El nombre del curso es obligatorio."));
@@ -46,7 +46,7 @@ export class ListCourses implements UseCase<ListCoursesInput, Course[]> {
   constructor(private readonly courses: CourseRepository) {}
 
   async execute({ actor, academicYearId }: ListCoursesInput): Promise<Result<Course[]>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
     return ok(await this.courses.findAll(actor.institutionId, academicYearId));
   }

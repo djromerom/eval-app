@@ -47,7 +47,7 @@ const superAdmin: AuthenticatedUser = {
   institutionId: "sys",
   roles: ["SUPER_ADMIN"],
 };
-const admin: AuthenticatedUser = { userId: "u2", institutionId: "i1", roles: ["ADMIN"] };
+const admin: AuthenticatedUser = { userId: "u2", institutionId: "i1", roles: ["ECU_MASTER"] };
 
 describe("SetInstitutionActive", () => {
   let repo: InMemoryInstitutionRepository;

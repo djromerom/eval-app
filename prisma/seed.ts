@@ -53,7 +53,7 @@ async function main() {
     },
   });
   // Idempotencia: asegura todos los roles aunque el usuario ya existiera.
-  for (const role of [RoleType.ADMIN, RoleType.COORDINATOR, RoleType.TEACHER]) {
+  for (const role of [RoleType.ECU_MASTER, RoleType.COORDINATOR, RoleType.TEACHER]) {
     await prisma.userRole.upsert({
       where: { userId_role: { userId: admin.id, role } },
       update: {},

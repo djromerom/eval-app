@@ -21,7 +21,12 @@ const WAIT_MS = 120_000;
  * es un csv de ids de estudiantes de la misma institución.
  */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR", "ADMIN", "SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser(
+    "TEACHER",
+    "COORDINATOR",
+    "ECU_MASTER",
+    "SUPER_ADMIN",
+  );
   const { id } = await params;
 
   const studentsParam = new URL(request.url).searchParams.get("students") ?? "";

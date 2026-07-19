@@ -15,7 +15,7 @@ import { ResendInviteButton } from "./resend-invite-button";
 export const metadata: Metadata = { title: "Docentes" };
 
 export default async function TeachersPage() {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const [teachersRes, courseSubjectsRes, assignmentsRes] = await Promise.all([
     makeListTeachers().execute({ actor }),
     makeListCourseSubjects().execute({ actor }),

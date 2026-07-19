@@ -32,7 +32,12 @@ const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%
  * Ver docs/compendios.md §"Sprint 3 — Reporte comparativo" y §"Sprint 4".
  */
 export default async function BundleReportPage({ params }: { params: Promise<{ id: string }> }) {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR", "ADMIN", "SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser(
+    "TEACHER",
+    "COORDINATOR",
+    "ECU_MASTER",
+    "SUPER_ADMIN",
+  );
   const { id } = await params;
 
   const bundleRes = await makeGetBundle().execute({ actor, bundleId: id });

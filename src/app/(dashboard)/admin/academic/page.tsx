@@ -57,7 +57,7 @@ function Empty({ label }: { label: string }) {
 }
 
 export default async function AcademicPage() {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const { years, periods, courses, subjects, groups, courseSubjects } = await loadAll(actor);
 
   const yearOptions = years.map((y) => ({ value: y.id, label: String(y.year) }));

@@ -24,7 +24,7 @@ export async function addItemAction(
   _prev: ItemsFormState,
   formData: FormData,
 ): Promise<ItemsFormState> {
-  const actor = await requireAuthenticatedUser("SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const bundleId = String(formData.get("bundleId") ?? "");
   const evaluationId = String(formData.get("evaluationId") ?? "");
   if (!bundleId || !evaluationId) return { error: "Faltan datos." };
@@ -42,7 +42,7 @@ export async function addItemAction(
 
 /** Quita un item por id. */
 export async function removeItemAction(formData: FormData): Promise<void> {
-  const actor = await requireAuthenticatedUser("SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const bundleId = String(formData.get("bundleId") ?? "");
   const itemId = String(formData.get("itemId") ?? "");
   if (!bundleId || !itemId) throw new Error("Faltan datos.");
@@ -59,7 +59,7 @@ export async function removeItemAction(formData: FormData): Promise<void> {
  * ReorderBundleItems para enforce de permisos / DRAFT.
  */
 export async function moveItemAction(formData: FormData): Promise<void> {
-  const actor = await requireAuthenticatedUser("SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const bundleId = String(formData.get("bundleId") ?? "");
   const itemId = String(formData.get("itemId") ?? "");
   const direction = Number(formData.get("direction") ?? "0");

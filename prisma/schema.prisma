@@ -109,7 +109,7 @@ model UserRole {
 
 enum RoleType {
   SUPER_ADMIN
-  ADMIN
+  ECU_MASTER
   COORDINATOR
   TEACHER
 }
@@ -305,6 +305,11 @@ model Evaluation {
   status          DraftStatus         @default(DRAFT)
   bookletNumber   Int? // null = único; 1, 2, 3… para múltiples cuadernillos
   totalQuestions  Int                 @default(0)
+  // Duración estimada de la evaluación en minutos. Nullable: si es null, la
+  // portada del compendio cae al cálculo heurístico (totalQuestions *
+  // DEFAULT_MINUTES_PER_QUESTION). Capturado por el docente en el panel
+  // Settings de la evaluation; editable mientras esté en DRAFT.
+  durationMinutes Int?
   templateId      String?             @db.Uuid
   template        EvaluationTemplate? @relation(fields: [templateId], references: [id])
   // Override del tema institucional para esta evaluación. Se combina con

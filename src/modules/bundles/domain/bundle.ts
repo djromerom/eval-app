@@ -4,12 +4,24 @@
  * Ver docs/compendios.md.
  */
 import type { BundleStatus } from "./bundle-status";
+import type {
+  EvaluationTheme,
+  ResolvedTheme as ThemeResolvedTheme,
+} from "@/modules/theme/domain/theme";
 
-/** Override visual por bundle (mismo shape que Evaluation.theme). */
-export type BundleTheme = unknown;
+/**
+ * Override visual por bundle. Mismo shape que EvaluationTheme — extender
+ * EvaluationTheme cuando agreguemos campos específicos de bundle (p.ej.
+ * encabezado del salón). Hoy sólo reusa los campos cubiertos por
+ * `src/app/(dashboard)/admin/bundles/[id]/designer/`.
+ *
+ * El override (parcial) se mergea con Institution.theme en runtime a través
+ * de `getResolvedBundleTheme()` con precedencia bundle > institucional.
+ */
+export type BundleTheme = EvaluationTheme;
 
 /** Tema visual resuelto: combinación Institution.theme + bundle.theme. */
-export type ResolvedTheme = unknown;
+export type ResolvedTheme = ThemeResolvedTheme;
 
 export interface Bundle {
   id: string;
@@ -17,7 +29,13 @@ export interface Bundle {
   name: string;
   bookletNumber: number | null;
   status: BundleStatus;
-  theme: BundleTheme | null;
+  /**
+   * Override visual por compendio. JSONB crudo: la capa de aplicación no
+   * lo estructura — `getResolvedBundleTheme()` lo valida con
+   * `parseEvaluationTheme()` antes de mergearlo. Tipeado como `unknown`
+   * por consistencia con `Evaluation.theme`.
+   */
+  theme: unknown;
   createdById: string;
   createdAt: Date;
   updatedAt: Date;
@@ -36,6 +54,13 @@ export interface BundleItemDetail extends BundleItem {
   evaluationTitle: string;
   evaluationStatus: string;
   totalQuestions: number;
+  /**
+   * Duración estimada en minutos de la evaluation (Sprint 7). Nullable:
+   * las evaluations creadas antes de Sprint 7 quedan con null y la portada
+   * cae al cálculo heurístico `totalQuestions * DEFAULT_MINUTES_PER_QUESTION`.
+   * Si está definido, gana sobre el cálculo.
+   */
+  durationMinutes: number | null;
   /** Nombre del subject (área o subject hoja) para la portada. */
   subjectName: string | null;
   /** Subject hoja: id del parent si tiene; null si es subject raíz. */
@@ -53,18 +78,22 @@ export interface BundleDetail extends Bundle {
   totalQuestions: number;
 }
 
-/** Datos para crear un bundle. */
+/**
+ * Datos para crear un bundle. El tema es **parcial** — los campos no
+ * provistos caen al institucional en runtime (mergeTheme). `null` resetea
+ * al institucional explícitamente.
+ */
 export interface CreateBundleData {
   name: string;
   bookletNumber?: number | null;
   evaluationIds: string[];
-  theme?: BundleTheme | null;
+  theme?: Partial<BundleTheme> | null;
 }
 
 export interface UpdateBundleData {
   name?: string;
   bookletNumber?: number | null;
-  theme?: BundleTheme | null;
+  theme?: Partial<BundleTheme> | null;
 }
 
 export interface AddItemInput {
@@ -134,6 +163,8 @@ export interface BundleRepository {
       title: string;
       status: string;
       totalQuestions: number;
+      /** Sprint 7: duración capturada en Settings; nullable. */
+      durationMinutes: number | null;
       institutionId: string;
       subjectId: string;
       subjectName: string;

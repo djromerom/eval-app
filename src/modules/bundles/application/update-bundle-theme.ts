@@ -23,7 +23,7 @@ export class UpdateBundleTheme implements UseCase<UpdateBundleThemeInput, Bundle
   constructor(private readonly bundles: BundleRepository) {}
 
   async execute({ actor, bundleId, theme }: UpdateBundleThemeInput): Promise<Result<Bundle>> {
-    const authorized = requireRole(actor, "SUPER_ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     const existing = await this.bundles.findById(actor.institutionId, bundleId);

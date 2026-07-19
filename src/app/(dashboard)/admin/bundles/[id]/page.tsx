@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
 import { makeListEvaluations } from "@/modules/evaluations/infrastructure/container";
@@ -14,7 +17,7 @@ export const metadata: Metadata = { title: "Detalle del compendio" };
 const dateFmt = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
 
 export default async function BundleDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const actor = await requireAuthenticatedUser("SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const { id } = await params;
 
   const result = await makeGetBundle().execute({ actor, bundleId: id });
@@ -113,6 +116,19 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
 
         {/* Columna derecha — acciones */}
         <aside className="space-y-4">
+          <div className="bg-card space-y-2 rounded-xl border p-6">
+            <h2 className="font-semibold">Diseño</h2>
+            <p className="text-muted-foreground text-xs">
+              Personaliza la portada del cuadernillo: subtítulo, pie de página, color acento,
+              tipografía y bloque intro.
+            </p>
+            <Link
+              href={`/admin/bundles/${bundle.id}/designer`}
+              className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "w-full")}
+            >
+              Diseñar portada →
+            </Link>
+          </div>
           <BundleActionPanel bundleId={bundle.id} isDraft={isDraft} />
         </aside>
       </div>

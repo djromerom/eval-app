@@ -33,7 +33,7 @@ export async function createAcademicYearAction(
   _p: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const result = await makeCreateAcademicYear().execute({
     actor,
     data: {
@@ -47,7 +47,7 @@ export async function createAcademicYearAction(
 }
 
 export async function createPeriodAction(_p: FormState, formData: FormData): Promise<FormState> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const result = await makeCreatePeriod().execute({
     actor,
     data: {
@@ -62,7 +62,7 @@ export async function createPeriodAction(_p: FormState, formData: FormData): Pro
 }
 
 export async function createCourseAction(_p: FormState, formData: FormData): Promise<FormState> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const result = await makeCreateCourse().execute({
     actor,
     data: {
@@ -75,7 +75,7 @@ export async function createCourseAction(_p: FormState, formData: FormData): Pro
 }
 
 export async function createSubjectAction(_p: FormState, formData: FormData): Promise<FormState> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const result = await makeCreateSubject().execute({
     actor,
     data: { name: str(formData, "name"), code: str(formData, "code") },
@@ -84,7 +84,7 @@ export async function createSubjectAction(_p: FormState, formData: FormData): Pr
 }
 
 export async function createGroupAction(_p: FormState, formData: FormData): Promise<FormState> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const result = await makeCreateGroup().execute({
     actor,
     data: { courseId: str(formData, "courseId"), name: str(formData, "name") },
@@ -96,7 +96,7 @@ export async function createCourseSubjectAction(
   _p: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const result = await makeCreateCourseSubject().execute({
     actor,
     data: { courseId: str(formData, "courseId"), subjectId: str(formData, "subjectId") },

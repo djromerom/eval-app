@@ -21,7 +21,7 @@ export async function createTeacherAction(
   _prev: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const institution = await prisma.institution.findUnique({
     where: { id: actor.institutionId },
     select: { name: true },
@@ -46,7 +46,7 @@ export async function resendTeacherInvitationAction(
   _prev: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const institution = await prisma.institution.findUnique({
     where: { id: actor.institutionId },
     select: { name: true },
@@ -65,7 +65,7 @@ export async function completeTeacherProfileAction(
   _prev: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const result = await makeCompleteTeacherProfile().execute({
     actor,
     teacherId: str(formData, "teacherId"),
@@ -82,7 +82,7 @@ export async function assignTeacherAction(
   _prev: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
   const result = await makeAssignTeacher().execute({
     actor,
     teacherId: str(formData, "teacherId"),

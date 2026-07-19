@@ -71,6 +71,12 @@ export default async function EvaluationDetailPage({
           Diseñador →
         </Link>
         <Link
+          href={`/teacher/evaluations/${evaluation.id}/settings`}
+          className="text-muted-foreground text-sm hover:underline"
+        >
+          Configuración →
+        </Link>
+        <Link
           href={`/teacher/evaluations/${evaluation.id}/results`}
           className="text-muted-foreground text-sm hover:underline"
         >

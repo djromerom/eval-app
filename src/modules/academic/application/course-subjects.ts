@@ -24,7 +24,7 @@ export class CreateCourseSubject implements UseCase<CreateCourseSubjectInput, Co
   ) {}
 
   async execute({ actor, data }: CreateCourseSubjectInput): Promise<Result<CourseSubject>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     const course = await this.courses.findById(actor.institutionId, data.courseId);
@@ -54,7 +54,7 @@ export class ListCourseSubjects implements UseCase<ListCourseSubjectsInput, Cour
   constructor(private readonly courseSubjects: CourseSubjectRepository) {}
 
   async execute({ actor }: ListCourseSubjectsInput): Promise<Result<CourseSubjectView[]>> {
-    const authorized = requireRole(actor, "ADMIN", "COORDINATOR", "TEACHER");
+    const authorized = requireRole(actor, "ECU_MASTER", "COORDINATOR", "TEACHER");
     if (!authorized.ok) return authorized;
     return ok(await this.courseSubjects.findAll(actor.institutionId));
   }

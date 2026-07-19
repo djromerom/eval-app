@@ -7,7 +7,7 @@ import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
 import { makeGetMyInstitution } from "@/modules/institutions/infrastructure/container";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
 import { computeCoverTable, formatDuration } from "@/modules/bundles/domain/cover-table";
-import { getResolvedTheme } from "@/modules/theme/application/get-resolved-theme";
+import { getResolvedBundleTheme } from "@/modules/theme/application/get-resolved-bundle-theme";
 import { themeToCssVars } from "@/modules/theme/domain/theme";
 import { RichText, RichTextInline } from "@/components/editor/rich-text";
 import { richTextToPlain } from "@/components/editor/render";
@@ -90,10 +90,10 @@ export default async function PrintBundlePage({
   // Para el booklet label usamos bookletNumber o "1".
   const bookletLabel = `CUADERNILLO ${bundle.bookletNumber ?? 1}`;
 
-  const theme = await getResolvedTheme(
-    actor.institutionId,
-    validEvaluations[0]?.evaluation.id ?? "",
-  );
+  // Tema: institución + override del compendio. Antes heredaba del tema
+  // de la primera evaluación del bundle (cualquier edición del admin al
+  // tema del compendio se ignoraba). Ver get-resolved-bundle-theme.ts.
+  const theme = await getResolvedBundleTheme(actor.institutionId, bundle.id);
   const logoSrc = await readLogoIfNeeded(institution?.logo, theme.showLogo);
   const cssVars = themeToCssVars(theme) as Record<string, string>;
 

@@ -52,7 +52,7 @@ class InMemoryUsers implements UserRepository {
   }
 }
 
-const admin: AuthenticatedUser = { userId: "admin", institutionId: "i1", roles: ["ADMIN"] };
+const admin: AuthenticatedUser = { userId: "admin", institutionId: "i1", roles: ["ECU_MASTER"] };
 const teacher: AuthenticatedUser = { userId: "t", institutionId: "i1", roles: ["TEACHER"] };
 
 describe("InviteUser", () => {

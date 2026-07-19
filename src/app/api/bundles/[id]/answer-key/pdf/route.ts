@@ -17,7 +17,12 @@ const WAIT_MS = 90_000;
  * Requiere que el bundle esté READY.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR", "ADMIN", "SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser(
+    "TEACHER",
+    "COORDINATOR",
+    "ECU_MASTER",
+    "SUPER_ADMIN",
+  );
   const { id } = await params;
 
   const bundleRes = await makeGetBundle().execute({ actor, bundleId: id });

@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
  * basura queda descartada por `parseInstitutionalTheme()`).
  */
 export default async function ThemePage() {
-  const actor = await requireAuthenticatedUser("ADMIN", "SUPER_ADMIN");
+  const actor = await requireAuthenticatedUser("ECU_MASTER", "SUPER_ADMIN");
   const inst = await prisma.institution.findUnique({
     where: { id: actor.institutionId },
     select: { id: true, name: true, logo: true, theme: true },

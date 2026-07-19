@@ -36,7 +36,7 @@ export class InviteUser implements UseCase<InviteUserInput, User> {
     roles,
     institutionName,
   }: InviteUserInput): Promise<Result<User>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     if (!name.trim()) return fail(new ValidationError("El nombre es obligatorio."));
@@ -100,7 +100,7 @@ export class ResendUserInvitation implements UseCase<ResendUserInvitationInput, 
     userId,
     institutionName,
   }: ResendUserInvitationInput): Promise<Result<void>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     if (!this.email) {
@@ -148,7 +148,7 @@ export class ListUsers implements UseCase<ListUsersInput, User[]> {
   constructor(private readonly users: UserRepository) {}
 
   async execute({ actor }: ListUsersInput): Promise<Result<User[]>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
     return ok(await this.users.findAll(actor.institutionId));
   }
@@ -164,7 +164,7 @@ export class SetUserRoles implements UseCase<SetUserRolesInput, User> {
   constructor(private readonly users: UserRepository) {}
 
   async execute({ actor, userId, roles }: SetUserRolesInput): Promise<Result<User>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     if (!areAssignableRoles(roles)) {
@@ -188,7 +188,7 @@ export class SetUserActive implements UseCase<SetUserActiveInput, User> {
   constructor(private readonly users: UserRepository) {}
 
   async execute({ actor, userId, isActive }: SetUserActiveInput): Promise<Result<User>> {
-    const authorized = requireRole(actor, "ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     if (userId === actor.userId) {

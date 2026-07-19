@@ -35,7 +35,7 @@ export class AddEvaluationToBundle implements UseCase<AddEvaluationToBundleInput
     bundleId,
     data,
   }: AddEvaluationToBundleInput): Promise<Result<BundleItem>> {
-    const authorized = requireRole(actor, "SUPER_ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     const bundle = await this.bundles.findById(actor.institutionId, bundleId);
