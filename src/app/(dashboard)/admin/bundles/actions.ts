@@ -29,6 +29,8 @@ export async function createBundleAction(
   const name = String(formData.get("name") ?? "").trim();
   const bookletNumberRaw = String(formData.get("bookletNumber") ?? "").trim();
   const evaluationIds = formData.getAll("evaluationIds").map(String).filter(Boolean);
+  // "" en el select = compendio cross-course (sin curso asignado).
+  const courseId = String(formData.get("courseId") ?? "").trim() || null;
 
   if (!name) return { error: "El nombre es obligatorio." };
   if (evaluationIds.length === 0) {
@@ -45,6 +47,7 @@ export async function createBundleAction(
     data: {
       name,
       bookletNumber,
+      courseId,
       evaluationIds,
     },
   });
@@ -54,7 +57,7 @@ export async function createBundleAction(
   redirect(`/admin/bundles/${result.value.id}`);
 }
 
-/** Edita metadatos del compendio (name, bookletNumber). Solo DRAFT. */
+/** Edita metadatos del compendio (name, bookletNumber, courseId). Solo DRAFT. */
 export async function updateBundleAction(
   _prev: BundleFormState,
   formData: FormData,
@@ -69,11 +72,13 @@ export async function updateBundleAction(
     return { error: "El número de cuadernillo debe ser un entero positivo." };
   }
   if (!name) return { error: "El nombre es obligatorio." };
+  // "" en el select = limpiar el curso (compendio cross-course).
+  const courseId = String(formData.get("courseId") ?? "").trim() || null;
 
   const result = await makeUpdateBundle().execute({
     actor,
     bundleId: id,
-    data: { name, bookletNumber },
+    data: { name, bookletNumber, courseId },
   });
   if (!result.ok) return { error: result.error.message };
 

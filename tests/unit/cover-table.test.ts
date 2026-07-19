@@ -23,6 +23,9 @@ function item(
     subjectIsArea: partial.subjectIsArea ?? false,
     parentSubjectId: partial.parentSubjectId ?? null,
     parentSubjectName: partial.parentSubjectName,
+    // El curso no participa en el cómputo de la portada; valor fijo.
+    courseId: partial.courseId ?? "course-6",
+    courseName: partial.courseName ?? "6°",
   };
 }
 

@@ -1,8 +1,10 @@
 import { type AuthenticatedUser, requireRole } from "@/shared/application/authenticated-user";
 import type { UseCase } from "@/shared/application/use-case";
 import { ConflictError, type Result, ValidationError, fail, ok } from "@/shared/domain/result";
+import type { CourseRepository } from "@/modules/academic/domain/types";
 import { type Bundle, type BundleRepository, type CreateBundleData } from "../domain/bundle";
 import {
+  evaluationMatchesBundleCourse,
   isPrintableEvaluationStatus,
   isValidBookletNumber,
   isValidBundleName,
@@ -24,9 +26,15 @@ export interface CreateBundleInput {
  *   - bookletNumber: entero positivo si está definido
  *   - evaluationIds: no vacío, sin duplicados, todas printable, misma institución
  *   - bookletNumber único por institución (constraint DB; checked antes por repo)
+ *   - courseId (Sprint 9, opcional): si está definido debe existir en la
+ *     institución y TODAS las evaluations deben pertenecer a ese curso.
+ *     `null`/omitido = compendio cross-course (simulacro multi-grado).
  */
 export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
-  constructor(private readonly bundles: BundleRepository) {}
+  constructor(
+    private readonly bundles: BundleRepository,
+    private readonly courses: CourseRepository,
+  ) {}
 
   async execute({ actor, data }: CreateBundleInput): Promise<Result<Bundle>> {
     const authorized = requireRole(actor, "ECU_MASTER");
@@ -48,6 +56,15 @@ export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
     const uniqueIds = new Set(data.evaluationIds);
     if (uniqueIds.size !== data.evaluationIds.length) {
       return fail(new ValidationError("Hay evaluaciones duplicadas en la selección."));
+    }
+
+    // Curso del compendio (opcional). Si viene, debe existir en la institución.
+    const courseId = data.courseId ?? null;
+    if (courseId !== null) {
+      const course = await this.courses.findById(actor.institutionId, courseId);
+      if (!course) {
+        return fail(new ValidationError("El curso no existe en tu institución."));
+      }
     }
 
     // Cargar y validar las evaluaciones
@@ -72,6 +89,13 @@ export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
         return fail(
           new ValidationError(
             `La evaluación "${ev.title}" debe estar aprobada o publicada (actual: ${ev.status}).`,
+          ),
+        );
+      }
+      if (!evaluationMatchesBundleCourse(courseId, ev.courseId)) {
+        return fail(
+          new ValidationError(
+            `La evaluación "${ev.title}" es del curso ${ev.courseName} y no coincide con el curso del compendio.`,
           ),
         );
       }
@@ -104,6 +128,8 @@ export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
           subjectIsArea: e.subjectIsArea,
           parentSubjectId: e.parentSubjectId,
           parentSubjectName: e.parentSubjectName,
+          courseId: e.courseId,
+          courseName: e.courseName,
         },
       ]),
     );

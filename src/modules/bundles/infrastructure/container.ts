@@ -1,3 +1,4 @@
+import { PrismaCourseRepository } from "@/modules/academic/infrastructure/prisma-academic-repositories";
 import { AddEvaluationToBundle } from "../application/add-evaluation-to-bundle";
 import { CreateBundle } from "../application/create-bundle";
 import { DeleteBundle } from "../application/delete-bundle";
@@ -17,11 +18,14 @@ import { PrismaBundleRepository } from "./prisma-bundle-repository";
  * La capa de presentación importa estas factorías, nunca los adaptadores.
  */
 const repository = new PrismaBundleRepository();
+// Sprint 9: CreateBundle/UpdateBundle validan que el `courseId` del
+// compendio exista en la institución del actor.
+const courses = new PrismaCourseRepository();
 
-export const makeCreateBundle = () => new CreateBundle(repository);
+export const makeCreateBundle = () => new CreateBundle(repository, courses);
 export const makeListBundles = () => new ListBundles(repository);
 export const makeGetBundle = () => new GetBundle(repository);
-export const makeUpdateBundle = () => new UpdateBundle(repository);
+export const makeUpdateBundle = () => new UpdateBundle(repository, courses);
 export const makeDeleteBundle = () => new DeleteBundle(repository);
 export const makeAddEvaluationToBundle = () => new AddEvaluationToBundle(repository);
 export const makeRemoveFromBundle = () => new RemoveFromBundle(repository);

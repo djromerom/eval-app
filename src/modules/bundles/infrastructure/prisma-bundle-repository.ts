@@ -18,7 +18,9 @@ import type {
 } from "../domain/bundle";
 import type { BundleStatus } from "../domain/bundle-status";
 
-type BundleRow = PrismaBundle;
+// El curso se carga siempre por join (nullable): `courseName` alimenta la
+// portada del PDF y los listados sin obligar a un segundo query.
+type BundleRow = PrismaBundle & { course?: { name: string } | null };
 
 type BundleItemRow = PrismaBundleItem & {
   evaluation: {
@@ -29,6 +31,8 @@ type BundleItemRow = PrismaBundleItem & {
     durationMinutes: number | null;
     institutionId: string;
     courseSubject: {
+      courseId: string;
+      course: { name: string };
       subject: {
         id: string;
         name: string;
@@ -46,6 +50,8 @@ function toBundle(row: BundleRow): Bundle {
     institutionId: row.institutionId,
     name: row.name,
     bookletNumber: row.bookletNumber,
+    courseId: row.courseId,
+    courseName: row.course?.name ?? null,
     status: row.status as BundleStatus,
     theme: row.theme,
     createdById: row.createdById,
@@ -69,6 +75,8 @@ function toItemDetail(row: BundleItemRow): BundleItemDetail {
     subjectIsArea: subj.isArea,
     parentSubjectId: subj.parentSubjectId,
     parentSubjectName: subj.parentSubject?.name ?? null,
+    courseId: row.evaluation.courseSubject.courseId,
+    courseName: row.evaluation.courseSubject.course.name,
   };
 }
 
@@ -91,6 +99,8 @@ export class PrismaBundleRepository implements BundleRepository {
         subjectIsArea: boolean;
         parentSubjectId: string | null;
         parentSubjectName: string | null;
+        courseId: string;
+        courseName: string;
       }
     >,
   ): Promise<Bundle> {
@@ -101,8 +111,10 @@ export class PrismaBundleRepository implements BundleRepository {
           createdById,
           name: data.name,
           bookletNumber: data.bookletNumber ?? null,
+          courseId: data.courseId ?? null,
           theme: (data.theme ?? null) as Prisma.InputJsonValue,
         },
+        include: { course: { select: { name: true } } },
       });
 
       // Insertar items en el orden dado por el caller. Reordenamos por el
@@ -130,6 +142,7 @@ export class PrismaBundleRepository implements BundleRepository {
   async findById(institutionId: string, id: string): Promise<Bundle | null> {
     const row = await prisma.evaluationBundle.findFirst({
       where: { id, institutionId },
+      include: { course: { select: { name: true } } },
     });
     return row && toBundle(row);
   }
@@ -137,7 +150,10 @@ export class PrismaBundleRepository implements BundleRepository {
   async findDetail(institutionId: string, id: string): Promise<BundleDetail | null> {
     const row = await prisma.evaluationBundle.findFirst({
       where: { id, institutionId },
-      include: { items: { orderBy: { order: "asc" } } },
+      include: {
+        items: { orderBy: { order: "asc" } },
+        course: { select: { name: true } },
+      },
     });
     if (!row) return null;
 
@@ -155,6 +171,7 @@ export class PrismaBundleRepository implements BundleRepository {
     const rows = await prisma.evaluationBundle.findMany({
       where: { institutionId },
       orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+      include: { course: { select: { name: true } } },
     });
     return rows.map(toBundle);
   }
@@ -165,10 +182,12 @@ export class PrismaBundleRepository implements BundleRepository {
       data: {
         ...(data.name !== undefined ? { name: data.name } : {}),
         ...(data.bookletNumber !== undefined ? { bookletNumber: data.bookletNumber } : {}),
+        ...(data.courseId !== undefined ? { courseId: data.courseId } : {}),
         ...(data.theme !== undefined
           ? { theme: (data.theme ?? null) as Prisma.InputJsonValue }
           : {}),
       },
+      include: { course: { select: { name: true } } },
     });
     // Doble check institutionId para evitar leaks.
     if (row.institutionId !== institutionId) {
@@ -200,6 +219,8 @@ export class PrismaBundleRepository implements BundleRepository {
             institutionId: true,
             courseSubject: {
               select: {
+                courseId: true,
+                course: { select: { name: true } },
                 subject: {
                   select: {
                     id: true,
@@ -333,6 +354,8 @@ export class PrismaBundleRepository implements BundleRepository {
       subjectIsArea: boolean;
       parentSubjectId: string | null;
       parentSubjectName: string | null;
+      courseId: string;
+      courseName: string;
     }>
   > {
     if (evaluationIds.length === 0) return [];
@@ -347,6 +370,8 @@ export class PrismaBundleRepository implements BundleRepository {
         institutionId: true,
         courseSubject: {
           select: {
+            courseId: true,
+            course: { select: { name: true } },
             subject: {
               select: {
                 id: true,
@@ -372,6 +397,8 @@ export class PrismaBundleRepository implements BundleRepository {
       subjectIsArea: r.courseSubject.subject.isArea,
       parentSubjectId: r.courseSubject.subject.parentSubjectId,
       parentSubjectName: r.courseSubject.subject.parentSubject?.name ?? null,
+      courseId: r.courseSubject.courseId,
+      courseName: r.courseSubject.course.name,
     }));
   }
 }

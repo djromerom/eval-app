@@ -23,10 +23,14 @@ export function BundleEditForm({
   bundleId,
   initialName,
   initialBookletNumber,
+  initialCourseId,
+  courses,
 }: {
   bundleId: string;
   initialName: string;
   initialBookletNumber: number | null;
+  initialCourseId: string | null;
+  courses: Array<{ id: string; name: string }>;
 }) {
   const [state, formAction] = useActionState(updateBundleAction, {} as BundleFormState);
   const formRef = useRef<HTMLFormElement>(null);
@@ -69,6 +73,28 @@ export function BundleEditForm({
             placeholder="Opcional"
           />
         </div>
+      </div>
+
+      <div className="space-y-1">
+        <label htmlFor="courseId" className="text-sm font-medium">
+          Curso
+        </label>
+        <select
+          id="courseId"
+          name="courseId"
+          defaultValue={initialCourseId ?? ""}
+          className="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
+        >
+          <option value="">Sin curso específico (varios grados)</option>
+          {courses.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <p className="text-muted-foreground text-xs">
+          Para asignar un curso, todas las evaluaciones del compendio deben ser de ese curso.
+        </p>
       </div>
 
       {state.error ? <p className="text-destructive text-sm">{state.error}</p> : null}

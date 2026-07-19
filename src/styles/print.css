@@ -220,6 +220,17 @@
   height: 1.2rem;
 }
 
+/* Valor preimpreso (p. ej. el grado cuando el compendio tiene curso).
+ * Mantiene la línea inferior para que el bloque no "salte" respecto de los
+ * campos que el estudiante sí rellena a mano. */
+.student-field-value {
+  flex: 1;
+  border-bottom: 1px solid #000;
+  height: 1.2rem;
+  font-size: 10pt;
+  font-weight: 700;
+}
+
 /* ===== Línea de doblez al centro =====
  * Solo aplica al cuadernillo doble carta (worker PDF). En carta se oculta.
  */

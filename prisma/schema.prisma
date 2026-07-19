@@ -158,6 +158,7 @@ model Course {
 
   subjects CourseSubject[]
   groups   Group[]
+  bundles  EvaluationBundle[]
 
   @@index([institutionId, academicYearId])
 }
@@ -487,6 +488,13 @@ model EvaluationBundle {
   institution   Institution  @relation(fields: [institutionId], references: [id])
   name          String // "Simulacro ICFES — Periodo I"
   bookletNumber Int? // correlativo por institución (opcional; único si definido)
+  // Curso al que pertenece el compendio. Opcional: null = compendio
+  // cross-course (simulacro institucional multi-grado). Si está definido,
+  // TODOS los items deben ser evaluations de ese curso (validado en los use
+  // cases CreateBundle / AddEvaluationToBundle / UpdateBundle). La portada
+  // del PDF preimprime el grado en lugar de dejar la línea en blanco.
+  courseId      String?      @db.Uuid
+  course        Course?      @relation(fields: [courseId], references: [id], onDelete: SetNull)
   status        BundleStatus @default(DRAFT)
   // Override del tema institucional. Mismo shape que Evaluation.theme; se
   // combina con Institution.theme en runtime. Ver src/modules/theme/.
@@ -502,6 +510,7 @@ model EvaluationBundle {
   @@unique([institutionId, bookletNumber])
   @@index([institutionId])
   @@index([institutionId, status])
+  @@index([institutionId, courseId])
 }
 
 model EvaluationBundleItem {

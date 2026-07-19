@@ -70,6 +70,9 @@ export interface EvaluationListItem {
   version: number;
   bookletNumber: number | null;
   totalQuestions: number;
+  /** Curso al que pertenece (vía courseSubject). Sprint 9: el wizard de
+   *  compendios filtra los candidatos por este campo. */
+  courseId: string;
   courseName: string;
   subjectName: string;
   updatedAt: Date;

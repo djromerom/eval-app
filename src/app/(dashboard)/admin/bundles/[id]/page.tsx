@@ -6,6 +6,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
+import { makeListCourses } from "@/modules/academic/infrastructure/container";
 import { makeListEvaluations } from "@/modules/evaluations/infrastructure/container";
 import { computeCoverTable, formatDuration } from "@/modules/bundles/domain/cover-table";
 import { BundleActionPanel } from "./action-buttons";
@@ -27,20 +28,24 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
   const coverTable = computeCoverTable(bundle.items);
 
   // Lista de evaluations aprobadas/publicadas disponibles para añadir.
-  const [approved, published] = await Promise.all([
+  const [approved, published, coursesRes] = await Promise.all([
     makeListEvaluations().execute({ actor, status: "APPROVED" }),
     makeListEvaluations().execute({ actor, status: "PUBLISHED" }),
+    makeListCourses().execute({ actor }),
   ]);
+  const courses = coursesRes.ok ? coursesRes.value.map((c) => ({ id: c.id, name: c.name })) : [];
   const candidatesRaw = [
     ...(approved.ok ? approved.value : []),
     ...(published.ok ? published.value : []),
   ];
   const seen = new Set(bundle.items.map((i) => i.evaluationId));
-  // Deduplicar y excluir las que ya están en el compendio.
+  // Deduplicar, excluir las que ya están en el compendio y —si el compendio
+  // tiene curso— las de otros cursos: el use case las rechazaría igualmente.
   const candSeen = new Set<string>();
   const candidatesDedup = candidatesRaw.filter((e) => {
     if (seen.has(e.id)) return false;
     if (candSeen.has(e.id)) return false;
+    if (bundle.courseId && e.courseId !== bundle.courseId) return false;
     candSeen.add(e.id);
     return true;
   });
@@ -51,6 +56,7 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
         title={bundle.name}
         description={
           <>
+            {bundle.courseName ? `${bundle.courseName} · ` : ""}
             N° de cuadernillo {bundle.bookletNumber ?? "—"} ·{" "}
             <span
               className={
@@ -77,13 +83,16 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
               bundleId={bundle.id}
               initialName={bundle.name}
               initialBookletNumber={bundle.bookletNumber}
+              initialCourseId={bundle.courseId}
+              courses={courses}
             />
           ) : (
             <div className="bg-card space-y-2 rounded-xl border p-6">
               <h2 className="font-semibold">Metadatos</h2>
               <p className="text-muted-foreground text-sm">
                 <strong>{bundle.name}</strong> — cuadernillo{" "}
-                <strong>{bundle.bookletNumber ?? "—"}</strong>
+                <strong>{bundle.bookletNumber ?? "—"}</strong> — curso{" "}
+                <strong>{bundle.courseName ?? "sin curso específico"}</strong>
               </p>
               <p className="text-muted-foreground text-xs">
                 El compendio está sellado (READY). Desmárcate para editarlo.

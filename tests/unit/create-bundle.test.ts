@@ -6,6 +6,7 @@ import {
   superAdmin,
   teacher,
   adminOtherInstitution,
+  courses,
 } from "./bundles-shared";
 
 describe("CreateBundle", () => {
@@ -14,7 +15,7 @@ describe("CreateBundle", () => {
 
   beforeEach(() => {
     repo = new InMemoryBundleRepository();
-    useCase = new CreateBundle(repo);
+    useCase = new CreateBundle(repo, courses);
   });
 
   it("crea el bundle con 1 evaluation (caso N=1, camino canónico)", async () => {
@@ -161,5 +162,72 @@ describe("CreateBundle", () => {
     expect(result.ok).toBe(true);
     const all = await repo.findAll("inst-1");
     expect(all).toHaveLength(1);
+  });
+
+  // Sprint 9 — curso opcional del compendio.
+  describe("courseId (Sprint 9)", () => {
+    it("sin courseId el compendio es cross-course y admite grados mezclados", async () => {
+      const bio6 = seedEvaluationGrado6(repo, { id: "ev-6", courseId: "course-6" });
+      const fis11 = seedEvaluationGrado6(repo, {
+        id: "ev-11",
+        courseId: "course-11",
+        subjectName: "Física",
+      });
+      const result = await useCase.execute({
+        actor: superAdmin,
+        data: { name: "Simulacro institucional", evaluationIds: [bio6.id, fis11.id] },
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.courseId).toBeNull();
+        expect(result.value.courseName).toBeNull();
+      }
+    });
+
+    it("con courseId acepta evaluaciones de ese curso y lo persiste", async () => {
+      const ev = seedEvaluationGrado6(repo, { courseId: "course-11" });
+      const result = await useCase.execute({
+        actor: superAdmin,
+        data: { name: "Compendio 11°", evaluationIds: [ev.id], courseId: "course-11" },
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.courseId).toBe("course-11");
+        expect(result.value.courseName).toBe("11°");
+      }
+    });
+
+    it("rechaza una evaluación de otro curso cuando el compendio tiene curso", async () => {
+      const ev = seedEvaluationGrado6(repo, { courseId: "course-6", title: "Biología 6°" });
+      const result = await useCase.execute({
+        actor: superAdmin,
+        data: { name: "Compendio 11°", evaluationIds: [ev.id], courseId: "course-11" },
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe("VALIDATION");
+        expect(result.error.message).toContain("Biología 6°");
+      }
+    });
+
+    it("rechaza un curso que no existe en la institución del actor", async () => {
+      const ev = seedEvaluationGrado6(repo);
+      const result = await useCase.execute({
+        actor: superAdmin,
+        data: { name: "Compendio", evaluationIds: [ev.id], courseId: "course-fantasma" },
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe("VALIDATION");
+    });
+
+    it("rechaza un curso de OTRA institución (aislamiento multi-tenant)", async () => {
+      const ev = seedEvaluationGrado6(repo);
+      const result = await useCase.execute({
+        actor: superAdmin, // inst-1
+        data: { name: "Compendio", evaluationIds: [ev.id], courseId: "course-otra" }, // inst-2
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe("VALIDATION");
+    });
   });
 });

@@ -10,7 +10,7 @@ import {
 } from "@/shared/domain/result";
 import { type AddItemInput, type BundleItem, type BundleRepository } from "../domain/bundle";
 import { isLocked } from "../domain/bundle-status";
-import { isPrintableEvaluationStatus } from "../domain/bundle-rules";
+import { evaluationMatchesBundleCourse, isPrintableEvaluationStatus } from "../domain/bundle-rules";
 
 export interface AddEvaluationToBundleInput {
   actor: AuthenticatedUser;
@@ -25,6 +25,8 @@ export interface AddEvaluationToBundleInput {
  *   - evaluation.status ∈ {APPROVED, PUBLISHED}.
  *   - evaluation no puede estar ya en el bundle (el repo lo enforce con
  *     @@unique([bundleId, evaluationId])).
+ *   - Si el bundle tiene courseId (Sprint 9), la evaluation debe ser de
+ *     ese curso. Bundle cross-course (courseId null) acepta cualquiera.
  *   - Si order no se da, se añade al final (siguiente posición libre).
  */
 export class AddEvaluationToBundle implements UseCase<AddEvaluationToBundleInput, BundleItem> {
@@ -62,6 +64,13 @@ export class AddEvaluationToBundle implements UseCase<AddEvaluationToBundleInput
       return fail(
         new ValidationError(
           `La evaluación "${ev.title}" debe estar aprobada o publicada (actual: ${ev.status}).`,
+        ),
+      );
+    }
+    if (!evaluationMatchesBundleCourse(bundle.courseId, ev.courseId)) {
+      return fail(
+        new ValidationError(
+          `El compendio es del curso ${bundle.courseName ?? bundle.courseId} y la evaluación "${ev.title}" es del curso ${ev.courseName}.`,
         ),
       );
     }

@@ -177,6 +177,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
       version: r.version,
       bookletNumber: r.bookletNumber,
       totalQuestions: r.totalQuestions,
+      courseId: r.courseSubject.courseId,
       courseName: r.courseSubject.course.name,
       subjectName: r.courseSubject.subject.name,
       updatedAt: r.updatedAt,

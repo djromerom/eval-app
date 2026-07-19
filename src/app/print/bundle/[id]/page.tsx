@@ -185,7 +185,13 @@ export default async function PrintBundlePage({
           </div>
           <div className="student-field">
             <span className="student-field-label">Grado:</span>
-            <span className="student-field-line" />
+            {/* Si el compendio es de un curso concreto, el grado va preimpreso;
+                si es cross-course, el estudiante lo escribe sobre la línea. */}
+            {bundle.courseName ? (
+              <span className="student-field-value">{bundle.courseName}</span>
+            ) : (
+              <span className="student-field-line" />
+            )}
           </div>
           <div className="student-field">
             <span className="student-field-label">Fecha:</span>

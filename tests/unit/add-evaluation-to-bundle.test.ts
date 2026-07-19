@@ -3,7 +3,12 @@ import { AddEvaluationToBundle } from "@/modules/bundles/application/add-evaluat
 import { CreateBundle } from "@/modules/bundles/application/create-bundle";
 import { MarkBundleReady } from "@/modules/bundles/application/mark-bundle-ready";
 import { RemoveFromBundle } from "@/modules/bundles/application/remove-from-bundle";
-import { InMemoryBundleRepository, seedEvaluationGrado6, superAdmin } from "./bundles-shared";
+import {
+  InMemoryBundleRepository,
+  courses,
+  seedEvaluationGrado6,
+  superAdmin,
+} from "./bundles-shared";
 
 describe("AddEvaluationToBundle", () => {
   let repo: InMemoryBundleRepository;
@@ -13,7 +18,7 @@ describe("AddEvaluationToBundle", () => {
 
   beforeEach(() => {
     repo = new InMemoryBundleRepository();
-    createBundle = new CreateBundle(repo);
+    createBundle = new CreateBundle(repo, courses);
     addEvaluation = new AddEvaluationToBundle(repo);
     markReady = new MarkBundleReady(repo);
   });
@@ -214,5 +219,71 @@ describe("AddEvaluationToBundle", () => {
     });
     expect(a.ok).toBe(true);
     if (a.ok) expect(a.value.order).toBe(3);
+  });
+
+  // Sprint 9 — el curso del compendio restringe qué evaluations admite.
+  describe("courseId (Sprint 9)", () => {
+    it("añade una evaluación del mismo curso que el compendio", async () => {
+      const ev1 = seedEvaluationGrado6(repo, { id: "ev-1", courseId: "course-11" });
+      const ev2 = seedEvaluationGrado6(repo, {
+        id: "ev-2",
+        courseId: "course-11",
+        subjectName: "Física",
+      });
+      const created = await createBundle.execute({
+        actor: superAdmin,
+        data: { name: "Compendio 11°", evaluationIds: [ev1.id], courseId: "course-11" },
+      });
+      if (!created.ok) throw new Error("setup");
+
+      const result = await addEvaluation.execute({
+        actor: superAdmin,
+        bundleId: created.value.id,
+        data: { evaluationId: ev2.id },
+      });
+      expect(result.ok).toBe(true);
+    });
+
+    it("rechaza una evaluación de otro curso", async () => {
+      const ev11 = seedEvaluationGrado6(repo, { id: "ev-11", courseId: "course-11" });
+      const ev6 = seedEvaluationGrado6(repo, {
+        id: "ev-6",
+        courseId: "course-6",
+        title: "Biología 6°",
+      });
+      const created = await createBundle.execute({
+        actor: superAdmin,
+        data: { name: "Compendio 11°", evaluationIds: [ev11.id], courseId: "course-11" },
+      });
+      if (!created.ok) throw new Error("setup");
+
+      const result = await addEvaluation.execute({
+        actor: superAdmin,
+        bundleId: created.value.id,
+        data: { evaluationId: ev6.id },
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe("VALIDATION");
+        expect(result.error.message).toContain("11°");
+      }
+    });
+
+    it("un compendio cross-course (sin curso) admite cualquier grado", async () => {
+      const ev11 = seedEvaluationGrado6(repo, { id: "ev-11", courseId: "course-11" });
+      const ev6 = seedEvaluationGrado6(repo, { id: "ev-6", courseId: "course-6" });
+      const created = await createBundle.execute({
+        actor: superAdmin,
+        data: { name: "Simulacro institucional", evaluationIds: [ev11.id] },
+      });
+      if (!created.ok) throw new Error("setup");
+
+      const result = await addEvaluation.execute({
+        actor: superAdmin,
+        bundleId: created.value.id,
+        data: { evaluationId: ev6.id },
+      });
+      expect(result.ok).toBe(true);
+    });
   });
 });

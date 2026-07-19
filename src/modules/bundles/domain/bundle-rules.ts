@@ -24,6 +24,23 @@ export function isValidBookletNumber(n: number | null | undefined): boolean {
   return Number.isInteger(n) && n > 0;
 }
 
+/**
+ * Sprint 9 — invariante curso/compendio.
+ *
+ * Un bundle con `courseId` definido solo admite evaluations de ESE curso.
+ * Un bundle con `courseId === null` es cross-course: admite cualquiera
+ * (simulacro institucional que mezcla grados).
+ *
+ * Función pura: recibe el curso del bundle y el de la evaluation.
+ */
+export function evaluationMatchesBundleCourse(
+  bundleCourseId: string | null,
+  evaluationCourseId: string,
+): boolean {
+  if (bundleCourseId === null) return true;
+  return bundleCourseId === evaluationCourseId;
+}
+
 /** Mínimo de items requeridos para marcar el bundle como READY. */
 export const MIN_ITEMS_FOR_READY = 1;
 

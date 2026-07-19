@@ -6,6 +6,7 @@ import {
   seedEvaluationGrado6,
   superAdmin,
   teacher,
+  courses,
 } from "./bundles-shared";
 
 describe("MarkBundleReady", () => {
@@ -15,7 +16,7 @@ describe("MarkBundleReady", () => {
 
   beforeEach(() => {
     repo = new InMemoryBundleRepository();
-    createBundle = new CreateBundle(repo);
+    createBundle = new CreateBundle(repo, courses);
     markReady = new MarkBundleReady(repo);
   });
 

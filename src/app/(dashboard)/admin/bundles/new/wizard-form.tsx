@@ -11,8 +11,14 @@ interface CandidateEvaluation {
   title: string;
   status: string;
   totalQuestions: number;
+  courseId: string;
   courseName: string;
   subjectName: string;
+}
+
+interface CourseOption {
+  id: string;
+  name: string;
 }
 
 function SubmitButton({ disabled }: { disabled: boolean }) {
@@ -30,14 +36,23 @@ function SubmitButton({ disabled }: { disabled: boolean }) {
  * envía un solo FormData al server action createBundleAction con todos los
  * evaluationIds seleccionados.
  */
-export function CreateBundleWizard({ evaluations }: { evaluations: CandidateEvaluation[] }) {
+export function CreateBundleWizard({
+  evaluations,
+  courses,
+}: {
+  evaluations: CandidateEvaluation[];
+  courses: CourseOption[];
+}) {
   const [state, formAction] = useActionState(createBundleAction, {} as BundleFormState);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
+  // "" = compendio cross-course: admite evaluaciones de cualquier grado.
+  const [courseId, setCourseId] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
 
-  // Filtro básico (case-insensitive) sobre título, asignatura o curso.
+  // Filtro por curso (duro: el use case rechaza mezclas) + búsqueda libre.
   const filtered = evaluations.filter((e) => {
+    if (courseId && e.courseId !== courseId) return false;
     if (!filter.trim()) return true;
     const q = filter.toLowerCase();
     return (
@@ -46,6 +61,16 @@ export function CreateBundleWizard({ evaluations }: { evaluations: CandidateEval
       e.courseName.toLowerCase().includes(q)
     );
   });
+
+  /**
+   * Al cambiar de curso descartamos la selección previa: esas evaluaciones
+   * ya no están visibles en la lista y el use case las rechazaría, así que
+   * dejarlas marcadas produciría un error confuso al enviar.
+   */
+  function changeCourse(nextCourseId: string) {
+    setCourseId(nextCourseId);
+    setSelected(new Set());
+  }
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -99,6 +124,30 @@ export function CreateBundleWizard({ evaluations }: { evaluations: CandidateEval
             />
           </div>
         </div>
+        <div className="space-y-1">
+          <label htmlFor="courseId" className="text-sm font-medium">
+            Curso (opcional)
+          </label>
+          <select
+            id="courseId"
+            name="courseId"
+            value={courseId}
+            onChange={(e) => changeCourse(e.target.value)}
+            className="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
+          >
+            <option value="">Sin curso específico (varios grados)</option>
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-muted-foreground text-xs">
+            {courseId
+              ? "Solo se listan evaluaciones de este curso, y el grado se preimprime en la portada."
+              : "Sin curso, el compendio admite evaluaciones de cualquier grado y el estudiante escribe el suyo."}
+          </p>
+        </div>
       </section>
 
       {/* Step 2 — selección de evaluaciones */}
@@ -122,7 +171,11 @@ export function CreateBundleWizard({ evaluations }: { evaluations: CandidateEval
         ) : (
           <ul className="max-h-96 space-y-1 overflow-y-auto rounded-md border p-2">
             {filtered.length === 0 ? (
-              <li className="text-muted-foreground p-4 text-center text-sm">Sin coincidencias.</li>
+              <li className="text-muted-foreground p-4 text-center text-sm">
+                {courseId
+                  ? "No hay evaluaciones de este curso. Elige otro o quita el filtro de curso."
+                  : "Sin coincidencias."}
+              </li>
             ) : (
               filtered.map((e) => (
                 <li key={e.id}>

@@ -38,6 +38,7 @@ export default async function BundlesListPage() {
           <thead className="bg-muted/40 text-muted-foreground border-b text-left">
             <tr>
               <th className="px-4 py-3 font-medium">Nombre</th>
+              <th className="px-4 py-3 font-medium">Curso</th>
               <th className="px-4 py-3 font-medium">N° cuadernillo</th>
               <th className="px-4 py-3 font-medium">Estado</th>
               <th className="px-4 py-3 font-medium">Creado</th>
@@ -47,7 +48,7 @@ export default async function BundlesListPage() {
           <tbody>
             {bundles.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-muted-foreground px-4 py-8 text-center">
+                <td colSpan={6} className="text-muted-foreground px-4 py-8 text-center">
                   Aún no hay compendios. Crea uno para empezar.
                 </td>
               </tr>
@@ -59,6 +60,7 @@ export default async function BundlesListPage() {
                       {b.name}
                     </Link>
                   </td>
+                  <td className="text-muted-foreground px-4 py-3">{b.courseName ?? "—"}</td>
                   <td className="text-muted-foreground px-4 py-3">{b.bookletNumber ?? "—"}</td>
                   <td className="px-4 py-3">
                     <span

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/page-header";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { makeListEvaluations } from "@/modules/evaluations/infrastructure/container";
+import { makeListCourses } from "@/modules/academic/infrastructure/container";
 import { CreateBundleWizard } from "./wizard-form";
 
 export const metadata: Metadata = { title: "Nuevo compendio" };
@@ -16,9 +17,10 @@ export const dynamic = "force-dynamic";
 export default async function NewBundlePage() {
   const actor = await requireAuthenticatedUser("ECU_MASTER");
 
-  const [approved, published] = await Promise.all([
+  const [approved, published, coursesRes] = await Promise.all([
     makeListEvaluations().execute({ actor, status: "APPROVED" }),
     makeListEvaluations().execute({ actor, status: "PUBLISHED" }),
+    makeListCourses().execute({ actor }),
   ]);
 
   const candidates = [
@@ -34,13 +36,15 @@ export default async function NewBundlePage() {
     return true;
   });
 
+  const courses = coursesRes.ok ? coursesRes.value.map((c) => ({ id: c.id, name: c.name })) : [];
+
   return (
     <>
       <PageHeader
         title="Nuevo compendio"
         description="Agrupa evaluaciones aprobadas o publicadas en un cuadernillo único."
       />
-      <CreateBundleWizard evaluations={evaluations} />
+      <CreateBundleWizard evaluations={evaluations} courses={courses} />
     </>
   );
 }

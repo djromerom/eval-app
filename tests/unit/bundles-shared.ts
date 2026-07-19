@@ -10,6 +10,55 @@ import type {
   UpdateBundleData,
 } from "@/modules/bundles/domain/bundle";
 import type { BundleStatus } from "@/modules/bundles/domain/bundle-status";
+import type { Course, CourseRepository, CreateCourseData } from "@/modules/academic/domain/types";
+
+/**
+ * Catálogo de cursos compartido por los tests de bundles (Sprint 9).
+ * Los IDs son estables para que los specs puedan referirlos por nombre.
+ */
+export const COURSES: Record<string, { id: string; name: string; institutionId: string }> = {
+  "course-6": { id: "course-6", name: "6°", institutionId: "inst-1" },
+  "course-11": { id: "course-11", name: "11°", institutionId: "inst-1" },
+  // Curso de OTRA institución: sirve para probar el aislamiento multi-tenant.
+  "course-otra": { id: "course-otra", name: "9°", institutionId: "inst-2" },
+};
+
+export function courseNameOf(courseId: string): string {
+  return COURSES[courseId]?.name ?? courseId;
+}
+
+/**
+ * Repo de cursos en memoria para los use cases que validan `bundle.courseId`.
+ * Replica el filtro por `institutionId` del adaptador Prisma: un curso de
+ * otra institución es indistinguible de uno inexistente.
+ */
+export class InMemoryCourseRepository implements CourseRepository {
+  async findAll(institutionId: string): Promise<Course[]> {
+    return Object.values(COURSES)
+      .filter((c) => c.institutionId === institutionId)
+      .map(toCourse);
+  }
+  async findById(institutionId: string, id: string): Promise<Course | null> {
+    const c = COURSES[id];
+    return c && c.institutionId === institutionId ? toCourse(c) : null;
+  }
+  async create(_institutionId: string, _data: CreateCourseData): Promise<Course> {
+    throw new Error("no usado en tests de bundles");
+  }
+}
+
+/** Instancia compartida: el catálogo es inmutable, no hay estado por test. */
+export const courses = new InMemoryCourseRepository();
+
+function toCourse(c: { id: string; name: string; institutionId: string }): Course {
+  return {
+    id: c.id,
+    institutionId: c.institutionId,
+    academicYearId: "year-1",
+    name: c.name,
+    code: c.name,
+  };
+}
 
 /**
  * Simula el constraint `@@unique([bundleId, order])` de `EvaluationBundleItem`
@@ -50,6 +99,9 @@ export type SeedEvaluation = {
   subjectIsArea: boolean;
   parentSubjectId: string | null;
   parentSubjectName: string | null;
+  /** Sprint 9 — curso de la evaluation (vía courseSubject). */
+  courseId: string;
+  courseName: string;
 };
 
 export class InMemoryBundleRepository implements BundleRepository {
@@ -83,6 +135,8 @@ export class InMemoryBundleRepository implements BundleRepository {
       createdById,
       name: data.name,
       bookletNumber: data.bookletNumber ?? null,
+      courseId: data.courseId ?? null,
+      courseName: data.courseId ? courseNameOf(data.courseId) : null,
       status: "DRAFT",
       theme: data.theme ?? null,
       createdAt: now,
@@ -132,6 +186,12 @@ export class InMemoryBundleRepository implements BundleRepository {
       ...b,
       ...(data.name !== undefined ? { name: data.name } : {}),
       ...(data.bookletNumber !== undefined ? { bookletNumber: data.bookletNumber } : {}),
+      ...(data.courseId !== undefined
+        ? {
+            courseId: data.courseId,
+            courseName: data.courseId ? courseNameOf(data.courseId) : null,
+          }
+        : {}),
       ...(data.theme !== undefined ? { theme: data.theme } : {}),
       updatedAt: new Date(),
     };
@@ -167,6 +227,8 @@ export class InMemoryBundleRepository implements BundleRepository {
         subjectIsArea: ev.subjectIsArea,
         parentSubjectId: ev.parentSubjectId,
         parentSubjectName: ev.parentSubjectName,
+        courseId: ev.courseId,
+        courseName: ev.courseName,
       };
     });
   }
@@ -303,6 +365,8 @@ export function seedEvaluationGrado6(
     subjectIsArea: options?.subjectIsArea ?? false,
     parentSubjectId: options?.parentSubjectId ?? "subj-cn",
     parentSubjectName: options?.parentSubjectName ?? "Ciencias Naturales",
+    courseId: options?.courseId ?? "course-6",
+    courseName: options?.courseName ?? courseNameOf(options?.courseId ?? "course-6"),
   };
   repo.seedEvaluation(ev);
   return ev;

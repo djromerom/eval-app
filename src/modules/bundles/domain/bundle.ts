@@ -28,6 +28,15 @@ export interface Bundle {
   institutionId: string;
   name: string;
   bookletNumber: number | null;
+  /**
+   * Curso del compendio (Sprint 9). `null` = compendio cross-course
+   * (simulacro institucional que mezcla grados). Si está definido, todos
+   * los items deben ser evaluations de ese curso — invariante validada en
+   * CreateBundle / AddEvaluationToBundle / UpdateBundle, no en la DB.
+   */
+  courseId: string | null;
+  /** Nombre del curso resuelto por el repo (para portada y listados). */
+  courseName: string | null;
   status: BundleStatus;
   /**
    * Override visual por compendio. JSONB crudo: la capa de aplicación no
@@ -69,6 +78,11 @@ export interface BundleItemDetail extends BundleItem {
   parentSubjectName: string | null;
   /** Indica si el subject es un área agrupadora (no evaluable). */
   subjectIsArea: boolean;
+  /** Curso de la evaluation (vía courseSubject). Usado para validar que
+   *  coincida con `bundle.courseId` cuando éste está definido. */
+  courseId: string;
+  /** Nombre del curso ("11°") para los mensajes de error y la UI. */
+  courseName: string;
 }
 
 /** Bundle con items ya cargados. */
@@ -86,6 +100,8 @@ export interface BundleDetail extends Bundle {
 export interface CreateBundleData {
   name: string;
   bookletNumber?: number | null;
+  /** Curso del compendio. `null`/omitido = cross-course. */
+  courseId?: string | null;
   evaluationIds: string[];
   theme?: Partial<BundleTheme> | null;
 }
@@ -93,6 +109,11 @@ export interface CreateBundleData {
 export interface UpdateBundleData {
   name?: string;
   bookletNumber?: number | null;
+  /**
+   * `undefined` = no tocar; `null` = limpiar (volver a cross-course);
+   * string = asignar curso (requiere que los items ya presentes coincidan).
+   */
+  courseId?: string | null;
   theme?: Partial<BundleTheme> | null;
 }
 
@@ -122,6 +143,8 @@ export interface BundleRepository {
         subjectIsArea: boolean;
         parentSubjectId: string | null;
         parentSubjectName: string | null;
+        courseId: string;
+        courseName: string;
       }
     >,
   ): Promise<Bundle>;
@@ -171,6 +194,9 @@ export interface BundleRepository {
       subjectIsArea: boolean;
       parentSubjectId: string | null;
       parentSubjectName: string | null;
+      /** Sprint 9: curso de la evaluation, para validar contra bundle.courseId. */
+      courseId: string;
+      courseName: string;
     }>
   >;
 }

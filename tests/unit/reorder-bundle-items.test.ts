@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CreateBundle } from "@/modules/bundles/application/create-bundle";
 import { MarkBundleReady } from "@/modules/bundles/application/mark-bundle-ready";
 import { ReorderBundleItems } from "@/modules/bundles/application/reorder-bundle-items";
-import { InMemoryBundleRepository, seedEvaluationGrado6, superAdmin } from "./bundles-shared";
+import {
+  InMemoryBundleRepository,
+  courses,
+  seedEvaluationGrado6,
+  superAdmin,
+} from "./bundles-shared";
 
 describe("ReorderBundleItems", () => {
   let repo: InMemoryBundleRepository;
@@ -12,7 +17,7 @@ describe("ReorderBundleItems", () => {
 
   beforeEach(() => {
     repo = new InMemoryBundleRepository();
-    createBundle = new CreateBundle(repo);
+    createBundle = new CreateBundle(repo, courses);
     reorder = new ReorderBundleItems(repo);
     markReady = new MarkBundleReady(repo);
   });
