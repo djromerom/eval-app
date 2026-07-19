@@ -207,15 +207,18 @@ export default async function PrintBundlePage({
         const competencyRows = buildCompetencyRows(evaluation.sections);
         return (
           <div key={item.id} className="bundle-eval-section">
-            {/* Header del bloque: nombre de la evaluation + orden. */}
+            {/* Apertura de la evaluación: franja destacada que encadena con
+                sus preguntas en la misma hoja. Antes era una página completa
+                para dos líneas — en un compendio de 3 asignaturas eso son 3
+                cartas casi vacías. La franja sigue marcando con claridad
+                dónde empieza cada asignatura. */}
             {evalIdx > 0 ? (
-              <section className="sheet bundle-eval-cover">
-                <h1 className="text-2xl font-bold">{evaluation.title}</h1>
-                <p className="text-muted-foreground">
+              <div className="bundle-eval-band">
+                <span className="bundle-eval-band-title">{evaluation.title}</span>
+                <span className="bundle-eval-band-part">
                   Parte {item.order} de {validEvaluations.length}
-                </p>
-                <div className="fold-line" />
-              </section>
+                </span>
+              </div>
             ) : null}
             {evaluation.sections.map((section, idx) => {
               const numbers = section.questions.map((q) => q.number);
@@ -261,8 +264,11 @@ export default async function PrintBundlePage({
                 </section>
               );
             })}
+            {/* Sin `sheet`: encadena tras las preguntas de su evaluación en
+                lugar de abrir hoja nueva. `break-inside: avoid` en el CSS
+                evita que la tabla se parta por la mitad. */}
             {competencyRows.length > 0 && (
-              <section className="sheet competencies-section">
+              <div className="competencies-block">
                 <p className="competencies-title">¿Qué competencias evaluamos?</p>
                 <table className="competencies-table">
                   <thead>
@@ -297,8 +303,7 @@ export default async function PrintBundlePage({
                     ))}
                   </tbody>
                 </table>
-                <div className="fold-line" />
-              </section>
+              </div>
             )}
           </div>
         );

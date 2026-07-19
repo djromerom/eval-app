@@ -124,6 +124,45 @@
   margin: 0.8rem 0;
 }
 
+/* Apertura de cada evaluación dentro de un compendio.
+ *
+ * Sustituye a la antigua carátula de página completa: marca con la misma
+ * claridad dónde empieza la asignatura, pero encadenada con sus preguntas.
+ * `break-after: avoid` impide que la franja quede sola al pie de una hoja.
+ */
+.bundle-eval-band {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.9rem 0 0.7rem;
+  padding: 0.35rem 0.6rem;
+  background: #f0f0f0;
+  border-top: 2px solid var(--print-primary, #0b5c2e);
+  border-bottom: 1px solid #000;
+  break-inside: avoid;
+  break-after: avoid;
+}
+
+.bundle-eval-band-title {
+  font-size: 13pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.bundle-eval-band-part {
+  font-size: 9pt;
+  white-space: nowrap;
+}
+
+/* Tabla de competencias: encadena tras las preguntas de su evaluación, pero
+ * sin partirse por la mitad entre dos hojas. */
+.competencies-block {
+  margin-top: 1rem;
+  break-inside: avoid;
+}
+
 .competencies-title {
   font-size: 11pt;
   font-weight: 700;
@@ -409,12 +448,5 @@
    * tabla de competencias) conservan su salto. */
   .sheet.questions {
     break-after: auto;
-  }
-
-  /* …pero esas sí deben empezar en hoja limpia aunque las preceda un
-   * bloque de preguntas que quedó a media página. */
-  .sheet.bundle-eval-cover,
-  .sheet.competencies-section {
-    break-before: page;
   }
 }
