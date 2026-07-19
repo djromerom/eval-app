@@ -42,6 +42,15 @@ const ROUTE_BY_KIND: Record<PrintKind, string> = {
   "answer-key-bundle": "/print/answer-key/bundle", // Sprint 3
 };
 
+/**
+ * Kinds cuyo `targetId` es un `bundleId` (el resto usa `evaluationId`).
+ * Derivado de ROUTE_BY_KIND para que añadir una ruta `/print/**\/bundle`
+ * nueva no requiera acordarse de tocar también el check del worker.
+ */
+const BUNDLE_KINDS = new Set<PrintKind>(
+  (Object.keys(ROUTE_BY_KIND) as PrintKind[]).filter((k) => ROUTE_BY_KIND[k].includes("bundle")),
+);
+
 /** Genera el PDF lineal (carta, 1 página por hoja lógica) con Puppeteer. */
 async function renderLinearPdf(url: string): Promise<Uint8Array> {
   const browser = await puppeteer.launch({
@@ -158,7 +167,10 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
   async (job) => {
     const { evaluationId, bundleId, institutionId, kind, extraQuery } = job.data;
     // XOR explícito: o evaluación o compendio, nunca ambos.
-    const isBundleKind = kind === "bundle" || kind === "answer-sheets-bundle";
+    // Todo kind cuya ruta cuelga de un compendio va aquí — incluida
+    // `answer-key-bundle`, que quedó fuera al añadirse en Sprint 3 y hacía
+    // fallar el job pidiendo un `evaluationId` que nunca se envía.
+    const isBundleKind = BUNDLE_KINDS.has(kind);
     const targetId = isBundleKind ? bundleId : evaluationId;
     if (!targetId) {
       throw new Error(
