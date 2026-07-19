@@ -224,25 +224,23 @@ export default async function PrintBundlePage({
               const hasContext = richTextToPlain(section.content).length > 0;
               return (
                 <section key={section.id} className="sheet questions">
-                  <div className="page-header">
-                    <span>{institutionName}</span>
-                    <span>{bookletLabel}</span>
-                  </div>
-
                   {idx > 0 ? <hr className={`section-divider ${theme.sectionDivider}`} /> : null}
 
-                  {numbers.length > 0 && (
-                    <p className="block-lead">
-                      RESPONDA LAS PREGUNTAS {first} A LA {last}
-                      {hasContext || section.title
-                        ? " DE ACUERDO CON LA SIGUIENTE INFORMACIÓN"
-                        : ""}
-                    </p>
-                  )}
-                  {section.title ? <p className="block-text-title">«{section.title}»</p> : null}
-                  {hasContext ? (
-                    <RichText value={section.content} className="context-paragraph" />
-                  ) : null}
+                  {/* Agrupado para que el contexto no se separe de su 1ª pregunta. */}
+                  <div className="block-intro">
+                    {numbers.length > 0 && (
+                      <p className="block-lead">
+                        RESPONDA LAS PREGUNTAS {first} A LA {last}
+                        {hasContext || section.title
+                          ? " DE ACUERDO CON LA SIGUIENTE INFORMACIÓN"
+                          : ""}
+                      </p>
+                    )}
+                    {section.title ? <p className="block-text-title">«{section.title}»</p> : null}
+                    {hasContext ? (
+                      <RichText value={section.content} className="context-paragraph" />
+                    ) : null}
+                  </div>
 
                   {section.questions.map((q) => (
                     <div key={q.id} className="question">

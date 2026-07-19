@@ -278,6 +278,24 @@
   margin-bottom: 0.5rem;
 }
 
+/* Intro del bloque: "RESPONDA LAS PREGUNTAS X A LA Y" + título + contexto.
+ *
+ * `break-after: avoid` la mantiene pegada a la primera pregunta: si no caben
+ * juntas al pie de la página, el bloque entero baja a la siguiente. Evita el
+ * caso de un contexto largo (con gráfico) huérfano al final de una hoja y sus
+ * preguntas en la de enfrente, obligando al estudiante a ir y volver.
+ *
+ * Un bloque de 5 preguntas sigue partiéndose de forma natural entre páginas —
+ * lo que no se parte es el vínculo contexto → primera pregunta.
+ *
+ * Límite conocido: si el contexto por sí solo mide más que una página, el
+ * navegador ignora la regla y parte igual. No hay forma de evitarlo en CSS.
+ */
+.block-intro {
+  break-inside: avoid;
+  break-after: avoid;
+}
+
 /* Preguntas en columna única (NO dos columnas) */
 .question {
   margin-bottom: 0.7rem;
@@ -383,5 +401,20 @@
   }
   .sheet:last-child {
     break-after: auto;
+  }
+
+  /* Los bloques de preguntas FLUYEN entre sí: un bloque de 2 preguntas no
+   * debe quemar una hoja entera. Solo las páginas que son de verdad
+   * independientes (portada, carátula de cada evaluación del compendio,
+   * tabla de competencias) conservan su salto. */
+  .sheet.questions {
+    break-after: auto;
+  }
+
+  /* …pero esas sí deben empezar en hoja limpia aunque las preceda un
+   * bloque de preguntas que quedó a media página. */
+  .sheet.bundle-eval-cover,
+  .sheet.competencies-section {
+    break-before: page;
   }
 }

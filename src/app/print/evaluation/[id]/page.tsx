@@ -200,24 +200,28 @@ export default async function PrintEvaluationPage({
         const hasContext = richTextToPlain(section.content).length > 0;
         return (
           <section key={section.id} className="sheet questions">
-            <div className="page-header">
-              <span>{institutionName}</span>
-              <span>{bookletLabel}</span>
-            </div>
-            {area ? <p className="subject-title">{area}</p> : null}
+            {/* El área se rotula una sola vez, al abrir las preguntas: los
+                bloques ahora fluyen en la misma página y repetirla en cada
+                uno la haría aparecer a media hoja. */}
+            {idx === 0 && area ? <p className="subject-title">{area}</p> : null}
 
             {/* Separador configurable (line / double / dots) — primer bloque
                 después de portada no lleva, los demás sí. */}
             {idx > 0 ? <hr className={`section-divider ${theme.sectionDivider}`} /> : null}
 
-            {numbers.length > 0 && (
-              <p className="block-lead">
-                RESPONDA LAS PREGUNTAS {first} A LA {last}
-                {hasContext || section.title ? " DE ACUERDO CON LA SIGUIENTE INFORMACIÓN" : ""}
-              </p>
-            )}
-            {section.title ? <p className="block-text-title">«{section.title}»</p> : null}
-            {hasContext ? <RichText value={section.content} className="context-paragraph" /> : null}
+            {/* Agrupado para que el contexto no se separe de su 1ª pregunta. */}
+            <div className="block-intro">
+              {numbers.length > 0 && (
+                <p className="block-lead">
+                  RESPONDA LAS PREGUNTAS {first} A LA {last}
+                  {hasContext || section.title ? " DE ACUERDO CON LA SIGUIENTE INFORMACIÓN" : ""}
+                </p>
+              )}
+              {section.title ? <p className="block-text-title">«{section.title}»</p> : null}
+              {hasContext ? (
+                <RichText value={section.content} className="context-paragraph" />
+              ) : null}
+            </div>
 
             {section.questions.map((q) => (
               <div key={q.id} className="question">
