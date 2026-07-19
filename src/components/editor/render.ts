@@ -50,6 +50,27 @@ export function renderRichText(value: unknown): string {
   return "";
 }
 
+/**
+ * Quita el `<p>` exterior cuando el contenido es un ÚNICO párrafo.
+ *
+ * TipTap siempre envuelve el texto en `<p>`. En los sitios donde el contenido
+ * va en línea con algo más — "319. ¿Qué inicia…", "A. Memoria repetitiva" —
+ * ese bloque forzaba un salto de línea (el número quedaba solo en su renglón)
+ * y además generaba HTML inválido: un `<p>` anidado dentro del `<p>` de
+ * `.question-text`.
+ *
+ * Si hay varios párrafos se devuelve el HTML intacto: desenvolverlos juntaría
+ * los textos y dejaría un `</p><p>` suelto a mitad del marcado.
+ */
+export function unwrapSingleParagraph(html: string): string {
+  const match = /^<p(?:\s[^>]*)?>([\s\S]*)<\/p>$/.exec(html.trim());
+  if (!match) return html;
+  const inner = match[1] ?? "";
+  // Un cierre de párrafo por dentro delata que eran dos o más.
+  if (inner.includes("</p>")) return html;
+  return inner;
+}
+
 /** Extrae texto plano (para búsquedas, resúmenes, títulos cortos). */
 export function richTextToPlain(value: unknown): string {
   if (typeof value === "string") return value;
