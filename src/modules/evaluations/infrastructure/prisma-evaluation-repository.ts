@@ -1,6 +1,7 @@
 import { type Prisma, type SoloLevel as PrismaSoloLevel, DraftStatus } from "@prisma/client";
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import type { EvaluationStatus } from "../domain/evaluation-status";
+import { computeRenumbering } from "../domain/evaluation";
 import type {
   AnswerKey,
   CreateEvaluationData,
@@ -14,6 +15,8 @@ import type {
   Question,
   SoloLevel,
   UpdateEvaluationSettingsData,
+  UpdateQuestionData,
+  UpdateSectionData,
 } from "../domain/evaluation";
 
 type EvaluationRow = {
@@ -71,6 +74,33 @@ type SectionRow = {
     options: { key: string; text: Prisma.JsonValue }[];
   }[];
 };
+
+/**
+ * Persiste la renumeración que calcula `computeRenumbering` (dominio) y deja
+ * `totalQuestions` acorde.
+ *
+ * A diferencia del reorder de items del compendio, aquí NO hace falta el
+ * two-phase con valores temporales: `Question.number` solo tiene índice
+ * (`@@index([sectionId, number])`), no constraint único, así que dos filas
+ * pueden compartir número un instante sin que la BD lo rechace.
+ */
+async function renumberQuestions(
+  tx: Prisma.TransactionClient,
+  evaluationId: string,
+): Promise<void> {
+  const sections = await tx.evaluationSection.findMany({
+    where: { evaluationId },
+    orderBy: { order: "asc" },
+    select: { questions: { orderBy: { number: "asc" }, select: { id: true, number: true } } },
+  });
+
+  const { updates, total } = computeRenumbering(sections);
+  for (const u of updates) {
+    await tx.question.update({ where: { id: u.id }, data: { number: u.number } });
+  }
+
+  await tx.evaluation.update({ where: { id: evaluationId }, data: { totalQuestions: total } });
+}
 
 function toSection(s: SectionRow): EvaluationSection {
   return {
@@ -204,6 +234,52 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
     return toSection(row);
   }
 
+  async updateSection(
+    institutionId: string,
+    evaluationId: string,
+    sectionId: string,
+    data: UpdateSectionData,
+  ): Promise<EvaluationSection> {
+    await prisma.evaluation.findFirstOrThrow({ where: { id: evaluationId, institutionId } });
+    // findFirst + update por id: `updateMany` no permite `include`, y filtrar
+    // por evaluationId aquí evita editar un contexto de otra evaluación.
+    const existing = await prisma.evaluationSection.findFirstOrThrow({
+      where: { id: sectionId, evaluationId },
+      select: { id: true },
+    });
+    const row = await prisma.evaluationSection.update({
+      where: { id: existing.id },
+      data: {
+        ...(data.title !== undefined ? { title: data.title } : {}),
+        ...(data.content !== undefined ? { content: json(data.content) } : {}),
+      },
+      include: { questions: { include: { options: true }, orderBy: { number: "asc" } } },
+    });
+    return toSection(row);
+  }
+
+  async deleteSection(
+    institutionId: string,
+    evaluationId: string,
+    sectionId: string,
+  ): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await tx.evaluation.findFirstOrThrow({ where: { id: evaluationId, institutionId } });
+      const section = await tx.evaluationSection.findFirstOrThrow({
+        where: { id: sectionId, evaluationId },
+        select: { id: true, order: true },
+      });
+      // Las preguntas (y sus opciones) caen por onDelete: Cascade del esquema.
+      await tx.evaluationSection.delete({ where: { id: section.id } });
+      // Compacta el `order` de los contextos que quedaban por detrás.
+      await tx.evaluationSection.updateMany({
+        where: { evaluationId, order: { gt: section.order } },
+        data: { order: { decrement: 1 } },
+      });
+      await renumberQuestions(tx, evaluationId);
+    });
+  }
+
   async addQuestion(
     institutionId: string,
     evaluationId: string,
@@ -248,6 +324,81 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         competency: q.competency,
         options: q.options.map((o) => ({ key: o.key as AnswerKey, text: o.text })),
       };
+    });
+  }
+
+  async updateQuestion(
+    institutionId: string,
+    evaluationId: string,
+    questionId: string,
+    data: UpdateQuestionData,
+  ): Promise<Question> {
+    return prisma.$transaction(async (tx) => {
+      await tx.evaluation.findFirstOrThrow({ where: { id: evaluationId, institutionId } });
+      // La pregunta debe colgar de un contexto de ESTA evaluación.
+      const existing = await tx.question.findFirstOrThrow({
+        where: { id: questionId, section: { evaluationId } },
+        select: { id: true },
+      });
+
+      // Las opciones se reemplazan en bloque: pasar de 4 a 3 debe borrar la
+      // sobrante, y un upsert por clave la dejaría huérfana.
+      if (data.options !== undefined) {
+        await tx.questionOption.deleteMany({ where: { questionId: existing.id } });
+      }
+
+      const q = await tx.question.update({
+        where: { id: existing.id },
+        data: {
+          ...(data.text !== undefined ? { text: json(data.text) } : {}),
+          ...(data.correctAnswer !== undefined ? { correctAnswer: data.correctAnswer } : {}),
+          ...(data.justification !== undefined ? { justification: data.justification } : {}),
+          ...(data.weight !== undefined ? { weight: data.weight } : {}),
+          ...(data.soloLevel !== undefined
+            ? { soloLevel: (data.soloLevel as PrismaSoloLevel | null) ?? null }
+            : {}),
+          ...(data.menComponent !== undefined ? { menComponent: data.menComponent } : {}),
+          ...(data.competency !== undefined ? { competency: data.competency } : {}),
+          ...(data.image !== undefined ? { image: data.image } : {}),
+          ...(data.options !== undefined
+            ? { options: { create: data.options.map((o) => ({ key: o.key, text: json(o.text) })) } }
+            : {}),
+        },
+        include: { options: true },
+      });
+
+      return {
+        id: q.id,
+        number: q.number,
+        text: q.text,
+        image: q.image,
+        correctAnswer: q.correctAnswer as AnswerKey,
+        justification: q.justification,
+        weight: q.weight,
+        soloLevel: (q.soloLevel as SoloLevel | null) ?? null,
+        menComponent: q.menComponent,
+        competency: q.competency,
+        options: q.options.map((o) => ({ key: o.key as AnswerKey, text: o.text })),
+      };
+    });
+  }
+
+  async deleteQuestion(
+    institutionId: string,
+    evaluationId: string,
+    questionId: string,
+  ): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await tx.evaluation.findFirstOrThrow({ where: { id: evaluationId, institutionId } });
+      const q = await tx.question.findFirstOrThrow({
+        where: { id: questionId, section: { evaluationId } },
+        select: { id: true },
+      });
+      // Las opciones caen por cascade. `StudentAnswer` NO tiene cascade, así
+      // que si hubiera respuestas escaneadas el FK abortaría la transacción —
+      // no debería pasar: editar exige DRAFT y al escanear ya está PUBLISHED.
+      await tx.question.delete({ where: { id: q.id } });
+      await renumberQuestions(tx, evaluationId);
     });
   }
 

@@ -12,7 +12,9 @@ import { makeListCourseSubjects } from "@/modules/academic/infrastructure/contai
 import { makeSearchBankQuestions } from "@/modules/question-bank/infrastructure/container";
 import { DownloadPdfButton } from "./download-pdf-button";
 import { QuestionForm } from "../question-form";
+import { QuestionEditor } from "../question-editor";
 import { SectionForm } from "../section-form";
+import { SectionEditor } from "../section-editor";
 import { submitForReviewAction } from "../actions";
 import { exportQuestionToBankAction, importBankQuestionAction } from "../../question-bank/actions";
 import { env } from "@/config/env";
@@ -131,79 +133,127 @@ export default async function EvaluationDetailPage({
         </p>
       ) : (
         <div className="space-y-8">
-          {evaluation.sections.map((section) => (
-            <section key={section.id} className="space-y-4">
-              <h2 className="border-b pb-2 font-semibold">
-                {section.title ?? `Contexto ${section.order + 1}`}
-              </h2>
-              <RichText value={section.content} className="text-muted-foreground" />
+          {evaluation.sections.map((section) => {
+            const heading = section.title ?? `Contexto ${section.order + 1}`;
+            const readOnlyHeader = (
+              <>
+                <h2 className="border-b pb-2 font-semibold">{heading}</h2>
+                <RichText value={section.content} className="text-muted-foreground" />
+              </>
+            );
+            return (
+              <section key={section.id} className="space-y-4">
+                {editable ? (
+                  <SectionEditor
+                    evaluationId={evaluation.id}
+                    sectionId={section.id}
+                    heading={heading}
+                    title={section.title}
+                    content={section.content}
+                    questionCount={section.questions.length}
+                  >
+                    <RichText value={section.content} className="text-muted-foreground" />
+                  </SectionEditor>
+                ) : (
+                  readOnlyHeader
+                )}
 
-              {section.questions.map((q) => (
-                <div key={q.id} className="rounded-lg border p-4">
-                  <div className="flex gap-1 font-medium">
-                    <span>{q.number}.</span>
-                    <RichTextInline value={q.text} />
-                  </div>
-                  <ul className="mt-2 space-y-1 text-sm">
-                    {q.options.map((o) => (
-                      <li
-                        key={o.key}
-                        className={
-                          o.key === q.correctAnswer
-                            ? "text-primary font-medium"
-                            : "text-muted-foreground"
-                        }
-                      >
-                        {o.key}) <RichTextInline value={o.text} />
-                        {o.key === q.correctAnswer ? " ✓" : ""}
-                      </li>
-                    ))}
-                  </ul>
-                  {q.soloLevel || q.menComponent ? (
-                    <p className="text-muted-foreground mt-2 text-xs">
-                      {q.soloLevel ?? ""} {q.menComponent ? `· ${q.menComponent}` : ""}
-                    </p>
-                  ) : null}
-                  {isOwner && subjectId ? (
-                    <form action={exportQuestionToBankAction} className="mt-2">
-                      <input type="hidden" name="evaluationId" value={evaluation.id} />
-                      <input type="hidden" name="questionId" value={q.id} />
-                      <input type="hidden" name="subjectId" value={subjectId} />
-                      <Button type="submit" size="sm" variant="ghost">
-                        Exportar al banco
-                      </Button>
-                    </form>
-                  ) : null}
-                </div>
-              ))}
+                {section.questions.map((q) => {
+                  const lectura = (
+                    <>
+                      <div className="flex gap-1 font-medium">
+                        <span>{q.number}.</span>
+                        <RichTextInline value={q.text} />
+                      </div>
+                      <ul className="mt-2 space-y-1 text-sm">
+                        {q.options.map((o) => (
+                          <li
+                            key={o.key}
+                            className={
+                              o.key === q.correctAnswer
+                                ? "text-primary font-medium"
+                                : "text-muted-foreground"
+                            }
+                          >
+                            {o.key}) <RichTextInline value={o.text} />
+                            {o.key === q.correctAnswer ? " ✓" : ""}
+                          </li>
+                        ))}
+                      </ul>
+                      {q.soloLevel || q.menComponent ? (
+                        <p className="text-muted-foreground mt-2 text-xs">
+                          {q.soloLevel ?? ""} {q.menComponent ? `· ${q.menComponent}` : ""}
+                        </p>
+                      ) : null}
+                      {isOwner && subjectId ? (
+                        <form action={exportQuestionToBankAction} className="mt-2">
+                          <input type="hidden" name="evaluationId" value={evaluation.id} />
+                          <input type="hidden" name="questionId" value={q.id} />
+                          <input type="hidden" name="subjectId" value={subjectId} />
+                          <Button type="submit" size="sm" variant="ghost">
+                            Exportar al banco
+                          </Button>
+                        </form>
+                      ) : null}
+                    </>
+                  );
+                  return editable ? (
+                    <QuestionEditor
+                      key={q.id}
+                      evaluationId={evaluation.id}
+                      sectionId={section.id}
+                      questionNumber={q.number}
+                      defaultOptions={env.EVAL_DEFAULT_OPTIONS}
+                      maxOptions={env.EVAL_MAX_OPTIONS}
+                      initial={{
+                        id: q.id,
+                        text: q.text,
+                        options: q.options,
+                        correctAnswer: q.correctAnswer,
+                        justification: q.justification,
+                        weight: q.weight,
+                        soloLevel: q.soloLevel,
+                        menComponent: q.menComponent,
+                        competency: q.competency,
+                      }}
+                    >
+                      {lectura}
+                    </QuestionEditor>
+                  ) : (
+                    <div key={q.id} className="rounded-lg border p-4">
+                      {lectura}
+                    </div>
+                  );
+                })}
 
-              {editable && bankQuestions.length > 0 ? (
-                <form action={importBankQuestionAction} className="flex items-end gap-2">
-                  <input type="hidden" name="evaluationId" value={evaluation.id} />
-                  <input type="hidden" name="sectionId" value={section.id} />
-                  <select name="bankQuestionId" required className={controlClass}>
-                    {bankQuestions.map((bq) => (
-                      <option key={bq.id} value={bq.id}>
-                        {richTextToPlain(bq.text).slice(0, 70)}
-                      </option>
-                    ))}
-                  </select>
-                  <Button type="submit" size="sm" variant="outline">
-                    Importar del banco
-                  </Button>
-                </form>
-              ) : null}
+                {editable && bankQuestions.length > 0 ? (
+                  <form action={importBankQuestionAction} className="flex items-end gap-2">
+                    <input type="hidden" name="evaluationId" value={evaluation.id} />
+                    <input type="hidden" name="sectionId" value={section.id} />
+                    <select name="bankQuestionId" required className={controlClass}>
+                      {bankQuestions.map((bq) => (
+                        <option key={bq.id} value={bq.id}>
+                          {richTextToPlain(bq.text).slice(0, 70)}
+                        </option>
+                      ))}
+                    </select>
+                    <Button type="submit" size="sm" variant="outline">
+                      Importar del banco
+                    </Button>
+                  </form>
+                ) : null}
 
-              {editable ? (
-                <QuestionForm
-                  evaluationId={evaluation.id}
-                  sectionId={section.id}
-                  defaultOptions={env.EVAL_DEFAULT_OPTIONS}
-                  maxOptions={env.EVAL_MAX_OPTIONS}
-                />
-              ) : null}
-            </section>
-          ))}
+                {editable ? (
+                  <QuestionForm
+                    evaluationId={evaluation.id}
+                    sectionId={section.id}
+                    defaultOptions={env.EVAL_DEFAULT_OPTIONS}
+                    maxOptions={env.EVAL_MAX_OPTIONS}
+                  />
+                ) : null}
+              </section>
+            );
+          })}
         </div>
       )}
     </>

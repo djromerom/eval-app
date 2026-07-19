@@ -6,7 +6,7 @@ import type { AdminFormState } from "@/components/admin/entity-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
-import { addQuestionAction } from "./actions";
+import { addQuestionAction, updateQuestionAction } from "./actions";
 import {
   MAX_OPTIONS,
   MIN_OPTIONS,
@@ -23,13 +23,50 @@ const SOLO_OPTIONS = [
 
 const DEFAULT_COUNT = MAX_OPTIONS; // 4 por defecto
 
-function SubmitButton() {
+function SubmitButton({ editing }: { editing: boolean }) {
   const { pending } = useFormStatus();
+  const label = editing ? "Guardar cambios" : "Agregar pregunta";
   return (
     <Button type="submit" size="sm" disabled={pending}>
-      {pending ? "Agregando…" : "Agregar pregunta"}
+      {pending ? "Guardando…" : label}
     </Button>
   );
+}
+
+/**
+ * Texto plano de una opción para precargar su `<input>`.
+ *
+ * Las opciones creadas desde este formulario se guardan como string, pero las
+ * importadas del banco pueden venir como documento TipTap. Se recorre el JSON
+ * en vez de reusar `richTextToPlain` de `editor/render` para no arrastrar
+ * `@tiptap/html` + KaTeX al bundle del cliente.
+ */
+function plainOption(initial: QuestionInitialValues | undefined, key: string): string | undefined {
+  if (!initial) return undefined;
+  const value = initial.options.find((o) => o.key === key)?.text;
+  return toPlain(value);
+}
+
+function toPlain(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return "";
+  const node = value as { text?: string; content?: unknown[] };
+  if (typeof node.text === "string") return node.text;
+  if (Array.isArray(node.content)) return node.content.map(toPlain).join("");
+  return "";
+}
+
+/** Datos de la pregunta que se está editando. Ausente = alta. */
+export interface QuestionInitialValues {
+  id: string;
+  text: unknown;
+  options: { key: string; text: unknown }[];
+  correctAnswer: string;
+  justification?: string | null;
+  weight?: number;
+  soloLevel?: string | null;
+  menComponent?: string | null;
+  competency?: string | null;
 }
 
 /** Editor estructurado por pregunta (§3.3 v2.0): enunciado + N opciones + correcta + metadatos.
@@ -51,26 +88,41 @@ export function QuestionForm({
   sectionId,
   defaultOptions = DEFAULT_COUNT,
   maxOptions = MAX_OPTIONS,
+  initial,
+  onDone,
 }: {
   evaluationId: string;
   sectionId: string;
   defaultOptions?: number;
   maxOptions?: number;
+  /** Si viene, el formulario edita esa pregunta en vez de crear una nueva. */
+  initial?: QuestionInitialValues;
+  /** Se invoca tras guardar con éxito (la vista de edición se cierra). */
+  onDone?: () => void;
 }) {
-  const [state, formAction] = useActionState<AdminFormState, FormData>(addQuestionAction, {});
-  const [optionCount, setOptionCount] = useState<number>(defaultOptions);
-  const [correct, setCorrect] = useState<string>(ANSWER_KEYS_ORDER[0]!);
+  const editing = initial !== undefined;
+  const [state, formAction] = useActionState<AdminFormState, FormData>(
+    editing ? updateQuestionAction : addQuestionAction,
+    {},
+  );
+  const [optionCount, setOptionCount] = useState<number>(initial?.options.length ?? defaultOptions);
+  const [correct, setCorrect] = useState<string>(initial?.correctAnswer ?? ANSWER_KEYS_ORDER[0]!);
   const [resetKey, setResetKey] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    if (state.success) {
-      formRef.current?.reset();
-      setOptionCount(defaultOptions);
-      setCorrect(ANSWER_KEYS_ORDER[0]!);
-      setResetKey((k) => k + 1); // remonta el editor para limpiarlo
+    if (!state.success) return;
+    if (editing) {
+      // Al editar NO se limpia: el padre cierra el formulario y vuelve a la
+      // vista de lectura, ya revalidada por el server action.
+      onDone?.();
+      return;
     }
-  }, [state.success, defaultOptions]);
+    formRef.current?.reset();
+    setOptionCount(defaultOptions);
+    setCorrect(ANSWER_KEYS_ORDER[0]!);
+    setResetKey((k) => k + 1); // remonta el editor para limpiarlo
+  }, [state.success, defaultOptions, editing, onDone]);
 
   const visibleKeys = ANSWER_KEYS_ORDER.slice(0, optionCount);
 
@@ -96,10 +148,16 @@ export function QuestionForm({
       <input type="hidden" name="evaluationId" value={evaluationId} />
       <input type="hidden" name="sectionId" value={sectionId} />
       <input type="hidden" name="optionCount" value={optionCount} />
+      {editing ? <input type="hidden" name="questionId" value={initial.id} /> : null}
 
       <div className="space-y-1">
         <label className="text-muted-foreground text-xs font-medium">Enunciado</label>
-        <RichTextEditor key={resetKey} name="text" minHeightClass="min-h-16" />
+        <RichTextEditor
+          key={resetKey}
+          name="text"
+          minHeightClass="min-h-16"
+          defaultValue={initial?.text}
+        />
       </div>
 
       <div className="space-y-2">
@@ -116,7 +174,13 @@ export function QuestionForm({
               />
               {k}
             </label>
-            <Input name={`option${k}`} required placeholder={`Opción ${k}`} className="flex-1" />
+            <Input
+              name={`option${k}`}
+              required
+              placeholder={`Opción ${k}`}
+              className="flex-1"
+              defaultValue={plainOption(initial, k)}
+            />
             {correct === k ? (
               <span className="text-primary text-xs font-medium">✓ correcta</span>
             ) : null}
@@ -159,6 +223,7 @@ export function QuestionForm({
           <label className="text-muted-foreground block text-xs font-medium">Nivel SOLO</label>
           <select
             name="soloLevel"
+            defaultValue={initial?.soloLevel ?? ""}
             className="border-input bg-background focus-visible:ring-ring h-9 rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
           >
             {SOLO_OPTIONS.map((o) => (
@@ -170,20 +235,36 @@ export function QuestionForm({
         </div>
         <div className="space-y-1">
           <label className="text-muted-foreground block text-xs font-medium">Componente MEN</label>
-          <Input name="menComponent" placeholder="(opcional)" className="w-40" />
+          <Input
+            name="menComponent"
+            placeholder="(opcional)"
+            className="w-40"
+            defaultValue={initial?.menComponent ?? ""}
+          />
         </div>
         <div className="space-y-1">
           <label className="text-muted-foreground block text-xs font-medium">Competencia</label>
-          <Input name="competency" placeholder="(opcional)" className="w-40" />
+          <Input
+            name="competency"
+            placeholder="(opcional)"
+            className="w-40"
+            defaultValue={initial?.competency ?? ""}
+          />
         </div>
         <div className="space-y-1">
           <label className="text-muted-foreground block text-xs font-medium">Puntaje</label>
-          <Input name="weight" type="number" step="0.5" defaultValue="1" className="w-24" />
+          <Input
+            name="weight"
+            type="number"
+            step="0.5"
+            defaultValue={initial?.weight ?? 1}
+            className="w-24"
+          />
         </div>
       </div>
 
       {state.error ? <p className="text-destructive text-sm">{state.error}</p> : null}
-      <SubmitButton />
+      <SubmitButton editing={editing} />
     </form>
   );
 }

@@ -12,6 +12,10 @@ import {
   makeAddSection,
   makeChangeEvaluationStatus,
   makeCreateEvaluation,
+  makeDeleteQuestion,
+  makeDeleteSection,
+  makeUpdateQuestion,
+  makeUpdateSection,
 } from "@/modules/evaluations/infrastructure/container";
 
 function str(formData: FormData, key: string): string {
@@ -76,6 +80,40 @@ export async function addSectionAction(
   return { success: true };
 }
 
+export async function updateSectionAction(
+  _prev: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
+  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const evaluationId = str(formData, "evaluationId");
+  const result = await makeUpdateSection().execute({
+    actor,
+    evaluationId,
+    sectionId: str(formData, "sectionId"),
+    // Título vacío → null: el contexto vuelve a rotularse "Contexto N".
+    data: { title: str(formData, "title") || null, content: rich(formData, "content") },
+  });
+  if (!result.ok) return { error: result.error.message };
+  revalidatePath(`/teacher/evaluations/${evaluationId}`);
+  return { success: true };
+}
+
+export async function deleteSectionAction(
+  _prev: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
+  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const evaluationId = str(formData, "evaluationId");
+  const result = await makeDeleteSection().execute({
+    actor,
+    evaluationId,
+    sectionId: str(formData, "sectionId"),
+  });
+  if (!result.ok) return { error: result.error.message };
+  revalidatePath(`/teacher/evaluations/${evaluationId}`);
+  return { success: true };
+}
+
 export async function addQuestionAction(
   _prev: AdminFormState,
   formData: FormData,
@@ -115,6 +153,58 @@ export async function addQuestionAction(
       menComponent: str(formData, "menComponent") || undefined,
       competency: str(formData, "competency") || undefined,
     },
+  });
+  if (!result.ok) return { error: result.error.message };
+  revalidatePath(`/teacher/evaluations/${evaluationId}`);
+  return { success: true };
+}
+
+export async function updateQuestionAction(
+  _prev: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
+  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const evaluationId = str(formData, "evaluationId");
+  const soloLevel = str(formData, "soloLevel");
+  const weightRaw = str(formData, "weight");
+
+  // Mismo clamp que en el alta: el form envía el total de opciones visibles.
+  const optionCountRaw = Number(str(formData, "optionCount"));
+  const optionCount = Number.isInteger(optionCountRaw)
+    ? Math.min(env.EVAL_MAX_OPTIONS, Math.max(MIN_OPTIONS, optionCountRaw))
+    : env.EVAL_DEFAULT_OPTIONS;
+  const keys = ANSWER_KEYS_ORDER.slice(0, optionCount) as AnswerKey[];
+
+  const result = await makeUpdateQuestion().execute({
+    actor,
+    evaluationId,
+    questionId: str(formData, "questionId"),
+    data: {
+      text: rich(formData, "text"),
+      options: keys.map((key) => ({ key, text: str(formData, `option${key}`) })),
+      correctAnswer: str(formData, "correctAnswer") as AnswerKey,
+      justification: str(formData, "justification") || null,
+      weight: weightRaw ? Number(weightRaw) : undefined,
+      soloLevel: (soloLevel || null) as SoloLevel | null,
+      menComponent: str(formData, "menComponent") || null,
+      competency: str(formData, "competency") || null,
+    },
+  });
+  if (!result.ok) return { error: result.error.message };
+  revalidatePath(`/teacher/evaluations/${evaluationId}`);
+  return { success: true };
+}
+
+export async function deleteQuestionAction(
+  _prev: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
+  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const evaluationId = str(formData, "evaluationId");
+  const result = await makeDeleteQuestion().execute({
+    actor,
+    evaluationId,
+    questionId: str(formData, "questionId"),
   });
   if (!result.ok) return { error: result.error.message };
   revalidatePath(`/teacher/evaluations/${evaluationId}`);

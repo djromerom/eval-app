@@ -9,9 +9,13 @@ import {
   AddQuestion,
   AddSection,
   CreateEvaluation,
+  DeleteQuestion,
+  DeleteSection,
   GetEvaluation,
   ListEvaluations,
   UpdateEvaluationSettings,
+  UpdateQuestion,
+  UpdateSection,
 } from "../application/manage-evaluations";
 import {
   ApplyTemplate,
@@ -39,7 +43,11 @@ export const makeCreateEvaluation = () =>
 export const makeListEvaluations = () => new ListEvaluations(evaluations);
 export const makeGetEvaluation = () => new GetEvaluation(evaluations);
 export const makeAddSection = () => new AddSection(evaluations);
+export const makeUpdateSection = () => new UpdateSection(evaluations);
+export const makeDeleteSection = () => new DeleteSection(evaluations);
 export const makeAddQuestion = () => new AddQuestion(evaluations);
+export const makeUpdateQuestion = () => new UpdateQuestion(evaluations);
+export const makeDeleteQuestion = () => new DeleteQuestion(evaluations);
 export const makeUpdateEvaluationSettings = () => new UpdateEvaluationSettings(evaluations);
 export const makeChangeEvaluationStatus = () =>
   new ChangeEvaluationStatus(evaluations, notificationSender, coordinatorDirectory);

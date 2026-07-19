@@ -97,6 +97,32 @@ export interface CreateSectionData {
   content?: unknown; // TipTap JSON; por defecto vacío
 }
 
+/** Edición de un contexto. Campos ausentes = no se tocan. */
+export interface UpdateSectionData {
+  /** `null` limpia el título (el contexto pasa a rotularse "Contexto N"). */
+  title?: string | null;
+  content?: unknown; // TipTap JSON
+}
+
+/**
+ * Edición de una pregunta. Campos ausentes = no se tocan.
+ *
+ * `options` se reemplaza entero (no se hace merge por clave): editar una
+ * pregunta de 4 opciones a 3 debe poder eliminar la sobrante, y casar
+ * parcialmente por clave dejaría huérfana la D.
+ */
+export interface UpdateQuestionData {
+  text?: unknown; // TipTap JSON
+  options?: { key: AnswerKey; text: unknown }[];
+  correctAnswer?: AnswerKey;
+  justification?: string | null;
+  weight?: number;
+  soloLevel?: SoloLevel | null;
+  menComponent?: string | null;
+  competency?: string | null;
+  image?: string | null;
+}
+
 export interface CreateQuestionData {
   text: unknown; // TipTap JSON
   options: { key: AnswerKey; text: unknown }[];
@@ -135,6 +161,19 @@ export interface EvaluationRepository {
     evaluationId: string,
     data: CreateSectionData,
   ): Promise<EvaluationSection>;
+  updateSection(
+    institutionId: string,
+    evaluationId: string,
+    sectionId: string,
+    data: UpdateSectionData,
+  ): Promise<EvaluationSection>;
+
+  /**
+   * Elimina el contexto y, en cascada, sus preguntas. Renumera las preguntas
+   * restantes de la evaluación y recalcula `totalQuestions`.
+   */
+  deleteSection(institutionId: string, evaluationId: string, sectionId: string): Promise<void>;
+
   /** Crea la pregunta y recalcula totalQuestions de la evaluación. */
   addQuestion(
     institutionId: string,
@@ -142,6 +181,19 @@ export interface EvaluationRepository {
     sectionId: string,
     data: CreateQuestionData,
   ): Promise<Question>;
+
+  updateQuestion(
+    institutionId: string,
+    evaluationId: string,
+    questionId: string,
+    data: UpdateQuestionData,
+  ): Promise<Question>;
+
+  /**
+   * Elimina la pregunta, renumera las siguientes para que la numeración siga
+   * siendo continua (la hoja OMR la asume así) y recalcula `totalQuestions`.
+   */
+  deleteQuestion(institutionId: string, evaluationId: string, questionId: string): Promise<void>;
   updateStatus(institutionId: string, id: string, status: EvaluationStatus): Promise<void>;
   /**
    * Actualiza los campos de metadata editables desde el panel Settings
@@ -192,6 +244,32 @@ export const ANSWER_KEYS_ORDER: readonly AnswerKey[] = ANSWER_KEYS;
  *    preguntas con menos opciones simplemente dejan las restantes en
  *    blanco. Esto simplifica la impresión (grilla uniforme) y el OMR
  *    (siempre escanea 8 columnas por pregunta). */
+/**
+ * Numeración continua 1..N de las preguntas de una evaluación, en el orden en
+ * que se imprimen: contextos por `order`, preguntas por `number` dentro de
+ * cada uno. El llamador debe pasar `sections` ya ordenada.
+ *
+ * Se usa tras borrar una pregunta o un contexto. El cuadernillo numera de
+ * corrido en toda la evaluación y la hoja OMR asume esa correspondencia, así
+ * que un hueco desalinearía las burbujas respecto de las respuestas.
+ *
+ * Devuelve **solo las preguntas cuyo número cambia**, para no escribir filas
+ * que ya están bien (borrar la última pregunta no debe tocar ninguna otra).
+ */
+export function computeRenumbering(
+  sections: Array<{ questions: Array<{ id: string; number: number }> }>,
+): { updates: Array<{ id: string; number: number }>; total: number } {
+  const updates: Array<{ id: string; number: number }> = [];
+  let next = 1;
+  for (const section of sections) {
+    for (const q of section.questions) {
+      if (q.number !== next) updates.push({ id: q.id, number: next });
+      next++;
+    }
+  }
+  return { updates, total: next - 1 };
+}
+
 export const MIN_OPTIONS = 2;
 export const MAX_OPTIONS = 8;
 

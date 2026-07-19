@@ -3,6 +3,10 @@ import { ChangeEvaluationStatus } from "@/modules/evaluations/application/change
 import {
   AddQuestion,
   CreateEvaluation,
+  DeleteQuestion,
+  DeleteSection,
+  UpdateQuestion,
+  UpdateSection,
 } from "@/modules/evaluations/application/manage-evaluations";
 import { validateQuestionShape } from "@/modules/evaluations/domain/evaluation";
 import type { EvaluationStatus } from "@/modules/evaluations/domain/evaluation-status";
@@ -66,6 +70,35 @@ class FakeEvaluations implements EvaluationRepository {
   }
   async addSection(): Promise<EvaluationSection> {
     throw new Error("no usado");
+  }
+  /** Registro de llamadas, para comprobar que el use case delega. */
+  updated: Array<{ kind: "section" | "question"; id: string }> = [];
+  deleted: Array<{ kind: "section" | "question"; id: string }> = [];
+  async updateSection(_i: string, _e: string, sectionId: string): Promise<EvaluationSection> {
+    this.updated.push({ kind: "section", id: sectionId });
+    return { id: sectionId, title: null, content: null, order: 0, questions: [] };
+  }
+  async deleteSection(_i: string, _e: string, sectionId: string): Promise<void> {
+    this.deleted.push({ kind: "section", id: sectionId });
+  }
+  async updateQuestion(_i: string, _e: string, questionId: string): Promise<Question> {
+    this.updated.push({ kind: "question", id: questionId });
+    return {
+      id: questionId,
+      number: 1,
+      text: "t",
+      image: null,
+      options: [],
+      correctAnswer: "A",
+      justification: null,
+      weight: 1,
+      soloLevel: null,
+      menComponent: null,
+      competency: null,
+    };
+  }
+  async deleteQuestion(_i: string, _e: string, questionId: string): Promise<void> {
+    this.deleted.push({ kind: "question", id: questionId });
   }
   async addQuestion(institutionId: string, evaluationId: string): Promise<Question> {
     const e = this.items.find((x) => x.id === evaluationId)!;
@@ -385,5 +418,187 @@ describe("Flujo de aprobación", () => {
     });
     expect(published.ok).toBe(true);
     if (published.ok) expect(published.value.status).toBe("PUBLISHED");
+  });
+});
+
+/**
+ * Edición y borrado de contextos y preguntas.
+ *
+ * La renumeración al borrar vive en `computeRenumbering` (dominio) y se prueba
+ * aparte en renumbering.test.ts. Aquí se cubren las reglas del use case:
+ * autorización, DRAFT-only, y que opciones y respuesta correcta viajen juntas.
+ */
+describe("Edición de contextos y preguntas", () => {
+  let repo: FakeEvaluations;
+  let evalId: string;
+
+  beforeEach(async () => {
+    repo = new FakeEvaluations();
+    const created = await repo.create("i1", teacher.userId, {
+      title: "T",
+      courseSubjectId: "cs1",
+    });
+    evalId = created.id;
+  });
+
+  describe("UpdateSection", () => {
+    it("el autor edita su contexto en BORRADOR", async () => {
+      const r = await new UpdateSection(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        sectionId: "s1",
+        data: { title: "Nuevo título" },
+      });
+      expect(r.ok).toBe(true);
+      expect(repo.updated).toEqual([{ kind: "section", id: "s1" }]);
+    });
+
+    it("otro docente NO puede editar la evaluación ajena", async () => {
+      const otro: AuthenticatedUser = { userId: "t2", institutionId: "i1", roles: ["TEACHER"] };
+      const r = await new UpdateSection(repo).execute({
+        actor: otro,
+        evaluationId: evalId,
+        sectionId: "s1",
+        data: { title: "Hackeado" },
+      });
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe("VALIDATION");
+      expect(repo.updated).toEqual([]);
+    });
+
+    it("no se puede editar fuera de BORRADOR", async () => {
+      await repo.updateStatus("i1", evalId, "APPROVED");
+      const r = await new UpdateSection(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        sectionId: "s1",
+        data: { title: "Tarde" },
+      });
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.message).toMatch(/BORRADOR/i);
+    });
+  });
+
+  describe("DeleteSection", () => {
+    it("el autor borra su contexto y delega en el repositorio", async () => {
+      const r = await new DeleteSection(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        sectionId: "s1",
+      });
+      expect(r.ok).toBe(true);
+      expect(repo.deleted).toEqual([{ kind: "section", id: "s1" }]);
+    });
+
+    it("no borra si la evaluación ya no está en BORRADOR", async () => {
+      await repo.updateStatus("i1", evalId, "PUBLISHED");
+      const r = await new DeleteSection(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        sectionId: "s1",
+      });
+      expect(r.ok).toBe(false);
+      expect(repo.deleted).toEqual([]);
+    });
+  });
+
+  describe("UpdateQuestion", () => {
+    const opciones = (["A", "B", "C", "D"] as const).map((key) => ({ key, text: key }));
+
+    it("edita solo el enunciado sin tocar opciones", async () => {
+      const r = await new UpdateQuestion(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        questionId: "q1",
+        data: { text: "Enunciado corregido" },
+      });
+      expect(r.ok).toBe(true);
+      expect(repo.updated).toEqual([{ kind: "question", id: "q1" }]);
+    });
+
+    it("edita opciones y correcta juntas", async () => {
+      const r = await new UpdateQuestion(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        questionId: "q1",
+        data: { options: opciones, correctAnswer: "C" },
+      });
+      expect(r.ok).toBe(true);
+    });
+
+    it("rechaza cambiar la correcta sin enviar las opciones", async () => {
+      const r = await new UpdateQuestion(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        questionId: "q1",
+        data: { correctAnswer: "C" },
+      });
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.message).toMatch(/ambas/i);
+      expect(repo.updated).toEqual([]);
+    });
+
+    it("rechaza cambiar las opciones sin enviar la correcta", async () => {
+      const r = await new UpdateQuestion(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        questionId: "q1",
+        data: { options: opciones },
+      });
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.message).toMatch(/ambas/i);
+    });
+
+    it("rechaza una correcta que no está entre las opciones enviadas", async () => {
+      const r = await new UpdateQuestion(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        questionId: "q1",
+        data: {
+          options: [
+            { key: "A", text: "a" },
+            { key: "B", text: "b" },
+          ],
+          correctAnswer: "D",
+        },
+      });
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe("VALIDATION");
+      expect(repo.updated).toEqual([]);
+    });
+
+    it("rechaza dejar la pregunta con una sola opción", async () => {
+      const r = await new UpdateQuestion(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        questionId: "q1",
+        data: { options: [{ key: "A", text: "a" }], correctAnswer: "A" },
+      });
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe("VALIDATION");
+    });
+  });
+
+  describe("DeleteQuestion", () => {
+    it("el autor borra su pregunta", async () => {
+      const r = await new DeleteQuestion(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        questionId: "q1",
+      });
+      expect(r.ok).toBe(true);
+      expect(repo.deleted).toEqual([{ kind: "question", id: "q1" }]);
+    });
+
+    it("no borra fuera de BORRADOR (una evaluación publicada ya se imprimió)", async () => {
+      await repo.updateStatus("i1", evalId, "PUBLISHED");
+      const r = await new DeleteQuestion(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        questionId: "q1",
+      });
+      expect(r.ok).toBe(false);
+      expect(repo.deleted).toEqual([]);
+    });
   });
 });

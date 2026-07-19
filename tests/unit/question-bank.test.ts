@@ -104,6 +104,18 @@ class FakeEvaluations implements EvaluationRepository {
       competency: data.competency ?? null,
     };
   }
+  async updateSection(): Promise<EvaluationSection> {
+    throw new Error("no usado");
+  }
+  async deleteSection(): Promise<void> {
+    throw new Error("no usado");
+  }
+  async updateQuestion(): Promise<Question> {
+    throw new Error("no usado");
+  }
+  async deleteQuestion(): Promise<void> {
+    throw new Error("no usado");
+  }
   async updateStatus(_i: string, _id: string, _s: EvaluationStatus) {}
   async updateSettings(
     _i: string,

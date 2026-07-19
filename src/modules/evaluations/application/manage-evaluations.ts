@@ -18,6 +18,8 @@ import {
   type EvaluationSection,
   type Question,
   type UpdateEvaluationSettingsData,
+  type UpdateQuestionData,
+  type UpdateSectionData,
   validateDurationMinutes,
   validateQuestionShape,
 } from "../domain/evaluation";
@@ -146,6 +148,57 @@ export class AddSection implements UseCase<AddSectionInput, EvaluationSection> {
   }
 }
 
+export interface UpdateSectionInput {
+  actor: AuthenticatedUser;
+  evaluationId: string;
+  sectionId: string;
+  data: UpdateSectionData;
+}
+
+/** Edita título y/o contenido de un contexto. Solo el autor y solo en DRAFT. */
+export class UpdateSection implements UseCase<UpdateSectionInput, EvaluationSection> {
+  constructor(private readonly evaluations: EvaluationRepository) {}
+
+  async execute({
+    actor,
+    evaluationId,
+    sectionId,
+    data,
+  }: UpdateSectionInput): Promise<Result<EvaluationSection>> {
+    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    if (!authorized.ok) return authorized;
+    const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
+    if (!owned.ok) return owned;
+    return ok(
+      await this.evaluations.updateSection(actor.institutionId, evaluationId, sectionId, data),
+    );
+  }
+}
+
+export interface DeleteSectionInput {
+  actor: AuthenticatedUser;
+  evaluationId: string;
+  sectionId: string;
+}
+
+/**
+ * Elimina un contexto con TODAS sus preguntas. El repositorio renumera las
+ * restantes; quien llame debe advertir al docente si el contexto no está
+ * vacío (la UI lo hace en el diálogo de confirmación).
+ */
+export class DeleteSection implements UseCase<DeleteSectionInput, void> {
+  constructor(private readonly evaluations: EvaluationRepository) {}
+
+  async execute({ actor, evaluationId, sectionId }: DeleteSectionInput): Promise<Result<void>> {
+    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    if (!authorized.ok) return authorized;
+    const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
+    if (!owned.ok) return owned;
+    await this.evaluations.deleteSection(actor.institutionId, evaluationId, sectionId);
+    return ok(undefined);
+  }
+}
+
 export interface AddQuestionInput {
   actor: AuthenticatedUser;
   evaluationId: string;
@@ -173,6 +226,77 @@ export class AddQuestion implements UseCase<AddQuestionInput, Question> {
     return ok(
       await this.evaluations.addQuestion(actor.institutionId, evaluationId, sectionId, data),
     );
+  }
+}
+
+export interface UpdateQuestionInput {
+  actor: AuthenticatedUser;
+  evaluationId: string;
+  questionId: string;
+  data: UpdateQuestionData;
+}
+
+/**
+ * Edita una pregunta. Solo el autor y solo en DRAFT.
+ *
+ * `options` y `correctAnswer` van juntas o no van: la validez de una depende
+ * de la otra (la correcta debe existir entre las opciones), y aceptar solo
+ * una obligaría a releer la pregunta para validar contra un estado a medias.
+ * El formulario de edición envía siempre ambas.
+ */
+export class UpdateQuestion implements UseCase<UpdateQuestionInput, Question> {
+  constructor(private readonly evaluations: EvaluationRepository) {}
+
+  async execute({
+    actor,
+    evaluationId,
+    questionId,
+    data,
+  }: UpdateQuestionInput): Promise<Result<Question>> {
+    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    if (!authorized.ok) return authorized;
+    const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
+    if (!owned.ok) return owned;
+
+    const tocaOpciones = data.options !== undefined || data.correctAnswer !== undefined;
+    if (tocaOpciones) {
+      if (data.options === undefined || data.correctAnswer === undefined) {
+        return fail(
+          new ValidationError(
+            "Para cambiar las opciones o la respuesta correcta hay que enviar ambas.",
+          ),
+        );
+      }
+      const shapeError = validateQuestionShape({
+        options: data.options,
+        correctAnswer: data.correctAnswer,
+      });
+      if (shapeError) return fail(new ValidationError(shapeError));
+    }
+
+    return ok(
+      await this.evaluations.updateQuestion(actor.institutionId, evaluationId, questionId, data),
+    );
+  }
+}
+
+export interface DeleteQuestionInput {
+  actor: AuthenticatedUser;
+  evaluationId: string;
+  questionId: string;
+}
+
+/** Elimina una pregunta; el repositorio renumera las siguientes. */
+export class DeleteQuestion implements UseCase<DeleteQuestionInput, void> {
+  constructor(private readonly evaluations: EvaluationRepository) {}
+
+  async execute({ actor, evaluationId, questionId }: DeleteQuestionInput): Promise<Result<void>> {
+    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    if (!authorized.ok) return authorized;
+    const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
+    if (!owned.ok) return owned;
+    await this.evaluations.deleteQuestion(actor.institutionId, evaluationId, questionId);
+    return ok(undefined);
   }
 }
 

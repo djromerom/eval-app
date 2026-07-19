@@ -61,6 +61,18 @@ class FakeEvaluations implements EvaluationRepository {
   async addQuestion(): Promise<Question> {
     throw new Error("no usado");
   }
+  async updateSection(): Promise<EvaluationSection> {
+    throw new Error("no usado");
+  }
+  async deleteSection(): Promise<void> {
+    throw new Error("no usado");
+  }
+  async updateQuestion(): Promise<Question> {
+    throw new Error("no usado");
+  }
+  async deleteQuestion(): Promise<void> {
+    throw new Error("no usado");
+  }
   async updateStatus(_i: string, id: string, status: EvaluationStatus) {
     const e = this.items.find((x) => x.id === id);
     if (e) e.status = status;
