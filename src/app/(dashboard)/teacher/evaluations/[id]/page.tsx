@@ -126,7 +126,7 @@ export default async function EvaluationDetailPage({
       {evaluation.sections.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           {editable
-            ? "Aún no hay bloques. Agrega uno para empezar a añadir preguntas."
+            ? "Aún no hay contextos. Agrega uno para empezar a añadir preguntas."
             : "Esta evaluación no tiene contenido."}
         </p>
       ) : (
@@ -134,7 +134,7 @@ export default async function EvaluationDetailPage({
           {evaluation.sections.map((section) => (
             <section key={section.id} className="space-y-4">
               <h2 className="border-b pb-2 font-semibold">
-                {section.title ?? `Bloque ${section.order + 1}`}
+                {section.title ?? `Contexto ${section.order + 1}`}
               </h2>
               <RichText value={section.content} className="text-muted-foreground" />
 

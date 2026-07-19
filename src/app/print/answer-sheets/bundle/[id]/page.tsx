@@ -140,7 +140,7 @@ export default async function BundleAnswerSheetsPage({
       <div className="no-print bg-card sticky top-0 z-10 flex w-full max-w-[900px] items-center gap-3 rounded-lg border p-3 text-sm">
         <span className="text-muted-foreground">
           {students.length} hoja(s) de respuestas para el compendio &laquo;{bundle.name}&raquo; (
-          {totalQuestions} preguntas, {sections.length} bloque(s))
+          {totalQuestions} preguntas, {sections.length} contexto(s))
         </span>
       </div>
 

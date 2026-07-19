@@ -11,12 +11,12 @@ function SubmitButton() {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" size="sm" variant="outline" disabled={pending}>
-      {pending ? "Agregando…" : "+ Agregar bloque"}
+      {pending ? "Agregando…" : "+ Agregar contexto"}
     </Button>
   );
 }
 
-/** Alta de bloque de contexto: título opcional + contenido rico (TipTap + KaTeX). */
+/** Alta de contexto: título opcional + contenido rico (TipTap + KaTeX). */
 export function SectionForm({ evaluationId }: { evaluationId: string }) {
   const [state, formAction] = useActionState<AdminFormState, FormData>(addSectionAction, {});
   const [resetKey, setResetKey] = useState(0);
@@ -30,12 +30,12 @@ export function SectionForm({ evaluationId }: { evaluationId: string }) {
       <input type="hidden" name="evaluationId" value={evaluationId} />
       <input
         name="title"
-        placeholder="Título del bloque (opcional)"
+        placeholder="Título del contexto (opcional)"
         className="border-input bg-background focus-visible:ring-ring h-9 w-full max-w-md rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
       />
       <div>
         <label className="text-muted-foreground mb-1 block text-xs font-medium">
-          Contenido del bloque (texto, tablas, imágenes, fórmulas $…$)
+          Contenido del contexto (texto, tablas, imágenes, fórmulas $…$)
         </label>
         <RichTextEditor name="content" minHeightClass="min-h-20" />
       </div>
