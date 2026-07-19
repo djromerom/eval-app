@@ -47,20 +47,20 @@ model Institution {
 // ========== AUTH & USERS ==========
 
 model User {
-  id            String      @id @default(uuid(7)) @db.Uuid
-  email         String      @unique
-  name          String
-  password      String? // hash bcrypt — solo para provider credentials
-  image         String?
-  emailVerified DateTime?
-  inviteToken   String? // bcrypt del token de invitación
+  id                   String      @id @default(uuid(7)) @db.Uuid
+  email                String      @unique
+  name                 String
+  password             String? // hash bcrypt — solo para provider credentials
+  image                String?
+  emailVerified        DateTime?
+  inviteToken          String? // bcrypt del token de invitación
   inviteTokenExpiresAt DateTime?
-  institutionId String      @db.Uuid
-  institution   Institution @relation(fields: [institutionId], references: [id])
-  isActive      Boolean     @default(true)
-  deletedAt     DateTime?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  institutionId        String      @db.Uuid
+  institution          Institution @relation(fields: [institutionId], references: [id])
+  isActive             Boolean     @default(true)
+  deletedAt            DateTime?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
 
   roles          UserRole[]
   accounts       Account[]
@@ -69,7 +69,7 @@ model User {
   questionBank   QuestionBank[]
   templates      EvaluationTemplate[]
   scanBatches    ScanBatch[]
-  bundlesCreated EvaluationBundle[] @relation("BundleCreatedBy")
+  bundlesCreated EvaluationBundle[]   @relation("BundleCreatedBy")
   auditLogs      AuditLog[]
   notifications  Notification[]
 
@@ -323,11 +323,11 @@ model Evaluation {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
-  sections       EvaluationSection[]
-  answerSheets   AnswerSheet[]
-  groups         EvaluationGroup[]
-  scanBatches    ScanBatch[]
-  bundleItems    EvaluationBundleItem[]
+  sections     EvaluationSection[]
+  answerSheets AnswerSheet[]
+  groups       EvaluationGroup[]
+  scanBatches  ScanBatch[]
+  bundleItems  EvaluationBundleItem[]
 
   @@index([courseSubjectId, academicYearId])
   @@index([institutionId, status])
@@ -496,7 +496,7 @@ model EvaluationBundle {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
-  items EvaluationBundleItem[]
+  items  EvaluationBundleItem[]
   sheets AnswerSheet[]
 
   @@unique([institutionId, bookletNumber])
@@ -550,7 +550,10 @@ model AnswerSheet {
   // migra el camino canónico a bundle (incluso N=1); hojas legacy (solo
   // evaluationId) siguen funcionando pero la app nueva ya no las crea.
   evaluationId   String?           @db.Uuid
-  evaluation     Evaluation?       @relation(fields: [evaluationId], references: [id])
+  // Hojas legacy (pre-Sprint 1) apuntan a una evaluation. Al borrar esa
+  // evaluation el FK queda en NULL (no en CASCADE) para conservar auditoría
+  // de la hoja escaneada.
+  evaluation     Evaluation?       @relation(fields: [evaluationId], references: [id], onDelete: SetNull)
   bundleId       String?           @db.Uuid
   bundle         EvaluationBundle? @relation(fields: [bundleId], references: [id])
   studentId      String?           @db.Uuid // null si es hoja genérica o QR no identificable
@@ -593,19 +596,19 @@ enum ScanStatus {
 }
 
 model StudentAnswer {
-  id            String               @id @default(uuid(7)) @db.Uuid
-  answerSheetId String               @db.Uuid
-  answerSheet   AnswerSheet          @relation(fields: [answerSheetId], references: [id], onDelete: Cascade)
-  questionId    String               @db.Uuid
-  question      Question             @relation(fields: [questionId], references: [id])
+  id            String                @id @default(uuid(7)) @db.Uuid
+  answerSheetId String                @db.Uuid
+  answerSheet   AnswerSheet           @relation(fields: [answerSheetId], references: [id], onDelete: Cascade)
+  questionId    String                @db.Uuid
+  question      Question              @relation(fields: [questionId], references: [id])
   // Fuente de verdad para hojas de bundle: cada respuesta apunta al item del
   // bundle, que indirectamente da evaluationId + questionId. evaluationId queda
   // como denormalización para queries rápidos y compat con hojas legacy.
-  bundleItemId  String?              @db.Uuid
+  bundleItemId  String?               @db.Uuid
   bundleItem    EvaluationBundleItem? @relation(fields: [bundleItemId], references: [id])
   selectedKey   String? // "A", "B", "C", "D", ..., "H" o null si sin responder
   isCorrect     Boolean?
-  isAmbiguous   Boolean              @default(false) // múltiple marca
+  isAmbiguous   Boolean               @default(false) // múltiple marca
   confidence    Float? // 0-1 confianza de la detección OMR
 
   @@index([answerSheetId])

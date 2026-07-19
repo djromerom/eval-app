@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { requireAuthenticatedUser } from "@/lib/session";
+import { hasRole } from "@/shared/application/authenticated-user";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { makeListUsers } from "@/modules/users/infrastructure/container";
+import { makeListInstitutions } from "@/modules/institutions/infrastructure/container";
 import { InviteUserForm, RolesEditor } from "./users-forms";
 import { ResendInviteButton } from "./resend-invite-button";
 import { ROLE_OPTIONS } from "./roles";
@@ -13,9 +15,17 @@ export const metadata: Metadata = { title: "Usuarios" };
 const roleLabel = new Map(ROLE_OPTIONS.map((o) => [o.value, o.label]));
 
 export default async function UsersPage() {
-  const actor = await requireAuthenticatedUser("ECU_MASTER");
-  const result = await makeListUsers().execute({ actor });
-  const users = result.ok ? result.value : [];
+  // SUPER_ADMIN entra también para invitar cross-institución desde esta
+  // misma pantalla. El selector de institución solo se muestra si la lista
+  // de instituciones está disponible (i.e. el actor es SUPER_ADMIN).
+  const actor = await requireAuthenticatedUser("ECU_MASTER", "SUPER_ADMIN");
+  const [listRes, instRes] = await Promise.all([
+    makeListUsers().execute({ actor }),
+    hasRole(actor, "SUPER_ADMIN") ? makeListInstitutions().execute({ actor }) : null,
+  ]);
+  const users = listRes.ok ? listRes.value : [];
+  const institutions =
+    instRes && instRes.ok ? instRes.value.map((i) => ({ id: i.id, name: i.name })) : undefined;
 
   return (
     <>
@@ -24,7 +34,7 @@ export default async function UsersPage() {
         description="Invita coordinadores y docentes, y gestiona sus roles combinables (§2)."
       />
 
-      <InviteUserForm />
+      <InviteUserForm institutions={institutions} />
 
       <div className="mt-8 overflow-x-auto rounded-xl border">
         <table className="w-full text-sm">

@@ -37,8 +37,17 @@ function SubmitButton({ label, size = "default" }: { label: string; size?: "defa
   );
 }
 
-export function InviteUserForm() {
+export function InviteUserForm({
+  /** Lista de instituciones para el selector. Si NO se pasa, el form se
+   *  renderiza sin selector — el usuario se invita a la institución del
+   *  actor implícitamente. Solo se pasa cuando el actor es SUPER_ADMIN y
+   *  queremos permitir cross-institución desde esta pantalla. */
+  institutions,
+}: {
+  institutions?: Array<{ id: string; name: string }>;
+} = {}) {
   const [state, formAction] = useActionState<UserFormState, FormData>(inviteUserAction, {});
+  const showInstitutionPicker = !!institutions && institutions.length > 0;
   return (
     <form action={formAction} className="bg-card space-y-4 rounded-xl border p-6">
       <h2 className="font-semibold">Invitar usuario</h2>
@@ -62,6 +71,28 @@ export function InviteUserForm() {
           />
         </div>
       </div>
+      {showInstitutionPicker ? (
+        <div className="space-y-1">
+          <label htmlFor="targetInstitutionId" className="text-sm font-medium">
+            Institución
+          </label>
+          <select
+            id="targetInstitutionId"
+            name="targetInstitutionId"
+            required
+            className="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
+          >
+            {institutions!.map((inst) => (
+              <option key={inst.id} value={inst.id}>
+                {inst.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-muted-foreground text-xs">
+            Como SUPER_ADMIN puedes invitar usuarios a cualquier institución.
+          </p>
+        </div>
+      ) : null}
       <div className="space-y-1">
         <span className="text-sm font-medium">Roles</span>
         <RoleCheckboxes />

@@ -53,14 +53,24 @@ class InMemoryUsers implements UserRepository {
 }
 
 const admin: AuthenticatedUser = { userId: "admin", institutionId: "i1", roles: ["ECU_MASTER"] };
+const superAdmin: AuthenticatedUser = { userId: "sa", institutionId: "i1", roles: ["SUPER_ADMIN"] };
 const teacher: AuthenticatedUser = { userId: "t", institutionId: "i1", roles: ["TEACHER"] };
+
+// Catálogo en memoria de instituciones para el use case (cuando actor es SUPER_ADMIN).
+const institutionCatalog = new Map<string, { id: string; name: string }>([
+  ["i1", { id: "i1", name: "Colegio Demo" }],
+  ["i2", { id: "i2", name: "Colegio Secundario" }],
+]);
+const institutionsPort = {
+  findById: async (id: string) => institutionCatalog.get(id) ?? null,
+};
 
 describe("InviteUser", () => {
   let repo: InMemoryUsers;
   let uc: InviteUser;
   beforeEach(() => {
     repo = new InMemoryUsers();
-    uc = new InviteUser(repo);
+    uc = new InviteUser(repo, institutionsPort);
   });
 
   it("invita con roles combinables (inactivo)", async () => {
@@ -75,6 +85,7 @@ describe("InviteUser", () => {
       expect(r.value.email).toBe("nuevo@colegio.edu.co"); // normalizado
       expect(r.value.isActive).toBe(false);
       expect(r.value.roles).toEqual(["TEACHER", "COORDINATOR"]);
+      expect(r.value.institutionId).toBe("i1"); // cae a institución del actor
     }
   });
 
@@ -85,7 +96,7 @@ describe("InviteUser", () => {
         sent.push(e);
       },
     };
-    const r = await new InviteUser(repo, email).execute({
+    const r = await new InviteUser(repo, institutionsPort, email).execute({
       actor: admin,
       email: "nuevo@colegio.edu.co",
       name: "Nuevo",
@@ -105,7 +116,7 @@ describe("InviteUser", () => {
         throw new Error("SMTP caído");
       },
     };
-    const r = await new InviteUser(repo, email).execute({
+    const r = await new InviteUser(repo, institutionsPort, email).execute({
       actor: admin,
       email: "x@colegio.edu.co",
       name: "X",
@@ -143,6 +154,57 @@ describe("InviteUser", () => {
     });
     expect(forbidden.ok).toBe(false);
     if (!forbidden.ok) expect(forbidden.error.code).toBe("FORBIDDEN");
+  });
+
+  // Sprint 8 follow-up: cross-institución para SUPER_ADMIN.
+  describe("cross-institución (SUPER_ADMIN)", () => {
+    it("SUPER_ADMIN puede invitar a otra institución con targetInstitutionId", async () => {
+      const r = await uc.execute({
+        actor: superAdmin,
+        email: "x@y.com",
+        name: "X",
+        roles: ["ECU_MASTER"],
+        targetInstitutionId: "i2",
+        institutionName: "Colegio Secundario",
+      });
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value.institutionId).toBe("i2");
+    });
+
+    it("ECU_MASTER NO puede usar targetInstitutionId (FORBIDDEN/VALIDATION)", async () => {
+      const r = await uc.execute({
+        actor: admin,
+        email: "x@y.com",
+        name: "X",
+        roles: ["ECU_MASTER"],
+        targetInstitutionId: "i2",
+      });
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe("VALIDATION");
+    });
+
+    it("SUPER_ADMIN con targetInstitutionId inexistente → VALIDATION", async () => {
+      const r = await uc.execute({
+        actor: superAdmin,
+        email: "x@y.com",
+        name: "X",
+        roles: ["COORDINATOR"],
+        targetInstitutionId: "ghost",
+      });
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe("VALIDATION");
+    });
+
+    it("SUPER_ADMIN sin targetInstitutionId → institución del actor (no cross)", async () => {
+      const r = await uc.execute({
+        actor: superAdmin,
+        email: "x@y.com",
+        name: "X",
+        roles: ["ECU_MASTER"],
+      });
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value.institutionId).toBe("i1");
+    });
   });
 });
 
@@ -214,7 +276,7 @@ describe("SetUserRoles / SetUserActive", () => {
   });
 
   it("cambia roles de un usuario existente", async () => {
-    const invited = await new InviteUser(repo).execute({
+    const invited = await new InviteUser(repo, institutionsPort).execute({
       actor: admin,
       email: "p@q.com",
       name: "P",

@@ -56,14 +56,20 @@ export async function inviteUserAction(
   _prev: UserFormState,
   formData: FormData,
 ): Promise<UserFormState> {
-  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  // Permitimos ECU_MASTER y SUPER_ADMIN. Solo SUPER_ADMIN verá el selector
+  // de institución en el form; el ECU_MASTER siempre cae a su institución.
+  const actor = await requireAuthenticatedUser("ECU_MASTER", "SUPER_ADMIN");
   const roles = rolesFrom(formData);
+  // `targetInstitutionId` viene del select solo si actor es SUPER_ADMIN.
+  // Si un ECU_MASTER lo manda por cualquier vía, el use case lo rechaza.
+  const targetInstitutionId = String(formData.get("targetInstitutionId") ?? "").trim() || undefined;
   const result = await makeInviteUser().execute({
     actor,
     name: String(formData.get("name") ?? "").trim(),
     email: String(formData.get("email") ?? "").trim(),
     roles,
-    institutionName: await institutionNameOf(actor.institutionId),
+    institutionName: await institutionNameOf(targetInstitutionId ?? actor.institutionId),
+    targetInstitutionId,
   });
   if (!result.ok) return { error: result.error.message };
   await ensureTeacherProfileIfNeeded(actor, result.value.id, roles);

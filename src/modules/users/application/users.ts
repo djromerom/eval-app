@@ -16,16 +16,28 @@ export interface InviteUserInput {
   name: string;
   roles: Role[];
   institutionName?: string;
+  /** Solo SUPER_ADMIN: permite invitar a una institución distinta de la
+   *  suya. Si se envía y el actor NO es SUPER_ADMIN, se ignora (se usa
+   *  `actor.institutionId` por seguridad). Si SUPER_ADMIN lo envía, debe
+   *  apuntar a una institución existente. */
+  targetInstitutionId?: string;
 }
 
 /**
  * Invita a un usuario a la institución del ADMIN con uno o más roles
  * combinables (§2, §3.1). Queda inactivo hasta que vincule cuenta OAuth o
  * defina contraseña; se le envía el correo con el enlace de invitación.
+ *
+ * Cross-institución: si el actor es SUPER_ADMIN y envía `targetInstitutionId`,
+ * el usuario se crea en esa institución en lugar de la del actor. Útil para
+ * dar de alta admins en instituciones nuevas sin tener que impersonar.
  */
 export class InviteUser implements UseCase<InviteUserInput, User> {
   constructor(
     private readonly users: UserRepository,
+    private readonly institutions?: {
+      findById: (id: string) => Promise<{ id: string; name: string } | null>;
+    },
     private readonly email?: EmailService,
   ) {}
 
@@ -35,8 +47,9 @@ export class InviteUser implements UseCase<InviteUserInput, User> {
     name,
     roles,
     institutionName,
+    targetInstitutionId,
   }: InviteUserInput): Promise<Result<User>> {
-    const authorized = requireRole(actor, "ECU_MASTER");
+    const authorized = requireRole(actor, "ECU_MASTER", "SUPER_ADMIN");
     if (!authorized.ok) return authorized;
 
     if (!name.trim()) return fail(new ValidationError("El nombre es obligatorio."));
@@ -50,8 +63,33 @@ export class InviteUser implements UseCase<InviteUserInput, User> {
       return fail(new ValidationError(`Ya existe un usuario con el correo "${email}".`));
     }
 
+    // Resolver institución destino:
+    // - SUPER_ADMIN puede pasar `targetInstitutionId` para cross-institución.
+    //   Si lo pasa y la institución no existe → error de validación.
+    // - Cualquier actor (ECU_MASTER o SUPER_ADMIN sin target) cae a la suya.
+    let resolvedInstitutionId = actor.institutionId;
+    let resolvedInstitutionName = institutionName;
+    if (targetInstitutionId && targetInstitutionId !== actor.institutionId) {
+      if (!actor.roles.includes("SUPER_ADMIN")) {
+        return fail(
+          new ValidationError("Solo un SUPER_ADMIN puede invitar usuarios a otra institución."),
+        );
+      }
+      if (!this.institutions) {
+        return fail(
+          new ValidationError("Falta el repositorio de instituciones para cross-institución."),
+        );
+      }
+      const target = await this.institutions.findById(targetInstitutionId);
+      if (!target) {
+        return fail(new ValidationError("La institución seleccionada no existe."));
+      }
+      resolvedInstitutionId = target.id;
+      resolvedInstitutionName = target.name;
+    }
+
     const user = await this.users.invite(
-      actor.institutionId,
+      resolvedInstitutionId,
       email.toLowerCase(),
       name.trim(),
       roles,
@@ -66,7 +104,7 @@ export class InviteUser implements UseCase<InviteUserInput, User> {
             userId: user.id,
             email: user.email,
             name: user.name,
-            institutionName: institutionName ?? "Institución",
+            institutionName: resolvedInstitutionName ?? "Institución",
           },
         );
       } catch (error) {
