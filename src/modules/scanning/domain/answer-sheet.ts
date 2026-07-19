@@ -8,7 +8,10 @@ export type ScanBatchStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "PARTIAL"
 export interface AnswerSheet {
   id: string;
   institutionId: string;
-  evaluationId: string;
+  /** Legacy (single-evaluation) o una hoja del Sprint 1+ antes de bundles. */
+  evaluationId: string | null;
+  /** Hoja de un compendio (Sprint 1 del módulo compendios). */
+  bundleId: string | null;
   studentId: string | null;
   studentName: string | null;
   studentCode: string | null;
@@ -32,6 +35,10 @@ export interface ScanBatch {
 
 export interface StudentAnswerRecord {
   questionId: string;
+  /** Sprint 4 del módulo compendios: si la hoja pertenece a un bundle, el
+   *  item del bundle al que pertenece esta question. Permite drill-down del
+   *  reporte comparativo por (student/hoja × item). null en hojas legacy. */
+  bundleItemId: string | null;
   selectedKey: AnswerKey | null;
   isCorrect: boolean | null;
   isAmbiguous: boolean;

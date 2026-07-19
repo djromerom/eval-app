@@ -48,3 +48,10 @@ export class ValidationError extends DomainError {
     this.name = "ValidationError";
   }
 }
+
+export class ConflictError extends DomainError {
+  constructor(message: string) {
+    super("CONFLICT", message);
+    this.name = "ConflictError";
+  }
+}

@@ -1,0 +1,358 @@
+import {
+  type BundleStatus as PrismaBundleStatus,
+  type EvaluationBundle as PrismaBundle,
+  type EvaluationBundleItem as PrismaBundleItem,
+  DraftStatus,
+  type Prisma,
+} from "@prisma/client";
+import { prisma } from "@/shared/infrastructure/db/prisma";
+import type {
+  AddItemInput,
+  Bundle,
+  BundleDetail,
+  BundleItem,
+  BundleItemDetail,
+  BundleRepository,
+  CreateBundleData,
+  UpdateBundleData,
+} from "../domain/bundle";
+import type { BundleStatus } from "../domain/bundle-status";
+
+type BundleRow = PrismaBundle;
+
+type BundleItemRow = PrismaBundleItem & {
+  evaluation: {
+    id: string;
+    title: string;
+    status: DraftStatus;
+    totalQuestions: number;
+    institutionId: string;
+    courseSubject: {
+      subject: {
+        id: string;
+        name: string;
+        isArea: boolean;
+        parentSubjectId: string | null;
+        parentSubject: { id: string; name: string } | null;
+      };
+    };
+  };
+};
+
+function toBundle(row: BundleRow): Bundle {
+  return {
+    id: row.id,
+    institutionId: row.institutionId,
+    name: row.name,
+    bookletNumber: row.bookletNumber,
+    status: row.status as BundleStatus,
+    theme: row.theme,
+    createdById: row.createdById,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function toItemDetail(row: BundleItemRow): BundleItemDetail {
+  const subj = row.evaluation.courseSubject.subject;
+  return {
+    id: row.id,
+    bundleId: row.bundleId,
+    evaluationId: row.evaluationId,
+    order: row.order,
+    evaluationTitle: row.evaluation.title,
+    evaluationStatus: row.evaluation.status,
+    totalQuestions: row.evaluation.totalQuestions,
+    subjectName: subj.name,
+    subjectIsArea: subj.isArea,
+    parentSubjectId: subj.parentSubjectId,
+    parentSubjectName: subj.parentSubject?.name ?? null,
+  };
+}
+
+export class PrismaBundleRepository implements BundleRepository {
+  async create(
+    institutionId: string,
+    createdById: string,
+    data: CreateBundleData,
+    evaluationsById: Map<
+      string,
+      {
+        id: string;
+        title: string;
+        status: string;
+        totalQuestions: number;
+        institutionId: string;
+        subjectId: string;
+        subjectName: string;
+        subjectIsArea: boolean;
+        parentSubjectId: string | null;
+        parentSubjectName: string | null;
+      }
+    >,
+  ): Promise<Bundle> {
+    return prisma.$transaction(async (tx) => {
+      const bundle = await tx.evaluationBundle.create({
+        data: {
+          institutionId,
+          createdById,
+          name: data.name,
+          bookletNumber: data.bookletNumber ?? null,
+          theme: (data.theme ?? null) as Prisma.InputJsonValue,
+        },
+      });
+
+      // Insertar items en el orden dado por el caller. Reordenamos por el
+      // orden de aparición en data.evaluationIds (1-based).
+      let order = 1;
+      for (const evId of data.evaluationIds) {
+        if (!evaluationsById.has(evId)) {
+          throw new Error(
+            `Evaluation ${evId} no encontrada en evaluationsById; bug en CreateBundle`,
+          );
+        }
+        await tx.evaluationBundleItem.create({
+          data: {
+            bundleId: bundle.id,
+            evaluationId: evId,
+            order: order++,
+          },
+        });
+      }
+
+      return toBundle(bundle);
+    });
+  }
+
+  async findById(institutionId: string, id: string): Promise<Bundle | null> {
+    const row = await prisma.evaluationBundle.findFirst({
+      where: { id, institutionId },
+    });
+    return row && toBundle(row);
+  }
+
+  async findDetail(institutionId: string, id: string): Promise<BundleDetail | null> {
+    const row = await prisma.evaluationBundle.findFirst({
+      where: { id, institutionId },
+      include: { items: { orderBy: { order: "asc" } } },
+    });
+    if (!row) return null;
+
+    const detailItems = await this.listItemsOrderedInternal(row.id);
+    const totalQuestions = detailItems.reduce((acc, i) => acc + i.totalQuestions, 0);
+
+    return {
+      ...toBundle(row),
+      items: detailItems,
+      totalQuestions,
+    };
+  }
+
+  async findAll(institutionId: string): Promise<Bundle[]> {
+    const rows = await prisma.evaluationBundle.findMany({
+      where: { institutionId },
+      orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+    });
+    return rows.map(toBundle);
+  }
+
+  async update(institutionId: string, id: string, data: UpdateBundleData): Promise<Bundle> {
+    const row = await prisma.evaluationBundle.update({
+      where: { id },
+      data: {
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.bookletNumber !== undefined ? { bookletNumber: data.bookletNumber } : {}),
+        ...(data.theme !== undefined
+          ? { theme: (data.theme ?? null) as Prisma.InputJsonValue }
+          : {}),
+      },
+    });
+    // Doble check institutionId para evitar leaks.
+    if (row.institutionId !== institutionId) {
+      throw new Error(`Bundle ${id} no pertenece a la institución ${institutionId}`);
+    }
+    return toBundle(row);
+  }
+
+  async delete(institutionId: string, id: string): Promise<void> {
+    await prisma.evaluationBundle.deleteMany({ where: { id, institutionId } });
+  }
+
+  async listItemsOrdered(bundleId: string): Promise<BundleItemDetail[]> {
+    return this.listItemsOrderedInternal(bundleId);
+  }
+
+  private async listItemsOrderedInternal(bundleId: string): Promise<BundleItemDetail[]> {
+    const rows = await prisma.evaluationBundleItem.findMany({
+      where: { bundleId },
+      orderBy: { order: "asc" },
+      include: {
+        evaluation: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            totalQuestions: true,
+            institutionId: true,
+            courseSubject: {
+              select: {
+                subject: {
+                  select: {
+                    id: true,
+                    name: true,
+                    isArea: true,
+                    parentSubjectId: true,
+                    parentSubject: { select: { id: true, name: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    return rows.map(toItemDetail);
+  }
+
+  async addItem(institutionId: string, bundleId: string, data: AddItemInput): Promise<BundleItem> {
+    const order =
+      data.order ?? (await prisma.evaluationBundleItem.count({ where: { bundleId } })) + 1;
+    // Verificamos pertenencia vía el bundle.
+    await prisma.evaluationBundle.findFirstOrThrow({ where: { id: bundleId, institutionId } });
+    const row = await prisma.evaluationBundleItem.create({
+      data: {
+        bundleId,
+        evaluationId: data.evaluationId,
+        order,
+      },
+    });
+    return {
+      id: row.id,
+      bundleId: row.bundleId,
+      evaluationId: row.evaluationId,
+      order: row.order,
+    };
+  }
+
+  async removeItem(institutionId: string, bundleId: string, itemId: string): Promise<boolean> {
+    // Verificamos pertenencia vía el bundle antes de borrar.
+    const bundle = await prisma.evaluationBundle.findFirst({
+      where: { id: bundleId, institutionId },
+      select: { id: true },
+    });
+    if (!bundle) return false;
+    const result = await prisma.evaluationBundleItem.deleteMany({
+      where: { id: itemId, bundleId },
+    });
+    return result.count > 0;
+  }
+
+  async reorderItems(institutionId: string, bundleId: string, itemIds: string[]): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await tx.evaluationBundle.findFirstOrThrow({
+        where: { id: bundleId, institutionId },
+      });
+
+      // Validación: la lista de ids debe coincidir 1-a-1 con los items del bundle
+      // (mismo set, ningún duplicado). Evita mover/duplicar items sin querer.
+      const existing = await tx.evaluationBundleItem.findMany({
+        where: { bundleId },
+        select: { id: true },
+      });
+      const existingIds = new Set(existing.map((r) => r.id));
+      if (existingIds.size !== itemIds.length) {
+        throw new Error(
+          `reorderItems: expected ${existingIds.size} items but received ${itemIds.length}`,
+        );
+      }
+      for (const id of itemIds) {
+        if (!existingIds.has(id)) {
+          throw new Error(`reorderItems: item ${id} does not belong to bundle ${bundleId}`);
+        }
+      }
+
+      // Two-phase update: el constraint @@unique([bundleId, order]) impide
+      // renumerar in-place cuando algún item "baja" (p.ej. revertir [1,2,3]
+      // → [3,2,1]: al setear id3.order=1 colisiona con id1.order=1 que aún no
+      // fue renumerado). Pasada 1: llevamos todos los items a un rango negativo
+      // que no colisiona con el actual. Pasada 2: aplicamos el orden final
+      // 1-based sobre ese rango ya libre.
+      let i = 0;
+      for (const id of itemIds) {
+        await tx.evaluationBundleItem.update({
+          where: { id },
+          data: { order: -1 - i++ },
+        });
+      }
+      let order = 1;
+      for (const id of itemIds) {
+        await tx.evaluationBundleItem.update({
+          where: { id },
+          data: { order: order++ },
+        });
+      }
+    });
+  }
+
+  async setStatus(institutionId: string, id: string, status: BundleStatus): Promise<void> {
+    await prisma.evaluationBundle.updateMany({
+      where: { id, institutionId },
+      data: { status: status as PrismaBundleStatus },
+    });
+  }
+
+  async findEvaluationsByIds(
+    institutionId: string,
+    evaluationIds: string[],
+  ): Promise<
+    Array<{
+      id: string;
+      title: string;
+      status: string;
+      totalQuestions: number;
+      institutionId: string;
+      subjectId: string;
+      subjectName: string;
+      subjectIsArea: boolean;
+      parentSubjectId: string | null;
+      parentSubjectName: string | null;
+    }>
+  > {
+    if (evaluationIds.length === 0) return [];
+    const rows = await prisma.evaluation.findMany({
+      where: { id: { in: evaluationIds }, institutionId, deletedAt: null },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        totalQuestions: true,
+        institutionId: true,
+        courseSubject: {
+          select: {
+            subject: {
+              select: {
+                id: true,
+                name: true,
+                isArea: true,
+                parentSubjectId: true,
+                parentSubject: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      status: r.status,
+      totalQuestions: r.totalQuestions,
+      institutionId: r.institutionId,
+      subjectId: r.courseSubject.subject.id,
+      subjectName: r.courseSubject.subject.name,
+      subjectIsArea: r.courseSubject.subject.isArea,
+      parentSubjectId: r.courseSubject.subject.parentSubjectId,
+      parentSubjectName: r.courseSubject.subject.parentSubject?.name ?? null,
+    }));
+  }
+}

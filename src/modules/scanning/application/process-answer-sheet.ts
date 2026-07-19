@@ -9,10 +9,28 @@ import type { ScanningRepository, QrDecoder, StudentAnswerRecord } from "../doma
 import { ANSWER_KEYS_ORDER } from "@/modules/evaluations/domain/evaluation";
 
 export interface EvaluationQuestionsProvider {
+  /** Hoja legacy de una sola evaluación. */
   getCorrectAnswers(
     institutionId: string,
     evaluationId: string,
-  ): Promise<{ id: string; number: number; correctAnswer: AnswerKey }[]>;
+  ): Promise<{ id: string; number: number; correctAnswer: AnswerKey; optionsLength: number }[]>;
+
+  /** Hoja de un compendio: une en orden todas las questions de cada item.
+   *  `number` es la posición global en la hoja unificada (1-based).
+   *  `bundleItemId` permite drill-down del reporte comparativo por item
+   *  (Sprint 4). */
+  getCorrectAnswersForBundle(
+    institutionId: string,
+    bundleId: string,
+  ): Promise<
+    {
+      id: string;
+      number: number;
+      bundleItemId: string;
+      correctAnswer: AnswerKey;
+      optionsLength: number;
+    }[]
+  >;
 }
 
 export interface BubbleLayout {
@@ -137,13 +155,12 @@ export class ProcessAnswerSheet {
       };
     }
 
-    const correctAnswers = await this.questionsProvider.getCorrectAnswers(
-      institutionId,
-      parsedQr.data.eval,
-    );
+    const correctAnswers = parsedQr.data.bundle
+      ? await this.questionsProvider.getCorrectAnswersForBundle(institutionId, parsedQr.data.bundle)
+      : await this.questionsProvider.getCorrectAnswers(institutionId, parsedQr.data.eval!);
     if (correctAnswers.length === 0) {
       await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
-        notes: "Evaluation has no questions",
+        notes: parsedQr.data.bundle ? "Bundle has no questions" : "Evaluation has no questions",
       });
       return {
         ok: false,
@@ -207,10 +224,14 @@ export class ProcessAnswerSheet {
     for (let idx = 0; idx < correctAnswers.length; idx++) {
       const q = correctAnswers[idx]!;
       const row = idx;
+      // Sprint 2: opciones variables por pregunta. Solo leemos las primeras
+      // `optionsLength` columnas (típicamente 4 o 8); las restantes se
+      // ignoran para esta pregunta (la hoja las imprime vacías como padding).
+      const effectiveColumns = Math.min(Math.max(2, q.optionsLength), ANSWER_KEYS_ORDER.length);
       const keys = ANSWER_KEYS_ORDER;
 
       const bubbleReadings = [];
-      for (let col = 0; col < keys.length; col++) {
+      for (let col = 0; col < effectiveColumns; col++) {
         const cx = Math.round(imgW * (layout.startXPct + col * layout.spacingXPct));
         const cy = Math.round(imgH * (layout.startYPct + row * layout.spacingYPct));
         const left = Math.max(0, cx - Math.floor(bubbleDiamPx / 2));
@@ -233,8 +254,16 @@ export class ProcessAnswerSheet {
 
       if (isCorrect) totalCorrect++;
 
+      // Sprint 4: bundleItemId poblado solo en hojas de bundle. En hojas
+      // legacy (single-evaluation) siempre es null. Cast via `unknown`
+      // porque TS no narrowea la unión por una variable externa (`bundle`).
+      const bundleItemId = parsedQr.data.bundle
+        ? (q as unknown as { bundleItemId: string }).bundleItemId
+        : null;
+
       answers.push({
         questionId: q.id,
+        bundleItemId,
         selectedKey: reading.selectedKey,
         isCorrect: reading.status === "ANSWERED" ? isCorrect : null,
         isAmbiguous: reading.status === "MULTIPLE",

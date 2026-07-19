@@ -1,6 +1,7 @@
 import { Queue, QueueEvents } from "bullmq";
 import IORedis from "ioredis";
 import { env } from "@/config/env";
+import type { PrintKind } from "@/shared/infrastructure/crypto/print-token";
 
 /**
  * Colas BullMQ (ver REQUERIMIENTOS_v2.md §3.6):
@@ -20,16 +21,30 @@ export interface OmrScanJob {
   imagePath: string;
 }
 
+/**
+ * Job de generación de PDF server-side. Soporta dos familias:
+ *   - evaluación única: lleva evaluationId + kind ∈ {booklet, answer-sheets, answer-key}
+ *   - compendio:        lleva bundleId + kind ∈ {bundle, answer-sheets-bundle}
+ * El campo del identificador que NO aplique debe ser undefined (XOR en runtime).
+ *
+ * `extraQuery` se concatena a la URL de Puppeteer. Sirve para pasar p.ej.
+ * `students=<csv>` en la hoja de respuestas del compendio (Sprint 2).
+ */
 export interface PdfGenerationJob {
-  evaluationId: string;
+  evaluationId?: string;
+  bundleId?: string;
   institutionId: string;
-  kind: "booklet" | "answer-sheets" | "answer-key";
+  kind: PrintKind;
+  /** Query string extra (sin `?` inicial), p.ej. "students=id1,id2". */
+  extraQuery?: string;
 }
 
 /** Resultado que el worker devuelve al completar el job. */
 export interface PdfGenerationResult {
-  evaluationId: string;
-  kind: PdfGenerationJob["kind"];
+  evaluationId?: string;
+  bundleId?: string;
+  institutionId: string;
+  kind: PrintKind;
   path: string;
 }
 

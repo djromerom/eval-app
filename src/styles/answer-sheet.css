@@ -73,6 +73,24 @@
   border-collapse: collapse;
 }
 
+/* Separador visual entre secciones del compendio (hoja unificada). */
+.as-section {
+  margin-top: 0.8rem;
+  padding-top: 0.4rem;
+  border-top: 0.5pt dashed #999;
+}
+
+.as-section:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.as-section-header {
+  font-size: 9pt;
+  margin-bottom: 0.3rem;
+}
+
 .as-grid-header {
   display: flex;
   align-items: center;

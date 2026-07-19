@@ -37,6 +37,9 @@ const ROUTE_BY_KIND: Record<PrintKind, string> = {
   booklet: "/print/evaluation",
   "answer-sheets": "/print/bulk-answer-sheets",
   "answer-key": "/print/answer-key",
+  bundle: "/print/bundle",
+  "answer-sheets-bundle": "/print/answer-sheets/bundle", // Sprint 2
+  "answer-key-bundle": "/print/answer-key/bundle", // Sprint 3
 };
 
 /** Genera el PDF lineal (carta, 1 página por hoja lógica) con Puppeteer. */
@@ -153,12 +156,26 @@ async function drawHalf(
 const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
   QUEUE_NAMES.pdfGeneration,
   async (job) => {
-    const { evaluationId, institutionId, kind } = job.data;
-    log.info({ jobId: job.id, evaluationId, kind }, "Generando PDF");
+    const { evaluationId, bundleId, institutionId, kind, extraQuery } = job.data;
+    // XOR explícito: o evaluación o compendio, nunca ambos.
+    const isBundleKind = kind === "bundle" || kind === "answer-sheets-bundle";
+    const targetId = isBundleKind ? bundleId : evaluationId;
+    if (!targetId) {
+      throw new Error(
+        `PdfGenerationJob incompleto: falta ${isBundleKind ? "bundleId" : "evaluationId"}`,
+      );
+    }
 
-    const token = signPrintToken({ evaluationId, institutionId, kind });
+    const tokenAccess: Parameters<typeof signPrintToken>[0] = isBundleKind
+      ? { bundleId: targetId, institutionId, kind }
+      : { evaluationId: targetId, institutionId, kind };
+
+    log.info({ jobId: job.id, targetId, kind }, "Generando PDF");
+
+    const token = signPrintToken(tokenAccess);
     const baseUrl = env.AUTH_URL ?? "http://localhost:3000";
-    const url = `${baseUrl}${ROUTE_BY_KIND[kind]}/${evaluationId}?t=${encodeURIComponent(token)}`;
+    const queryString = extraQuery ? `&${extraQuery}` : "";
+    const url = `${baseUrl}${ROUTE_BY_KIND[kind]}/${targetId}?t=${encodeURIComponent(token)}${queryString}`;
 
     // Paso 1: PDF lineal en carta.
     const linear = await renderLinearPdf(url);
@@ -170,10 +187,10 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
 
     const dir = path.join(env.STORAGE_DIR, "pdf", institutionId);
     await mkdir(dir, { recursive: true });
-    const filePath = path.join(dir, `${evaluationId}-${kind}.pdf`);
+    const filePath = path.join(dir, `${targetId}-${kind}.pdf`);
     await writeFile(filePath, imposed);
 
-    return { evaluationId, kind, path: filePath };
+    return { evaluationId, bundleId, institutionId, kind, path: filePath };
   },
   { connection: getRedisConnection(), concurrency: 1 },
 );

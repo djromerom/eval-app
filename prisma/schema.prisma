@@ -41,6 +41,7 @@ model Institution {
   questionBank  QuestionBank[]
   templates     EvaluationTemplate[]
   scanBatches   ScanBatch[]
+  bundles       EvaluationBundle[]
 }
 
 // ========== AUTH & USERS ==========
@@ -68,6 +69,7 @@ model User {
   questionBank   QuestionBank[]
   templates      EvaluationTemplate[]
   scanBatches    ScanBatch[]
+  bundlesCreated EvaluationBundle[] @relation("BundleCreatedBy")
   auditLogs      AuditLog[]
   notifications  Notification[]
 
@@ -161,18 +163,28 @@ model Course {
 }
 
 model Subject {
-  id            String       @id @default(uuid(7)) @db.Uuid
-  name          String // "Matemáticas", "Física"
-  code          String
-  icon          String?
-  institutionId String?      @db.Uuid // null = catálogo global
-  institution   Institution? @relation(fields: [institutionId], references: [id])
-  createdAt     DateTime     @default(now())
+  id              String       @id @default(uuid(7)) @db.Uuid
+  name            String // "Matemáticas", "Física"
+  code            String
+  icon            String?
+  institutionId   String?      @db.Uuid // null = catálogo global
+  institution     Institution? @relation(fields: [institutionId], references: [id])
+  // Jerarquía de 2 niveles para la tabla de áreas de la portada del compendio
+  // (Ciencias Naturales ⊃ Biología/Física/Química). Si isArea=true, este subject
+  // es solo agrupador — no se imprime como subject evaluable. Si tiene
+  // parentSubjectId, debe ser un subject hoja (isArea=false). Ver
+  // SubjectRepository.create en src/modules/academic/ para validación de ciclos.
+  parentSubjectId String?      @db.Uuid
+  parentSubject   Subject?     @relation("SubjectHierarchy", fields: [parentSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children        Subject[]    @relation("SubjectHierarchy")
+  isArea          Boolean      @default(false)
+  createdAt       DateTime     @default(now())
 
   courses      CourseSubject[]
   questionBank QuestionBank[]
 
   @@index([institutionId])
+  @@index([institutionId, parentSubjectId])
 }
 
 model CourseSubject {
@@ -306,10 +318,11 @@ model Evaluation {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
-  sections     EvaluationSection[]
-  answerSheets AnswerSheet[]
-  groups       EvaluationGroup[]
-  scanBatches  ScanBatch[]
+  sections       EvaluationSection[]
+  answerSheets   AnswerSheet[]
+  groups         EvaluationGroup[]
+  scanBatches    ScanBatch[]
+  bundleItems    EvaluationBundleItem[]
 
   @@index([courseSubjectId, academicYearId])
   @@index([institutionId, status])
@@ -453,6 +466,56 @@ model EvaluationTemplate {
   @@index([institutionId])
 }
 
+// ========== EVALUATION BUNDLES (COMPENDIOS) ==========
+// Agrupación de N evaluations en un solo artefacto imprimible (cuadernillo)
+// con hoja de respuestas unificada. Sprint 1 del módulo compendios.
+// Ver docs/compendios.md.
+
+enum BundleStatus {
+  DRAFT // editable: items, nombre, bookletNumber, theme
+  READY // sellado: listo para imprimir; contenido inmutable
+}
+
+model EvaluationBundle {
+  id            String       @id @default(uuid(7)) @db.Uuid
+  institutionId String       @db.Uuid
+  institution   Institution  @relation(fields: [institutionId], references: [id])
+  name          String // "Simulacro ICFES — Periodo I"
+  bookletNumber Int? // correlativo por institución (opcional; único si definido)
+  status        BundleStatus @default(DRAFT)
+  // Override del tema institucional. Mismo shape que Evaluation.theme; se
+  // combina con Institution.theme en runtime. Ver src/modules/theme/.
+  theme         Json?
+  createdById   String       @db.Uuid
+  createdBy     User         @relation("BundleCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  items EvaluationBundleItem[]
+  sheets AnswerSheet[]
+
+  @@unique([institutionId, bookletNumber])
+  @@index([institutionId])
+  @@index([institutionId, status])
+}
+
+model EvaluationBundleItem {
+  id           String           @id @default(uuid(7)) @db.Uuid
+  bundleId     String           @db.Uuid
+  bundle       EvaluationBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  evaluationId String           @db.Uuid
+  evaluation   Evaluation       @relation(fields: [evaluationId], references: [id])
+  // Posición 1-based en el compendio. Controla el orden de impresión de los
+  // booklet y el orden de las secciones en la portada.
+  order        Int
+
+  answers StudentAnswer[]
+
+  @@unique([bundleId, evaluationId]) // una eval no se repite en el mismo bundle
+  @@unique([bundleId, order]) // un solo item por posición
+  @@index([evaluationId])
+}
+
 // ========== ANSWER SHEETS & GRADING ==========
 
 // Lote de escaneo: hasta 200 hojas por carga, procesado asíncronamente (BullMQ)
@@ -477,32 +540,40 @@ model ScanBatch {
 }
 
 model AnswerSheet {
-  id             String     @id @default(uuid(7)) @db.Uuid
-  evaluationId   String     @db.Uuid
-  evaluation     Evaluation @relation(fields: [evaluationId], references: [id])
-  studentId      String?    @db.Uuid // null si es hoja genérica o QR no identificable
-  student        Student?   @relation(fields: [studentId], references: [id])
+  id             String            @id @default(uuid(7)) @db.Uuid
+  // Hoja pertenece a UN evaluation legacy o a UN bundle (compendio). Sprint 1+
+  // migra el camino canónico a bundle (incluso N=1); hojas legacy (solo
+  // evaluationId) siguen funcionando pero la app nueva ya no las crea.
+  evaluationId   String?           @db.Uuid
+  evaluation     Evaluation?       @relation(fields: [evaluationId], references: [id])
+  bundleId       String?           @db.Uuid
+  bundle         EvaluationBundle? @relation(fields: [bundleId], references: [id])
+  studentId      String?           @db.Uuid // null si es hoja genérica o QR no identificable
+  student        Student?          @relation(fields: [studentId], references: [id])
   studentName    String? // respaldo: nombre escrito a mano en la hoja
   studentCode    String? // respaldo: código escrito en la hoja
   qrContent      String // contenido completo del QR (JSON)
   qrSignature    String // HMAC-SHA256 para verificar integridad
   scannedImage   String? // ruta de la imagen escaneada original
   processedImage String? // ruta de la imagen procesada (binaria, con detecciones)
-  scanBatchId    String?    @db.Uuid
-  scanBatch      ScanBatch? @relation(fields: [scanBatchId], references: [id])
-  status         ScanStatus @default(PENDING)
+  scanBatchId    String?           @db.Uuid
+  scanBatch      ScanBatch?        @relation(fields: [scanBatchId], references: [id])
+  status         ScanStatus        @default(PENDING)
   score          Float?
   totalCorrect   Int?
   totalQuestions Int?
-  reviewedBy     String?    @db.Uuid // usuario que revisó manualmente
+  reviewedBy     String?           @db.Uuid // usuario que revisó manualmente
   reviewedAt     DateTime?
   notes          String?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   answers StudentAnswer[]
 
+  // Invariante (validada en use cases, no en DB): exactamente uno de
+  // evaluationId / bundleId no nulo.
   @@index([evaluationId, status])
+  @@index([bundleId, status])
   @@index([studentId])
   @@index([scanBatchId])
 }
@@ -517,18 +588,24 @@ enum ScanStatus {
 }
 
 model StudentAnswer {
-  id            String      @id @default(uuid(7)) @db.Uuid
-  answerSheetId String      @db.Uuid
-  answerSheet   AnswerSheet @relation(fields: [answerSheetId], references: [id], onDelete: Cascade)
-  questionId    String      @db.Uuid
-  question      Question    @relation(fields: [questionId], references: [id])
-  selectedKey   String? // "A", "B", "C", "D" o null si sin responder
+  id            String               @id @default(uuid(7)) @db.Uuid
+  answerSheetId String               @db.Uuid
+  answerSheet   AnswerSheet          @relation(fields: [answerSheetId], references: [id], onDelete: Cascade)
+  questionId    String               @db.Uuid
+  question      Question             @relation(fields: [questionId], references: [id])
+  // Fuente de verdad para hojas de bundle: cada respuesta apunta al item del
+  // bundle, que indirectamente da evaluationId + questionId. evaluationId queda
+  // como denormalización para queries rápidos y compat con hojas legacy.
+  bundleItemId  String?              @db.Uuid
+  bundleItem    EvaluationBundleItem? @relation(fields: [bundleItemId], references: [id])
+  selectedKey   String? // "A", "B", "C", "D", ..., "H" o null si sin responder
   isCorrect     Boolean?
-  isAmbiguous   Boolean     @default(false) // múltiple marca
+  isAmbiguous   Boolean              @default(false) // múltiple marca
   confidence    Float? // 0-1 confianza de la detección OMR
 
   @@index([answerSheetId])
   @@index([questionId])
+  @@index([bundleItemId])
 }
 
 // ========== AUDIT & NOTIFICATIONS ==========

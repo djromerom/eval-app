@@ -1,11 +1,23 @@
 import { env } from "@/config/env";
 import { signPayload, verifySignature } from "./hmac";
 
-/** Tipo de documento imprimible; alineado con PdfGenerationJob. */
-export type PrintKind = "booklet" | "answer-sheets" | "answer-key";
+/** Tipo de documento imprimible; alineado con PdfGenerationJob.
+ *  Sprint 1 del módulo compendios: agrega "bundle" para el booklet combinado.
+ *  Sprint 2: "answer-sheets-bundle" para la hoja unificada.
+ *  Sprint 3: "answer-key-bundle" para la clave de respuestas unificada. */
+export type PrintKind =
+  | "booklet"
+  | "answer-sheets"
+  | "answer-key"
+  | "bundle"
+  | "answer-sheets-bundle"
+  | "answer-key-bundle";
 
 export interface PrintAccess {
-  evaluationId: string;
+  /** evaluationId para booklet/answer-sheets/answer-key. */
+  evaluationId?: string;
+  /** bundleId para bundle/answer-sheets-bundle (Sprint 1+ / Sprint 2). */
+  bundleId?: string;
   institutionId: string;
   kind: PrintKind;
 }
@@ -47,6 +59,7 @@ export function verifyPrintToken(token: string): PrintAccess | null {
 
   return {
     evaluationId: payload.evaluationId,
+    bundleId: payload.bundleId,
     institutionId: payload.institutionId,
     kind: payload.kind,
   };

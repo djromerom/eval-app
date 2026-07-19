@@ -10,7 +10,11 @@ import {
   getPdfQueueEvents,
 } from "@/shared/infrastructure/queue/queues";
 
-const KINDS: PrintKind[] = ["booklet", "answer-sheets", "answer-key"];
+const KINDS: Array<Exclude<PrintKind, "bundle" | "answer-sheets-bundle" | "answer-key-bundle">> = [
+  "booklet",
+  "answer-sheets",
+  "answer-key",
+];
 const WAIT_MS = 90_000;
 
 /**
@@ -23,10 +27,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
 
   const kindParam = new URL(request.url).searchParams.get("kind") ?? "booklet";
-  if (!KINDS.includes(kindParam as PrintKind)) {
+  if (!KINDS.includes(kindParam as (typeof KINDS)[number])) {
     return NextResponse.json({ error: "Tipo de PDF inválido." }, { status: 400 });
   }
-  const kind = kindParam as PrintKind;
+  const kind = kindParam as (typeof KINDS)[number];
 
   // Verifica que la evaluación exista y pertenezca a la institución del actor.
   const evalRes = await makeGetEvaluation().execute({ actor, id });

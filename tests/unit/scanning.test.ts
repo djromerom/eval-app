@@ -23,7 +23,8 @@ function buildFakePng() {
 interface SheetSeed {
   id: string;
   institutionId: string;
-  evaluationId: string;
+  evaluationId: string | null;
+  bundleId?: string | null;
   studentId: string | null;
   studentName: string | null;
   studentCode: string | null;
@@ -57,6 +58,7 @@ function inMemoryRepo(): RepoState {
         id: s.id,
         institutionId: s.institutionId,
         evaluationId: s.evaluationId,
+        bundleId: s.bundleId ?? null,
         studentId: s.studentId,
         studentName: s.studentName,
         studentCode: s.studentCode,
@@ -107,12 +109,15 @@ beforeAll(async () => {
 
 describe("ProcessAnswerSheet", () => {
   const questions = [
-    { id: "q1", number: 1, correctAnswer: "B" as const },
-    { id: "q2", number: 2, correctAnswer: "A" as const },
-    { id: "q3", number: 3, correctAnswer: "D" as const },
+    { id: "q1", number: 1, correctAnswer: "B" as const, optionsLength: 4, bundleItemId: "bi-fake" },
+    { id: "q2", number: 2, correctAnswer: "A" as const, optionsLength: 4, bundleItemId: "bi-fake" },
+    { id: "q3", number: 3, correctAnswer: "D" as const, optionsLength: 4, bundleItemId: "bi-fake" },
   ];
 
-  const questionsProvider = { getCorrectAnswers: async () => questions };
+  const questionsProvider = {
+    getCorrectAnswers: async () => questions,
+    getCorrectAnswersForBundle: async () => [],
+  };
 
   it("returns NOT_FOUND when answer sheet does not exist", async () => {
     const { repo } = inMemoryRepo();

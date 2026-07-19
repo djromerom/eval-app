@@ -28,6 +28,7 @@ function inMemoryRepo(): ScanningRepository {
         id: SHEET_ID,
         institutionId: "inst-1",
         evaluationId: EVAL_ID,
+        bundleId: null,
         studentId: "stu-1",
         studentName: "Demo",
         studentCode: STUDENT_CODE,
@@ -135,15 +136,16 @@ async function main() {
   };
 
   const mockQuestions = [
-    { id: "q1", number: 1, correctAnswer: "B" as const },
-    { id: "q2", number: 2, correctAnswer: "A" as const },
-    { id: "q3", number: 3, correctAnswer: "D" as const },
-    { id: "q4", number: 4, correctAnswer: "C" as const },
-    { id: "q5", number: 5, correctAnswer: "B" as const },
+    { id: "q1", number: 1, correctAnswer: "B" as const, optionsLength: 4, bundleItemId: "bi-fake" },
+    { id: "q2", number: 2, correctAnswer: "A" as const, optionsLength: 4, bundleItemId: "bi-fake" },
+    { id: "q3", number: 3, correctAnswer: "D" as const, optionsLength: 4, bundleItemId: "bi-fake" },
+    { id: "q4", number: 4, correctAnswer: "C" as const, optionsLength: 4, bundleItemId: "bi-fake" },
+    { id: "q5", number: 5, correctAnswer: "B" as const, optionsLength: 4, bundleItemId: "bi-fake" },
   ];
 
   const useCase = new ProcessAnswerSheet(repo, qrDecoder, {
     getCorrectAnswers: async () => mockQuestions,
+    getCorrectAnswersForBundle: async () => [],
   });
 
   console.log("3. Processing…");

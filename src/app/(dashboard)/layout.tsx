@@ -45,6 +45,11 @@ function navFor(roles: Role[]): NavItem[] {
       { href: "/admin/theme", label: "Tema institucional" },
     );
   }
+  if (hasRole(user, "SUPER_ADMIN")) {
+    // Los compendios multi-evaluación los arma el SUPER_ADMIN; el resto de
+    // roles solo los consume (descarga PDF) desde /print.
+    items.push({ href: "/admin/bundles", label: "Compendios" });
+  }
   if (hasRole(user, "COORDINATOR")) {
     items.push(
       { href: "/coordinator", label: "Panel" },
