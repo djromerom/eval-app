@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { Metadata } from "next";
 import "@/styles/print.css";
 import { readFile } from "node:fs/promises";
@@ -232,52 +233,61 @@ export default async function PrintBundlePage({
                 </span>
               </div>
             ) : null}
-            {evaluation.sections.map((section, idx) => {
-              const numbers = section.questions.map((q) => q.number);
-              const first = numbers[0];
-              const last = numbers[numbers.length - 1];
-              const hasContext = richTextToPlain(section.content).length > 0;
-              return (
-                <section key={section.id} className="sheet questions">
-                  {idx > 0 ? <hr className={`section-divider ${theme.sectionDivider}`} /> : null}
+            {/* UN solo contenedor por evaluación, igual que en el booklet de
+                una evaluación suelta: a dos columnas el texto fluye de la
+                izquierda a la derecha y de ahí a la página siguiente. Con un
+                contenedor por contexto, Chrome balancea mal al fragmentar. */}
+            <section className="sheet questions">
+              <div className="questions-flow" data-columns={theme.questionColumns}>
+                {evaluation.sections.map((section, idx) => {
+                  const numbers = section.questions.map((q) => q.number);
+                  const first = numbers[0];
+                  const last = numbers[numbers.length - 1];
+                  const hasContext = richTextToPlain(section.content).length > 0;
+                  return (
+                    <Fragment key={section.id}>
+                      {idx > 0 ? (
+                        <hr className={`section-divider ${theme.sectionDivider}`} />
+                      ) : null}
 
-                  {/* Agrupado para que el contexto no se separe de su 1ª pregunta. */}
-                  <div className="block-intro">
-                    {numbers.length > 0 && (
-                      <p className="block-lead">
-                        RESPONDA LAS PREGUNTAS {first} A LA {last}
-                        {hasContext || section.title
-                          ? " DE ACUERDO CON LA SIGUIENTE INFORMACIÓN"
-                          : ""}
-                      </p>
-                    )}
-                    {section.title ? <p className="block-text-title">«{section.title}»</p> : null}
-                    {hasContext ? (
-                      <RichText value={section.content} className="context-paragraph" />
-                    ) : null}
-                  </div>
-
-                  <div className="question-list" data-columns={theme.questionColumns}>
-                    {section.questions.map((q) => (
-                      <div key={q.id} className={`question${isWideQuestion(q) ? "wide" : ""}`}>
-                        <p className="question-text">
-                          {q.number}. <RichTextInline value={q.text} />
-                        </p>
-                        <ul className="question-options">
-                          {q.options.map((o) => (
-                            <li key={o.key}>
-                              {o.key}. <RichTextInline value={o.text} />
-                            </li>
-                          ))}
-                        </ul>
+                      {/* Agrupado para que el contexto no se separe de su 1ª pregunta. */}
+                      <div className="block-intro">
+                        {numbers.length > 0 && (
+                          <p className="block-lead">
+                            RESPONDA LAS PREGUNTAS {first} A LA {last}
+                            {hasContext || section.title
+                              ? " DE ACUERDO CON LA SIGUIENTE INFORMACIÓN"
+                              : ""}
+                          </p>
+                        )}
+                        {section.title ? (
+                          <p className="block-text-title">«{section.title}»</p>
+                        ) : null}
+                        {hasContext ? (
+                          <RichText value={section.content} className="context-paragraph" />
+                        ) : null}
                       </div>
-                    ))}
-                  </div>
 
-                  <div className="fold-line" />
-                </section>
-              );
-            })}
+                      {section.questions.map((q) => (
+                        <div key={q.id} className={`question${isWideQuestion(q) ? "wide" : ""}`}>
+                          <p className="question-text">
+                            {q.number}. <RichTextInline value={q.text} />
+                          </p>
+                          <ul className="question-options">
+                            {q.options.map((o) => (
+                              <li key={o.key}>
+                                {o.key}. <RichTextInline value={o.text} />
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </Fragment>
+                  );
+                })}
+              </div>
+              <div className="fold-line" />
+            </section>
             {/* Sin `sheet`: encadena tras las preguntas de su evaluación en
                 lugar de abrir hoja nueva. `break-inside: avoid` en el CSS
                 evita que la tabla se parta por la mitad. */}

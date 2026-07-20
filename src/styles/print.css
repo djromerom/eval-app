@@ -405,10 +405,6 @@
   column-fill: auto;
 }
 
-.questions-flow[data-columns="2"] {
-  column-rule: 1px solid #ddd;
-}
-
 /* El encabezado de cada contexto cruza ambas columnas: es común a todas sus
  * preguntas y partirlo por la mitad haría ilegible el enunciado del texto. */
 .questions-flow[data-columns="2"] .block-intro,
