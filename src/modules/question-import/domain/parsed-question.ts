@@ -9,6 +9,10 @@
  * El texto viaja como STRING plano, no como documento TipTap: lo que se lee
  * de un Word o un CSV no trae formato aprovechable, y el docente lo enriquece
  * después en el editor. Convertirlo a TipTap se hace al dar de alta.
+ *
+ * Las imágenes sí viajan como URL del upload propio (Fase 3 / parser DOCX):
+ * mammoth las entrega en base64, se suben a `/api/uploads` y se guardan aquí
+ * ya servibles por la app.
  */
 import {
   ANSWER_KEYS_ORDER,
@@ -17,6 +21,15 @@ import {
   MIN_OPTIONS,
   validateQuestionShape,
 } from "@/modules/evaluations/domain/evaluation";
+
+/**
+ * Imagen inline de una pregunta. Una sola por pregunta para mantener simple
+ * el modelo; si el DOCX trae varias antes del enunciado, se conserva la
+ * última (la más cercana al texto) y el resto se descarta con un aviso.
+ */
+export interface ParsedQuestionImage {
+  url: string;
+}
 
 /** Pregunta leída de una fuente externa, antes de validar y confirmar. */
 export interface ParsedQuestion {
@@ -34,6 +47,8 @@ export interface ParsedQuestion {
   /** Contexto al que pertenecía, si la fuente agrupaba preguntas. */
   contextTitle: string | null;
   contextText: string | null;
+  /** Imagen inline adjunta (solo el parser DOCX la rellena hoy). */
+  image: ParsedQuestionImage | null;
   /** Lo que el parser no pudo resolver; se pinta en la revisión. */
   warnings: string[];
 }

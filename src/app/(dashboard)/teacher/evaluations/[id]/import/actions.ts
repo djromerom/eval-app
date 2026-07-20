@@ -8,6 +8,8 @@ import type {
   ParsedQuestionProblem,
 } from "@/modules/question-import/domain/parsed-question";
 import { parseQuestionsCsv } from "@/modules/question-import/infrastructure/csv";
+import { parseQuestionsDocx } from "@/modules/question-import/infrastructure/docx";
+import { makeUploadImageForInstitution } from "@/modules/question-import/infrastructure/docx-upload";
 import {
   makeImportQuestions,
   makeQuestionsFromEvaluation,
@@ -84,7 +86,6 @@ export async function commitImportAction(
   revalidatePath("/teacher/question-bank");
   revalidatePath("/teacher/evaluations");
 
-  // Devuelve éxito al cliente para que muestre el resumen.
   return {
     imported: result.value.imported,
     problems: result.value.problems,
@@ -99,11 +100,8 @@ export interface LoadSourceState {
 
 /**
  * Carga las preguntas de la fuente seleccionada por el docente. Es el
- * único punto de entrada para todos los orígenes: hoy "evaluación" y
- * "CSV"; mañana "DOCX" y "PDF" caen aquí sin tocar la pantalla de revisión.
- *
- * Se hace un único overload en la implementación (sin firmas separadas)
- * porque TS no las resuelve bien cuando se pasa una unión discriminada.
+ * único punto de entrada para todos los orígenes: hoy "evaluación", "CSV"
+ * y "DOCX"; mañana "PDF" cae aquí sin tocar la pantalla de revisión.
  */
 export type LoadSourceInput =
   { kind: "evaluation"; evaluationId: string } | { kind: "csv"; content: string };
@@ -120,7 +118,6 @@ export async function loadSourceAction(input: LoadSourceInput): Promise<LoadSour
     return result.value;
   }
 
-  // CSV: parsea aquí en servidor para no enviar el parser al cliente.
   const parsed = parseQuestionsCsv(input.content);
   if (parsed.missing.length > 0) {
     return {
@@ -130,4 +127,35 @@ export async function loadSourceAction(input: LoadSourceInput): Promise<LoadSour
     };
   }
   return parsed.result;
+}
+
+/**
+ * Variante para DOCX: el archivo se sube como `multipart` por su tamaño
+ * (un DOCX con 10 preguntas y 8 imágenes llega a ~3 MB). Lo dejamos en su
+ * propia action porque no encaja con la firma plana de `loadSourceAction`
+ * (que serializa el payload en JSON para evitar serializar el DOCX).
+ */
+export async function loadDocxSourceAction(formData: FormData): Promise<LoadSourceState> {
+  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) {
+    return { questions: [], warnings: [], error: "Falta el archivo DOCX." };
+  }
+  if (!file.name.toLowerCase().endsWith(".docx")) {
+    return { questions: [], warnings: [], error: "El archivo tiene que ser .docx." };
+  }
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const uploadImage = makeUploadImageForInstitution();
+  try {
+    const parsed = await parseQuestionsDocx({
+      buffer,
+      institutionId: actor.institutionId,
+      uploadImage,
+    });
+    return parsed;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "No se pudo leer el DOCX.";
+    return { questions: [], warnings: [], error: message };
+  }
 }

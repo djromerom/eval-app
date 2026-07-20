@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import type { ParsedQuestion } from "@/modules/question-import/domain/parsed-question";
-import { loadSourceAction } from "./actions";
+import { loadDocxSourceAction, loadSourceAction } from "./actions";
 import { QUESTIONS_CSV_TEMPLATE } from "@/modules/question-import/infrastructure/csv";
 import { ImportReviewForm } from "./review-form";
 
@@ -29,6 +29,11 @@ interface Props {
   subjects: SubjectOption[];
 }
 
+type LoadSource =
+  | { kind: "evaluation"; evaluationId: string }
+  | { kind: "csv"; content: string }
+  | { kind: "docx"; file: File };
+
 /**
  * Wizard de importación. Maneja el paso 1 (elegir origen) y el paso 2
  * (revisar e importar) en un solo componente cliente.
@@ -39,18 +44,13 @@ interface Props {
  * si recarga, pero es el mismo contrato que la importación de estudiantes.
  */
 export function ImportWizard({ targetEvaluationId, sources, sections, subjects }: Props) {
-  type Step =
-    | { kind: "source" }
-    | {
-        kind: "review";
-        source: { kind: "evaluation"; evaluationId: string } | { kind: "csv"; content: string };
-        cached?: ParsedQuestion[];
-      };
-
-  const [step, setStep] = useState<Step>({ kind: "source" });
+  const [step, setStep] = useState<
+    { kind: "source" } | { kind: "review"; source: LoadSource; cached?: ParsedQuestion[] }
+  >({ kind: "source" });
   const [error, setError] = useState<string | null>(null);
   const [csvFileName, setCsvFileName] = useState<string>("");
   const [csvContent, setCsvContent] = useState<string>("");
+  const [docxFile, setDocxFile] = useState<File | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function loadEvaluation(evaluationId: string) {
@@ -84,6 +84,28 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
       setStep({
         kind: "review",
         source: { kind: "csv", content: csvContent },
+        cached: res.questions,
+      });
+    });
+  }
+
+  function loadDocx() {
+    if (!docxFile) {
+      setError("Sube un archivo DOCX.");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.append("file", docxFile);
+      const res = await loadDocxSourceAction(fd);
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      setStep({
+        kind: "review",
+        source: { kind: "docx", file: docxFile },
         cached: res.questions,
       });
     });
@@ -180,6 +202,37 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
             className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 rounded-md px-4 text-sm font-medium disabled:opacity-50"
           >
             {isPending ? "Procesando…" : `Procesar ${csvFileName || "CSV"} →`}
+          </button>
+        </div>
+      </section>
+
+      <section className="bg-card space-y-3 rounded-xl border p-6">
+        <h2 className="font-semibold">Subir DOCX</h2>
+        <p className="text-muted-foreground text-sm">
+          Tu examen en Word. Si trae una tabla con{" "}
+          <code>Item | Clave | Competencia | Evidencia</code> al final, recuperamos la respuesta
+          correcta y los metadatos; si no, la marcamos manualmente en la revisión. Las imágenes
+          inline se suben a la carpeta del colegio.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <input
+            type="file"
+            accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            disabled={isPending}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setDocxFile(file);
+            }}
+            className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-sm file:mr-3 file:border-0 file:bg-transparent file:text-sm file:font-medium"
+          />
+          <button
+            type="button"
+            disabled={isPending || !docxFile}
+            onClick={loadDocx}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 rounded-md px-4 text-sm font-medium disabled:opacity-50"
+          >
+            {isPending ? "Procesando…" : `Procesar ${docxFile?.name ?? "DOCX"} →`}
           </button>
         </div>
       </section>

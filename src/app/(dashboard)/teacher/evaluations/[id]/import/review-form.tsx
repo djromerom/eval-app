@@ -23,7 +23,10 @@ interface Props {
   sections: SectionOption[];
   subjects: SubjectOption[];
   /** Origen del que se sacan las preguntas. */
-  source: { kind: "evaluation"; evaluationId: string } | { kind: "csv"; content: string };
+  source:
+    | { kind: "evaluation"; evaluationId: string }
+    | { kind: "csv"; content: string }
+    | { kind: "docx"; file: File };
   /** Si el padre ya cargó las preguntas (caso normal), se evita el re-fetch. */
   initialQuestions?: ParsedQuestion[];
   /** Volver al paso 1 para cambiar de origen. */
@@ -65,9 +68,15 @@ export function ImportReviewForm({
 
   useEffect(() => {
     // Si el padre ya pasó las preguntas, no hay que volver a pedirlas.
-    if (initialQuestions) return;
+    // El DOCX no se vuelve a pedir: el padre lo subió vía multipart y solo
+    // guarda la referencia al File original.
+    if (initialQuestions || source.kind === "docx") return;
     let cancelled = false;
-    loadSourceAction(source).then((res) => {
+    const req =
+      source.kind === "evaluation"
+        ? { kind: "evaluation" as const, evaluationId: source.evaluationId }
+        : { kind: "csv" as const, content: source.content };
+    loadSourceAction(req).then((res) => {
       if (cancelled) return;
       if (res.error) {
         setLoadError(res.error);
@@ -278,6 +287,13 @@ export function ImportReviewForm({
                         <span className="text-destructive ml-2">⚠ {q.warnings.join(" · ")}</span>
                       ) : null}
                     </div>
+                    {q.image ? (
+                      <img
+                        src={q.image.url}
+                        alt=""
+                        className="max-h-32 rounded border bg-white object-contain"
+                      />
+                    ) : null}
                     <p className="font-medium">{q.text}</p>
                     <ul className="space-y-1 text-sm">
                       {q.options.map((o) => (

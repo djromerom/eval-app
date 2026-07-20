@@ -171,6 +171,7 @@ export function parseQuestionsCsv(text: string): ParsedQuestionsCsv {
         evidence: record.evidence?.trim() || null,
         contextTitle: null,
         contextText: record.context?.trim() || null,
+        image: null,
         warnings: [],
       }),
     );

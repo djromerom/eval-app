@@ -166,6 +166,7 @@ const valid = (over: Partial<ParsedQuestion> = {}): ParsedQuestion => ({
   evidence: null,
   contextTitle: null,
   contextText: null,
+  image: null,
   warnings: [],
   ...over,
 });

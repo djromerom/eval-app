@@ -61,6 +61,7 @@ export class QuestionsFromEvaluation implements UseCase<QuestionsFromEvaluationI
         evidence: null, // `Question` no expone `evidence` en el dominio
         contextTitle: section.title,
         contextText,
+        image: null, // copiar de BD: no se re-sube lo que ya está en disco
         warnings: [],
       }));
     });
