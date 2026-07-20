@@ -7,6 +7,7 @@ import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
 import { makeGetMyInstitution } from "@/modules/institutions/infrastructure/container";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
 import { inlineSectionsImages } from "@/modules/uploads/application/inline-content-images";
+import { isWideQuestion } from "@/modules/printing/domain/wide-question";
 import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import { computeCoverTable, formatDuration } from "@/modules/bundles/domain/cover-table";
 import { getResolvedBundleTheme } from "@/modules/theme/application/get-resolved-bundle-theme";
@@ -256,20 +257,22 @@ export default async function PrintBundlePage({
                     ) : null}
                   </div>
 
-                  {section.questions.map((q) => (
-                    <div key={q.id} className="question">
-                      <p className="question-text">
-                        {q.number}. <RichTextInline value={q.text} />
-                      </p>
-                      <ul className="question-options">
-                        {q.options.map((o) => (
-                          <li key={o.key}>
-                            {o.key}. <RichTextInline value={o.text} />
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
+                  <div className="question-list" data-columns={theme.questionColumns}>
+                    {section.questions.map((q) => (
+                      <div key={q.id} className={`question${isWideQuestion(q) ? "wide" : ""}`}>
+                        <p className="question-text">
+                          {q.number}. <RichTextInline value={q.text} />
+                        </p>
+                        <ul className="question-options">
+                          {q.options.map((o) => (
+                            <li key={o.key}>
+                              {o.key}. <RichTextInline value={o.text} />
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
 
                   <div className="fold-line" />
                 </section>

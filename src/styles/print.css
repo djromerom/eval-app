@@ -350,10 +350,46 @@
   break-after: avoid;
 }
 
-/* Preguntas en columna única (NO dos columnas) */
+/* Flujo de preguntas a N columnas (del tema: `--print-question-columns`).
+ *
+ * UN solo contenedor para TODOS los contextos de la evaluación, no uno por
+ * contexto. Probado al revés: con un multicolumna por contexto, Chrome
+ * balancea mal en cuanto el contenedor se fragmenta entre páginas — un bloque
+ * de 22 preguntas metía 5 o 6 por hoja dejando la columna derecha vacía, y el
+ * cuadernillo no ahorraba ni una página frente a una columna.
+ *
+ * Con un único flujo continuo el texto pasa de la columna izquierda a la
+ * derecha y de ahí a la página siguiente, que es el modelo del examen de
+ * referencia (y el de \twocolumn en LaTeX).
+ */
+.questions-flow {
+  column-count: var(--print-question-columns, 1);
+  column-gap: 1.2rem;
+  column-fill: auto;
+}
+
+.questions-flow[data-columns="2"] {
+  column-rule: 1px solid #ddd;
+}
+
+/* El encabezado de cada contexto cruza ambas columnas: es común a todas sus
+ * preguntas y partirlo por la mitad haría ilegible el enunciado del texto. */
+.questions-flow[data-columns="2"] .block-intro,
+.questions-flow[data-columns="2"] .section-divider,
+.questions-flow[data-columns="2"] .subject-title {
+  column-span: all;
+}
+
 .question {
   margin-bottom: 0.7rem;
+  /* Ninguna pregunta se parte entre dos columnas ni entre dos páginas. */
   break-inside: avoid;
+}
+
+/* Preguntas con imagen o tabla: a media página (~8 cm) serían ilegibles, así
+ * que cruzan ambas columnas. Lo decide `isWideQuestion` al renderizar. */
+.questions-flow[data-columns="2"] .question.wide {
+  column-span: all;
 }
 
 .question-text {

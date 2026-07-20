@@ -51,6 +51,18 @@ export const DENSITY_LABELS: Record<Density, string> = {
   airy: "Espaciada",
 };
 
+/**
+ * Columnas en que fluyen las preguntas. Dos es el formato del PDF de
+ * referencia (y del ICFES): ahorra papel y acorta la línea de lectura.
+ * El contexto siempre va a ancho completo — solo las preguntas se reparten.
+ */
+export const QUESTION_COLUMNS = [1, 2] as const;
+export type QuestionColumns = (typeof QUESTION_COLUMNS)[number];
+export const QUESTION_COLUMNS_LABELS: Record<QuestionColumns, string> = {
+  1: "Una columna",
+  2: "Dos columnas (estilo ICFES)",
+};
+
 export const SECTION_DIVIDERS = ["line", "double", "dots"] as const;
 export type SectionDivider = (typeof SECTION_DIVIDERS)[number];
 export const SECTION_DIVIDER_LABELS: Record<SectionDivider, string> = {
@@ -68,6 +80,8 @@ export const InstitutionalThemeSchema = z.object({
   primary: z.string().regex(HEX_COLOR, "Color primario debe ser #RRGGBB").optional(),
   fontFamily: z.enum(FONT_FAMILIES).default("serif"),
   density: z.enum(DENSITIES).default("normal"),
+  // Union de literales en vez de z.enum: los valores son números, no strings.
+  questionColumns: z.union([z.literal(1), z.literal(2)]).default(1),
   footerText: z.string().max(200).optional(),
   showLogo: z.boolean().default(true),
 });
@@ -88,6 +102,7 @@ export interface ResolvedTheme {
   primary: string;
   fontFamily: FontFamily;
   density: Density;
+  questionColumns: QuestionColumns;
   footerText: string;
   showLogo: boolean;
   coverSubtitle: string;
@@ -106,6 +121,9 @@ export const INSTITUTIONAL_DEFAULT: InstitutionalTheme = {
   primary: "#0B5C2E",
   fontFamily: "serif",
   density: "normal",
+  // Una columna por defecto: cambiar la maquetación de las evaluaciones ya
+  // creadas al desplegar sería una sorpresa. Quien quiera dos, lo activa.
+  questionColumns: 1,
   footerText: "",
   showLogo: true,
 };
@@ -125,6 +143,7 @@ export const THEME_PRESETS: Record<
       primary: "#0B5C2E",
       fontFamily: "serif",
       density: "normal",
+      questionColumns: 2,
       footerText: "",
       showLogo: true,
     },
@@ -137,6 +156,7 @@ export const THEME_PRESETS: Record<
       primary: "#1E3A8A",
       fontFamily: "sans",
       density: "airy",
+      questionColumns: 1,
       footerText: "",
       showLogo: true,
     },
@@ -149,6 +169,7 @@ export const THEME_PRESETS: Record<
       primary: "#0B5C2E",
       fontFamily: "serif",
       density: "compact",
+      questionColumns: 2,
       footerText: "",
       showLogo: true,
     },
@@ -183,6 +204,7 @@ export function mergeTheme(
     primary: ev.primary ?? ins.primary ?? base.primary!,
     fontFamily: ev.fontFamily ?? ins.fontFamily ?? base.fontFamily!,
     density: ev.density ?? ins.density ?? base.density!,
+    questionColumns: ev.questionColumns ?? ins.questionColumns ?? base.questionColumns!,
     footerText: ev.footerText ?? ins.footerText ?? base.footerText!,
     showLogo: ev.showLogo ?? ins.showLogo ?? base.showLogo!,
     coverSubtitle: ev.coverSubtitle ?? "",
@@ -210,6 +232,7 @@ const FONT_SCHEMA = z.enum(FONT_FAMILIES);
 const DENSITY_SCHEMA = z.enum(DENSITIES);
 const BOOL_SCHEMA = z.boolean();
 const DIVIDER_SCHEMA = z.enum(SECTION_DIVIDERS);
+const COLUMNS_SCHEMA = z.union([z.literal(1), z.literal(2)]);
 
 function pickString(o: RawTheme, key: string, max?: number): string | undefined {
   const v = o[key];
@@ -235,6 +258,8 @@ export function parseInstitutionalTheme(raw: unknown): Partial<InstitutionalThem
   if (ff !== undefined) out.fontFamily = ff;
   const d = pickAndValidate(o, "density", DENSITY_SCHEMA);
   if (d !== undefined) out.density = d;
+  const qc = pickAndValidate(o, "questionColumns", COLUMNS_SCHEMA);
+  if (qc !== undefined) out.questionColumns = qc;
   const ft = pickString(o, "footerText", 200);
   if (ft !== undefined) out.footerText = ft;
   const sl = pickAndValidate(o, "showLogo", BOOL_SCHEMA);
@@ -279,6 +304,7 @@ export function themeToCssVars(theme: ResolvedTheme): Record<string, string> {
         ? "'Liberation Serif', 'Times New Roman', Times, serif"
         : "'Liberation Sans', Arial, Helvetica, sans-serif",
     "--print-line-height": String(DENSITY_LINE_HEIGHTS[theme.density]),
+    "--print-question-columns": String(theme.questionColumns),
     "--print-footer-text": `"${(theme.footerText ?? "").replace(/"/g, '\\"')}"`,
     "--print-show-logo": theme.showLogo ? "block" : "none",
   };

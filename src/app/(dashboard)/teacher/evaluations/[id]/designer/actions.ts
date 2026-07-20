@@ -29,6 +29,8 @@ export async function saveEvaluationThemeAction(
     density: ["compact", "normal", "airy"].includes(String(formData.get("density") ?? ""))
       ? (String(formData.get("density")) as "compact" | "normal" | "airy")
       : undefined,
+    // Solo 1 o 2; cualquier otra cosa cae al heredado (undefined).
+    questionColumns: String(formData.get("questionColumns") ?? "") === "2" ? 2 : 1,
     footerText: String(formData.get("footerText") ?? "").trim() || undefined,
     showLogo: formData.get("showLogo") === "on",
     coverSubtitle: String(formData.get("coverSubtitle") ?? "").trim() || undefined,

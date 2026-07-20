@@ -10,6 +10,8 @@ import {
   type ResolvedTheme,
   DENSITIES,
   DENSITY_LABELS,
+  QUESTION_COLUMNS,
+  QUESTION_COLUMNS_LABELS,
   FONT_FAMILIES,
   FONT_FAMILY_LABELS,
   SECTION_DIVIDERS,
@@ -63,6 +65,9 @@ export function BundleDesignerForm({ bundleId, initial, resolved, editable }: Pr
   const [primary, setPrimary] = useState(initial.primary ?? resolved.primary);
   const [fontFamily, setFontFamily] = useState(initial.fontFamily ?? resolved.fontFamily);
   const [density, setDensity] = useState(initial.density ?? resolved.density);
+  const [questionColumns, setQuestionColumns] = useState(
+    initial.questionColumns ?? resolved.questionColumns,
+  );
   const [footerText, setFooterText] = useState(initial.footerText ?? resolved.footerText);
   const [showLogo, setShowLogo] = useState(initial.showLogo ?? resolved.showLogo);
   const [coverSubtitle, setCoverSubtitle] = useState(
@@ -85,6 +90,7 @@ export function BundleDesignerForm({ bundleId, initial, resolved, editable }: Pr
         primary,
         fontFamily,
         density,
+        questionColumns,
         footerText,
         showLogo,
         coverSubtitle,
@@ -96,6 +102,7 @@ export function BundleDesignerForm({ bundleId, initial, resolved, editable }: Pr
       primary,
       fontFamily,
       density,
+      questionColumns,
       footerText,
       showLogo,
       coverSubtitle,
@@ -180,6 +187,26 @@ export function BundleDesignerForm({ bundleId, initial, resolved, editable }: Pr
                   </option>
                 ))}
               </select>
+            </Field>
+
+            <Field label="Columnas de preguntas">
+              <select
+                name="questionColumns"
+                value={questionColumns}
+                onChange={(e) =>
+                  setQuestionColumns(Number(e.target.value) as typeof questionColumns)
+                }
+                className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+              >
+                {QUESTION_COLUMNS.map((c) => (
+                  <option key={c} value={c}>
+                    {QUESTION_COLUMNS_LABELS[c]}
+                  </option>
+                ))}
+              </select>
+              <p className="text-muted-foreground mt-1 text-xs">
+                A dos columnas, las preguntas con imagen o tabla siguen ocupando el ancho completo.
+              </p>
             </Field>
 
             <Field label="Pie de página">

@@ -130,3 +130,44 @@ describe("theme · themeToCssVars", () => {
     expect(themeToCssVars(t)["--print-line-height"]).toBe("1.4");
   });
 });
+
+/**
+ * Columnas de preguntas: hereda institución → evaluación como el resto del
+ * tema, y llega a la variable CSS que usa la hoja de impresión.
+ */
+describe("questionColumns", () => {
+  it("por defecto es 1 (no cambia la maquetación de lo ya creado)", () => {
+    expect(mergeTheme(null, null).questionColumns).toBe(1);
+  });
+
+  it("la institución fija el valor y la evaluación lo hereda", () => {
+    expect(mergeTheme({ questionColumns: 2 }, null).questionColumns).toBe(2);
+    expect(mergeTheme({ questionColumns: 2 }, {}).questionColumns).toBe(2);
+  });
+
+  it("la evaluación puede sobreescribir el institucional en ambos sentidos", () => {
+    expect(mergeTheme({ questionColumns: 1 }, { questionColumns: 2 }).questionColumns).toBe(2);
+    expect(mergeTheme({ questionColumns: 2 }, { questionColumns: 1 }).questionColumns).toBe(1);
+  });
+
+  it("llega a la variable CSS de impresión", () => {
+    const vars = themeToCssVars(mergeTheme({ questionColumns: 2 }, null));
+    expect(vars["--print-question-columns"]).toBe("2");
+  });
+
+  it("se lee del JSON guardado en la BD", () => {
+    // Regresión: `parseInstitutionalTheme` enumera los campos uno a uno y
+    // este faltaba, así que el valor guardado se descartaba en silencio y el
+    // PDF salía siempre a una columna. Este assert es el que lo detecta —
+    // comprobar solo que un valor inválido da `undefined` pasaba igualmente
+    // cuando el parser ni miraba el campo.
+    expect(parseInstitutionalTheme({ questionColumns: 2 }).questionColumns).toBe(2);
+    expect(parseEvaluationTheme({ questionColumns: 2 }).questionColumns).toBe(2);
+  });
+
+  it("un valor inválido se descarta sin romper el resto del tema", () => {
+    const parsed = parseInstitutionalTheme({ questionColumns: 7, fontFamily: "sans" });
+    expect(parsed.questionColumns).toBeUndefined();
+    expect(parsed.fontFamily).toBe("sans");
+  });
+});
