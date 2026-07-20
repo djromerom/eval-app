@@ -6,6 +6,7 @@
  * como data: URI o el examen sale impreso con recuadros rotos.
  */
 import { describe, expect, it, vi } from "vitest";
+import { renderRichText } from "@/components/editor/render";
 import {
   inlineContentImages,
   inlineSectionsImages,
@@ -166,5 +167,66 @@ describe("inlineSectionsImages", () => {
     expect(out!.order).toBe(3);
     expect(out!.questions[0]!.number).toBe(7);
     expect(out!.questions[0]!.correctAnswer).toBe("B");
+  });
+});
+
+/**
+ * El ancho que el docente fija arrastrando se guarda en el JSON y debe llegar
+ * hasta el HTML que renderiza el servidor para el PDF. Si se perdiera por el
+ * camino, la imagen saldría impresa a tamaño completo.
+ */
+describe("ancho de imagen (redimensión)", () => {
+  it("emite el ancho como style y data-width al renderizar en servidor", () => {
+    const html = renderRichText({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "image", attrs: { src: "/api/uploads/evaluations/i1/a.jpg", width: 60 } },
+          ],
+        },
+      ],
+    });
+    // `width="60%"` y no `style`: el DOM del servidor sanitiza `style`.
+    expect(html).toContain('width="60%"');
+    expect(html).toContain('data-width="60"');
+  });
+
+  it("una imagen sin ancho no emite style (queda al 100% por CSS)", () => {
+    const html = renderRichText({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "image", attrs: { src: "/api/uploads/evaluations/i1/a.jpg" } }],
+        },
+      ],
+    });
+    expect(html).not.toContain("width=");
+    expect(html).not.toContain("data-width");
+  });
+
+  it("el ancho sobrevive al inlineado de la imagen", async () => {
+    // Regresión: el inlineador reconstruye `attrs` al cambiar el src; si
+    // hiciera `attrs = { src }` en vez de extender, borraría el ancho y la
+    // imagen saldría a tamaño completo en el PDF.
+    const doc = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "image", attrs: { src: "/api/uploads/evaluations/i1/a.jpg", width: 45 } },
+          ],
+        },
+      ],
+    };
+    const out = (await inlineContentImages(doc, read)) as {
+      content: { content: { attrs: Record<string, unknown> }[] }[];
+    };
+    const attrs = out.content[0]!.content[0]!.attrs;
+    expect(attrs.width).toBe(45);
+    expect(attrs.src).toBe(DATA_URI);
   });
 });

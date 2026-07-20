@@ -317,6 +317,21 @@
   margin-bottom: 0.5rem;
 }
 
+/* Imágenes del contenido (contextos, enunciados y opciones).
+ *
+ * `.prose-eval img` de globals.css solo alcanza a `RichText`, que envuelve en
+ * un div con esa clase. `RichTextInline` —el que usan enunciados y opciones—
+ * emite un `<span>` sin ella, así que una imagen ancha dentro de una pregunta
+ * se salía del área imprimible. Esta regla cubre toda la hoja.
+ *
+ * El ancho que el docente fija arrastrando llega como `style="width:N%"` en
+ * la propia etiqueta y gana sobre esto, que solo pone el techo.
+ */
+.booklet img {
+  max-width: 100%;
+  height: auto;
+}
+
 /* Intro del bloque: "RESPONDA LAS PREGUNTAS X A LA Y" + título + contexto.
  *
  * `break-after: avoid` la mantiene pegada a la primera pregunta: si no caben

@@ -1,8 +1,26 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { EditorContent, useEditor, type Editor } from "@tiptap/react";
-import { EMPTY_DOC, richTextExtensions } from "./extensions";
+import { EditorContent, ReactNodeViewRenderer, useEditor, type Editor } from "@tiptap/react";
+import { EMPTY_DOC, ResizableImage, richTextExtensions } from "./extensions";
+import { ResizableImageView } from "./resizable-image-view";
+
+/**
+ * Extensiones del editor = las compartidas, pero con la imagen envuelta en su
+ * NodeView de React (tiradores para redimensionar).
+ *
+ * El NodeView solo afecta a la edición: el esquema y los atributos son los
+ * mismos que usa `generateHTML` en el servidor, así que el JSON viaja igual.
+ * Vive aquí y no en extensions.ts porque ese módulo debe seguir siendo
+ * agnóstico del framework (lo importa el renderer del servidor).
+ */
+const editorExtensions = richTextExtensions.map((ext) =>
+  ext.name === ResizableImage.name
+    ? ResizableImage.extend({
+        addNodeView: () => ReactNodeViewRenderer(ResizableImageView),
+      })
+    : ext,
+);
 
 /**
  * Sube una imagen y devuelve su URL servida por `/api/uploads/`.
@@ -185,7 +203,7 @@ export function RichTextEditor({
   }, []);
 
   const editor = useEditor({
-    extensions: richTextExtensions,
+    extensions: editorExtensions,
     content: initialContent(defaultValue),
     immediatelyRender: false,
     editorProps: {
