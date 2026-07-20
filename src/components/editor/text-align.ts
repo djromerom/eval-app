@@ -15,6 +15,18 @@ export function isAlignment(value: unknown): value is Alignment {
   return typeof value === "string" && (ALIGNMENTS as readonly string[]).includes(value);
 }
 
+/**
+ * Ejecuta `apply` sobre TODOS los tipos y devuelve `true` si alguno funcionó.
+ *
+ * Existe para no volver a caer en el bug que tuvo la primera versión: usaba
+ * `types.some(apply)`, que corta en el primer `true`. Como "paragraph" va
+ * primero y su `updateAttributes` siempre devuelve `true`, nunca se llegaba a
+ * "image" y las imágenes no se alineaban. `map` no cortocircuita.
+ */
+export function applyToEveryType(types: string[], apply: (type: string) => boolean): boolean {
+  return types.map(apply).some(Boolean);
+}
+
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     textAlign: {
@@ -70,14 +82,11 @@ export const TextAlign = Extension.create({
       setAlign:
         (align: Alignment) =>
         ({ commands }) =>
-          // Se aplica a todos los tipos alineables: el usuario puede tener el
-          // cursor en un párrafo o una imagen seleccionada, y el comando debe
-          // funcionar en ambos casos.
-          ALIGNABLE_TYPES.some((type) => commands.updateAttributes(type, { align })),
+          applyToEveryType(ALIGNABLE_TYPES, (type) => commands.updateAttributes(type, { align })),
       unsetAlign:
         () =>
         ({ commands }) =>
-          ALIGNABLE_TYPES.some((type) => commands.resetAttributes(type, "align")),
+          applyToEveryType(ALIGNABLE_TYPES, (type) => commands.resetAttributes(type, "align")),
     };
   },
 });

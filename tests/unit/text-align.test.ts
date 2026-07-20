@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { renderRichText } from "@/components/editor/render";
-import { ALIGNMENTS, alignClass } from "@/components/editor/text-align";
+import { ALIGNMENTS, alignClass, applyToEveryType } from "@/components/editor/text-align";
 
 /** Documento de un párrafo con la alineación dada. */
 const parrafo = (align?: string) => ({
@@ -74,5 +74,30 @@ describe("alineación en el HTML del servidor", () => {
     // no debe acabar como clase del documento.
     expect(renderRichText(parrafo("inventada"))).toBe("<p>Texto</p>");
     expect(renderRichText(parrafo("center; color:red"))).toBe("<p>Texto</p>");
+  });
+});
+
+describe("applyToEveryType", () => {
+  it("intenta TODOS los tipos aunque el primero ya funcione", () => {
+    // Regresión del bug reportado: la primera versión usaba `types.some()`,
+    // que corta en el primer `true`. Como "paragraph" va primero y su
+    // updateAttributes siempre devuelve true, nunca se llegaba a "image" y
+    // las imágenes no se alineaban aunque el texto sí.
+    const intentados: string[] = [];
+    const ok = applyToEveryType(["paragraph", "heading", "image"], (t) => {
+      intentados.push(t);
+      return t === "paragraph";
+    });
+    expect(intentados).toEqual(["paragraph", "heading", "image"]);
+    expect(ok).toBe(true);
+  });
+
+  it("devuelve true si funcionó alguno, aunque no sea el primero", () => {
+    expect(applyToEveryType(["a", "b"], (t) => t === "b")).toBe(true);
+  });
+
+  it("devuelve false si no funcionó ninguno", () => {
+    expect(applyToEveryType(["a", "b"], () => false)).toBe(false);
+    expect(applyToEveryType([], () => true)).toBe(false);
   });
 });
