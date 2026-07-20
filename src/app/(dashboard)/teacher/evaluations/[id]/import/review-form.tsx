@@ -22,29 +22,38 @@ interface Props {
   targetEvaluationId: string;
   sections: SectionOption[];
   subjects: SubjectOption[];
-  sourceEvaluationId: string;
+  /** Origen del que se sacan las preguntas. */
+  source: { kind: "evaluation"; evaluationId: string } | { kind: "csv"; content: string };
+  /** Si el padre ya cargó las preguntas (caso normal), se evita el re-fetch. */
+  initialQuestions?: ParsedQuestion[];
+  /** Volver al paso 1 para cambiar de origen. */
+  onBack?: () => void;
 }
 
 /**
  * Wizard de revisión de la importación.
  *
  * Carga las preguntas con `loadSourceAction` (origen "otra evaluación" en
- * Fase 1), deja que el docente descarte y corrija la respuesta correcta
- * cuando falte, y al confirmar envía todo el array al server action
- * `commitImportAction`. El estado NO se persiste: vive en React hasta el
- * submit, igual que la importación de estudiantes.
+ * Fase 1, "CSV" en Fase 2), deja que el docente descarte y corrija la
+ * respuesta correcta cuando falte, y al confirmar envía todo el array al
+ * server action `commitImportAction`. El estado NO se persiste: vive en
+ * React hasta el submit, igual que la importación de estudiantes.
  */
 export function ImportReviewForm({
   targetEvaluationId,
   sections,
   subjects,
-  sourceEvaluationId,
+  source,
+  initialQuestions,
+  onBack,
 }: Props) {
-  const [questions, setQuestions] = useState<ParsedQuestion[] | null>(null);
+  const [questions, setQuestions] = useState<ParsedQuestion[] | null>(initialQuestions ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // El docente puede destildar preguntas y, si falta la correcta, marcarla.
-  const [included, setIncluded] = useState<Set<number>>(new Set());
+  const [included, setIncluded] = useState<Set<number>>(
+    new Set((initialQuestions ?? []).map((_, idx) => idx)),
+  );
   const [corrections, setCorrections] = useState<Record<number, AnswerKey>>({});
   const [destinationKind, setDestinationKind] = useState<"evaluation" | "bank">("evaluation");
   const [destinationId, setDestinationId] = useState<string>(sections[0]?.id ?? "");
@@ -55,8 +64,10 @@ export function ImportReviewForm({
   >(null);
 
   useEffect(() => {
+    // Si el padre ya pasó las preguntas, no hay que volver a pedirlas.
+    if (initialQuestions) return;
     let cancelled = false;
-    loadSourceAction(sourceEvaluationId).then((res) => {
+    loadSourceAction(source).then((res) => {
       if (cancelled) return;
       if (res.error) {
         setLoadError(res.error);
@@ -69,7 +80,7 @@ export function ImportReviewForm({
     return () => {
       cancelled = true;
     };
-  }, [sourceEvaluationId]);
+  }, [source, initialQuestions]);
 
   const payload = useMemo(() => questions ?? [], [questions]);
 
@@ -338,12 +349,22 @@ export function ImportReviewForm({
         >
           {isPending ? "Importando…" : `Importar ${importableCount} pregunta(s)`}
         </button>
-        <Link
-          href={`/teacher/evaluations/${targetEvaluationId}/import`}
-          className="text-muted-foreground text-sm hover:underline"
-        >
-          ← Cambiar origen
-        </Link>
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-muted-foreground text-sm hover:underline"
+          >
+            ← Cambiar origen
+          </button>
+        ) : (
+          <Link
+            href={`/teacher/evaluations/${targetEvaluationId}/import`}
+            className="text-muted-foreground text-sm hover:underline"
+          >
+            ← Cambiar origen
+          </Link>
+        )}
       </div>
     </form>
   );

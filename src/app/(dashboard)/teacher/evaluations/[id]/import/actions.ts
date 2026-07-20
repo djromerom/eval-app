@@ -1,13 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/session";
 import type { AnswerKey } from "@/modules/evaluations/domain/evaluation";
 import type {
   ParsedQuestion,
   ParsedQuestionProblem,
 } from "@/modules/question-import/domain/parsed-question";
+import { parseQuestionsCsv } from "@/modules/question-import/infrastructure/csv";
 import {
   makeImportQuestions,
   makeQuestionsFromEvaluation,
@@ -91,22 +91,6 @@ export async function commitImportAction(
   };
 }
 
-/**
- * Server action puente: el cliente envía el id de la evaluación origen y
- * este action redirige a la misma página con `?source=`. Lo hacemos action y
- * no un link directo para poder validar que la evaluación origen existe y es
- * accesible antes de saltar a la revisión.
- */
-export async function pickSourceAction(formData: FormData): Promise<void> {
-  await requireAuthenticatedUser("TEACHER", "COORDINATOR");
-  const evaluationId = String(formData.get("evaluationId") ?? "").trim();
-  const targetEvaluationId = String(formData.get("targetEvaluationId") ?? "").trim();
-  if (!evaluationId || !targetEvaluationId) return;
-  redirect(
-    `/teacher/evaluations/${targetEvaluationId}/import?source=${encodeURIComponent(evaluationId)}`,
-  );
-}
-
 export interface LoadSourceState {
   questions: ParsedQuestion[];
   warnings: string[];
@@ -114,16 +98,36 @@ export interface LoadSourceState {
 }
 
 /**
- * Carga las preguntas de la evaluación origen. Se llama desde el cliente cuando
- * el usuario confirma la selección, para evitar tener que serializar el array
- * en la URL cuando pueda ser grande.
+ * Carga las preguntas de la fuente seleccionada por el docente. Es el
+ * único punto de entrada para todos los orígenes: hoy "evaluación" y
+ * "CSV"; mañana "DOCX" y "PDF" caen aquí sin tocar la pantalla de revisión.
+ *
+ * Se hace un único overload en la implementación (sin firmas separadas)
+ * porque TS no las resuelve bien cuando se pasa una unión discriminada.
  */
-export async function loadSourceAction(sourceEvaluationId: string): Promise<LoadSourceState> {
+export type LoadSourceInput =
+  { kind: "evaluation"; evaluationId: string } | { kind: "csv"; content: string };
+
+export async function loadSourceAction(input: LoadSourceInput): Promise<LoadSourceState> {
   const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
-  const result = await makeQuestionsFromEvaluation().execute({
-    actor,
-    evaluationId: sourceEvaluationId,
-  });
-  if (!result.ok) return { questions: [], warnings: [], error: result.error.message };
-  return result.value;
+
+  if (input.kind === "evaluation") {
+    const result = await makeQuestionsFromEvaluation().execute({
+      actor,
+      evaluationId: input.evaluationId,
+    });
+    if (!result.ok) return { questions: [], warnings: [], error: result.error.message };
+    return result.value;
+  }
+
+  // CSV: parsea aquí en servidor para no enviar el parser al cliente.
+  const parsed = parseQuestionsCsv(input.content);
+  if (parsed.missing.length > 0) {
+    return {
+      questions: [],
+      warnings: [],
+      error: `Faltan columnas en el CSV: ${parsed.missing.join(", ")}.`,
+    };
+  }
+  return parsed.result;
 }
