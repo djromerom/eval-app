@@ -11,6 +11,12 @@ import {
   type ParsedQuestionProblem,
   partitionParsedQuestions,
 } from "../domain/parsed-question";
+import {
+  collectUniqueContexts,
+  mergeContextsIntoSectionContent,
+  prependContextToBankQuestion,
+  stripContextFromQuestions,
+} from "./context-stitch";
 
 /**
  * A dónde van las preguntas importadas. Lo elige el docente en la pantalla de
@@ -31,6 +37,10 @@ export interface ImportQuestionsResult {
   imported: number;
   /** Las que no se pudieron dar de alta, con el motivo. */
   problems: ParsedQuestionProblem[];
+  /** Mensajes no-fatales sobre cómo se acomodaron cosas (contexto compartido,
+   *  advertencias estructurales). Se muestran en el banner de éxito para
+   *  que el docente sepa qué pasó con su información. */
+  infos: string[];
 }
 
 /**
@@ -43,6 +53,19 @@ export interface ImportQuestionsResult {
  *
  * El texto llega como string plano desde los parsers y se convierte aquí a
  * documento TipTap, que es lo que espera la base de datos.
+ *
+ * Sobre el contexto compartido (Fase 3 → corrección): los parsers ya lo leen
+ * pero la BD no tiene una columna `contextText` por pregunta, así que aquí
+ * decidimos a dónde va:
+ *  - **Evaluación destino**: el contexto se PROMUeve al `section.content`
+ *    (TipTap) UNA sola vez para todas las preguntas que lo compartían. Si ya
+ *    había contenido en la sección, se concatena con un separador.
+ *  - **Banco destino**: el contexto se EMBEBE al inicio del TipTap `text` de
+ *    cada pregunta que lo traiga (con un encabezado "Contexto"). El banco
+ *    hoy no almacena contexto compartido aparte.
+ *
+ * En ambos casos el docente ve un `info` en el banner de éxito describiendo
+ * la decisión: nunca pierde información silenciosamente.
  */
 export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQuestionsResult> {
   constructor(
@@ -71,13 +94,13 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
       );
     }
 
-    const imported =
+    const result =
       destination.kind === "evaluation"
         ? await this.intoEvaluation(actor, valid, destination)
         : await this.intoBank(actor, valid, destination);
 
-    if (!imported.ok) return imported;
-    return ok({ imported: imported.value, problems });
+    if (!result.ok) return result;
+    return ok({ imported: result.value.imported, problems, infos: result.value.infos });
   }
 
   /** Añade a un contexto de una evaluación propia y en BORRADOR. */
@@ -85,23 +108,52 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
     actor: AuthenticatedUser,
     questions: ParsedQuestion[],
     destination: Extract<ImportDestination, { kind: "evaluation" }>,
-  ): Promise<Result<number>> {
-    const evaluation = await this.evaluations.findById(
-      actor.institutionId,
-      destination.evaluationId,
-    );
-    if (!evaluation) return fail(new NotFoundError("Evaluación", destination.evaluationId));
-    if (evaluation.teacherId !== actor.userId) {
+  ): Promise<Result<{ imported: number; infos: string[] }>> {
+    // Necesitamos `getDetail` (no `findById`) porque vamos a leer el contenido
+    // actual del contexto para fusionar el contexto compartido entrante.
+    const detail = await this.evaluations.getDetail(actor.institutionId, destination.evaluationId);
+    if (!detail) return fail(new NotFoundError("Evaluación", destination.evaluationId));
+    if (detail.teacherId !== actor.userId) {
       return fail(new ValidationError("Solo el autor puede editar la evaluación."));
     }
-    if (evaluation.status !== "DRAFT") {
+    if (detail.status !== "DRAFT") {
       return fail(new ValidationError("Solo se puede editar una evaluación en BORRADOR."));
     }
 
-    // `addQuestion` numera cada pregunta a partir de `totalQuestions`, así que
-    // el bucle secuencial preserva el orden del documento de origen. En
-    // paralelo se pisarían los números.
-    for (const q of questions) {
+    const infos: string[] = [];
+    const uniqueContexts = collectUniqueContexts(questions);
+
+    // 1) Si hay contextos compartidos, los añadimos al contenido del contexto
+    //    destino. Hecho antes del bucle de `addQuestion` para que las preguntas
+    //    ya no traigan `contextText` (lo hemos subido de nivel).
+    if (uniqueContexts.length > 0) {
+      const section = detail.sections.find((s) => s.id === destination.sectionId);
+      if (!section) return fail(new NotFoundError("Contexto de evaluación", destination.sectionId));
+      const merged = mergeContextsIntoSectionContent(section.content, uniqueContexts);
+      await this.evaluations.updateSection(
+        actor.institutionId,
+        destination.evaluationId,
+        destination.sectionId,
+        { content: merged },
+      );
+      if (uniqueContexts.length === 1) {
+        infos.push(
+          "El contexto compartido se guardó en el contexto de evaluación (afecta a todas las preguntas que lo compartían).",
+        );
+      } else {
+        infos.push(
+          `Se encontraron ${uniqueContexts.length} contextos distintos y se concatenaron en el contexto de evaluación. Si varios no comparten texto, conviene dividirlos en varias importaciones.`,
+        );
+      }
+    }
+
+    // 2) Damos de alta cada pregunta ya sin `contextText`, para no duplicarlo
+    //    ni en la pregunta ni en el contexto. `addQuestion` numera cada
+    //    pregunta a partir de `totalQuestions`, así que el bucle secuencial
+    //    preserva el orden del documento de origen. En paralelo se pisarían
+    //    los números.
+    const stripped = stripContextFromQuestions(questions);
+    for (const q of stripped) {
       await this.evaluations.addQuestion(
         actor.institutionId,
         destination.evaluationId,
@@ -115,7 +167,7 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
         },
       );
     }
-    return ok(questions.length);
+    return ok({ imported: stripped.length, infos });
   }
 
   /** Guarda en el banco, todas con la misma asignatura. */
@@ -123,21 +175,39 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
     actor: AuthenticatedUser,
     questions: ParsedQuestion[],
     destination: Extract<ImportDestination, { kind: "bank" }>,
-  ): Promise<Result<number>> {
+  ): Promise<Result<{ imported: number; infos: string[] }>> {
     if (!destination.subjectId) {
       return fail(new ValidationError("Elige la asignatura del banco."));
     }
 
-    const data: CreateBankQuestionData[] = questions.map((q) => ({
+    const infos: string[] = [];
+    const withContextInlined = questions.map((q) => {
+      if (!q.contextText) return { text: toRichText(q.text) };
+      return {
+        text: prependContextToBankQuestion(toRichText(q.text), q.contextTitle, q.contextText),
+      };
+    });
+
+    const data: CreateBankQuestionData[] = questions.map((q, idx) => ({
       subjectId: destination.subjectId,
-      text: toRichText(q.text),
+      text: withContextInlined[idx]!.text,
       options: q.options.map((o) => ({ key: o.key, text: o.text })),
       correctAnswer: q.correctAnswer!,
       competency: q.competency,
       evidence: q.evidence,
     }));
 
-    return ok(await this.bank.createMany(actor.institutionId, actor.userId, data));
+    const withContextCount = questions.filter((q) => Boolean(q.contextText)).length;
+    if (withContextCount > 0) {
+      infos.push(
+        `El banco no guarda contexto compartido: se añadió al inicio del enunciado de ${withContextCount} pregunta(s) con un encabezado «Contexto».`,
+      );
+    }
+
+    return ok({
+      imported: await this.bank.createMany(actor.institutionId, actor.userId, data),
+      infos,
+    });
   }
 }
 

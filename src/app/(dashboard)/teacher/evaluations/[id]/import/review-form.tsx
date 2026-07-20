@@ -63,7 +63,9 @@ export function ImportReviewForm({
 
   const [isPending, startTransition] = useTransition();
   const [result, setResult] = useState<
-    { imported: number; problems: { index: number; message: string }[] } | { error: string } | null
+    | { imported: number; problems: { index: number; message: string }[]; infos: string[] }
+    | { error: string }
+    | null
   >(null);
 
   useEffect(() => {
@@ -136,6 +138,16 @@ export function ImportReviewForm({
             </ul>
           </div>
         ) : null}
+        {(result.infos?.length ?? 0) > 0 ? (
+          <div className="bg-muted/40 space-y-1 rounded-md p-3 text-sm">
+            <p className="font-medium">Notas de la importación:</p>
+            <ul className="list-disc pl-5">
+              {(result.infos ?? []).map((msg, i) => (
+                <li key={i}>{msg}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="flex gap-3">
           <Link
             href={`/teacher/evaluations/${targetEvaluationId}`}
@@ -161,6 +173,7 @@ export function ImportReviewForm({
                 index: p.index,
                 message: p.message,
               })),
+              infos: res.infos ?? [],
             });
         });
       }}

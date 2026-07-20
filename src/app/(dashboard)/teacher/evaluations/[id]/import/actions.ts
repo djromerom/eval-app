@@ -19,6 +19,8 @@ export interface CommitImportState {
   error?: string;
   imported?: number;
   problems?: ParsedQuestionProblem[];
+  /** Mensajes no-fatales (cómo se reubicó el contexto compartido). */
+  infos?: string[];
 }
 
 /**
@@ -89,6 +91,7 @@ export async function commitImportAction(
   return {
     imported: result.value.imported,
     problems: result.value.problems,
+    infos: result.value.infos,
   };
 }
 

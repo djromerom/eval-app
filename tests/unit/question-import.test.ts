@@ -125,8 +125,32 @@ class FakeEvaluations implements EvaluationRepository {
       competency: data.competency ?? null,
     };
   }
-  async updateSection(): Promise<EvaluationSection> {
-    throw new Error("no usado");
+  updateSectionCalls: Array<{ sectionId: string; content: unknown }> = [];
+  async updateSection(
+    _i: string,
+    _e: string,
+    sectionId: string,
+    data: { title?: string | null; content?: unknown },
+  ): Promise<EvaluationSection> {
+    if (this.detail?.sections) {
+      const idx = this.detail.sections.findIndex((s) => s.id === sectionId);
+      if (idx >= 0 && this.detail.sections[idx]) {
+        if (data.content !== undefined) {
+          this.detail.sections[idx]!.content = data.content;
+        }
+        if (data.title !== undefined) {
+          this.detail.sections[idx]!.title = data.title;
+        }
+      }
+    }
+    this.updateSectionCalls.push({ sectionId, content: data.content });
+    return {
+      id: sectionId,
+      title: data.title === undefined ? null : data.title,
+      content: data.content,
+      order: 1,
+      questions: [],
+    };
   }
   async deleteSection(): Promise<void> {
     throw new Error("no usado");
@@ -469,5 +493,91 @@ describe("ImportQuestions", () => {
     if (!r.ok) return;
     expect(r.value.imported).toBe(1);
     expect(r.value.problems).toHaveLength(1);
+  });
+
+  it("contexto compartido en evaluación → updateSection añade texto e info", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = {
+      ...draft(),
+      sections: [
+        {
+          id: "sec1",
+          title: null,
+          content: { type: "doc", content: [] },
+          order: 1,
+          questions: [],
+        },
+      ],
+    };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({ contextText: "El agua es vital para la vida.", correctAnswer: "B" }),
+        valid({
+          sourceNumber: 2,
+          text: "¿Otra?",
+          correctAnswer: "B",
+          contextText: "El agua es vital para la vida.",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.imported).toBe(2);
+    expect(evals.updateSectionCalls).toHaveLength(1);
+    const content = evals.updateSectionCalls[0]!.content as {
+      type: string;
+      content: unknown[];
+    };
+    expect(content.type).toBe("doc");
+    expect(content.content).toHaveLength(1); // un único contexto deduplicado
+    expect(evals.added).toHaveLength(2);
+    expect(r.value.infos.some((m) => /contexto/i.test(m))).toBe(true);
+  });
+
+  it("contexto compartido en banco → embebe «Contexto» al inicio del text", async () => {
+    const bank = new FakeBank();
+    const r = await new ImportQuestions(new FakeEvaluations(), bank).execute({
+      actor: teacher,
+      questions: [valid({ contextText: "Texto introductorio", correctAnswer: "B" })],
+      destination: { kind: "bank", subjectId: "s1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.infos.some((m) => /Contexto/i.test(m))).toBe(true);
+    const data = bank.createManyCalls[0]![0]!;
+    const tipTap = data.text as {
+      content: { type: string; content?: { text?: string }[] }[];
+    };
+    expect(tipTap.content[0]!.type).toBe("heading");
+    const ctxPara = tipTap.content[1]!;
+    expect(ctxPara.type).toBe("paragraph");
+    expect(ctxPara.content?.[0]?.text).toBe("Texto introductorio");
+  });
+
+  it("preguntas SIN contexto no producen info ni modifican el section content", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = {
+      ...draft(),
+      sections: [
+        {
+          id: "sec1",
+          title: null,
+          content: { type: "doc", content: [] },
+          order: 1,
+          questions: [],
+        },
+      ],
+    };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [valid()],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(evals.updateSectionCalls).toHaveLength(0);
+    expect(r.value.infos).toEqual([]);
   });
 });
