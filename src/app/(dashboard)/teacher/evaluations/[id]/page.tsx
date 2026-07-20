@@ -84,6 +84,14 @@ export default async function EvaluationDetailPage({
         >
           Resultados →
         </Link>
+        {editable ? (
+          <Link
+            href={`/teacher/evaluations/${evaluation.id}/import`}
+            className="text-muted-foreground text-sm hover:underline"
+          >
+            Importar preguntas →
+          </Link>
+        ) : null}
         <Link
           href={`/print/evaluation/${evaluation.id}`}
           target="_blank"

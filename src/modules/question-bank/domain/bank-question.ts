@@ -14,6 +14,9 @@ export interface BankQuestion {
   soloLevel: SoloLevel | null;
   menComponent: string | null;
   competency: string | null;
+  /** Evidencia de aprendizaje (MEN). La rellena el importador desde la tabla
+   *  de clave de los exámenes en Word, que la trae como columna propia. */
+  evidence: string | null;
   difficulty: Difficulty;
   tags: string[];
   isPersonal: boolean; // true = solo visible para su creador
@@ -29,6 +32,7 @@ export interface CreateBankQuestionData {
   soloLevel?: SoloLevel | null;
   menComponent?: string | null;
   competency?: string | null;
+  evidence?: string | null;
   difficulty?: Difficulty;
   tags?: string[];
   isPersonal?: boolean;
@@ -52,6 +56,16 @@ export interface BankQuestionRepository {
     createdBy: string,
     data: CreateBankQuestionData,
   ): Promise<BankQuestion>;
+  /**
+   * Alta masiva en una transacción, para la importación. Devuelve cuántas se
+   * crearon. Mismo contrato que `StudentRepository.createMany`: las preguntas
+   * llegan YA validadas.
+   */
+  createMany(
+    institutionId: string,
+    createdBy: string,
+    data: CreateBankQuestionData[],
+  ): Promise<number>;
   /** Visible si es institucional o personal del propio usuario. */
   findVisible(institutionId: string, userId: string, id: string): Promise<BankQuestion | null>;
   search(

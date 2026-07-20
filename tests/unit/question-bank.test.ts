@@ -37,6 +37,7 @@ class FakeBank implements BankQuestionRepository {
       soloLevel: data.soloLevel ?? null,
       menComponent: data.menComponent ?? null,
       competency: data.competency ?? null,
+      evidence: data.evidence ?? null,
       difficulty: data.difficulty ?? "MEDIUM",
       tags: data.tags ?? [],
       isPersonal: data.isPersonal ?? false,
@@ -44,6 +45,18 @@ class FakeBank implements BankQuestionRepository {
     };
     this.items.push(q);
     return q;
+  }
+  createManyCalls: CreateBankQuestionData[] = [];
+  async createMany(
+    institutionId: string,
+    createdBy: string,
+    data: CreateBankQuestionData[],
+  ): Promise<number> {
+    this.createManyCalls.push(...data);
+    for (const d of data) {
+      await this.create(institutionId, createdBy, d);
+    }
+    return data.length;
   }
   async findVisible(institutionId: string, userId: string, id: string) {
     return (

@@ -24,6 +24,7 @@ type BankRow = {
   soloLevel: PrismaSoloLevel | null;
   menComponent: string | null;
   competency: string | null;
+  evidence: string | null;
   difficulty: QuestionDifficulty;
   tags: string[];
   isPersonal: boolean;
@@ -44,6 +45,7 @@ function toBankQuestion(r: BankRow): BankQuestion {
     soloLevel: (r.soloLevel as SoloLevel | null) ?? null,
     menComponent: r.menComponent,
     competency: r.competency,
+    evidence: r.evidence,
     difficulty: r.difficulty as Difficulty,
     tags: r.tags,
     isPersonal: r.isPersonal,
@@ -84,6 +86,7 @@ export class PrismaBankQuestionRepository implements BankQuestionRepository {
         soloLevel: (data.soloLevel as PrismaSoloLevel | null) ?? null,
         menComponent: data.menComponent ?? null,
         competency: data.competency ?? null,
+        evidence: data.evidence ?? null,
         difficulty: (data.difficulty as QuestionDifficulty | undefined) ?? "MEDIUM",
         tags: data.tags ?? [],
         isPersonal: data.isPersonal ?? false,
@@ -92,6 +95,43 @@ export class PrismaBankQuestionRepository implements BankQuestionRepository {
       include,
     });
     return toBankQuestion(row);
+  }
+
+  /**
+   * Alta masiva en UNA transacción: o entran todas o ninguna. Se usa
+   * `create` por fila (no `createMany` de Prisma) porque cada pregunta trae
+   * sus opciones en una tabla aparte, y `createMany` no admite relaciones
+   * anidadas.
+   */
+  async createMany(
+    institutionId: string,
+    createdBy: string,
+    data: CreateBankQuestionData[],
+  ): Promise<number> {
+    if (data.length === 0) return 0;
+    await prisma.$transaction(
+      data.map((q) =>
+        prisma.questionBank.create({
+          data: {
+            institutionId,
+            createdBy,
+            subjectId: q.subjectId,
+            text: json(q.text),
+            correctAnswer: q.correctAnswer,
+            justification: q.justification ?? null,
+            soloLevel: (q.soloLevel as PrismaSoloLevel | null) ?? null,
+            menComponent: q.menComponent ?? null,
+            competency: q.competency ?? null,
+            evidence: q.evidence ?? null,
+            difficulty: (q.difficulty as QuestionDifficulty | undefined) ?? "MEDIUM",
+            tags: q.tags ?? [],
+            isPersonal: q.isPersonal ?? false,
+            options: { create: q.options.map((o) => ({ key: o.key, text: json(o.text) })) },
+          },
+        }),
+      ),
+    );
+    return data.length;
   }
 
   async findVisible(

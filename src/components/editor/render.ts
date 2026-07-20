@@ -71,16 +71,11 @@ export function unwrapSingleParagraph(html: string): string {
   return inner;
 }
 
-/** Extrae texto plano (para búsquedas, resúmenes, títulos cortos). */
-export function richTextToPlain(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (value && typeof value === "object") {
-    const walk = (node: { text?: string; content?: unknown[] }): string => {
-      if (node.text) return node.text;
-      if (Array.isArray(node.content)) return node.content.map((c) => walk(c as never)).join(" ");
-      return "";
-    };
-    return walk(value as never).trim();
-  }
-  return "";
-}
+/**
+ * Extrae texto plano (para búsquedas, resúmenes, títulos cortos).
+ * La implementación vive en `shared/domain/rich-text` para que la puedan usar
+ * también los use cases y el cliente sin arrastrar @tiptap/html + KaTeX.
+ * Se reexporta aquí porque media docena de sitios ya la importaban de este
+ * módulo.
+ */
+export { richTextToPlain } from "@/shared/domain/rich-text";
