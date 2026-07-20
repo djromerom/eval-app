@@ -207,7 +207,16 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
       </section>
 
       <section className="bg-card space-y-3 rounded-xl border p-6">
-        <h2 className="font-semibold">Subir DOCX</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-semibold">Subir DOCX</h2>
+          <a
+            href="/templates/plantilla-preguntas.docx"
+            download="plantilla-preguntas.docx"
+            className="text-muted-foreground text-xs hover:underline"
+          >
+            Descargar plantilla
+          </a>
+        </div>
         <p className="text-muted-foreground text-sm">
           Tu examen en Word. Si trae una tabla con{" "}
           <code>Item | Clave | Competencia | Evidencia</code> al final, recuperamos la respuesta
