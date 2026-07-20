@@ -5,6 +5,7 @@ import { EditorContent, ReactNodeViewRenderer, useEditor, type Editor } from "@t
 import { EMPTY_DOC, ResizableImage, richTextExtensions } from "./extensions";
 import type { Alignment } from "./text-align";
 import { ResizableImageView } from "./resizable-image-view";
+import { TableControls, TableInsertButton } from "./table-toolbar";
 
 /**
  * Extensiones del editor = las compartidas, pero con la imagen envuelta en su
@@ -162,14 +163,7 @@ function Toolbar({ editor, onPickImage }: { editor: Editor; onPickImage: () => v
       >
         ❝
       </ToolbarButton>
-      <ToolbarButton
-        title="Insertar tabla 3×2"
-        onClick={() =>
-          editor.chain().focus().insertTable({ rows: 2, cols: 3, withHeaderRow: true }).run()
-        }
-      >
-        ▦
-      </ToolbarButton>
+      <TableInsertButton editor={editor} />
       <ToolbarButton title="Insertar imagen (o pégala / arrástrala)" onClick={onPickImage}>
         🖼
       </ToolbarButton>
@@ -292,7 +286,11 @@ export function RichTextEditor({
   return (
     <div className="border-input bg-background rounded-md border shadow-sm">
       {editor ? (
-        <Toolbar editor={editor} onPickImage={() => fileInputRef.current?.click()} />
+        <>
+          <Toolbar editor={editor} onPickImage={() => fileInputRef.current?.click()} />
+          {/* Segunda fila contextual: solo aparece con el cursor en una tabla. */}
+          <TableControls editor={editor} />
+        </>
       ) : null}
       <EditorContent editor={editor} />
       <input

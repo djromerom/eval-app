@@ -332,6 +332,35 @@
   height: auto;
 }
 
+/* Tablas del contenido, por el mismo motivo que las imágenes: los estilos de
+ * `.prose-eval table` (globals.css) no alcanzan a `RichTextInline`, que emite
+ * un `<span>` sin esa clase, así que una tabla dentro del enunciado de una
+ * pregunta se imprimía SIN bordes.
+ *
+ * Se usa negro y no `var(--border)`: el spec fija los bordes de tabla en
+ * negro (§3.4) y la variable del tema es un gris pensado para pantalla.
+ *
+ * El `:not(.competencies-table)` NO es decorativo: estas reglas van después
+ * en el archivo y con la misma especificidad, así que sin él le pisarían a la
+ * tabla de competencias de la portada su cabecera centrada. */
+.booklet table:not(.competencies-table) {
+  border-collapse: collapse;
+  margin: 0.4rem 0;
+  width: 100%;
+}
+
+.booklet table:not(.competencies-table) th,
+.booklet table:not(.competencies-table) td {
+  border: 1px solid #000;
+  padding: 0.2rem 0.4rem;
+  text-align: left;
+}
+
+.booklet table:not(.competencies-table) th {
+  font-weight: 700;
+  background: #f0f0f0;
+}
+
 /* Intro del bloque: "RESPONDA LAS PREGUNTAS X A LA Y" + título + contexto.
  *
  * `break-after: avoid` la mantiene pegada a la primera pregunta: si no caben
