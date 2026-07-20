@@ -11,6 +11,8 @@ import { getResolvedTheme } from "@/modules/theme/application/get-resolved-theme
 import { themeToCssVars } from "@/modules/theme/domain/theme";
 import { RichText, RichTextInline } from "@/components/editor/rich-text";
 import { richTextToPlain } from "@/components/editor/render";
+import { inlineSectionsImages } from "@/modules/uploads/application/inline-content-images";
+import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import { PrintButton } from "./print-button";
 
 export const metadata: Metadata = { title: "Vista previa de impresión" };
@@ -66,7 +68,13 @@ export default async function PrintEvaluationPage({
   ]);
   if (!evalRes.ok) notFound();
 
-  const evaluation = evalRes.value;
+  // Las imágenes subidas se incrustan como data: URI. El worker de PDF carga
+  // esta página con un token en la query string, así que una petición aparte
+  // a /api/uploads (sin sesión ni token) saldría 404 y la imagen rota.
+  const evaluation = {
+    ...evalRes.value,
+    sections: await inlineSectionsImages(evalRes.value.sections, (p) => localStorage.read(p)),
+  };
   const institution = instRes.ok ? instRes.value : null;
   const institutionName = institution?.name ?? "";
   const cs = csRes.ok ? csRes.value.find((c) => c.id === evaluation.courseSubjectId) : undefined;

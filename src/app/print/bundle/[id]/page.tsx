@@ -6,6 +6,8 @@ import { resolvePrintActor } from "@/lib/print-access";
 import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
 import { makeGetMyInstitution } from "@/modules/institutions/infrastructure/container";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
+import { inlineSectionsImages } from "@/modules/uploads/application/inline-content-images";
+import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import { computeCoverTable, formatDuration } from "@/modules/bundles/domain/cover-table";
 import { getResolvedBundleTheme } from "@/modules/theme/application/get-resolved-bundle-theme";
 import { themeToCssVars } from "@/modules/theme/domain/theme";
@@ -82,7 +84,16 @@ export default async function PrintBundlePage({
   const evaluations = await Promise.all(
     bundle.items.map(async (item) => {
       const r = await getEvaluation.execute({ actor, id: item.evaluationId });
-      return r.ok ? { item, evaluation: r.value } : null;
+      if (!r.ok) return null;
+      // Igual que en el booklet de una evaluación: las imágenes se incrustan
+      // porque Puppeteer no puede autenticarse contra /api/uploads.
+      return {
+        item,
+        evaluation: {
+          ...r.value,
+          sections: await inlineSectionsImages(r.value.sections, (p) => localStorage.read(p)),
+        },
+      };
     }),
   );
   const validEvaluations = evaluations.filter((e): e is NonNullable<typeof e> => e !== null);
