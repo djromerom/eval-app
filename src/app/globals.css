@@ -112,6 +112,44 @@
   max-width: 100%;
   height: auto;
 }
+
+/* ===== Alineación (extensión TextAlign del editor) =====
+ *
+ * Clases y no `style`: el DOM que usa `generateHTML` en el servidor descarta
+ * `style` al sanitizar, así que la alineación no llegaría al PDF.
+ *
+ * Viven en globals.css —cargado por el layout raíz— para que valgan igual en
+ * el editor, en la vista de la evaluación y en las páginas de impresión.
+ *
+ * En un párrafo basta `text-align`. En una imagen NO: es un bloque, así que
+ * `text-align` no la mueve y hay que centrarla con los márgenes.
+ */
+.ta-center {
+  text-align: center;
+}
+.ta-right {
+  text-align: right;
+}
+.ta-justify {
+  text-align: justify;
+}
+
+img.ta-center {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+img.ta-right {
+  display: block;
+  margin-left: auto;
+  margin-right: 0;
+}
+/* `justify` no significa nada en una imagen; se comporta como izquierda. */
+img.ta-justify {
+  display: block;
+  margin-right: auto;
+  margin-left: 0;
+}
 .prose-eval table {
   border-collapse: collapse;
   margin: 0.5rem 0;

@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { EditorContent, ReactNodeViewRenderer, useEditor, type Editor } from "@tiptap/react";
 import { EMPTY_DOC, ResizableImage, richTextExtensions } from "./extensions";
+import type { Alignment } from "./text-align";
 import { ResizableImageView } from "./resizable-image-view";
 
 /**
@@ -85,6 +86,37 @@ function ToolbarButton({
   );
 }
 
+/** Iconos de alineación dibujados con líneas, para no depender de una fuente. */
+function AlignIcon({ align }: { align: Alignment }) {
+  // Anchos de las 4 líneas según la alineación; `justify` las pone todas
+  // completas, que es justo lo que significa.
+  const rows =
+    align === "justify" ? [10, 10, 10, 10] : align === "center" ? [10, 6, 10, 6] : [10, 6, 10, 6];
+  const anchor = align === "center" ? "middle" : align === "right" ? "end" : "start";
+  const x = anchor === "middle" ? 6 : anchor === "end" ? 11 : 1;
+  return (
+    <svg viewBox="0 0 12 10" className="h-3 w-3" aria-hidden>
+      {rows.map((w, i) => (
+        <rect
+          key={i}
+          x={anchor === "middle" ? x - w / 2 : anchor === "end" ? x - w : x}
+          y={i * 2.6}
+          width={w}
+          height="1.2"
+          fill="currentColor"
+        />
+      ))}
+    </svg>
+  );
+}
+
+const ALIGN_BUTTONS: { align: Alignment; title: string; icon: React.ReactNode }[] = [
+  { align: "left", title: "Alinear a la izquierda", icon: <AlignIcon align="left" /> },
+  { align: "center", title: "Centrar", icon: <AlignIcon align="center" /> },
+  { align: "right", title: "Alinear a la derecha", icon: <AlignIcon align="right" /> },
+  { align: "justify", title: "Justificar", icon: <AlignIcon align="justify" /> },
+];
+
 function Toolbar({ editor, onPickImage }: { editor: Editor; onPickImage: () => void }) {
   return (
     <div className="bg-muted/40 flex flex-wrap items-center gap-0.5 border-b p-1">
@@ -141,6 +173,25 @@ function Toolbar({ editor, onPickImage }: { editor: Editor; onPickImage: () => v
       <ToolbarButton title="Insertar imagen (o pégala / arrástrala)" onClick={onPickImage}>
         🖼
       </ToolbarButton>
+
+      <span className="bg-border mx-1 h-5 w-px" aria-hidden />
+
+      {/* Alinea el párrafo donde está el cursor, o la imagen seleccionada. */}
+      {ALIGN_BUTTONS.map(({ align, title, icon }) => (
+        <ToolbarButton
+          key={align}
+          title={title}
+          // `left` es el valor por defecto y no se guarda: se marca activo
+          // también cuando no hay alineación puesta.
+          active={
+            editor.isActive({ align }) ||
+            (align === "left" && !editor.getAttributes("paragraph").align)
+          }
+          onClick={() => editor.chain().focus().setAlign(align).run()}
+        >
+          {icon}
+        </ToolbarButton>
+      ))}
       <span className="text-muted-foreground ml-1 text-xs">
         Fórmulas: escribe <code>$x^2$</code> o <code>$$…$$</code>
       </span>

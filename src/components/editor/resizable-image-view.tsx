@@ -7,6 +7,20 @@ import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 const MIN_PCT = 10;
 const MAX_PCT = 100;
 
+/** Márgenes que colocan el bloque según la alineación guardada. */
+function alignMargins(align: string | null): React.CSSProperties {
+  switch (align) {
+    case "center":
+      return { marginLeft: "auto", marginRight: "auto" };
+    case "right":
+      return { marginLeft: "auto", marginRight: 0 };
+    default:
+      // `left` y `justify` (que en una imagen no significa nada) van pegadas
+      // al margen izquierdo, igual que sin alineación.
+      return { marginLeft: 0, marginRight: "auto" };
+  }
+}
+
 /**
  * Vista de una imagen dentro del editor con tiradores para redimensionarla,
  * como en Word: se arrastra una esquina y el ancho cambia en vivo.
@@ -71,8 +85,15 @@ export function ResizableImageView({ node, updateAttributes, selected }: NodeVie
     <NodeViewWrapper
       as="div"
       ref={containerRef}
-      className="relative my-2 inline-block max-w-full"
-      style={shown ? { width: `${shown}%` } : undefined}
+      className="relative my-2 block max-w-full"
+      style={{
+        ...(shown ? { width: `${shown}%` } : undefined),
+        // La alineación la aplica el NodeView a mano: al controlar su propio
+        // DOM no recibe la clase `ta-*` que emite `renderHTML` para el
+        // servidor. Con márgenes y no con `text-align`, porque el contenedor
+        // es un bloque con ancho propio.
+        ...alignMargins(node.attrs.align as string | null),
+      }}
       data-drag-handle
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}

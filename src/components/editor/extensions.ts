@@ -5,6 +5,7 @@ import TableHeader from "@tiptap/extension-table-header";
 import TableRow from "@tiptap/extension-table-row";
 import StarterKit from "@tiptap/starter-kit";
 import type { Extensions } from "@tiptap/core";
+import { TextAlign } from "./text-align";
 
 /**
  * Extensiones de TipTap compartidas por el editor (cliente) y el renderer
@@ -51,6 +52,7 @@ export const ResizableImage = Image.extend({
 
 export const richTextExtensions: Extensions = [
   StarterKit,
+  TextAlign,
   ResizableImage,
   Table.configure({ resizable: false }),
   TableRow,
