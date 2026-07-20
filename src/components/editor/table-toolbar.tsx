@@ -6,6 +6,24 @@ import type { Editor } from "@tiptap/react";
 /** Tamaño máximo que ofrece la rejilla. Para más, están los inputs. */
 const GRID = 8;
 
+/**
+ * El alto de fila se guarda en px porque es lo que espera el atributo HTML
+ * `height`, pero al docente se le pregunta en MILÍMETROS: está maquetando una
+ * hoja de examen, no una pantalla.
+ *
+ * La equivalencia es exacta y no depende del monitor: en impresión un px CSS
+ * es 1/96 de pulgada por definición.
+ */
+const PX_PER_MM = 96 / 25.4;
+
+function mmToPx(mm: number): number {
+  return Math.round(mm * PX_PER_MM);
+}
+
+function pxToMm(px: number): number {
+  return Math.round(px / PX_PER_MM);
+}
+
 function Btn({
   onClick,
   title,
@@ -173,6 +191,11 @@ export function TableControls({ editor }: { editor: Editor }) {
   if (!editor.isActive("table")) return null;
   const chain = () => editor.chain().focus();
 
+  /** Alto de la fila donde está el cursor, en px (null = automático). */
+  const rowHeight = (editor.getAttributes("tableRow").height as number | null) ?? null;
+  const setRowHeight = (height: number | null) =>
+    editor.chain().focus().updateAttributes("tableRow", { height }).run();
+
   return (
     <div className="bg-muted/20 flex flex-wrap items-center gap-0.5 border-b px-1 py-0.5">
       <span className="text-muted-foreground mr-1 text-xs font-medium">Tabla:</span>
@@ -198,6 +221,31 @@ export function TableControls({ editor }: { editor: Editor }) {
       <Btn onClick={() => chain().deleteColumn().run()} title="Eliminar la columna actual" danger>
         − col
       </Btn>
+
+      <span className="bg-border mx-1 h-4 w-px" aria-hidden />
+
+      <label
+        className="text-muted-foreground flex items-center gap-1 text-xs"
+        title="Alto de la fila actual. Vacío = se ajusta al contenido."
+      >
+        Alto
+        <input
+          type="number"
+          min={0}
+          max={120}
+          step={5}
+          value={rowHeight === null ? "" : pxToMm(rowHeight)}
+          placeholder="auto"
+          onChange={(e) => {
+            const mm = Number(e.target.value);
+            setRowHeight(
+              e.target.value === "" || !Number.isFinite(mm) || mm <= 0 ? null : mmToPx(mm),
+            );
+          }}
+          className="border-input bg-background h-6 w-14 rounded border px-1 text-xs"
+        />
+        mm
+      </label>
 
       <span className="bg-border mx-1 h-4 w-px" aria-hidden />
 

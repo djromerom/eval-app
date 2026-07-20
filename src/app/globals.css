@@ -161,6 +161,42 @@ img.ta-justify {
   padding: 0.25rem 0.5rem;
   text-align: left;
 }
+/* El alto de fila se fija en el `<tr>`, pero quien manda sobre la altura real
+ * es la celda: sin esto, `vertical-align` centrado la dejaría crecer y el
+ * alto pedido no se respetaría en filas vacías (el caso de una tabla que el
+ * estudiante rellena a mano). */
+.prose-eval tr[height] td,
+.prose-eval tr[height] th {
+  vertical-align: top;
+}
+
+/* Tiradores de columna de prosemirror-tables (resizable: true).
+ * Sin estilo son invisibles: la librería solo pinta el div, no lo posiciona. */
+.prose-eval .tableWrapper {
+  overflow-x: auto;
+}
+.prose-eval table {
+  position: relative;
+}
+.prose-eval .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--primary);
+  pointer-events: none;
+}
+.prose-eval td,
+.prose-eval th {
+  position: relative;
+}
+/* Mientras se arrastra, el cursor debe ser el de redimensionar en toda la
+ * tabla, no solo sobre la línea de 4 px. */
+.prose-eval.resize-cursor {
+  cursor: col-resize;
+}
+
 .prose-eval :where(.ProseMirror) {
   outline: none;
 }

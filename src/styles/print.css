@@ -361,6 +361,14 @@
   background: #f0f0f0;
 }
 
+/* Alto de fila: el `<tr height>` solo se respeta si las celdas no crecen para
+ * centrar su contenido. Importa en las filas VACÍAS, que es justo para lo que
+ * el docente fija un alto (una tabla que el estudiante rellena a mano). */
+.booklet tr[height] td,
+.booklet tr[height] th {
+  vertical-align: top;
+}
+
 /* Intro del bloque: "RESPONDA LAS PREGUNTAS X A LA Y" + título + contexto.
  *
  * `break-after: avoid` la mantiene pegada a la primera pregunta: si no caben
