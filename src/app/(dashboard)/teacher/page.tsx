@@ -14,7 +14,11 @@ const df = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "s
 export default async function TeacherDashboardPage() {
   const actor = await requireAuthenticatedUser("TEACHER");
 
-  const [evaluations, recentBatches, unreadNotifications] = await Promise.all([
+  const [currentUser, evaluations, recentBatches, unreadNotifications] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: actor.userId },
+      select: { name: true },
+    }),
     prisma.evaluation.findMany({
       where: { institutionId: actor.institutionId, teacherId: actor.userId, deletedAt: null },
       orderBy: { updatedAt: "desc" },
@@ -42,11 +46,17 @@ export default async function TeacherDashboardPage() {
   const totalSheets = recentBatches.reduce((s, b) => s + b.totalSheets, 0);
   const processedSheets = recentBatches.reduce((s, b) => s + b.processedSheets, 0);
 
+  // Saludo con el primer nombre del docente (lo que esté antes del primer
+  // espacio). Si el usuario no tiene nombre, cae al saludo genérico.
+  const firstName = currentUser?.name?.split(" ")[0]?.trim();
+
   return (
     <>
       {/* Saludo */}
       <header className="mb-8">
-        <h1 className="font-display text-3xl font-bold tracking-tight">¡Hola de nuevo! 👋</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight">
+          {firstName ? `¡Hola de nuevo, ${firstName}!` : "¡Hola de nuevo!"}
+        </h1>
         <p className="text-muted-foreground mt-1.5 text-sm">
           Crea evaluaciones, gestiona tu banco de preguntas y escanea hojas de respuesta.
         </p>
