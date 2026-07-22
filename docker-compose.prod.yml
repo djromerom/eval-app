@@ -1,13 +1,20 @@
 # =============================================================================
 # eval-app — stack de producción (VPS único: ecognia.pro)
 #
+# Imágenes pineadas por env vars (CI/CD las setea en deploy-time):
+#   EVAL_APP_IMAGE     Imagen SHA-pineada del web/workers (default local: eval-app:latest)
+#   OMR_SERVICE_IMAGE  Imagen SHA-pineada del microservicio OMR  (default local: omr-service:latest)
+# El CI exporta estas vars con valores tipo
+#   ghcr.io/<owner>/eval-app:git-<sha>
+# Para builds locales sin CI, basta con `dp build` (compose usa los defaults).
+#
 # Uso:
 #   alias dp='docker compose -f docker-compose.prod.yml'
-#   dp build                          # construye la imagen eval-app:latest
+#   dp build                          # construye eval-app:latest y omr-service:latest
 #   dp up -d postgres redis            # primero la infra de datos
 #   dp run --rm migrate                # aplica migraciones (profile: init)
 #   dp run --rm certbot certonly ...   # emite el primer cert (profile: init)
-#   dp up -d                           # nginx, web y workers
+#   dp up -d                           # omr-service, web y workers
 #
 # Volúmenes nombrados (creados en el primer up):
 #   pgdata          → Postgres 16
@@ -86,7 +93,7 @@ services:
   # correr `prisma migrate deploy`.
   # ---------------------------------------------------------------------------
   migrate:
-    image: eval-app:latest
+    image: ${EVAL_APP_IMAGE:-eval-app:latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -131,11 +138,34 @@ services:
   # ---------------------------------------------------------------------------
 
   # ---------------------------------------------------------------------------
+  # omr-service — microservicio Python para detección de burbujas.
+  # Solo accesible desde la red interna `eval-net` (NO se publica al host).
+  # El worker-omr lo consume por http://omr-service:8000 (configurar en
+  # `.env.prod` con OMR_SERVICE_URL=http://omr-service:8000).
+  # ---------------------------------------------------------------------------
+  omr-service:
+    image: ${OMR_SERVICE_IMAGE:-omr-service:latest}
+    build:
+      context: ./omr-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    user: "1001:1001"
+    # Sin `ports:` → solo accesible desde la red interna.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request,sys; r=urllib.request.urlopen(\"http://127.0.0.1:8000/health\",timeout=2); sys.exit(0 if r.status==200 else 1)'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - eval-net
+
+  # ---------------------------------------------------------------------------
   # Web — Next.js standalone. El entrypoint-web.sh copia .next/static y
   # public/ al output standalone antes de `exec node server.js`.
   # ---------------------------------------------------------------------------
   web:
-    image: eval-app:latest
+    image: ${EVAL_APP_IMAGE:-eval-app:latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -175,7 +205,7 @@ services:
   # Worker OMR — calificación de hojas escaneadas. Concurrencia 2.
   # ---------------------------------------------------------------------------
   worker-omr:
-    image: eval-app:latest
+    image: ${EVAL_APP_IMAGE:-eval-app:latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -185,6 +215,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      omr-service:
         condition: service_healthy
     env_file:
       - .env.prod
@@ -203,7 +235,7 @@ services:
   # Concurrencia 1 (Puppeteer es pesado: ~400MB por instancia).
   # ---------------------------------------------------------------------------
   worker-pdf:
-    image: eval-app:latest
+    image: ${EVAL_APP_IMAGE:-eval-app:latest}
     build:
       context: .
       dockerfile: Dockerfile
