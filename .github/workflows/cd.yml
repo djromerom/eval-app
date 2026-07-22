@@ -61,11 +61,14 @@ jobs:
           - name: web
             image_name: eval-app
             context: .
-            dockerfile: Dockerfile
+            # Path ABSOLUTO para evitar que docker buildx resuelva `Dockerfile`
+            # relativo al CWD del runner (que también es repo root) y caiga en
+            # el Dockerfile equivocado cuando el context cambia.
+            dockerfile: ${{ github.workspace }}/Dockerfile
           - name: omr-service
             image_name: omr-service
             context: ./omr-service
-            dockerfile: Dockerfile
+            dockerfile: ${{ github.workspace }}/omr-service/Dockerfile
     steps:
       - uses: actions/checkout@v4
 

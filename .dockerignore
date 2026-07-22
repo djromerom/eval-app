@@ -29,8 +29,11 @@ test-results
 .env.*
 !.env.example
 
-# Uploads locales y temporales de OMR
-storage/
+# Uploads locales y temporales de OMR.
+# IMPORTANTE: anclar a la raíz con `/storage/` — el patrón `storage/` SIN
+# slash inicial matchea a cualquier nivel y excluiría también
+# `src/shared/infrastructure/storage/local-storage.ts`, rompiendo `next build`.
+/storage/
 omr-verify-*/
 scanning-test-*/
 
