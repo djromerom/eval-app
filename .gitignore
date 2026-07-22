@@ -24,8 +24,11 @@ test-results/
 *.pem
 *.tsbuildinfo
 
-# uploads locales (hojas escaneadas, PDFs generados)
-storage/
+# uploads locales (hojas escaneadas, PDFs generados).
+# Anclar a la raíz con `/storage/` — sin slash matchea a cualquier nivel
+# y excluiría también `src/shared/infrastructure/storage/local-storage.ts`
+# (rompe el `next build` en Docker porque el archivo deja de estar en git).
+/storage/
 
 # directorios temporales de verificación OMR (mkdtempSync)
 omr-verify-*/
