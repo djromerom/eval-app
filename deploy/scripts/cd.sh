@@ -131,6 +131,19 @@ log "imágenes:"
 log "  eval-app    → $EVAL_APP_IMAGE"
 log "  omr-service → $OMR_SERVICE_IMAGE"
 
+# ---------- Auth check (GHCR paquetes privados) ----------
+# El login a ghcr.io se hace UNA SOLA VEZ en el VPS con `docker login ghcr.io`
+# (las credenciales quedan en /root/.docker/config.json, chmod 600). cd.sh
+# no hace login en cada run — solo verifica que la auth está en su sitio
+# y emite una guía clara si falta.
+if [ -f /root/.docker/config.json ] && grep -q '"ghcr.io"' /root/.docker/config.json 2>/dev/null; then
+  log "GHCR auth: detectada en /root/.docker/config.json"
+else
+  log "GHCR auth: NO detectada — si el pull falla con 'unauthorized',"
+  log "  corre UNA vez en el VPS:    docker login ghcr.io"
+  log "  con un PAT de scope 'read:packages' (fine-grained del repo eval-app)."
+fi
+
 # ---------- Pull ----------
 log "pulling images…"
 docker compose -f "$COMPOSE_FILE" pull --ignore-pull-failures \

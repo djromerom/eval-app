@@ -304,10 +304,13 @@ Desde julio 2026 el deploy a producción está automatizado con GitHub Actions:
    `ghcr.io/djromerom/eval-app:git-abc1234` sin necesidad de forwarding de
    env vars por SSH.
 
-5. **Visibilidad de GHCR**: los paquetes se crean **públicos** (la imagen no
-   contiene secretos — toda config sensible va por `.env.prod`). El VPS
-   puede hacer pull sin autenticación. Si se prefiere mantenerlos privados,
-   ver §Paquetes GHCR privados abajo.
+5. **Visibilidad de GHCR**: por defecto GHCR crea paquetes **privados**. Para
+   que el VPS pueda hacer pull, hay que hacer `docker login ghcr.io` una vez
+   en el VPS con un PAT de scope mínimo. Ver
+   **[§Paquetes GHCR privados](#paquetes-ghcr-privados)** abajo — toma ~3
+   minutos. (Si prefieres dejarlos públicos, ve a GitHub → Packages →
+   eval-app / omr-service → Package settings → Change visibility → Public. La
+   imagen no contiene secretos — toda config sensible va por `.env.prod`.)
 
 ### Operación
 
@@ -356,27 +359,75 @@ echo "[--END-- $(date -Iseconds)] rc=$RC" >> "$LOG"
 exit $RC
 ```
 
-### Anexo — paquetes GHCR privados (opcional)
+### Anexo — Paquetes GHCR privados
 
-Si más adelante se prefiere que los paquetes sean privados:
+Por defecto GHCR crea los paquetes como **privados**. Para que el VPS pueda
+hacer `docker pull ghcr.io/djromerom/eval-app:git-<sha>` necesita autenticarse.
+Hay que hacerlo **una sola vez** en el VPS; Docker persiste las credenciales
+en `/root/.docker/config.json` (chmod 600, root). El workflow y cd.sh no
+cambian — `docker compose pull` ya usa esa config automáticamente.
 
-1. Crear un PAT (fine-grained) con scope `read:packages` del owner del repo.
-2. Agregar `GHCR_TOKEN` y `GHCR_USER` a `.env.prod` del VPS.
-3. Agregar un paso al workflow `cd` (en la job `deploy`):
-   ```yaml
-   - name: docker login on VPS
-     uses: appleboy/ssh-action@v1.1.0
-     with:
-       host: ${{ secrets.VPS_HOST }}
-       username: ${{ secrets.VPS_USER }}
-       key: ${{ secrets.VPS_SSH_KEY }}
-       command: deploy --pre-login "${{ secrets.GHCR_USER }} ${{ secrets.GHCR_TOKEN }}"
-   ```
-   Y en `cd.sh`, antes del primer `pull`, hacer `docker login -u "$U" -p "$P" ghcr.io`
-   si se pasó `--pre-login`.
+> Si prefieres no meterte con PATs: en GitHub ve a Packages → eval-app y
+> omr-service → Package settings → Change visibility → Public. La imagen no
+> contiene secretos — toda config sensible va por `.env.prod`. Esta opción
+> es de un solo click y deja el VPS sin auth que mantener.
 
-No se hizo por defecto — los paquetes públicos simplifican el flujo y la
-imagen no tiene secretos.
+#### Paso 1 — Crear un PAT fine-grained (scope mínimo)
+
+1. `https://github.com/settings/personal-access-tokens/new` (o desde el avatar →
+   Settings → Developer settings → Personal access tokens → Fine-grained tokens
+   → **Generate new token**).
+2. **Token name**: `eval-cd-pull` (o el que prefieras).
+3. **Resource owner**: `djromerom`.
+4. **Expiration**: 90 días (renovable).
+5. **Repository access**: Only select repositories → **`djromerom/eval-app`**.
+6. **Permissions** (buscar "packages" en el dropdown):
+   - **Packages**: Read-only
+   - (Metadata: Read-only viene por default, dejarlo así.)
+7. **Generate token** → **copiar el token** (empieza con `github_pat_…`). Es la
+   única vez que se muestra — guárdalo seguro.
+
+> El blast radius de este PAT es: leer paquetes del repo eval-app. No puede
+> tocar código, ni PRs, ni escribir en ningún lado. Si se filtra, el daño
+> potencial es bajo.
+
+#### Paso 2 — (Opcional) Agregar los Secrets a GitHub
+
+Útil para referencia / futura rotación / scripts que quieran regenerar el
+login. cd.sh NO los lee — el login se persiste en disco y se hace offline:
+
+- Settings → Secrets and variables → Actions → **New repository secret**:
+  - `GHCR_USER` = `djromerom`
+  - `GHCR_TOKEN` = el PAT del paso 1 (`github_pat_…`)
+
+#### Paso 3 — Login una sola vez en el VPS
+
+```bash
+# Desde tu Mac, vía SSH con la clave admin (NO la deploy key):
+ssh -i ~/.ssh/id_ed25519_solinces root@177.7.42.54
+
+# Una vez adentro:
+docker login ghcr.io -u djromerom
+# pegará un prompt — pegar el PAT del paso 1. Verás:
+#   Login Succeeded
+```
+
+Docker persiste las credenciales en `/root/.docker/config.json`. Para
+verificar:
+
+```bash
+ls -l /root/.docker/config.json        # debe ser -rw------- root root
+grep ghcr.io /root/.docker/config.json # debe listar la entrada
+```
+
+A partir de acá, **todos los deploys** que haga `docker compose pull` usarán
+esa auth. No hay nada más que hacer.
+
+#### Cuándo renovar el login
+
+- Cuando el PAT expire (90 días) → generar uno nuevo y repetir el paso 3.
+- Si el deploy falla con `unauthorized: GHCR` o similar → el PAT expiró o se
+  revocó. cd.sh imprime una guía clara si detecta que la auth no está.
 
 ## Solución de problemas
 
@@ -460,6 +511,18 @@ Solución: en el VPS correr `cd /opt/eval/eval-app && git pull --ff-only` y
 luego re-disparar el workflow. Si es recurrente, vale la pena que el
 wrapper haga pull antes (trade-off: el deploy depende del estado del repo
 local).
+
+### El deploy falla con "unauthorized" al hacer pull de GHCR
+
+El `docker login ghcr.io` del VPS expiró o el PAT fue revocado. cd.sh emite
+una guía clara en sus logs cuando detecta que falta auth. Para arreglar:
+
+```bash
+ssh root@<vps> 'docker login ghcr.io -u djromerom'
+# pegar el PAT (generar uno nuevo si el anterior expiró)
+```
+
+Ver §Paquetes GHCR privados abajo.
 
 ## Riesgos conocidos
 
