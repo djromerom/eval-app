@@ -14,8 +14,12 @@ import type { UploadImageFn } from "./docx-parser";
  *
  * El parser pide `uploadImage` por cada imagen inline; esta implementación
  * replica LOCALMENTE la lógica del endpoint (sin round-trip HTTP) para evitar
- * serializar el DOCX al servidor dos veces. La imagen sigue terminando en
- * disco bajo `evaluations/{institutionId}/{uuid}.jpg`.
+ * serializar y deserializar el DOCX al servidor dos veces. La imagen sigue
+ * terminando en disco bajo `evaluations/{institutionId}/{uuid}.jpg`.
+ *
+ * Si quisiéramos invocarlo a través de la red (p. ej. cuando el parser viva
+ * en un worker), bastaría con otra implementación de `UploadImageFn` que
+ * haga `fetch("/api/uploads", { method: "POST", body: formData })`.
  */
 export function makeUploadImageForInstitution(): UploadImageFn {
   return async ({ institutionId, contentType, base64 }) => {

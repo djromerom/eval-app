@@ -85,8 +85,13 @@ src/app/
 independientes del servidor web (no bloquean request/response). Ver
 [workers/README.md](./workers/README.md).
 
-- **OMR**: `sharp` + heurística de detección de burbujas (umbrales 60/20). El
-  microservicio Python/OpenCV es un fallback **solo si** la precisión < 95 %.
+- **OMR**: la detección de burbujas la hace el microservicio Python `omr-service/`
+  (FastAPI + OpenCV, deskew + detección + recortes), que corre en loopback y el
+  `worker-omr` llama por HTTP (`OMR_SERVICE_URL`, ver `HttpOmrDetector`). El worker
+  conserva QR + verificación HMAC + clave + scoring + persistencia en TS; solo la
+  visión se delegó. La pipeline TS previa (`bubble-detector.ts`, `grid-inference.ts`,
+  registro por plantilla) queda **dormida** en el repo. La matriz de revisión por
+  lote (`teacher/scan/[batchId]`) muestra la detección con recortes navegables.
 - **PDF**: método primario = imprimir desde el navegador; Puppeteer es el
   secundario para descarga masiva.
 

@@ -10,6 +10,12 @@ import type {
 import { parseQuestionsCsv } from "@/modules/question-import/infrastructure/csv";
 import { parseQuestionsDocx } from "@/modules/question-import/infrastructure/docx";
 import { makeUploadImageForInstitution } from "@/modules/question-import/infrastructure/docx-upload";
+import { loadAiConfig } from "@/shared/infrastructure/ai/config";
+import { AiClient } from "@/shared/infrastructure/ai/client";
+import {
+  parseQuestionsWithAi,
+  AI_PROMPT_SYSTEM,
+} from "@/modules/question-import/infrastructure/ai-parser";
 import {
   makeImportQuestions,
   makeQuestionsFromEvaluation,
@@ -41,11 +47,22 @@ export async function commitImportAction(
   const payloadRaw = String(formData.get("payload") ?? "");
   const correctionsRaw = String(formData.get("corrections") ?? "{}");
 
-  if (!destinationKind || !destinationId) {
+  if (!destinationKind || (destinationKind !== "evaluation" && destinationKind !== "bank")) {
     return { error: "Elige un destino para la importación." };
   }
-  if (destinationKind === "evaluation" && (!evaluationId || !sectionId)) {
-    return { error: "Falta la evaluación o el contexto destino." };
+  if (!evaluationId) {
+    return { error: "Falta la evaluación destino." };
+  }
+  if (destinationKind === "evaluation") {
+    // El use case espera sectionId (lo usa como destino del merge de contextos
+    // y como ancla de `addQuestion`). Si falta, rechazamos — la rama de
+    // "crear secciones automáticamente" aún no está implementada.
+    if (!sectionId) {
+      return { error: "Elige un contexto destino." };
+    }
+  }
+  if (destinationKind === "bank" && !destinationId) {
+    return { error: "Elige la asignatura del banco." };
   }
 
   let questions: ParsedQuestion[];
@@ -161,4 +178,153 @@ export async function loadDocxSourceAction(formData: FormData): Promise<LoadSour
     const message = e instanceof Error ? e.message : "No se pudo leer el DOCX.";
     return { questions: [], warnings: [], error: message };
   }
+}
+
+/**
+ * Variante con IA: extrae preguntas de un PDF o DOCX usando Minimax.
+ * El resultado pasa por la misma pantalla de revisión que CSV/DOCX.
+ */
+export async function loadAiSourceAction(formData: FormData): Promise<LoadSourceState> {
+  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) {
+    return { questions: [], warnings: [], error: "Falta el archivo." };
+  }
+
+  const aiConfig = loadAiConfig();
+  if (!aiConfig) {
+    return {
+      questions: [],
+      warnings: [],
+      error: "La importación con IA no está configurada (MINIMAX_API_KEY).",
+    };
+  }
+
+  const isPdf = file.name.toLowerCase().endsWith(".pdf");
+  const isDocx = file.name.toLowerCase().endsWith(".docx");
+  if (!isPdf && !isDocx) {
+    return { questions: [], warnings: [], error: "Solo se aceptan archivos PDF o DOCX." };
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  // Mapa: nº de imagen → URL real
+  const imageMap: Record<number, string> = {};
+  let docBuffer: Buffer = buffer;
+
+  // Si es PDF, convertir a DOCX via Python/pdf2docx para extraer imágenes
+  if (isPdf) {
+    try {
+      const { pdfToDocx } = await import("@/shared/infrastructure/pdf");
+      docBuffer = Buffer.from(await pdfToDocx(buffer));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { questions: [], warnings: [], error: msg };
+    }
+  }
+
+  // Procesar como DOCX: mammoth HTML + extraer imágenes
+  const mammoth = await import("mammoth");
+  const m = (mammoth.default ?? mammoth) as {
+    convertToHtml: (input: { buffer: Buffer }) => Promise<{ value: string }>;
+    extractRawText: (input: { buffer: Buffer }) => Promise<{ value: string }>;
+  };
+  const htmlResult = await m.convertToHtml({ buffer: docBuffer });
+  const rawHtml = htmlResult.value;
+
+  // Extraer data URIs de imágenes, subirlas y reemplazar por marcadores
+  const uploadImage = (
+    await import("@/modules/question-import/infrastructure/docx-upload")
+  ).makeUploadImageForInstitution();
+  let imgIndex = 0;
+  const textWithMarkers = rawHtml.replace(
+    /<img[^>]+src="data:image\/([a-z0-9+.-]+);base64,([^"]+)"[^>]*>/gi,
+    (_match, contentType: string, base64: string) => {
+      imgIndex++;
+      const n = imgIndex;
+      uploadImage({ institutionId: actor.institutionId, contentType, base64 }).then((res) => {
+        if ("url" in res) imageMap[n] = res.url;
+      });
+      return `[IMAGEN ${n}]`;
+    },
+  );
+
+  await new Promise((r) => setTimeout(r, 500));
+
+  // Convertir HTML a texto plano (strip tags)
+  let documentText = textWithMarkers
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&[a-z]+;/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (!documentText) {
+    const rawResult = await m.extractRawText({ buffer: docBuffer });
+    documentText = rawResult.value;
+  }
+
+  if (!documentText.trim()) {
+    return { questions: [], warnings: [], error: "No se pudo extraer texto del documento." };
+  }
+
+  // Limpiar posibles restos de imágenes no capturadas
+  const cleanText = documentText
+    .replace(/data:image\/[^;]+;base64,[^\s]+/g, "[IMAGEN]")
+    .replace(/!\[.*?\]\(.*?\)/g, "[IMAGEN]")
+    .slice(0, 50000);
+
+  const client = new AiClient(aiConfig);
+  let aiResponse: string;
+  try {
+    aiResponse = await client.chat({
+      system: AI_PROMPT_SYSTEM,
+      messages: [
+        {
+          role: "user",
+          content: `Analiza el siguiente examen y extrae todas las preguntas con su contexto compartido:\n\n${cleanText}`,
+        },
+      ],
+      temperature: 0.1,
+      maxTokens: 65536,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Error desconocido";
+    if (/image|model does not support/i.test(message) && message.length < 200) {
+      return {
+        questions: [],
+        warnings: [],
+        error:
+          "El modelo de IA no puede procesar imágenes. Asegúrate de que el texto del documento esté visible como texto seleccionable, no como imágenes escaneadas.",
+      };
+    }
+    return { questions: [], warnings: [], error: `Error con la IA: ${message}` };
+  }
+
+  const parsed = parseQuestionsWithAi(documentText, aiResponse);
+
+  // Reemplazar placeholders !!IMAGEN N!! por las URLs reales subidas
+  if (Object.keys(imageMap).length > 0) {
+    for (const q of parsed.questions) {
+      if (q.image?.url) {
+        const m = q.image.url.match(/^!!IMAGEN\s*(\d+)!!$/i);
+        if (m) {
+          const url = imageMap[Number(m[1])];
+          if (url) q.image.url = url;
+        }
+      }
+    }
+  }
+
+  if (parsed.questions.length === 0) {
+    return {
+      questions: [],
+      warnings: parsed.warnings,
+      error:
+        parsed.warnings.length > 0 ? parsed.warnings.join(" ") : "La IA no pudo extraer preguntas.",
+    };
+  }
+
+  return parsed;
 }

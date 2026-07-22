@@ -26,7 +26,8 @@ interface Props {
   source:
     | { kind: "evaluation"; evaluationId: string }
     | { kind: "csv"; content: string }
-    | { kind: "docx"; file: File };
+    | { kind: "docx"; file: File }
+    | { kind: "ai"; fileName: string };
   /** Si el padre ya cargó las preguntas (caso normal), se evita el re-fetch. */
   initialQuestions?: ParsedQuestion[];
   /** Volver al paso 1 para cambiar de origen. */
@@ -72,7 +73,7 @@ export function ImportReviewForm({
     // Si el padre ya pasó las preguntas, no hay que volver a pedirlas.
     // El DOCX no se vuelve a pedir: el padre lo subió vía multipart y solo
     // guarda la referencia al File original.
-    if (initialQuestions || source.kind === "docx") return;
+    if (initialQuestions || source.kind === "docx" || source.kind === "ai") return;
     let cancelled = false;
     const req =
       source.kind === "evaluation"
@@ -94,6 +95,8 @@ export function ImportReviewForm({
   }, [source, initialQuestions]);
 
   const payload = useMemo(() => questions ?? [], [questions]);
+
+  const hasContexts = useMemo(() => payload.some((q) => q.contextText?.trim()), [payload]);
 
   const importableCount = useMemo(() => {
     return payload.filter(
@@ -187,8 +190,14 @@ export function ImportReviewForm({
       />
       <input type="hidden" name="corrections" value={JSON.stringify(corrections)} />
       <input type="hidden" name="destinationKind" value={destinationKind} />
-      {destinationKind === "evaluation" ? (
+      {destinationKind === "evaluation" && !hasContexts ? (
+        <input type="hidden" name="destinationId" value={destinationId} />
+      ) : null}
+      {destinationKind === "evaluation" && !hasContexts ? (
         <input type="hidden" name="sectionId" value={destinationId} />
+      ) : null}
+      {destinationKind === "bank" ? (
+        <input type="hidden" name="destinationId" value={destinationId} />
       ) : null}
 
       <section className="bg-card space-y-4 rounded-xl border p-6">
@@ -206,6 +215,11 @@ export function ImportReviewForm({
               }}
             />
             Añadir a esta evaluación
+            {hasContexts ? (
+              <span className="text-muted-foreground ml-1 text-xs">
+                (se crearán secciones por cada contexto del documento)
+              </span>
+            ) : null}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -220,7 +234,7 @@ export function ImportReviewForm({
             />
             Guardar en el banco
           </label>
-          {destinationKind === "evaluation" ? (
+          {destinationKind === "evaluation" && !hasContexts ? (
             <div className="space-y-1">
               <label className="text-muted-foreground block text-xs font-medium">Contexto</label>
               <select
@@ -235,7 +249,8 @@ export function ImportReviewForm({
                 ))}
               </select>
             </div>
-          ) : (
+          ) : null}
+          {destinationKind === "bank" ? (
             <div className="space-y-1">
               <label className="text-muted-foreground block text-xs font-medium">Asignatura</label>
               <select
@@ -250,7 +265,7 @@ export function ImportReviewForm({
                 ))}
               </select>
             </div>
-          )}
+          ) : null}
         </div>
       </section>
 

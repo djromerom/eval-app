@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { createScanBatchAction } from "./actions";
+import { createScanBatchAction, type ScanTargetKind } from "./actions";
 
 function SubmitButton({ count }: { count: number }) {
   const { pending } = useFormStatus();
@@ -17,15 +17,32 @@ function SubmitButton({ count }: { count: number }) {
   );
 }
 
+/** Objetivo del escaneo: evaluación individual o compendio. */
+export type ScanTarget =
+  { kind: "evaluation"; id: string; title: string } | { kind: "bundle"; id: string; title: string };
+
 interface UploadZoneProps {
-  evaluations: { id: string; title: string }[];
+  /** Lista mixta de evaluaciones + compendios a mostrar en el selector. */
+  targets: ScanTarget[];
 }
 
-export function UploadZone({ evaluations }: UploadZoneProps) {
+export function UploadZone({ targets }: UploadZoneProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // `selected` = `${kind}:${id}` para que un bundle y una evaluación con
+  // el mismo id nunca colisionen en el <select>.
+  const grouped = useMemo(() => {
+    const evaluations = targets.filter(
+      (t): t is Extract<ScanTarget, { kind: "evaluation" }> => t.kind === "evaluation",
+    );
+    const bundles = targets.filter(
+      (t): t is Extract<ScanTarget, { kind: "bundle" }> => t.kind === "bundle",
+    );
+    return { evaluations, bundles };
+  }, [targets]);
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -42,10 +59,38 @@ export function UploadZone({ evaluations }: UploadZoneProps) {
     setFiles((prev) => prev.filter((_, idx) => idx !== i));
   }
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  // Resolver kind + id a partir del value "kind:id" seleccionado.
+  function readSelection(form: HTMLFormElement): { kind: ScanTargetKind; id: string } | null {
+    const value = (form.elements.namedItem("target") as HTMLSelectElement | null)?.value ?? "";
+    const [kind, id] = value.split(":");
+    if (!kind || !id) return null;
+    return { kind: kind as ScanTargetKind, id };
+  }
+
+  async function onFormSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setMessage(null);
     const form = e.currentTarget;
+    const sel = readSelection(form);
+    if (!sel) {
+      setMessage({ ok: false, text: "Selecciona una evaluación o un compendio." });
+      return;
+    }
+    // Inyectamos kind + id como campos hidden antes de serializar.
+    form
+      .querySelectorAll<HTMLInputElement>("input[name='kind'],input[name='id']")
+      .forEach((el) => el.remove());
+    const k = document.createElement("input");
+    k.type = "hidden";
+    k.name = "kind";
+    k.value = sel.kind;
+    form.appendChild(k);
+    const i = document.createElement("input");
+    i.type = "hidden";
+    i.name = "id";
+    i.value = sel.id;
+    form.appendChild(i);
+
+    setMessage(null);
     const formData = new FormData(form);
     const result = await createScanBatchAction(formData);
     if (result.ok) {
@@ -58,20 +103,36 @@ export function UploadZone({ evaluations }: UploadZoneProps) {
   }
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
+    <form ref={formRef} onSubmit={onFormSubmit} className="space-y-4">
       <div>
-        <label className="text-sm font-medium">Evaluación</label>
+        <label className="text-sm font-medium">Objetivo del escaneo</label>
         <select
-          name="evaluationId"
+          name="target"
           required
+          defaultValue=""
           className="border-input bg-background mt-1 block w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-black focus:outline-none"
         >
-          <option value="">Seleccionar evaluación…</option>
-          {evaluations.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.title}
-            </option>
-          ))}
+          <option value="" disabled>
+            Seleccionar evaluación o compendio…
+          </option>
+          {grouped.evaluations.length > 0 && (
+            <optgroup label="Evaluaciones">
+              {grouped.evaluations.map((t) => (
+                <option key={`evaluation:${t.id}`} value={`evaluation:${t.id}`}>
+                  {t.title}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {grouped.bundles.length > 0 && (
+            <optgroup label="Compendios">
+              {grouped.bundles.map((t) => (
+                <option key={`bundle:${t.id}`} value={`bundle:${t.id}`}>
+                  {t.title}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
       </div>
 

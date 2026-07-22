@@ -226,6 +226,25 @@ type Current = {
   evidence: string | null;
 };
 
+/**
+ * Política de contexto compartido:
+ *
+ * 1. Cada vez que arranca una pregunta nueva volcamos el accumulator al
+ *    `current.contextText` (`assignContext`). Esto refleja la realidad
+ *    docente: un párrafo "Lee el texto y responde 1 y 2" precede a las
+ *    preguntas 1 y 2, ambas lo comparten.
+ *
+ * 2. `finalize()` ya NO vuelca el accumulator: si lo hiciera, los párrafos
+ *    que aparecen ENTRE las opciones de una pregunta y la siguiente
+ *    (introducciones de "siguiente pasaje") se le atribuirían a la pregunta
+ *    anterior — error que tenía la versión anterior.
+ *
+ * 3. Al final, un barrido `propagateSharedContext` copia el `contextText`
+ *    de una pregunta a las CONSECUTIVAS que quedan con `null`, hasta que
+ *    aparezca una con contexto propio. Una pregunta "P1 → Q1, P2 → Q3"
+ *    deja Q2 con el mismo P1 (porque P2 vino después de Q2), mientras que
+ *    "P1 → Q1, Q2, P2 → Q3" deja Q1, Q2 con P1 y Q3 con P2.
+ */
 async function buildQuestionsFromBlocks(params: {
   blocks: Block[];
   institutionId: string;
@@ -238,37 +257,63 @@ async function buildQuestionsFromBlocks(params: {
   let current: Current | null = null;
   let contextAccum: string[] = [];
 
-  const flushContext = () => {
+  const assignContext = () => {
     const ctx = contextAccum.join("\n").trim();
-    if (current && ctx) current.contextText = ctx;
+    if (current && ctx && !current.contextText) current.contextText = ctx;
     contextAccum = [];
   };
 
   const finalize = async () => {
     if (!current) return;
-    flushContext();
+    // Importante: NO llamamos `assignContext` aquí. Si lo hiciéramos, los
+    // párrafos acumulados entre las opciones de `current` y la SIGUIENTE
+    // pregunta terminarían en la pregunta equivocada (la anterior).
     if (!current.sourceNumber) return;
     const opts = current.options ?? [];
     if (opts.length < 2) {
+      // Pregunta inválida: la descartamos pero dejamos el accumulator intacto
+      // para que la próxima pregunta válida herede cualquier contexto que la
+      // acompañaba.
       current = null;
       return;
     }
     const rawText = (current.text ?? "").trim();
-    const finalText = stripImagesFromText(rawText);
+    const imageStripped = stripImagesFromText(rawText);
+    const placeholderSanitized = sanitizeImagePlaceholders(imageStripped);
+    // Si quedó algo tras limpiar placeholders, lo usamos; si quedó vacío,
+    // caemos al texto original (sin img ni placeholders) para no perder
+    // información importante del enunciado.
+    const finalText = placeholderSanitized.text || imageStripped;
+    const contextSanitized = current.contextText
+      ? sanitizeImagePlaceholders(current.contextText)
+      : { text: null, removedImagePlaceholder: false };
     // hasInlineImage mira el HTML crudo; el texto ya strippeado pierde <img>.
     const image = await maybeExtractImage(current.rawHtml, institutionId, uploadImage);
     const fromKey = keyByNumber.get(current.sourceNumber);
+    const warnings: string[] = [];
+    if (image === null && current.hasInlineImage) {
+      warnings.push("No se pudo extraer la imagen.");
+    }
+    if (placeholderSanitized.removedImagePlaceholder) {
+      warnings.push(
+        "Esta pregunta tenía referencias a imágenes (!!IMAGEN N!!) que no se pudieron extraer; revisa el PDF original.",
+      );
+    }
+    const sanitizedOptions = opts.map((o) => {
+      const s = sanitizeImagePlaceholders(o.text);
+      return { key: o.key, text: s.text || o.text.trim() };
+    });
     const q: ParsedQuestion = {
       sourceNumber: current.sourceNumber,
-      text: finalText || rawText,
-      options: opts,
+      text: finalText,
+      options: sanitizedOptions,
       correctAnswer: fromKey?.answer ?? null,
       competency: current.competency ?? fromKey?.competency ?? null,
       evidence: current.evidence ?? fromKey?.evidence ?? null,
       contextTitle: null,
-      contextText: current.contextText ?? null,
+      contextText: contextSanitized.text ?? null,
       image,
-      warnings: image === null && current.hasInlineImage ? ["No se pudo extraer la imagen."] : [],
+      warnings,
     };
     questions.push(normalizeOptionKeys(q));
     current = null;
@@ -287,6 +332,7 @@ async function buildQuestionsFromBlocks(params: {
         competency: null,
         evidence: null,
       };
+      assignContext(); // El accumulator precede a esta pregunta → va con ella.
       continue;
     }
     if (b.kind === "option") {
@@ -295,20 +341,32 @@ async function buildQuestionsFromBlocks(params: {
       continue;
     }
     if (b.kind === "context") {
-      // Se acumula SIEMPRE: los párrafos previos a la primera pregunta se
-      // asignan a esa primera pregunta al hacer flushContext; los que llegan
-      // entre preguntas se asignan a la siguiente cuando llegue.
       contextAccum.push(b.text);
       continue;
     }
     // empty → ignora
   }
   await finalize();
-  flushContext();
-  const last = questions[questions.length - 1];
-  if (last && contextAccum.length > 0) {
+
+  // Párrafos que aparecen DESPUÉS de la última pregunta: van con esa pregunta.
+  // Ya hicimos `assignContext` cuando cada pregunta arrancó, así que este
+  // bloque solo recoge párrafos sueltos posteriores.
+  if (contextAccum.length > 0) {
     const extra = contextAccum.join("\n").trim();
-    if (extra && !last.contextText) last.contextText = extra;
+    const last = questions[questions.length - 1];
+    if (extra && last && !last.contextText) last.contextText = extra;
+  }
+
+  // Propagación: una pregunta con contexto compartido transmite ese contexto
+  // a las consecutivas que quedaron con `null`, hasta que aparezca un bloque
+  // de contexto explícitamente distinto.
+  let lastContext: string | null = null;
+  for (const q of questions) {
+    if (q.contextText !== null) {
+      lastContext = q.contextText;
+    } else if (lastContext !== null) {
+      q.contextText = lastContext;
+    }
   }
   return questions;
 }
@@ -334,4 +392,41 @@ async function maybeExtractImage(
 
 function stripImagesFromText(text: string): string {
   return text.replace(/<img\b[^>]*>/gi, "").trim();
+}
+
+/**
+ * Placeholders literales que insertan algunas herramientas (en especial
+ * `pdf2docx` cuando `soffice` no está en PATH o la imagen es vectorial) cuando
+ * NO pueden extraer una figura. Tipos:
+ *
+ *   !!IMAGEN 3!!   !!IMAGE 3!!   !!IMG 3!!   !!FIGURA 3!!   !!FIGURE 3!!
+ *
+ * Si llegan al texto, algo en la UI los renderiza como `<img src=…>` o como
+ * `<a href=…>` y se generan 404 contra rutas de evaluación. Los saneamos
+ * aquí, ANTES de que `q.text` llegue a la BD, y dejamos un warning para que
+ * el docente los marque con la imagen real desde el editor visual.
+ *
+ * El regex acepta mayúsculas/minúsculas y separadores varios entre palabra
+ * y número (espacios opcionales y pequeños signos). Devuelve un objeto con
+ * el texto limpio y un flag para activar el warning.
+ */
+const IMAGE_PLACEHOLDER_RE = /!!\s*(?:imagen|image|img|figura|figure|fig)\s*\d+\s*!!/gi;
+
+export interface SanitizedText {
+  text: string;
+  /** true si se eliminó al menos un placeholder de imagen del texto. */
+  removedImagePlaceholder: boolean;
+}
+
+export function sanitizeImagePlaceholders(text: string): SanitizedText {
+  if (!text) return { text: "", removedImagePlaceholder: false };
+  const matches = text.match(IMAGE_PLACEHOLDER_RE);
+  const cleaned = text
+    .replace(IMAGE_PLACEHOLDER_RE, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return {
+    text: cleaned,
+    removedImagePlaceholder: matches !== null && matches.length > 0,
+  };
 }

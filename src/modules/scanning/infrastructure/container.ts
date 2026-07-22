@@ -1,8 +1,10 @@
 import { prisma } from "@/shared/infrastructure/db/prisma";
+import { env } from "@/config/env";
 import { PrismaEvaluationRepository } from "@/modules/evaluations/infrastructure/prisma-evaluation-repository";
 import type { AnswerKey } from "@/modules/evaluations/domain/evaluation";
 import { PrismaScanningRepository } from "./prisma-scanning-repository";
 import { sharpQrDecoder } from "./qr-decoder";
+import { HttpOmrDetector } from "./http-omr-detector";
 import {
   ProcessAnswerSheet,
   type EvaluationQuestionsProvider,
@@ -72,4 +74,10 @@ const questionsProvider: EvaluationQuestionsProvider = {
 };
 
 export const makeProcessAnswerSheet = () =>
-  new ProcessAnswerSheet(scanningRepo, sharpQrDecoder, questionsProvider);
+  new ProcessAnswerSheet(
+    scanningRepo,
+    sharpQrDecoder,
+    questionsProvider,
+    // Detección delegada al microservicio Python (omr-service) por HTTP.
+    new HttpOmrDetector(env.OMR_SERVICE_URL),
+  );

@@ -499,6 +499,22 @@ model EvaluationBundle {
   // Override del tema institucional. Mismo shape que Evaluation.theme; se
   // combina con Institution.theme en runtime. Ver src/modules/theme/.
   theme         Json?
+  // Geometría OMR de la hoja de respuestas, MEDIDA del render real
+  // (ver modules/printing/domain/sheet-template.ts). Se captura de forma
+  // perezosa la primera vez que se escanea una hoja del compendio y se
+  // reutiliza para las demás: la rejilla depende del compendio, no del
+  // estudiante.
+  //
+  // OJO — no basta con cachearla: si el layout de impresión cambia después
+  // de imprimir, esta plantilla deja de describir el papel que tiene el
+  // docente en la mano. Por eso el escaneo NO confía a ciegas en ella; mide
+  // la calidad de la alineación (`SheetAlignment`) y manda la hoja a
+  // revisión en vez de calificarla mal en silencio. Un caso real: una hoja
+  // impresa con reparto de columnas 40/40/30 se escaneó cuando el código ya
+  // repartía 37/37/36.
+  sheetTemplate    Json?
+  // Cuándo se capturó `sheetTemplate`, para poder invalidarla a mano.
+  sheetTemplateAt  DateTime?
   createdById   String       @db.Uuid
   createdBy     User         @relation("BundleCreatedBy", fields: [createdById], references: [id])
   createdAt     DateTime     @default(now())
@@ -506,6 +522,7 @@ model EvaluationBundle {
 
   items  EvaluationBundleItem[]
   sheets AnswerSheet[]
+  scanBatches ScanBatch[]
 
   @@unique([institutionId, bookletNumber])
   @@index([institutionId])
@@ -532,13 +549,18 @@ model EvaluationBundleItem {
 
 // ========== ANSWER SHEETS & GRADING ==========
 
-// Lote de escaneo: hasta 200 hojas por carga, procesado asíncronamente (BullMQ)
+// Lote de escaneo: hasta 200 hojas por carga, procesado asíncronamente (BullMQ).
+// Una hoja escaneada pertenece a UN evaluation legacy o a UN bundle (compendio);
+// lo mismo aplica al batch que la agrupa. La invariante "exactamente uno no-nulo"
+// vive en el use case (no se enforza a nivel DB para no romper hojas legacy).
 model ScanBatch {
   id              String      @id @default(uuid(7)) @db.Uuid
   institutionId   String      @db.Uuid
   institution     Institution @relation(fields: [institutionId], references: [id])
   evaluationId    String?     @db.Uuid
   evaluation      Evaluation? @relation(fields: [evaluationId], references: [id])
+  bundleId        String?     @db.Uuid
+  bundle          EvaluationBundle? @relation(fields: [bundleId], references: [id])
   uploadedBy      String      @db.Uuid
   uploader        User        @relation(fields: [uploadedBy], references: [id])
   status          ScanStatus  @default(PENDING)
@@ -551,6 +573,7 @@ model ScanBatch {
 
   @@index([institutionId])
   @@index([evaluationId])
+  @@index([bundleId])
 }
 
 model AnswerSheet {
@@ -579,6 +602,13 @@ model AnswerSheet {
   score          Float?
   totalCorrect   Int?
   totalQuestions Int?
+  // Sprint 9 OMR auto-detect: geometría inferida por el detector de burbujas.
+  // Permite a la UI matriz renderizar el grid sin re-detectar. null = legacy
+  // 1-col o detección omitida.
+  gridLayout         Json?
+  // Confianza mediana de la detección 0..1 (densidad de componentes
+  // supervivientes). Útil para diagnóstico y para ajustar thresholds.
+  detectionConfidence Float?
   reviewedBy     String?           @db.Uuid // usuario que revisó manualmente
   reviewedAt     DateTime?
   notes          String?
@@ -619,6 +649,10 @@ model StudentAnswer {
   isCorrect     Boolean?
   isAmbiguous   Boolean               @default(false) // múltiple marca
   confidence    Float? // 0-1 confianza de la detección OMR
+  // Sprint 9 OMR auto-detect: diagnóstico por burbuja individual para la UI
+  // matriz estilo Remark. Array de {key, fillRatio, state, bboxX/Y/W/H, isMarked}.
+  cells         Json?
+  fillRatio     Float? // fill ratio de la burbuja seleccionada (atajo para UI)
 
   @@index([answerSheetId])
   @@index([questionId])

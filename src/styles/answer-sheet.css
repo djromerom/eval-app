@@ -67,81 +67,62 @@
   padding: 0 0.2rem;
 }
 
-/* Grid de burbujas */
+/* Grid de burbujas — 3 columnas para casar con el PDF institucional
+ * (Prueba__11º_I_periodo_C3__1_.pdf). Las preguntas se reparten en orden
+ * entre las 3 columnas verticales: 1..N/3, N/3+1..2N/3, 2N/3+1..N.
+ * Cada columna es independiente (mismo ancho, mismo header). */
 .as-grid {
   flex: 1;
-  border-collapse: collapse;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  column-gap: 0.6rem;
 }
 
-/* Separador visual entre secciones del compendio (hoja unificada). */
-.as-section {
-  margin-top: 0.8rem;
-  padding-top: 0.4rem;
-  border-top: 0.5pt dashed #999;
-}
-
-.as-section:first-child {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
-}
-
-.as-section-header {
-  font-size: 9pt;
-  margin-bottom: 0.3rem;
-}
-
-.as-grid-header {
+/* Cada columna apila verticalmente sus filas (número + N burbujas con
+ * letra centrada). El grid interno de la fila reserva 1.5rem para el
+ * número y reparte el resto entre 8 huecos: las preguntas con menos
+ * opciones (2..7) simplemente dejan las celdas sobrantes en blanco. */
+.as-col {
   display: flex;
+  flex-direction: column;
+}
+
+.as-col-row {
+  display: grid;
+  grid-template-columns: 1.5rem repeat(8, 1fr);
   align-items: center;
-  border-bottom: 1px solid #000;
-  padding-bottom: 0.3rem;
-  margin-bottom: 0.3rem;
+  padding: 0.12rem 0;
 }
 
-.as-grid-corner {
-  width: 1.6rem;
-  font-weight: 700;
-  font-size: 9pt;
-}
-
-.as-grid-key {
-  /* 8 columnas (A–H) × ~10mm centro a centro = ~80mm de ancho de grilla. */
-  width: 10mm;
-  text-align: center;
-  font-weight: 700;
-  font-size: 9pt;
-}
-
-.as-grid-row {
-  display: flex;
-  align-items: center;
-  padding: 0.15rem 0;
-}
-
-.as-grid-num {
-  width: 1.6rem;
-  font-size: 9pt;
+.as-col-num {
+  font-size: 8pt;
   color: #555;
   text-align: right;
-  padding-right: 0.3rem;
+  padding-right: 0.25rem;
 }
 
-.as-grid-bubble {
-  width: 10mm;
+.as-col-bubble {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.as-grid-bubble .omr-bubble {
-  /* 4mm de diámetro, 10mm centro a centro (§11) — la columna visual
-     reserva el espacio, la burbuja es más pequeña para que la cuadrícula
-     no se sature con 8 columnas. */
-  width: 4mm;
-  height: 4mm;
+.as-col-bubble .omr-bubble {
+  /* Burbuja con la letra de la opción centrada dentro — estilo del PDF
+   * institucional. Tamaño pensado para que 8 burbujas quepan en el ancho
+   * de una columna con la letra legible (≥ 6pt). */
+  width: 5.5mm;
+  height: 5.5mm;
   border: 0.3mm solid #000;
   border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7pt;
+  font-weight: 700;
+  font-family: Arial, Helvetica, sans-serif;
+  line-height: 1;
+  color: #000;
 }
 
 /* Impresión */

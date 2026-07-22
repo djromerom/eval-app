@@ -36,6 +36,8 @@ describe("parseQuestionsCsv", () => {
     expect(ok.result.warnings).toHaveLength(0);
 
     // Una fila con 0 opciones (todas vacías) debe generar aviso y no entrar.
+    // Importante: 5 comas en la fila para que la última celda caiga en
+    // "correcta", no en "d".
     const bad = parseQuestionsCsv("enunciado,a,b,c,d,correcta\n¿z?,,,,,B");
     expect(bad.result.questions).toHaveLength(0);
     expect(bad.result.warnings.some((w) => w.includes("0 opci"))).toBe(true);

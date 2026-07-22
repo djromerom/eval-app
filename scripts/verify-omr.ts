@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { signPayload, deriveInstitutionSecret } from "@/shared/infrastructure/crypto/hmac";
 import type { ScanningRepository, QrDecoder } from "@/modules/scanning/domain/answer-sheet";
 import { ProcessAnswerSheet } from "@/modules/scanning/application/process-answer-sheet";
+import { HttpOmrDetector } from "@/modules/scanning/infrastructure/http-omr-detector";
 
 const QR_SIGNING_SECRET = process.env.QR_SIGNING_SECRET;
 if (!QR_SIGNING_SECRET) {
@@ -44,6 +45,10 @@ function inMemoryRepo(): ScanningRepository {
     async updateSheetStatus(_id, status, data) {
       logs.push(`status=${status}${data?.notes ? ` (${data.notes})` : ""}`);
       if (data?.score !== undefined) logs.push(`score=${data.score}/${data.totalQuestions}`);
+    },
+    async saveDecodedQr(_id, qrContent, _sig, _studentCode) {
+      logs.push(`decoded qr (${qrContent.length} chars)`);
+      return { studentId: "stu-1" };
     },
     async saveAnswers(_id, ans) {
       const ok = ans.filter((a) => a.isCorrect).length;
@@ -143,10 +148,16 @@ async function main() {
     { id: "q5", number: 5, correctAnswer: "B" as const, optionsLength: 4, bundleItemId: "bi-fake" },
   ];
 
-  const useCase = new ProcessAnswerSheet(repo, qrDecoder, {
-    getCorrectAnswers: async () => mockQuestions,
-    getCorrectAnswersForBundle: async () => [],
-  });
+  const useCase = new ProcessAnswerSheet(
+    repo,
+    qrDecoder,
+    {
+      getCorrectAnswers: async () => mockQuestions,
+      getCorrectAnswersForBundle: async () => [],
+    },
+    // Requiere el microservicio OMR arriba (uvicorn en OMR_SERVICE_URL).
+    new HttpOmrDetector(process.env.OMR_SERVICE_URL ?? "http://127.0.0.1:8000"),
+  );
 
   console.log("3. Processing…");
   const result = await useCase.execute({

@@ -3,10 +3,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Worker } from "bullmq";
 import puppeteer from "puppeteer";
-import { PDFDocument } from "pdf-lib";
 import { env } from "@/config/env";
 import { type PrintKind, signPrintToken } from "@/shared/infrastructure/crypto/print-token";
-import { TABLOID_PT, buildImposedPageOrder, padToMultipleOf4 } from "@/shared/imposition/booklet";
+import { imposeBooklet } from "@/shared/imposition/booklet-pdf";
 import {
   type PdfGenerationJob,
   type PdfGenerationResult,
@@ -26,6 +25,11 @@ import { logger } from "@/shared/infrastructure/logger";
  *      horizontal), reordenando las páginas de modo que al imprimir a
  *      doble cara, doblar al centro y grapar por el lomo, el lector
  *      hojee el examen en orden 1..N.
+ *
+ * Para compendios (multi-evaluación) se preserva la primera página del PDF
+ * lineal como portada institucional (sin imposition). Si se impusiera con
+ * el resto, la portada ocuparía media hoja tabloid desperdiciando la otra
+ * media — bug documentado al cambiar de "una columna" a "dos páginas".
  *
  * El método primario del navegador (print CSS en carta) sigue siendo el
  * principal; este worker es para cuando el colegio quiere el cuadernillo
@@ -76,92 +80,6 @@ async function renderLinearPdf(url: string): Promise<Uint8Array> {
   }
 }
 
-/**
- * Aplica imposition saddle-stitch sobre un PDF lineal: cada página lógica
- * se pega en la cara correspondiente del pliego doble carta.
- *
- * Convenciones:
- *   - El PDF de entrada tiene páginas [1, 2, 3, …, N].
- *   - El PDF de salida tiene páginas = (N padded a múltiplo de 4) / 2,
- *     cada una con dos medias páginas carta lado a lado (saddle-stitch
- *     imprime dos caras por hoja, anverso y reverso, una por página del
- *     PDF de salida).
- *   - `outputPageIndex` 0 = anverso del primer pliego, 1 = reverso, 2 =
- *     anverso del segundo pliego, etc. El worker imprime a doble cara
- *     respetando este orden.
- */
-async function imposeBooklet(linearPdf: Uint8Array): Promise<Uint8Array> {
-  const src = await PDFDocument.load(linearPdf);
-  const srcPages = src.getPages();
-  const logicalCount = srcPages.length;
-  const padded = padToMultipleOf4(logicalCount);
-  const order = buildImposedPageOrder(logicalCount);
-
-  // Cada página del PDF de salida = 1 cara física del pliego (anverso O reverso).
-  // Anverso va en páginas pares del output (0, 2, 4, …), reverso en impares (1, 3, …).
-  // Por pliego hay 4 slots: FL, FR (anverso) y BL, BR (reverso).
-  const out = await PDFDocument.create();
-  const totalOutputPages = (padded / 4) * 2; // 2 caras por pliego
-
-  // Copiamos las páginas fuente para reusar.
-  const copiedPages = await out.copyPages(
-    src,
-    srcPages.map((_, i) => i),
-  );
-
-  for (let i = 0; i < totalOutputPages; i++) {
-    const outPage = out.addPage([TABLOID_PT.width, TABLOID_PT.height]);
-
-    // Decidir si esta página de output es anverso o reverso.
-    const isBack = i % 2 === 1;
-    const sheetIdx = Math.floor(i / 2);
-    // Slots del pliego, en orden [FL, FR, BL, BR] = [0, 1, 2, 3].
-    const slots = order.slice(sheetIdx * 4, sheetIdx * 4 + 4);
-
-    if (!isBack) {
-      // Anverso: dibuja FL (slots[0]) a la izquierda y FR (slots[1]) a la derecha.
-      await drawHalf(outPage, copiedPages, slots[0] ?? null, "left");
-      await drawHalf(outPage, copiedPages, slots[1] ?? null, "right");
-    } else {
-      // Reverso: el orden izq/der se espeja porque el pliego se voltea por
-      // el borde largo al imprimir el reverso. Dibujamos BL (slots[2]) a la
-      // derecha y BR (slots[3]) a la izquierda para que coincida.
-      await drawHalf(outPage, copiedPages, slots[3] ?? null, "left");
-      await drawHalf(outPage, copiedPages, slots[2] ?? null, "right");
-    }
-  }
-
-  return await out.save();
-}
-
-/** Pega una página lógica en la mitad izquierda o derecha de un pliego. */
-async function drawHalf(
-  outPage: import("pdf-lib").PDFPage,
-  copiedPages: import("pdf-lib").PDFPage[],
-  logical: number | null,
-  half: "left" | "right",
-): Promise<void> {
-  if (logical === null) return; // página blanca: dejar en blanco
-  const src = copiedPages[logical - 1];
-  if (!src) return;
-
-  const { width: srcW, height: srcH } = src.getSize();
-  const halfW = TABLOID_PT.width / 2;
-  const halfH = TABLOID_PT.height;
-
-  // Escalar la página fuente para que llene la mitad del pliego.
-  const scale = Math.min(halfW / srcW, halfH / srcH);
-  const drawW = srcW * scale;
-  const drawH = srcH * scale;
-
-  // Centrar verticalmente, alinear a la mitad correspondiente horizontalmente.
-  const x = half === "left" ? (halfW - drawW) / 2 : halfW + (halfW - drawW) / 2;
-  const y = (halfH - drawH) / 2;
-
-  const embedded = await outPage.doc.embedPage(src);
-  outPage.drawPage(embedded, { x, y, width: drawW, height: drawH });
-}
-
 const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
   QUEUE_NAMES.pdfGeneration,
   async (job) => {
@@ -198,8 +116,14 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
     const linear = await renderLinearPdf(url);
     log.info({ jobId: job.id, linearBytes: linear.length }, "PDF lineal generado");
 
-    // Paso 2: imposition saddle-stitch a doble carta.
-    const imposed = await imposeBooklet(linear);
+    // Paso 2: imposition saddle-stitch a doble carta. Los compendios
+    // preservan la primera página (portada institucional) sin imposition
+    // para no desperdiciar media hoja tabloid; el resto del cuerpo sí se
+    // impone. Los cuadernillos de una sola evaluación se imponen enteros
+    // (comportamiento legacy): portada y contraportada comparten pliego.
+    const imposed = await imposeBooklet(linear, {
+      coverPages: isBundleKind ? 1 : 0,
+    });
     log.info({ jobId: job.id, imposedBytes: imposed.length }, "Imposición aplicada");
 
     const dir = path.join(env.STORAGE_DIR, "pdf", institutionId);

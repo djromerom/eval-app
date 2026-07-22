@@ -32,11 +32,11 @@ describe("collectUniqueContexts", () => {
   it("deduplica tras trim y preserva orden de aparición", () => {
     const list = [
       q({ contextText: "Contexto A" }),
-      q({ contextText: "  Contexto A  " }),
+      q({ contextText: "  Contexto A  " }), // dup tras trim
       q({ contextText: "Contexto B" }),
       q({ contextText: null }),
-      q({ contextText: "   " }),
-      q({ contextText: "Contexto A" }),
+      q({ contextText: "   " }), // vacío tras trim
+      q({ contextText: "Contexto A" }), // dup
     ];
     expect(collectUniqueContexts(list)).toEqual(["Contexto A", "Contexto B"]);
   });
@@ -62,7 +62,7 @@ describe("mergeContextsIntoSectionContent", () => {
       type: "paragraph",
       content: [{ type: "text", text: "Contexto A" }],
     });
-    expect((merged.content[1] as { type: string }).type).toBe("paragraph");
+    expect(merged.content[1]!.type).toBe("paragraph");
   });
 
   it("si la sección YA tiene contenido, inserta un `horizontalRule` antes del primer contexto nuevo", () => {

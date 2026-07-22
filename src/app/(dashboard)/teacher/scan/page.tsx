@@ -68,6 +68,12 @@ export default async function ScanPage() {
                       {batch.processedSheets}/{batch.totalSheets} hojas
                     </span>
                     <ScanStatusBadge status={batch.status} size="lg" />
+                    <Link
+                      href={`/teacher/scan/${batch.id}`}
+                      className="text-primary font-medium hover:underline"
+                    >
+                      Revisar lote →
+                    </Link>
                   </div>
                 </div>
 

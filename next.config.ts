@@ -7,7 +7,17 @@ const nextConfig: NextConfig = {
   // que Next infiera un root equivocado por lockfiles de carpetas superiores.
   outputFileTracingRoot: import.meta.dirname,
   // sharp y bullmq son dependencias nativas/de servidor, no deben empaquetarse
-  serverExternalPackages: ["sharp", "bullmq", "ioredis", "pino"],
+  // pdfjs-dist rompe al ser empaquetado por Next (Object.defineProperty en
+  // non-object); pdf-parse lo arrastra.
+  serverExternalPackages: ["sharp", "bullmq", "ioredis", "pino", "pdfjs-dist", "pdf-parse"],
+  experimental: {
+    // Server Actions 20MB permiten upload de imágenes escaneadas (típico
+    // 1-2MB pero dejamos holgura). En Next 15 estable, esto pasa a top-level
+    // (`serverActions`); mientras esté en `experimental` evitamos la warning.
+    serverActions: {
+      bodySizeLimit: "20mb",
+    },
+  },
 };
 
 export default nextConfig;

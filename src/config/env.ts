@@ -25,6 +25,9 @@ const serverEnvSchema = z
     PRINT_BASE_URL: z.string().url().optional(),
     STORAGE_DIR: z.string().default("./storage"),
     QR_SIGNING_SECRET: z.string().min(16, "QR_SIGNING_SECRET debe tener al menos 16 caracteres"),
+    /** URL del microservicio Python de detección OMR (omr-service, FastAPI).
+     *  Solo loopback: el worker OMR lo llama; nunca se expone públicamente. */
+    OMR_SERVICE_URL: z.string().url().default("http://127.0.0.1:8000"),
     /** Opciones con las que se inicializa el editor de preguntas nuevas. */
     EVAL_DEFAULT_OPTIONS: z.coerce
       .number()

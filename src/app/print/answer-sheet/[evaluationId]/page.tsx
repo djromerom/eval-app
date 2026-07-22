@@ -17,6 +17,16 @@ export const metadata: Metadata = { title: "Hoja de respuestas" };
  *  restantes en blanco. Ver evaluations/domain/evaluation.ts. */
 const KEYS = ANSWER_KEYS_ORDER;
 
+/** Reparte las preguntas en 3 columnas verticales (estilo PDF institucional
+ *  María Doraliza). Si sobran preguntas, la tercera columna las absorbe;
+ *  con 110 preguntas: 37 / 37 / 36 — la distribución exacta no importa
+ *  mientras las preguntas fluyan en orden 1..N a través de las columnas. */
+function splitIntoColumns<T>(items: T[]): T[][] {
+  if (items.length === 0) return [[], [], []];
+  const perCol = Math.ceil(items.length / 3);
+  return [items.slice(0, perCol), items.slice(perCol, perCol * 2), items.slice(perCol * 2)];
+}
+
 interface Props {
   params: Promise<{ evaluationId: string }>;
 }
@@ -34,6 +44,7 @@ export default async function AnswerSheetPage({ params }: Props) {
   const evaluation = evalRes.value;
   const institutionName = instRes.ok ? instRes.value.name : "";
   const allQuestions = evaluation.sections.flatMap((s) => s.questions);
+  const columns = splitIntoColumns(allQuestions);
 
   const qrPayload = {
     inst: instRes.ok ? instRes.value.code : "",
@@ -78,22 +89,18 @@ export default async function AnswerSheetPage({ params }: Props) {
             </div>
           </div>
 
-          {/* Bubble grid */}
+          {/* 3 columnas de burbujas (estilo PDF institucional) */}
           <div className="as-grid">
-            <div className="as-grid-header">
-              <div className="as-grid-corner">N.º</div>
-              {KEYS.map((k) => (
-                <div key={k} className="as-grid-key">
-                  {k}
-                </div>
-              ))}
-            </div>
-            {allQuestions.map((q) => (
-              <div key={q.id} className="as-grid-row">
-                <div className="as-grid-num">{q.number}</div>
-                {KEYS.map((k) => (
-                  <div key={k} className="as-grid-bubble">
-                    <div className="omr-bubble" />
+            {columns.map((col, colIdx) => (
+              <div key={colIdx} className="as-col">
+                {col.map((q) => (
+                  <div key={q.id} className="as-col-row">
+                    <div className="as-col-num">{q.number}</div>
+                    {KEYS.slice(0, q.options.length).map((k) => (
+                      <div key={k} className="as-col-bubble">
+                        <div className="omr-bubble">{k}</div>
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>

@@ -16,6 +16,15 @@ export const metadata: Metadata = { title: "Hojas de respuestas del compendio" }
 
 const KEYS = ANSWER_KEYS_ORDER;
 
+/** Reparte en 3 columnas. La hoja unificada del bundle trata TODAS las
+ *  preguntas como una sola lista plana, ignorando secciones y evaluaciones:
+ *  la numeración va 1..N de corrido de izquierda a derecha y de arriba abajo. */
+function splitIntoColumns<T>(items: T[]): T[][] {
+  if (items.length === 0) return [[], [], []];
+  const perCol = Math.ceil(items.length / 3);
+  return [items.slice(0, perCol), items.slice(perCol, perCol * 2), items.slice(perCol * 2)];
+}
+
 interface BundleQuestionRow {
   /** Posición global dentro de la hoja (1..N). */
   globalNumber: number;
@@ -23,29 +32,22 @@ interface BundleQuestionRow {
   localNumber: number;
   /** Número de opciones para el ancho de fila (2..8). */
   optionsLength: number;
-  /** Sección y evaluación de origen (para el separador visual). */
-  sectionTitle: string | null;
-  evaluationTitle: string;
   questionId: string;
-}
-
-interface BundleSection {
-  evaluationTitle: string;
-  evaluationId: string;
-  itemId: string;
-  sectionTitle: string | null;
-  questions: BundleQuestionRow[];
 }
 
 /**
  * Render server-side de la hoja de respuestas UNIFICADA del compendio.
  * Lo abre el worker de Puppeteer con un token firmado (kind = "answer-sheets-bundle").
  *
- * Estructura: una hoja por estudiante con TODAS las preguntas del bundle,
- * numeración global continua, y separadores visuales por sección (área +
- * asignatura + bloque). El QR lleva `bundle` (no `eval`) para que el OMR
- * worker pueda reconstruir el orden global al calificar (ver Sprint 2 del
- * módulo compendios).
+ * Numeración 1..N contínua a través de TODAS las preguntas de TODAS las
+ * evaluaciones y secciones del compendio (sin separadores por sección,
+ * sin reinicio por evaluación). El QR lleva `bundle` (no `eval`) para que
+ * el OMR worker pueda reconstruir el orden global al calificar
+ * (ver Sprint 2 del módulo compendios).
+ *
+ * La distribución en 3 columnas replica exactamente el estilo del PDF
+ * institucional de I.E. María Doraliza López de Mejía: la lista plana se
+ * parte en 3 grupos verticalmente (1..N/3, N/3+1..2N/3, 2N/3+1..N).
  */
 export default async function BundleAnswerSheetsPage({
   params,
@@ -79,11 +81,12 @@ export default async function BundleAnswerSheetsPage({
 
   if (students.length === 0) notFound();
 
-  // Cargar questions + sections de cada evaluation del bundle en orden.
-  // Esto hace N+1 queries; aceptable para una hoja de respuestas que se
-  // imprime una vez por período. Si se vuelve cuello de botella, batch con
+  // Cargar questions de cada evaluation del bundle en orden y aplanarlas.
+  // Numeramos de corrido 1..N ignorando secciones y evaluaciones. Esto hace
+  // N+1 queries; aceptable para una hoja de respuestas que se imprime una vez
+  // por período. Si se vuelve cuello de botella, batch con
   // prisma.evaluation.findMany + include.
-  const sections: BundleSection[] = [];
+  const flatQuestions: BundleQuestionRow[] = [];
   let globalCounter = 1;
   for (const item of bundle.items) {
     const evaluation = await prisma.evaluation.findUnique({
@@ -99,25 +102,19 @@ export default async function BundleAnswerSheetsPage({
     });
     if (!evaluation) continue;
     for (const section of evaluation.sections) {
-      const questions: BundleQuestionRow[] = section.questions.map((q) => ({
-        globalNumber: globalCounter++,
-        localNumber: q.number,
-        optionsLength: q.options.length,
-        sectionTitle: section.title,
-        evaluationTitle: evaluation.title,
-        questionId: q.id,
-      }));
-      sections.push({
-        evaluationTitle: evaluation.title,
-        evaluationId: evaluation.id,
-        itemId: item.id,
-        sectionTitle: section.title,
-        questions,
-      });
+      for (const q of section.questions) {
+        flatQuestions.push({
+          globalNumber: globalCounter++,
+          localNumber: q.number,
+          optionsLength: q.options.length,
+          questionId: q.id,
+        });
+      }
     }
   }
 
-  const totalQuestions = globalCounter - 1;
+  const totalQuestions = flatQuestions.length;
+  const columns = splitIntoColumns(flatQuestions);
 
   // Generar QR por estudiante con payload {bundle, ...} (no eval).
   const sheets = await Promise.all(
@@ -140,7 +137,8 @@ export default async function BundleAnswerSheetsPage({
       <div className="no-print bg-card sticky top-0 z-10 flex w-full max-w-[900px] items-center gap-3 rounded-lg border p-3 text-sm">
         <span className="text-muted-foreground">
           {students.length} hoja(s) de respuestas para el compendio &laquo;{bundle.name}&raquo; (
-          {totalQuestions} preguntas, {sections.length} contexto(s))
+          {totalQuestions} preguntas, {bundle.items.length} evaluación
+          {bundle.items.length === 1 ? "" : "es"})
         </span>
       </div>
 
@@ -157,8 +155,11 @@ export default async function BundleAnswerSheetsPage({
           <div className="as-body">
             {/* QR + student fields */}
             <div className="as-left">
+              {/* `data-omr-qr` lo lee el capturador de geometría (Puppeteer)
+                  para registrar la hoja escaneada contra esta plantilla.
+                  No afecta al render. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={qrDataUrl} alt="QR" className="as-qr" />
+              <img src={qrDataUrl} alt="QR" className="as-qr" data-omr-qr="1" />
               <div className="as-student-fields">
                 <div className="as-field">
                   <span>Nombre:</span>
@@ -175,37 +176,24 @@ export default async function BundleAnswerSheetsPage({
               </div>
             </div>
 
-            {/* Grid: una sección por bloque (separador visual) */}
+            {/* Grid de burbujas (3 columnas, estilo PDF institucional).
+                Numeración 1..N plana — sin separadores por sección/evaluación. */}
             <div className="as-grid">
-              {sections.map((section, sIdx) => (
-                <div key={`${section.evaluationId}-${sIdx}`} className="as-section">
-                  <div className="as-section-header">
-                    <strong>{section.evaluationTitle}</strong>
-                    {section.sectionTitle ? <> · {section.sectionTitle}</> : null}
-                    <span className="text-muted-foreground ml-2 text-[8pt]">
-                      ({section.questions.length} preguntas)
-                    </span>
-                  </div>
-                  <div className="as-grid-header">
-                    <div className="as-grid-corner">N.º</div>
-                    {KEYS.map((k) => (
-                      <div key={k} className="as-grid-key">
-                        {k}
-                      </div>
-                    ))}
-                  </div>
-                  {section.questions.map((q) => (
-                    <div key={q.questionId} className="as-grid-row">
-                      <div className="as-grid-num">{q.globalNumber}</div>
+              {columns.map((col, colIdx) => (
+                <div key={colIdx} className="as-col">
+                  {col.map((q) => (
+                    <div key={q.questionId} className="as-col-row">
+                      <div className="as-col-num">{q.globalNumber}</div>
                       {KEYS.slice(0, q.optionsLength).map((k) => (
-                        <div key={k} className="as-grid-bubble">
-                          <div className="omr-bubble" />
-                        </div>
-                      ))}
-                      {/* Padding para mantener alineamiento cuando optionsLength < 8 */}
-                      {KEYS.slice(q.optionsLength).map((k) => (
-                        <div key={k} className="as-grid-bubble">
-                          {/* burbuja vacía reservada — el OMR la ignora */}
+                        <div key={k} className="as-col-bubble">
+                          {/* `data-omr-q` / `data-omr-key` permiten al
+                              capturador de geometría medir cada burbuja del
+                              render REAL y asociarla a (pregunta, opción)
+                              sin ambigüedad. Son atributos data-*: no
+                              cambian nada de lo que se imprime. */}
+                          <div className="omr-bubble" data-omr-q={q.globalNumber} data-omr-key={k}>
+                            {k}
+                          </div>
                         </div>
                       ))}
                     </div>

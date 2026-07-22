@@ -36,6 +36,12 @@ scanning-test-*/
 prisma/assets/*
 !prisma/assets/README.md
 
+# omr-service (microservicio Python de detección OMR)
+omr-service/.venv/
+omr-service/__pycache__/
+omr-service/**/__pycache__/
+*.pyc
+
 # Producción: el archivo real con secretos vive en el VPS. El template
 # commiteado está en deploy/.env.prod.example.
 .env.prod
@@ -46,3 +52,11 @@ docker-compose.override.yml
 
 # Salidas del compilador de workers (regenerables con `pnpm tsc -p tsconfig.worker.json`).
 dist-workers/
+
+# Scripts de scratch locales (p. ej. para depurar geometría de hoja sin pasar
+# por tests). NUNCA commitear.
+.tmp-*.ts
+.tmp-*.mjs
+.tmp-*.sh
+tmp/
+public/templates/~$*

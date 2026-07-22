@@ -20,8 +20,8 @@ type TipTapNode = {
   type: string;
   attrs?: Record<string, unknown>;
   content?: TipTapNode[];
+  /** Presente solo en nodos hoja `type: "text"`. */
   text?: string;
-  marks?: { type: string; attrs?: Record<string, unknown> }[];
 };
 
 /** Documento TipTap con `type === "doc"` o estructura vacía. */

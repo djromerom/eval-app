@@ -3,9 +3,12 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import type { ParsedQuestion } from "@/modules/question-import/domain/parsed-question";
-import { loadDocxSourceAction, loadSourceAction } from "./actions";
+import { loadDocxSourceAction, loadAiSourceAction, loadSourceAction } from "./actions";
 import { QUESTIONS_CSV_TEMPLATE } from "@/modules/question-import/infrastructure/csv";
 import { ImportReviewForm } from "./review-form";
+
+/** Tamaño máximo de archivo para carga (15 MB). */
+const MAX_FILE_SIZE = 15 * 1024 * 1024;
 
 interface SourceOption {
   id: string;
@@ -32,7 +35,8 @@ interface Props {
 type LoadSource =
   | { kind: "evaluation"; evaluationId: string }
   | { kind: "csv"; content: string }
-  | { kind: "docx"; file: File };
+  | { kind: "docx"; file: File }
+  | { kind: "ai"; fileName: string };
 
 /**
  * Wizard de importación. Maneja el paso 1 (elegir origen) y el paso 2
@@ -51,6 +55,7 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
   const [csvFileName, setCsvFileName] = useState<string>("");
   const [csvContent, setCsvContent] = useState<string>("");
   const [docxFile, setDocxFile] = useState<File | null>(null);
+  const [aiFile, setAiFile] = useState<File | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function loadEvaluation(evaluationId: string) {
@@ -89,9 +94,39 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
     });
   }
 
+  function loadAi() {
+    if (!aiFile) {
+      setError("Sube un archivo PDF o DOCX.");
+      return;
+    }
+    if (aiFile.size > MAX_FILE_SIZE) {
+      setError(`El archivo es demasiado grande (máx. ${MAX_FILE_SIZE / 1024 / 1024} MB).`);
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.append("file", aiFile);
+      const res = await loadAiSourceAction(fd);
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      setStep({
+        kind: "review",
+        source: { kind: "ai", fileName: aiFile.name },
+        cached: res.questions,
+      });
+    });
+  }
+
   function loadDocx() {
     if (!docxFile) {
       setError("Sube un archivo DOCX.");
+      return;
+    }
+    if (docxFile.size > MAX_FILE_SIZE) {
+      setError(`El archivo es demasiado grande (máx. ${MAX_FILE_SIZE / 1024 / 1024} MB).`);
       return;
     }
     setError(null);
@@ -242,6 +277,40 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
             className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 rounded-md px-4 text-sm font-medium disabled:opacity-50"
           >
             {isPending ? "Procesando…" : `Procesar ${docxFile?.name ?? "DOCX"} →`}
+          </button>
+        </div>
+      </section>
+
+      <section className="bg-card space-y-3 rounded-xl border p-6">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-semibold">Importar con IA</h2>
+          <span className="rounded-md bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+            Beta
+          </span>
+        </div>
+        <p className="text-muted-foreground text-sm">
+          Sube un PDF o DOCX y la IA extraerá automáticamente las preguntas, opciones, respuestas
+          correctas y contextos compartidos. Revisa el resultado antes de importar.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <input
+            type="file"
+            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            disabled={isPending}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setAiFile(file);
+            }}
+            className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-sm file:mr-3 file:border-0 file:bg-transparent file:text-sm file:font-medium"
+          />
+          <button
+            type="button"
+            disabled={isPending || !aiFile}
+            onClick={loadAi}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 rounded-md px-4 text-sm font-medium disabled:opacity-50"
+          >
+            {isPending ? "Procesando con IA…" : `Procesar ${aiFile?.name ?? "archivo"} →`}
           </button>
         </div>
       </section>

@@ -34,14 +34,14 @@ interface CompetencyRow {
 }
 
 function buildCompetencyRows(
-  sections: { questions: { number: number; competency: string | null }[] }[],
+  sections: { questions: { globalNumber: number; competency: string | null }[] }[],
 ): CompetencyRow[] {
   const map = new Map<string, number[]>();
   for (const section of sections) {
     for (const q of section.questions) {
       const key = q.competency || "Sin especificar";
       const list = map.get(key) ?? [];
-      list.push(q.number);
+      list.push(q.globalNumber);
       map.set(key, list);
     }
   }
@@ -49,6 +49,51 @@ function buildCompetencyRows(
     competency,
     questions,
   }));
+}
+
+/** Pregunta con el campo extra `globalNumber` (numeración continua del
+ *  compendio 1..N). El resto de campos del `Question` se preservan con `&`,
+ *  pero el helper los serializa por construcción. */
+type BundledQuestion = {
+  id: string;
+  number: number;
+  competency: string | null;
+  globalNumber: number;
+};
+
+/** Asigna a cada pregunta del compendio un número global 1..N respetando el
+ *  orden del bundle (items.order → sections.order → questions.number). Las
+ *  evaluaciones independientes arrastran su `q.number` original (que puede
+ *  tener gaps o solaparse entre sí); el booklet, la hoja de respuestas y la
+ *  clave del compendio comparten esta numeración continua.
+ *
+ *  Trabajamos con `unknown` y un cast final porque el shape completo del
+ *  `Evaluation` (con `RichText` y decenas de campos) es demasiado ruidoso
+ *  para pasarlo por una mónada genérica, y la maquetación solo necesita saber
+ *  que `q.globalNumber` existe. La forma se valida implícitamente cuando el
+ *  componente la recorre para renderizar. */
+function renumberCompendioQuestions<Item>(
+  entries: { item: Item; evaluation: unknown }[],
+): { item: Item; evaluation: unknown }[] {
+  let counter = 1;
+  return entries.map(({ item, evaluation }) => {
+    const ev = evaluation as {
+      sections: { id: string; questions: BundledQuestion[] }[];
+    };
+    return {
+      item,
+      evaluation: {
+        ...ev,
+        sections: ev.sections.map((section) => ({
+          ...section,
+          questions: section.questions.map((q) => ({
+            ...q,
+            globalNumber: counter++,
+          })),
+        })),
+      },
+    };
+  });
 }
 
 /**
@@ -98,7 +143,32 @@ export default async function PrintBundlePage({
       };
     }),
   );
-  const validEvaluations = evaluations.filter((e): e is NonNullable<typeof e> => e !== null);
+  const filteredEvaluations = evaluations.filter((e): e is NonNullable<typeof e> => e !== null);
+  // Renumerar todas las preguntas del compendio de corrido 1..N. La hoja
+  // unificada de respuestas y la clave de respuestas ya usan su propio
+  // `globalCounter` (mismo orden ⇒ mismos números); aquí los hacemos
+  // coincidir con una sola fuente de verdad visual.
+  type BundledEval = NonNullable<(typeof filteredEvaluations)[number]>["evaluation"] & {
+    sections: {
+      id: string;
+      questions: (NonNullable<
+        (typeof filteredEvaluations)[number]
+      >["evaluation"]["sections"][number]["questions"][number] & { globalNumber: number })[];
+    }[];
+  };
+  const renumbered = renumberCompendioQuestions(
+    filteredEvaluations as {
+      item: NonNullable<(typeof filteredEvaluations)[number]>["item"];
+      evaluation: unknown;
+    }[],
+  );
+  const validEvaluations: {
+    item: (typeof filteredEvaluations)[number]["item"];
+    evaluation: BundledEval;
+  }[] = filteredEvaluations.map((entry, idx) => ({
+    item: entry.item,
+    evaluation: renumbered[idx]!.evaluation as BundledEval,
+  }));
 
   // Para el booklet label usamos bookletNumber o "1".
   const bookletLabel = `CUADERNILLO ${bundle.bookletNumber ?? 1}`;
@@ -240,7 +310,9 @@ export default async function PrintBundlePage({
             <section className="sheet questions">
               <div className="questions-flow" data-columns={theme.questionColumns}>
                 {evaluation.sections.map((section, idx) => {
-                  const numbers = section.questions.map((q) => q.number);
+                  const numbers = section.questions.map(
+                    (q) => (q as unknown as { globalNumber: number }).globalNumber,
+                  );
                   const first = numbers[0];
                   const last = numbers[numbers.length - 1];
                   const hasContext = richTextToPlain(section.content).length > 0;
@@ -271,7 +343,8 @@ export default async function PrintBundlePage({
                       {section.questions.map((q) => (
                         <div key={q.id} className={`question${isWideQuestion(q) ? "wide" : ""}`}>
                           <p className="question-text">
-                            {q.number}. <RichTextInline value={q.text} />
+                            {(q as unknown as { globalNumber: number }).globalNumber}.{" "}
+                            <RichTextInline value={q.text} />
                           </p>
                           <ul className="question-options">
                             {q.options.map((o) => (

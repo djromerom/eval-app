@@ -1,8 +1,9 @@
-import { ScanStatus } from "@prisma/client";
+import { ScanStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import type {
   AnswerSheet,
   AnswerSheetStatus,
+  GridLayoutRecord,
   ScanBatch,
   ScanBatchStatus,
   ScanningRepository,
@@ -43,6 +44,7 @@ export class PrismaScanningRepository implements ScanningRepository {
       id: row.id,
       institutionId: row.institutionId,
       evaluationId: row.evaluationId,
+      bundleId: row.bundleId,
       status:
         row.status === ScanStatus.PENDING
           ? "PENDING"
@@ -88,7 +90,15 @@ export class PrismaScanningRepository implements ScanningRepository {
   async updateSheetStatus(
     sheetId: string,
     status: AnswerSheetStatus,
-    data?: { score?: number; totalCorrect?: number; totalQuestions?: number; notes?: string },
+    data?: {
+      score?: number;
+      totalCorrect?: number;
+      totalQuestions?: number;
+      notes?: string;
+      gridLayout?: GridLayoutRecord;
+      detectionConfidence?: number;
+      processedImage?: string;
+    },
   ): Promise<void> {
     await prisma.answerSheet.update({
       where: { id: sheetId },
@@ -98,8 +108,71 @@ export class PrismaScanningRepository implements ScanningRepository {
         ...(data?.totalCorrect !== undefined ? { totalCorrect: data.totalCorrect } : {}),
         ...(data?.totalQuestions !== undefined ? { totalQuestions: data.totalQuestions } : {}),
         ...(data?.notes ? { notes: data.notes } : {}),
+        // Sprint 9 OMR auto-detect: persistimos la geometría detectada y la
+        // ruta al overlay PNG para que la UI matriz no tenga que re-detectar.
+        // Prisma recibe `Json?` como `Prisma.InputJsonValue`.
+        ...(data?.gridLayout !== undefined
+          ? { gridLayout: data.gridLayout as unknown as Prisma.InputJsonValue }
+          : {}),
+        ...(data?.detectionConfidence !== undefined
+          ? { detectionConfidence: data.detectionConfidence }
+          : {}),
+        ...(data?.processedImage ? { processedImage: data.processedImage } : {}),
       },
     });
+  }
+
+  async saveDecodedQr(
+    sheetId: string,
+    qrContent: string,
+    qrSignature: string,
+    studentCode: string | null,
+  ): Promise<{ studentId: string | null }> {
+    // Buscar el estudiante por código (incluyendo histórico de códigos viejos).
+    let studentId: string | null = null;
+    if (studentCode) {
+      const sheet = await prisma.answerSheet.findFirst({
+        where: { id: sheetId },
+        select: {
+          evaluation: { select: { institutionId: true } },
+          bundle: { select: { institutionId: true } },
+        },
+      });
+      const institutionId = sheet?.evaluation?.institutionId ?? sheet?.bundle?.institutionId;
+      if (institutionId) {
+        const direct = await prisma.student.findFirst({
+          where: { institutionId, code: studentCode, deletedAt: null },
+          select: { id: true },
+        });
+        if (direct) {
+          studentId = direct.id;
+        } else {
+          // El QR viejo debe seguir funcionando: busca en el historial de códigos.
+          const history = await prisma.studentCodeHistory.findFirst({
+            where: { oldCode: studentCode, student: { institutionId, deletedAt: null } },
+            select: { studentId: true },
+            orderBy: { changedAt: "desc" },
+          });
+          if (history) studentId = history.studentId;
+        }
+      }
+    }
+
+    await prisma.answerSheet.update({
+      where: { id: sheetId },
+      data: {
+        qrContent,
+        qrSignature,
+        ...(studentId ? { studentId } : {}),
+        // Mantener backup del código escrito a mano (si figura en la hoja).
+        // Si la hoja ya tiene studentCode y es distinto al del QR, no lo
+        // sobreescribimos — el QR es la fuente de verdad pero dejamos el
+        // handwriting como respaldo.
+        ...(studentCode ? {} : {}),
+      },
+    });
+
+    return { studentId };
   }
 
   async saveAnswers(sheetId: string, answers: StudentAnswerRecord[]): Promise<void> {
@@ -117,6 +190,10 @@ export class PrismaScanningRepository implements ScanningRepository {
           isCorrect: a.isCorrect,
           isAmbiguous: a.isAmbiguous,
           confidence: a.confidence,
+          // Sprint 9 OMR auto-detect: diagnóstico per-bubble para la UI
+          // matriz y fill ratio de la burbuja seleccionada (atajo).
+          cells: (a.cells ?? undefined) as Prisma.InputJsonValue | undefined,
+          fillRatio: a.fillRatio ?? null,
         })),
       });
     });

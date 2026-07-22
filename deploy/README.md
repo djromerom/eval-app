@@ -27,6 +27,28 @@ Volúmenes nombrados (viven en `/var/lib/docker/volumes/`):
 | `certs`           | `/etc/letsencrypt` (para nginx y certbot)                                               |
 | `certbot-webroot` | `/.well-known/acme-challenge/`                                                          |
 
+## Servicio omr-service (detección OMR en Python)
+
+El `worker-omr` ya no detecta burbujas en TS: delega en el microservicio Python
+`omr-service/` (FastAPI + OpenCV) por HTTP. Corre como un servicio más del
+compose, **solo en la red interna** (puerto NO publicado al host, nginx NO lo
+proxya). Imagen: `omr-service/Dockerfile`.
+
+Bloque para `docker-compose.prod.yml` (red interna del compose):
+
+```yaml
+omr-service:
+  build: ./omr-service
+  restart: unless-stopped
+  # sin `ports:` — solo accesible desde la red del compose
+  networks: [internal]
+```
+
+El `worker-omr` lo alcanza vía la variable de entorno
+`OMR_SERVICE_URL=http://omr-service:8000` (nombre del servicio en la red del
+compose). En dev local, en cambio, se corre `uvicorn main:app --port 8000` y la
+URL por defecto es `http://127.0.0.1:8000`.
+
 ## Pre-requisitos
 
 1. **VPS con Docker** — Ubuntu 22.04+ o Debian 12. Paquetes:
