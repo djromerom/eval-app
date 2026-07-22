@@ -96,8 +96,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,scope=${{ matrix.name }},mode=max
+          # Sin cache-from/cache-to en el primer run: el cache GHA puede
+          # referenciar paths de runs anteriores que no cuadran con el
+          # contexto actual (BUILD-LEVEL cache miss → error raro tipo
+          # "/prisma: not found"). Una vez que la primera build pasa, las
+          # siguientes se cachean automáticamente vía la registry de GHCR
+          # (los layers se reusan al hacer `docker buildx build` con la
+          # misma imagen base).
           provenance: false
           sbom: false
 
