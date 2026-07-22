@@ -2,48 +2,74 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Tokens semánticos (compatibles con Shadcn/ui, base neutral).
-   La personalización por institución (logo/colores) se aplicará
-   sobre estas variables. */
+/* Tokens semánticos (compatibles con Shadcn/ui) con la identidad ecognIA:
+   azul institucional #0A4FA8 + menta/teal #22D3A5. `--accent` se mantiene
+   como un tinte azul suave para que los hovers (botones ghost/outline, nav)
+   sean sutiles; el menta de marca vive en los tokens `--brand-*`.
+   La personalización por institución (logo/colores) se aplicará sobre
+   estas variables. */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --background: #f7fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #0a4fa8;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #475569;
+  --accent: #eaf1fb;
+  --accent-foreground: #0a4fa8;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #0a4fa8;
   --radius: 0.625rem;
+
+  /* Marca ecognIA + estados (no forman parte del set base de Shadcn). */
+  --success: #10b981;
+  --success-foreground: #ffffff;
+  --warning: #f59e0b;
+  --warning-foreground: #ffffff;
+  --brand-mint: #22d3a5;
+  --brand-mint-foreground: #062b22;
+  --brand-blue-tint: #eaf1fb;
+  --brand-mint-tint: #e6fbf4;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --background: #0b1320;
+  --foreground: #f1f5f9;
+  --card: #111a2c;
+  --card-foreground: #f1f5f9;
+  --popover: #111a2c;
+  --popover-foreground: #f1f5f9;
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  --secondary: #172033;
+  --secondary-foreground: #f1f5f9;
+  --muted: #172033;
+  --muted-foreground: #94a3b8;
+  --accent: #172033;
+  --accent-foreground: #f1f5f9;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #1e293b;
+  --input: #1e293b;
+  --ring: #3b82f6;
+
+  --success: #34d399;
+  --success-foreground: #052e22;
+  --warning: #fbbf24;
+  --warning-foreground: #3a2a05;
+  --brand-mint: #34e0b4;
+  --brand-mint-foreground: #062b22;
+  --brand-blue-tint: #14243b;
+  --brand-mint-tint: #0e2a24;
 }
 
 @theme inline {
@@ -51,6 +77,8 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
@@ -64,10 +92,20 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-brand-mint: var(--brand-mint);
+  --color-brand-mint-foreground: var(--brand-mint-foreground);
+  --color-brand-blue-tint: var(--brand-blue-tint);
+  --color-brand-mint-tint: var(--brand-mint-tint);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer base {
@@ -75,7 +113,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
   }
 }
 

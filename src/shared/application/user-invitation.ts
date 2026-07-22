@@ -43,7 +43,7 @@ export async function sendUserInvitation(
 function buildInvitationEmail(target: InvitationTarget, inviteUrl: string): Email {
   return {
     to: target.email,
-    subject: `Has sido invitado a ${target.institutionName} — Eval`,
+    subject: `Has sido invitado a ${target.institutionName} — ecognIA`,
     html: `<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="utf-8"></head>
@@ -52,20 +52,20 @@ function buildInvitationEmail(target: InvitationTarget, inviteUrl: string): Emai
     <tr><td align="center">
       <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden">
         <tr>
-          <td style="background:#2563eb;padding:24px;text-align:center">
+          <td style="background:#0a4fa8;padding:24px;text-align:center">
             <h1 style="color:#fff;margin:0;font-size:20px;font-weight:600">${target.institutionName}</h1>
           </td>
         </tr>
         <tr><td style="padding:32px 24px">
           <p style="margin:0 0 16px;font-size:16px;color:#18181b">Hola <strong>${target.name}</strong>,</p>
           <p style="margin:0 0 16px;font-size:14px;color:#52525b;line-height:1.6">
-            Has sido invitado a la plataforma <strong>Eval</strong> de
+            Has sido invitado a la plataforma <strong>ecognIA</strong> de
             <strong>${target.institutionName}</strong>.
             Haz clic en el siguiente botón para establecer tu contraseña y acceder:
           </p>
           <table cellpadding="0" cellspacing="0" style="margin:24px 0">
             <tr>
-              <td align="center" style="background:#2563eb;border-radius:8px;padding:12px 32px">
+              <td align="center" style="background:#0a4fa8;border-radius:8px;padding:12px 32px">
                 <a href="${inviteUrl}" style="color:#fff;text-decoration:none;font-size:15px;font-weight:500;display:block">Aceptar invitación</a>
               </td>
             </tr>
@@ -75,7 +75,7 @@ function buildInvitationEmail(target: InvitationTarget, inviteUrl: string): Emai
             Este enlace expira en 48 horas.
           </p>
         </td></tr>
-        <tr><td style="background:#f4f4f5;padding:16px 24px;text-align:center;font-size:12px;color:#a1a1aa">Eval — Plataforma de evaluaciones tipo ICFES</td></tr>
+        <tr><td style="background:#f4f4f5;padding:16px 24px;text-align:center;font-size:12px;color:#a1a1aa">ecognIA — Plataforma de evaluaciones tipo ICFES</td></tr>
       </table>
     </td></tr>
   </table>

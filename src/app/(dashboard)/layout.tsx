@@ -4,6 +4,8 @@ import { type Role } from "@/shared/application/authenticated-user";
 import { can, type Capability } from "@/shared/application/capabilities";
 import { signOut } from "@/auth";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/brand/logo";
+import { NavLinks } from "./nav-links";
 import { PrismaNotificationReader } from "@/modules/notifications/infrastructure/prisma-notification-reader";
 
 interface NavItem {
@@ -81,24 +83,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="flex min-h-screen">
       <aside className="bg-card flex w-60 shrink-0 flex-col border-r">
-        <div className="px-6 py-5">
-          <span className="text-lg font-bold">Eval</span>
+        <div className="px-5 py-5">
+          <Link href="/" aria-label="ecognIA — inicio">
+            <Logo markClassName="h-8" wordmarkClassName="text-xl" />
+          </Link>
         </div>
-        <nav className="flex-1 space-y-1 px-3">
-          {items.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="text-muted-foreground hover:bg-accent hover:text-accent-foreground block rounded-md px-3 py-2 text-sm font-medium"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        <NavLinks items={items} />
         <div className="border-t p-2">
           <Link
             href="/notifications"
-            className="text-muted-foreground hover:bg-accent hover:text-accent-foreground relative flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium"
+            className="text-muted-foreground hover:bg-accent/60 hover:text-accent-foreground relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
           >
             <BellIcon />
             <span>Notificaciones</span>

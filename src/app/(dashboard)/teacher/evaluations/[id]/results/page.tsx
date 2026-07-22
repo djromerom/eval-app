@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
+import { StatCard } from "@/components/dashboard/stat-card";
 import { ScanStatusBadge } from "@/components/evaluations/scan-status-badge";
 import { getEvaluationResultsAction } from "./actions";
 
@@ -50,39 +51,19 @@ export default async function ResultsPage({ params }: Props) {
 
       {/* Summary cards */}
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div className="bg-card rounded-xl border p-4">
-          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            Promedio
-          </p>
-          <p className="mt-1 text-2xl font-bold">
-            {results.averageScore != null ? results.averageScore.toFixed(1) : "—"}
-          </p>
-        </div>
-        <div className="bg-card rounded-xl border p-4">
-          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            Mínimo
-          </p>
-          <p className="mt-1 text-2xl font-bold">{results.minScore ?? "—"}</p>
-        </div>
-        <div className="bg-card rounded-xl border p-4">
-          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            Máximo
-          </p>
-          <p className="mt-1 text-2xl font-bold">{results.maxScore ?? "—"}</p>
-        </div>
-        <div className="bg-card rounded-xl border p-4">
-          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            Calificadas
-          </p>
-          <p className="mt-1 text-2xl font-bold">
-            {results.gradedSheets}/{results.totalSheets}
-          </p>
-        </div>
+        <StatCard
+          label="Promedio"
+          value={results.averageScore != null ? results.averageScore.toFixed(1) : "—"}
+          accent
+        />
+        <StatCard label="Mínimo" value={results.minScore ?? "—"} />
+        <StatCard label="Máximo" value={results.maxScore ?? "—"} />
+        <StatCard label="Calificadas" value={`${results.gradedSheets}/${results.totalSheets}`} />
       </div>
 
       {/* Score distribution */}
-      <section className="bg-card mb-8 rounded-xl border p-4">
-        <h3 className="mb-3 font-semibold">Distribución de puntajes</h3>
+      <section className="bg-card mb-8 rounded-xl border p-5 shadow-sm">
+        <h3 className="font-display mb-4 text-lg font-semibold">Distribución de puntajes</h3>
         {results.scoreDistribution.length === 0 ? (
           <p className="text-muted-foreground text-sm">Sin datos.</p>
         ) : (
@@ -109,8 +90,8 @@ export default async function ResultsPage({ params }: Props) {
       </section>
 
       {/* Per-question stats */}
-      <section className="bg-card mb-8 rounded-xl border p-4">
-        <h3 className="mb-3 font-semibold">Análisis por pregunta</h3>
+      <section className="bg-card mb-8 rounded-xl border p-5 shadow-sm">
+        <h3 className="font-display mb-4 text-lg font-semibold">Análisis por pregunta</h3>
         {results.questionStats.length === 0 ? (
           <p className="text-muted-foreground text-sm">Sin datos.</p>
         ) : (
@@ -165,8 +146,8 @@ export default async function ResultsPage({ params }: Props) {
       </section>
 
       {/* Sheets list */}
-      <section className="bg-card rounded-xl border p-4">
-        <h3 className="mb-3 font-semibold">Hojas de respuestas</h3>
+      <section className="bg-card rounded-xl border p-5 shadow-sm">
+        <h3 className="font-display mb-4 text-lg font-semibold">Hojas de respuestas</h3>
         {results.sheets.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             No hay hojas escaneadas para esta evaluación.

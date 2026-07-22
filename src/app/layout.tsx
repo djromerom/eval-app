@@ -1,20 +1,33 @@
 import type { Metadata } from "next";
+import { Inter, Sora } from "next/font/google";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 import { ServerActionRecovery } from "@/components/server-action-recovery";
 
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const sora = Sora({
+  subsets: ["latin"],
+  variable: "--font-sora",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: {
-    default: "Eval — Evaluaciones tipo ICFES",
-    template: "%s | Eval",
+    default: "ecognIA — Evaluaciones inteligentes tipo ICFES",
+    template: "%s | ecognIA",
   },
   description:
-    "Plataforma multi-institucional para diseñar, imprimir y calificar automáticamente evaluaciones tipo ICFES",
+    "Plataforma multi-institucional para diseñar, imprimir y calificar automáticamente evaluaciones tipo ICFES con reconocimiento OMR + IA",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" suppressHydrationWarning>
+    <html lang="es" className={`${inter.variable} ${sora.variable}`} suppressHydrationWarning>
       {/*
        * `suppressHydrationWarning` también en <body> — algunas extensiones
        * del navegador (CommandersAct / CZ Shortcuts, ColorZilla, etc.)

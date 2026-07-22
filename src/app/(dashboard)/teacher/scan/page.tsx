@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { ScanStatusBadge } from "@/components/evaluations/scan-status-badge";
 import { makeListEvaluations } from "@/modules/evaluations/infrastructure/container";
-import { UploadZone } from "./upload-zone";
+import { makeListBundles } from "@/modules/bundles/infrastructure/container";
+import { UploadZone, type ScanTarget } from "./upload-zone";
 import { getBatchesAction } from "./actions";
 
 export const metadata: Metadata = { title: "Escanear hojas" };
@@ -12,9 +14,19 @@ const df = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "s
 
 export default async function ScanPage() {
   const actor = await requireAuthenticatedUser("TEACHER");
-  const listRes = await makeListEvaluations().execute({ actor });
+  const [listRes, bundlesRes] = await Promise.all([
+    makeListEvaluations().execute({ actor }),
+    makeListBundles().execute({ actor }),
+  ]);
 
-  const evaluations = listRes.ok ? listRes.value.map((e) => ({ id: e.id, title: e.title })) : [];
+  const targets: ScanTarget[] = [
+    ...(listRes.ok
+      ? listRes.value.map((e) => ({ kind: "evaluation" as const, id: e.id, title: e.title }))
+      : []),
+    ...(bundlesRes.ok
+      ? bundlesRes.value.map((b) => ({ kind: "bundle" as const, id: b.id, title: b.name }))
+      : []),
+  ];
 
   const batches = await getBatchesAction();
 
@@ -22,25 +34,31 @@ export default async function ScanPage() {
     <>
       <PageHeader
         title="Escanear hojas de respuestas"
-        description="Sube las hojas escaneadas de una evaluación para calificarlas automáticamente."
+        description="Sube las hojas escaneadas de una evaluación o un compendio para calificarlas automáticamente."
       />
 
-      <section className="bg-card space-y-4 rounded-xl border p-6">
-        <h2 className="font-semibold">Nuevo lote</h2>
-        <UploadZone evaluations={evaluations} />
+      <section className="from-brand-blue-tint to-brand-mint-tint space-y-4 rounded-2xl bg-linear-to-br p-6">
+        <div className="flex items-center gap-2">
+          <span className="bg-primary h-2 w-2 rounded-full" />
+          <h2 className="font-display text-primary font-semibold">Nuevo lote</h2>
+        </div>
+        <UploadZone targets={targets} />
       </section>
 
       <section className="mt-8 space-y-4">
-        <h2 className="text-lg font-semibold">Lotes recientes</h2>
+        <h2 className="font-display text-lg font-semibold">Lotes recientes</h2>
         {batches.length === 0 ? (
           <p className="text-muted-foreground text-sm">No hay lotes de escaneo todavía.</p>
         ) : (
           <div className="space-y-4">
             {batches.map((batch) => (
-              <div key={batch.id} className="bg-card rounded-xl border p-4">
+              <div key={batch.id} className="bg-card rounded-xl border p-4 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="font-medium">{batch.evaluationTitle}</span>
+                    <span className="bg-muted text-muted-foreground mr-2 rounded px-2 py-0.5 text-xs font-medium">
+                      {batch.kind === "bundle" ? "Compendio" : "Evaluación"}
+                    </span>
+                    <span className="font-medium">{batch.title ?? "(sin nombre)"}</span>
                     <span className="text-muted-foreground ml-2 text-sm">
                       {df.format(new Date(batch.createdAt))}
                     </span>
@@ -69,7 +87,14 @@ export default async function ScanPage() {
                       <tbody>
                         {batch.sheets.map((s) => (
                           <tr key={s.id} className="border-b last:border-0">
-                            <td className="px-3 py-2 font-mono text-xs">{s.id.slice(0, 8)}</td>
+                            <td className="px-3 py-2 font-mono text-xs">
+                              <Link
+                                href={`/teacher/scan/${batch.id}/${s.id}`}
+                                className="hover:text-foreground text-primary underline"
+                              >
+                                {s.id.slice(0, 8)}
+                              </Link>
+                            </td>
                             <td className="px-3 py-2">{s.studentName ?? "—"}</td>
                             <td className="px-3 py-2">{s.studentCode ?? "—"}</td>
                             <td className="px-3 py-2">

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
+import { StatCard } from "@/components/dashboard/stat-card";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/shared/infrastructure/db/prisma";
 
@@ -48,41 +49,21 @@ export default async function CoordinatorDashboardPage() {
 
       {/* Summary cards */}
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div className="bg-card rounded-xl border p-4">
-          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            Pendientes
-          </p>
-          <p className="mt-1 text-2xl font-bold">{inReview.length}</p>
-        </div>
-        <div className="bg-card rounded-xl border p-4">
-          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            Aprobadas
-          </p>
-          <p className="mt-1 text-2xl font-bold">{approved}</p>
-        </div>
-        <div className="bg-card rounded-xl border p-4">
-          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            Docentes
-          </p>
-          <p className="mt-1 text-2xl font-bold">{teachersCount}</p>
-        </div>
-        <div className="bg-card rounded-xl border p-4">
-          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            Estudiantes
-          </p>
-          <p className="mt-1 text-2xl font-bold">{studentsCount}</p>
-        </div>
+        <StatCard label="Pendientes" value={inReview.length} accent />
+        <StatCard label="Aprobadas" value={approved} />
+        <StatCard label="Docentes" value={teachersCount} />
+        <StatCard label="Estudiantes" value={studentsCount} />
       </div>
 
-      <div className="mb-6">
+      <div className="mb-8">
         <Link href="/coordinator/review">
           <Button size="sm">Ir a revisión</Button>
         </Link>
       </div>
 
       {/* Evaluaciones pendientes */}
-      <section className="bg-card rounded-xl border p-4">
-        <h3 className="mb-3 font-semibold">
+      <section className="bg-card rounded-xl border p-5 shadow-sm">
+        <h3 className="font-display mb-4 text-lg font-semibold">
           Evaluaciones pendientes de revisión ({inReview.length})
         </h3>
         {inReview.length === 0 ? (
@@ -90,12 +71,12 @@ export default async function CoordinatorDashboardPage() {
             No hay evaluaciones pendientes de revisión.
           </p>
         ) : (
-          <div className="divide-y">
+          <div className="space-y-1">
             {inReview.map((e) => (
               <Link
                 key={e.id}
                 href={`/teacher/evaluations/${e.id}`}
-                className="flex items-center gap-3 py-3 hover:opacity-80"
+                className="hover:bg-accent/60 flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{e.title}</p>

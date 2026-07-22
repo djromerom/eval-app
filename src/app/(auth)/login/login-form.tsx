@@ -22,9 +22,9 @@ async function loginWithCredentials(formData: FormData) {
 export function LoginForm() {
   return (
     <form action={loginWithCredentials} className="mt-6 space-y-4">
-      <div className="space-y-1">
-        <label htmlFor="email" className="text-sm font-medium">
-          Correo electrónico
+      <div className="space-y-1.5">
+        <label htmlFor="email" className="text-foreground text-sm font-medium">
+          Correo institucional
         </label>
         <input
           id="email"
@@ -32,11 +32,12 @@ export function LoginForm() {
           type="email"
           required
           autoComplete="email"
-          className="bg-background w-full rounded-md border px-3 py-2 text-sm"
+          placeholder="nombre@institucion.edu.co"
+          className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring w-full rounded-lg border px-3.5 py-2.5 text-sm shadow-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
         />
       </div>
-      <div className="space-y-1">
-        <label htmlFor="password" className="text-sm font-medium">
+      <div className="space-y-1.5">
+        <label htmlFor="password" className="text-foreground text-sm font-medium">
           Contraseña
         </label>
         <input
@@ -45,10 +46,11 @@ export function LoginForm() {
           type="password"
           required
           autoComplete="current-password"
-          className="bg-background w-full rounded-md border px-3 py-2 text-sm"
+          placeholder="••••••••••"
+          className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring w-full rounded-lg border px-3.5 py-2.5 text-sm shadow-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
         />
       </div>
-      <Button type="submit" className="w-full">
+      <Button type="submit" size="lg" className="w-full">
         Iniciar sesión
       </Button>
       {/* TODO Fase 1: botones "Continuar con Google" / "Continuar con Microsoft" */}
