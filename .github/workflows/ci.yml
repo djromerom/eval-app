@@ -20,8 +20,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
+        # Sin `version:` — la acción lee packageManager de package.json
+        # (pnpm@10.1.0) automáticamente. Pnpm/action-setup@v4 es estricto:
+        # si pasás `version` y NO coincide con packageManager, falla con
+        # "Multiple versions of pnpm specified". Mantenemos una sola
+        # fuente de verdad (package.json).
 
       - uses: actions/setup-node@v4
         with:
