@@ -183,9 +183,11 @@ services:
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
     # Publica 3000 solo en loopback del host → el nginx del host (apt) hace
-    # proxy_pass a http://127.0.0.1:3000. No exponemos 3000 al exterior.
+    # proxy_pass a http://127.0.0.1:${WEB_HOST_PORT:-3000}. Default 3000 en
+    # prod; el override de staging (docker-compose.staging.yml) usa
+    # WEB_HOST_PORT=3001 para no chocar con prod en el mismo VPS.
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${WEB_HOST_PORT:-3000}:3000"
     volumes:
       - storage:/var/eval/storage
     healthcheck:
