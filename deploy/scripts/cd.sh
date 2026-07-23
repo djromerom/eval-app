@@ -113,22 +113,28 @@ chmod 600 .env.prod 2>/dev/null || true
 
 log "SHA a desplegar: $(echo "$EXPECTED_SHA" | cut -c1-7)"
 
+# ---------- Cargar .env.prod en el entorno del proceso ----------
+# BUG histórico: docker-compose.prod.yml usa interpolación obligatoria
+# `${POSTGRES_PASSWORD:?...}` en bloques `environment:` — si esas vars
+# no están exportadas en el shell del `docker compose pull`, falla con
+# "required variable X is missing a value". `set -a` auto-exporta todo
+# lo que se asigna durante el source.
+set -a
+# shellcheck disable=SC1091
+. ./.env.prod
+set +a
+
 # ---------- Componer imágenes ----------
 # Si el caller las exportó (modo dev/staging), se respetan.
 # Si no, se componen desde .env.prod + EXPECTED_SHA.
 if [ -z "${EVAL_APP_IMAGE:-}" ] || [ -z "${OMR_SERVICE_IMAGE:-}" ]; then
-  # Source .env.prod SIN contaminar el resto del script con vars globales.
-  set +u
-  # shellcheck disable=SC1091
-  . ./.env.prod
-  set -u
-
   GHCR_OWNER="${GHCR_OWNER:-?}"
   GHCR_IMAGE_BASE="${GHCR_IMAGE_BASE:-ghcr.io}"
   SHORT_SHA=$(echo "$EXPECTED_SHA" | cut -c1-7)
   EVAL_APP_IMAGE="${GHCR_IMAGE_BASE}/${GHCR_OWNER}/eval-app:git-${SHORT_SHA}"
   OMR_SERVICE_IMAGE="${GHCR_IMAGE_BASE}/${GHCR_OWNER}/omr-service:git-${SHORT_SHA}"
 fi
+set -u
 
 # Exportar imágenes para que compose las vea en TODOS los servicios que
 # referencian $EVAL_APP_IMAGE / $OMR_SERVICE_IMAGE.
