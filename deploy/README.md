@@ -339,6 +339,144 @@ Desde julio 2026 el deploy a producción está automatizado con GitHub Actions:
 - **Healthcheck**: tras el rollout, espera a que `web` quede `healthy` y
   al final el job hace `curl https://ecognia.pro/login` con 200 como criterio.
 
+## Staging — `test.ecognia.pro`
+
+Staging es un ambiente paralelo en el mismo VPS, aislado lógicamente de prod:
+
+| Capa | Prod | Staging | Cómo se aísla |
+| --- | --- | --- | --- |
+| Dominio público | `ecognia.pro` | `test.ecognia.pro` | vhost nginx separado, cert Let's Encrypt propio |
+| Host port (loopback) | 3000 | 3001 | `WEB_HOST_PORT` en `.env.*` (compose override) |
+| Docker compose project | `eval-app` | `eval-app` (con override) | `docker-compose.staging.yml` hereda prod vía `include:` |
+| Postgres | DB `eval` | DB `eval_staging` | `POSTGRES_DB` distinto; mismo container compartido |
+| Redis | db=0 | db=1 | `REDIS_URL` con `/1` |
+| BullMQ | `bull:*` | `bull:stg:*` | `BULLMQ_PREFIX=stg:` en `.env.staging` |
+| Storage local | `/var/eval/storage` | `/var/eval/storage-staging` | volumen nombrado aparte |
+| Tag imágenes GHCR | `git-<sha>` | `git-<sha>-staging` | `IMAGE_TAG_SUFFIX=-staging` |
+| QR signing secret | uno | **distinto** | QRs de staging NO válidos en prod (security boundary) |
+
+### Layout del VPS con staging
+
+```
+/opt/eval/
+├── bin/
+│   ├── cd-wrapper.sh     # whitelist: deploy / deploy-staging
+│   └── cd.sh              # parametrizable con --env-dir / --env-file / --compose / --image-tag-suffix
+├── eval-app/                  # PRODUCTION
+│   ├── .env.prod
+│   └── docker-compose.prod.yml
+└── eval-app-staging/          # STAGING
+    ├── .env.staging
+    ├── docker-compose.prod.yml    # mismo archivo (env_file parametrizado vía ${ENV_FILE})
+    └── docker-compose.staging.yml # override: WEB_HOST_PORT=3001, POSTGRES_DB=eval_staging, volumen storage-staging
+```
+
+### Modelo de ramas (git-flow-lite)
+
+```
+feature/foo ──► PR ──► develop ──► (auto) test.ecognia.pro
+                              │
+                              └──► PR ──► main ──► (auto) ecognia.pro
+```
+
+- `develop`: branch de integración. Cada push dispara `cd-staging.yml`
+  (workflow con matrix build + SSH `deploy-staging --sha <sha>`).
+- `main`: branch protegido. Cada push dispara `cd.yml`
+  (gemelo con `branches-ignore: [develop]` como defensa-en-profundidad).
+- `cd.yml` solo deploya si el push es a `main`, así un push accidental a
+  `develop` NUNCA toca prod aunque alguien haya deshabilitado protection.
+
+> **Nota**: branch protection rules (require PR, require reviewers, require
+> status checks) **requieren GitHub Pro** para repos privados. En este repo
+> (Free tier, single admin) NO se pueden activar vía API/UI. La separación
+> workflow-level cumple el mismo rol para un repo single-admin: prod solo se
+> toca vía push a `main` + deploy key SSH restringida.
+
+### Setup único de staging
+
+1. **DNS A record**: `test.ecognia.pro` y `www.test.ecognia.pro` → IP del VPS.
+2. **Cert Let's Encrypt** (gemelo de first-cert.sh pero con webroot plugin
+   para no tumbar nginx del host):
+
+   ```bash
+   ssh -i ~/.ssh/<admin-key> root@<vps> 'export CERTBOT_EMAIL=admin@ecognia.pro && \
+     bash /opt/eval/eval-app/deploy/scripts/first-cert-test.sh'
+   ```
+
+3. **Vhost nginx**:
+
+   ```bash
+   scp -i ~/.ssh/<admin-key> deploy/nginx/test.ecognia.conf root@<vps>:/etc/nginx/sites-enabled/
+   ssh -i ~/.ssh/<admin-key> root@<vps> 'nginx -t && systemctl reload nginx'
+   ```
+
+4. **Layout del VPS** (stateless, igual que prod):
+
+   ```bash
+   ssh -i ~/.ssh/<admin-key> root@<vps> 'mkdir -p /opt/eval/eval-app-staging && \
+     cd /opt/eval/eval-app-staging && \
+     cp /opt/eval/eval-app/docker-compose.prod.yml . && \
+     cp /opt/eval/eval-app/deploy/docker-compose.staging.yml . && \
+     cp /opt/eval/eval-app/deploy/.env.staging.example .env.staging && \
+     chmod 600 .env.staging'
+   ```
+
+5. **Generar secretos nuevos** en `.env.staging` (NO reutilizar los de prod):
+
+   ```bash
+   ssh -i ~/.ssh/<admin-key> root@<vps> '
+     cd /opt/eval/eval-app-staging
+     NEW_PG=$(openssl rand -base64 24)
+     NEW_REDIS=$(openssl rand -base64 24)
+     NEW_AUTH=$(openssl rand -base64 32)
+     NEW_QR=$(openssl rand -hex 32)
+     sed -i "s|__REPLACE_WITH_openssl_rand_base64_24__|$NEW_PG|g; s|__REPLACE_WITH_openssl_rand_base64_24__|$NEW_REDIS|g" .env.staging
+     sed -i "s|__REPLACE_WITH_openssl_rand_base64_32__|$NEW_AUTH|g; s|__REPLACE_WITH_openssl_rand_hex_32__|$NEW_QR|g" .env.staging
+   '
+   ```
+
+6. **Crear DB `eval_staging`** en el Postgres existente:
+
+   ```bash
+   ssh -i ~/.ssh/<admin-key> root@<vps> 'docker exec eval-app-postgres-1 \
+     psql -U eval -d eval -c "CREATE DATABASE eval_staging;"'
+   ```
+
+7. **Environment `staging` en GitHub** (hecho): Settings → Environments →
+   `staging`, URL `https://test.ecognia.pro`. Sin required reviewers (free tier).
+
+### Operación día a día
+
+```bash
+# Deploy staging: cualquier push a develop dispara cd-staging.yml
+git push origin develop
+# o manual: gh workflow run cd-staging.yml --ref develop
+
+# Rollback staging: Actions → cd-staging → Run workflow con SHA anterior
+
+# Logs
+ssh -i ~/.ssh/<admin-key> root@<vps> 'tail -200 /var/log/eval-cd-script.log'
+ssh -i ~/.ssh/<admin-key> root@<vps> 'cd /opt/eval/eval-app-staging && dp logs --tail=100 web'
+```
+
+### OAuth providers
+
+Agregar redirect URIs para `test.ecognia.pro` en Google y Microsoft
+(ambos admiten múltiples):
+- `https://test.ecognia.pro/api/auth/callback/google`
+- `https://test.ecognia.pro/api/auth/callback/microsoft-entra-id`
+
+### Verificación de aislamiento
+
+| Check | Comando | Esperado |
+| --- | --- | --- |
+| Staging arriba | `curl -I https://test.ecognia.pro/login` | HTTP/2 200 |
+| Prod intacto | `curl -I https://ecognia.pro/login` | HTTP/2 200 |
+| DB separada | login + crear institución en staging | NO aparece en prod |
+| BullMQ aislado | encolar job en staging | NO aparece en `bull:omr-scan:wait` (db=0 de prod) |
+
+
+
 ### Setup único (hecho, pero documentado para reposicionamiento)
 
 1. **Generar clave SSH de deploy** (en el Mac del dev):
