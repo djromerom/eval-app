@@ -138,7 +138,10 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 10m
-          command: deploy --sha ${{ steps.sha.outputs.value }}
+          # `script:` (no `command:`) es el input válido en v1.1.0 — el
+          # wrapper SSH del VPS solo acepta el primer token `deploy` y
+          # reenvía el resto verbatim a `cd.sh` (`--sha <git-sha>`).
+          script: deploy --sha ${{ steps.sha.outputs.value }}
 
       - name: Smoke-test the deployed site
         run: |
