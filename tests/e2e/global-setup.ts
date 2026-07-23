@@ -71,15 +71,13 @@ export default async function globalSetup(): Promise<void> {
       },
     });
 
-    // Si ya existe la evaluación demo, terminamos.
-    const existingEval = await prisma.evaluation.findFirst({
+    // Si ya existe la evaluación demo, la dejamos en paz; seguimos con los
+    // cursos/asignaturas/periodos abajo para garantizar la DRAFT y, si falta
+    // la PUBLICADA, la creamos más adelante.
+    const existingPublishedEval = await prisma.evaluation.findFirst({
       where: { teacherId: admin.id, title: "E2E Demo — Prueba 1" },
       select: { id: true },
     });
-    if (existingEval) {
-      console.log(`✔ globalSetup: evaluación demo ya existe (${existingEval.id})`);
-      return;
-    }
 
     // Curso: findFirst o create.
     let course = await prisma.course.findFirst({
@@ -132,131 +130,168 @@ export default async function globalSetup(): Promise<void> {
     }
 
     // Crea la evaluación + sección + preguntas + opciones en una transacción.
-    const newEvaluationId = await prisma.$transaction(async (tx) => {
-      const evaluation = await tx.evaluation.create({
+    // Solo si la PUBLICADA aún no existe; si ya está, no la duplicamos (los
+    // cursos/asignaturas/periodos arriba siguen siendo útiles para la DRAFT).
+    if (existingPublishedEval) {
+      console.log(
+        `✔ globalSetup: evaluación demo PUBLICADA ya existe (${existingPublishedEval.id})`,
+      );
+    } else {
+      const newEvaluationId = await prisma.$transaction(async (tx) => {
+        const evaluation = await tx.evaluation.create({
+          data: {
+            institutionId: institution.id,
+            teacherId: admin.id,
+            courseSubjectId: courseSubject.id,
+            periodId: period.id,
+            academicYearId: academicYear.id,
+            title: "E2E Demo — Prueba 1",
+            status: "PUBLISHED",
+            version: 1,
+            bookletNumber: 1,
+          },
+        });
+
+        const section = await tx.evaluationSection.create({
+          data: {
+            evaluationId: evaluation.id,
+            order: 0,
+            title: "Bloque de preguntas",
+            content: { type: "doc", content: [] },
+          },
+        });
+
+        await tx.question.create({
+          data: {
+            sectionId: section.id,
+            number: 1,
+            text: {
+              type: "doc",
+              content: [
+                { type: "paragraph", content: [{ type: "text", text: "¿Cuánto es 2 + 2?" }] },
+              ],
+            },
+            correctAnswer: "B",
+            soloLevel: SoloLevel.RELACIONAL,
+            menComponent: "NUMÉRICO",
+            options: {
+              create: [
+                {
+                  key: "A",
+                  text: {
+                    type: "doc",
+                    content: [{ type: "paragraph", content: [{ type: "text", text: "3" }] }],
+                  },
+                },
+                {
+                  key: "B",
+                  text: {
+                    type: "doc",
+                    content: [{ type: "paragraph", content: [{ type: "text", text: "4" }] }],
+                  },
+                },
+                {
+                  key: "C",
+                  text: {
+                    type: "doc",
+                    content: [{ type: "paragraph", content: [{ type: "text", text: "5" }] }],
+                  },
+                },
+                {
+                  key: "D",
+                  text: {
+                    type: "doc",
+                    content: [{ type: "paragraph", content: [{ type: "text", text: "22" }] }],
+                  },
+                },
+              ],
+            },
+          },
+        });
+
+        await tx.question.create({
+          data: {
+            sectionId: section.id,
+            number: 2,
+            text: {
+              type: "doc",
+              content: [
+                { type: "paragraph", content: [{ type: "text", text: "Capital de Colombia" }] },
+              ],
+            },
+            correctAnswer: "B",
+            soloLevel: SoloLevel.RELACIONAL,
+            options: {
+              create: [
+                {
+                  key: "A",
+                  text: {
+                    type: "doc",
+                    content: [{ type: "paragraph", content: [{ type: "text", text: "Medellín" }] }],
+                  },
+                },
+                {
+                  key: "B",
+                  text: {
+                    type: "doc",
+                    content: [{ type: "paragraph", content: [{ type: "text", text: "Bogotá" }] }],
+                  },
+                },
+                {
+                  key: "C",
+                  text: {
+                    type: "doc",
+                    content: [{ type: "paragraph", content: [{ type: "text", text: "Cali" }] }],
+                  },
+                },
+                {
+                  key: "D",
+                  text: {
+                    type: "doc",
+                    content: [
+                      { type: "paragraph", content: [{ type: "text", text: "Barranquilla" }] },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        });
+
+        return evaluation.id;
+      });
+
+      console.log(`✔ globalSetup: evaluación demo PUBLICADA creada (${newEvaluationId})`);
+    }
+
+    // ========== Evaluación DRAFT adicional para tests de import ==========
+    // La pantalla `/teacher/evaluations/[id]/import` exige una evaluación en
+    // BORRADOR propia del docente. Sembramos una vacía (sin secciones ni
+    // preguntas) — cada test la reutiliza y la limpia durante el flujo de
+    // import. Idempotente: si ya existe, no la duplicamos.
+    const existingDraftEval = await prisma.evaluation.findFirst({
+      where: { teacherId: admin.id, title: "E2E Demo — Borrador para import" },
+      select: { id: true },
+    });
+    if (existingDraftEval) {
+      console.log(`✔ globalSetup: evaluación DRAFT ya existe (${existingDraftEval.id})`);
+    } else {
+      const draft = await prisma.evaluation.create({
         data: {
           institutionId: institution.id,
           teacherId: admin.id,
           courseSubjectId: courseSubject.id,
           periodId: period.id,
           academicYearId: academicYear.id,
-          title: "E2E Demo — Prueba 1",
-          status: "PUBLISHED",
+          title: "E2E Demo — Borrador para import",
+          status: "DRAFT",
           version: 1,
-          bookletNumber: 1,
+          bookletNumber: 2,
         },
+        select: { id: true },
       });
-
-      const section = await tx.evaluationSection.create({
-        data: {
-          evaluationId: evaluation.id,
-          order: 0,
-          title: "Bloque de preguntas",
-          content: { type: "doc", content: [] },
-        },
-      });
-
-      await tx.question.create({
-        data: {
-          sectionId: section.id,
-          number: 1,
-          text: {
-            type: "doc",
-            content: [
-              { type: "paragraph", content: [{ type: "text", text: "¿Cuánto es 2 + 2?" }] },
-            ],
-          },
-          correctAnswer: "B",
-          soloLevel: SoloLevel.RELACIONAL,
-          menComponent: "NUMÉRICO",
-          options: {
-            create: [
-              {
-                key: "A",
-                text: {
-                  type: "doc",
-                  content: [{ type: "paragraph", content: [{ type: "text", text: "3" }] }],
-                },
-              },
-              {
-                key: "B",
-                text: {
-                  type: "doc",
-                  content: [{ type: "paragraph", content: [{ type: "text", text: "4" }] }],
-                },
-              },
-              {
-                key: "C",
-                text: {
-                  type: "doc",
-                  content: [{ type: "paragraph", content: [{ type: "text", text: "5" }] }],
-                },
-              },
-              {
-                key: "D",
-                text: {
-                  type: "doc",
-                  content: [{ type: "paragraph", content: [{ type: "text", text: "22" }] }],
-                },
-              },
-            ],
-          },
-        },
-      });
-
-      await tx.question.create({
-        data: {
-          sectionId: section.id,
-          number: 2,
-          text: {
-            type: "doc",
-            content: [
-              { type: "paragraph", content: [{ type: "text", text: "Capital de Colombia" }] },
-            ],
-          },
-          correctAnswer: "B",
-          soloLevel: SoloLevel.RELACIONAL,
-          options: {
-            create: [
-              {
-                key: "A",
-                text: {
-                  type: "doc",
-                  content: [{ type: "paragraph", content: [{ type: "text", text: "Medellín" }] }],
-                },
-              },
-              {
-                key: "B",
-                text: {
-                  type: "doc",
-                  content: [{ type: "paragraph", content: [{ type: "text", text: "Bogotá" }] }],
-                },
-              },
-              {
-                key: "C",
-                text: {
-                  type: "doc",
-                  content: [{ type: "paragraph", content: [{ type: "text", text: "Cali" }] }],
-                },
-              },
-              {
-                key: "D",
-                text: {
-                  type: "doc",
-                  content: [
-                    { type: "paragraph", content: [{ type: "text", text: "Barranquilla" }] },
-                  ],
-                },
-              },
-            ],
-          },
-        },
-      });
-
-      return evaluation.id;
-    });
-
-    console.log(`✔ globalSetup: evaluación demo creada (${newEvaluationId})`);
+      console.log(`✔ globalSetup: evaluación DRAFT creada (${draft.id})`);
+    }
   } finally {
     await prisma.$disconnect();
   }
