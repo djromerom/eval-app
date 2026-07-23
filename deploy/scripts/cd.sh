@@ -6,6 +6,12 @@
 # para la deploy key):
 #   ssh root@<vps> "deploy --sha <git-sha>"
 #
+# El VPS NO tiene código fuente ni un clone de git. Solo archivos estáticos:
+#   /opt/eval/bin/cd.sh            (este script — versionado en el repo)
+#   /opt/eval/bin/cd-wrapper.sh    (whitelist SSH dispatcher)
+#   /opt/eval/eval-app/.env.prod   (variables, gitignored)
+#   /opt/eval/eval-app/docker-compose.prod.yml
+#
 # Las imágenes a desplegar se COMPONEN en este script a partir de:
 #   1. Variables exportadas por el caller (EVAL_APP_IMAGE / OMR_SERVICE_IMAGE),
 #      si las hay — útil para entornos no-GHCR (dev/staging).
@@ -20,20 +26,18 @@
 #   OMR_SERVICE_IMAGE = ghcr.io/djromerom/omr-service:git-abc1234
 #
 # Hace:
-#   1. Verifica que SHA local == SHA pasado (defense-in-depth: nadie subió
-#      tags manualmente).
-#   2. Pull de las imágenes.
-#   3. prisma migrate deploy (omitible con --skip-migrate).
-#   4. Rollout sin downtime: omr-service + web + workers.
-#   5. Espera a que `web` quede healthy (30 intentos × 2s = 60s).
-#   6. Dump del estado final + prune de imágenes dangling.
-#   7. Log a /var/log/eval-cd-script.log (rotación via logrotate externo).
+#   1. Pull de las imágenes nuevas desde GHCR.
+#   2. prisma migrate deploy (omitible con --skip-migrate).
+#   3. Rollout sin downtime: omr-service + web + workers.
+#   4. Espera a que `web` quede healthy (30 intentos × 2s = 60s).
+#   5. Dump del estado final + prune de imágenes dangling.
+#   6. Log a /var/log/eval-cd-script.log (rotación via logrotate externo).
 #
 # NO toca: postgres ni redis (nunca se recrean en cada deploy).
 # ============================================================================
 set -euo pipefail
 
-REPO_DIR="/opt/eval/eval-app"
+APP_DIR="/opt/eval/eval-app"
 COMPOSE_FILE="docker-compose.prod.yml"
 LOG="/var/log/eval-cd-script.log"
 LOCKFILE="/var/run/eval-cd.lock"
@@ -88,42 +92,32 @@ if [ -z "$EXPECTED_SHA" ]; then
   exit 2
 fi
 
-cd "$REPO_DIR"
-git config --global --add safe.directory "$REPO_DIR" 2>/dev/null || true
-
-# ---------- Traer el SHA esperado al repo local ----------
-# Defensa: el VPS tiene un clone persistente; si llega un deploy con un
-# SHA más nuevo que el último fetch, hay que traerlo antes de validar.
-# `git fetch origin` sin refspec trae todo (barato en un repo chico como este).
-# Si no se puede (sin red, sin remote, etc.) caemos al check de "HEAD == SHA"
-# que ahora puede fallar legítimamente si alguien pusheó pero no fetchó.
-log "git fetch origin…"
-if ! git fetch origin 2>&1 | sed 's/^/[cd] fetch: /'; then
-  err "git fetch origin falló — verificar remote/credenciales del clone"
-  # No abortamos todavía: si el HEAD local ya coincide con el SHA esperado,
-  # el deploy es válido igual.
-fi
-
-# ---------- Verificar SHA en el repo local ----------
-ACTUAL=$(git rev-parse HEAD 2>/dev/null || echo "")
-if [ "$ACTUAL" != "$EXPECTED_SHA" ]; then
-  err "HEAD local ($ACTUAL) != SHA esperado ($EXPECTED_SHA)"
-  err "¿el deploy se está corriendo sin pull? Abortando."
+# ---------- Validar layout del VPS ----------
+# Defensa mínima: si alguien borró .env.prod o el compose, fallar rápido y
+# ruidoso en lugar de dejar al compose "funcionando" con defaults rotos.
+if [ ! -d "$APP_DIR" ]; then
+  err "$APP_DIR no existe — VPS no tiene el layout esperado (ver deploy/README.md)"
   exit 1
 fi
-log "SHA verificado: $(git rev-parse --short HEAD)"
+if [ ! -f "$APP_DIR/$COMPOSE_FILE" ]; then
+  err "$APP_DIR/$COMPOSE_FILE no existe — falta instalar docker-compose.prod.yml"
+  exit 1
+fi
+if [ ! -f "$APP_DIR/.env.prod" ]; then
+  err "$APP_DIR/.env.prod no existe — falta instalar el archivo de env (gitignored)"
+  exit 1
+fi
+
+cd "$APP_DIR"
+chmod 600 .env.prod 2>/dev/null || true
+
+log "SHA a desplegar: $(echo "$EXPECTED_SHA" | cut -c1-7)"
 
 # ---------- Componer imágenes ----------
 # Si el caller las exportó (modo dev/staging), se respetan.
 # Si no, se componen desde .env.prod + EXPECTED_SHA.
 if [ -z "${EVAL_APP_IMAGE:-}" ] || [ -z "${OMR_SERVICE_IMAGE:-}" ]; then
-  if [ ! -f ".env.prod" ]; then
-    err ".env.prod no existe y las imágenes no fueron exportadas"
-    exit 1
-  fi
-  chmod 600 .env.prod 2>/dev/null || true
-  # Source .env.prod SIN ejecutar el resto del script con esos vars
-  # exportados a nivel global — solo los usamos para componer.
+  # Source .env.prod SIN contaminar el resto del script con vars globales.
   set +u
   # shellcheck disable=SC1091
   . ./.env.prod
@@ -154,7 +148,7 @@ if [ -f /root/.docker/config.json ] && grep -q '"ghcr.io"' /root/.docker/config.
 else
   log "GHCR auth: NO detectada — si el pull falla con 'unauthorized',"
   log "  corre UNA vez en el VPS:    docker login ghcr.io"
-  log "  con un PAT de scope 'read:packages' (fine-grained del repo eval-app)."
+  log "  con un PAT classic de scope 'read:packages'."
 fi
 
 # ---------- Pull ----------

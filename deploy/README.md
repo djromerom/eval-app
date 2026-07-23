@@ -30,6 +30,35 @@ one-shot `migrate` (profile: `init`).
 > `omr-service:git-<sha>`). El despliegue lo dispara el workflow `cd` en cada
 > push a `main`. Ver la sección **[§CI/CD](#cicd)** al final.
 
+### Layout del VPS (stateless — sin git)
+
+El VPS **no tiene código fuente ni clone de git**. Solo archivos estáticos:
+
+```
+/opt/eval/
+├── bin/
+│   ├── cd-wrapper.sh     # SSH dispatcher (whitelist `deploy <args>`)
+│   └── cd.sh              # deploy script (idempotente, este repo)
+└── eval-app/
+    ├── .env.prod          # variables de entorno (GITIGNORED — único dinámico)
+    └── docker-compose.prod.yml
+```
+
+**Cómo se actualizan los archivos del VPS** (raro, manual):
+
+| Archivo                   | Cuándo se toca                                 | Cómo                        |
+| ------------------------- | ---------------------------------------------- | --------------------------- |
+| `cd-wrapper.sh`           | Casi nunca (es la whitelist SSH)               | manual: `scp` desde el repo |
+| `cd.sh`                   | Solo si cambia el deploy (nuevo servicio, fix) | manual: `scp` desde el repo |
+| `docker-compose.prod.yml` | Solo si se agrega un servicio                  | manual: `scp` desde el repo |
+| `.env.prod`               | Para rotar secretos o agregar vars             | manual: editar in-place     |
+
+**Por qué NO hay `git clone`**: el chicken-and-egg de "para desplegar el
+nuevo `cd.sh` necesitás hacer pull; para pull necesitás auth; para auth
+necesitás un token que vence" no vale la pena. Las imágenes en GHCR YA
+son inmutables (tag por SHA); no hace falta reconciliar estado del repo
+local con el SHA que manda GH Actions — `cd.sh` ni mira `HEAD`.
+
 Volúmenes nombrados (viven en `/var/lib/docker/volumes/`):
 
 | Volumen           | Uso                                                                                     |
@@ -81,11 +110,18 @@ local se usa `uvicorn main:app --port 8000` y la URL por defecto es
    Puppeteer viene x86_64 y falla. O construyes con `--platform=linux/amd64`
    o usas un VPS x86_64.
 
-## Primer deploy
+## Primer deploy (instalación inicial — una sola vez)
+
+El VPS arranca SIN código. La primera vez necesitás **un único git clone
+temporal** para obtener `docker-compose.prod.yml`, `deploy/scripts/*`,
+`Dockerfile` y la imagen de nginx/certbot. Una vez emitidos los certs y
+arrancados los servicios, podés **borrar el clone** y pasar al modelo
+stateless (sólo `scp` + CI/CD). Los pasos:
 
 ```bash
-# 1. Clonar el repo en /opt/eval
+# 1. Crear el layout vacío y clonar el repo temporalmente
 sudo mkdir -p /opt/eval && sudo chown $USER /opt/eval
+sudo mkdir -p /opt/eval/bin
 cd /opt/eval
 git clone <repo-url> eval-app
 cd eval-app
@@ -99,35 +135,55 @@ $EDITOR .env.prod
 #   openssl rand -base64 32   (AUTH_SECRET)
 #   openssl rand -hex 32      (QR_SIGNING_SECRET)
 # AUTH_URL=https://ecognia.pro (NO localhost, NO hostname interno)
+# GHCR_OWNER=<owner de GHCR, ej. djromerom>   ← requerido por cd.sh
+# GHCR_IMAGE_BASE=ghcr.io                      ← requerido por cd.sh
 
-# 3. Construir la imagen
-docker compose -f docker-compose.prod.yml build
+# 3. Instalar los scripts de deploy en /opt/eval/bin (versión con whitelist)
+sudo install -m755 deploy/scripts/cd.sh          /opt/eval/bin/cd.sh
+sudo install -m755 deploy/scripts/cd-wrapper.sh  /opt/eval/bin/cd-wrapper.sh
 
-# 4. Arrancar Postgres y Redis (sin web todavía)
+# 4. Hacer el docker login a GHCR (si los paquetes son privados)
+docker login ghcr.io -u <ghcr-user>           # pega PAT classic scope read:packages
+
+# 5. Arrancar Postgres y Redis (sin web todavía)
 docker compose -f docker-compose.prod.yml up -d postgres redis
 
-# 5. Aplicar migraciones (profile: init)
+# 6. Aplicar migraciones (profile: init)
 docker compose -f docker-compose.prod.yml run --rm migrate
 
-# 6. Emitir el primer certificado (certbot standalone, nginx aún apagado)
+# 7. Emitir el primer certificado (certbot standalone, nginx aún apagado)
 docker compose -f docker-compose.prod.yml run --rm certbot \
     certonly --standalone \
     -d ecognia.pro -d www.ecognia.pro \
     --email "${CERTBOT_EMAIL}" --agree-tos --no-eff-email --rsa-key-size 4096
 
-# 7. Arrancar nginx, web y los 2 workers
+# 8. Arrancar nginx, web y los 2 workers
 docker compose -f docker-compose.prod.yml up -d
 
-# 8. Verificar
+# 9. Instalar la deploy key con whitelist (ver §CI/CD → Setup único → paso 2)
+# — requiere SSH admin root al VPS, NO la deploy key.
+
+# 10. Verificar
 docker compose -f docker-compose.prod.yml ps
-curl -I https://ecognia.pro/login
-# Esperado: 200 con HSTS header
+curl -I https://ecognia.pro/login   # Esperado: 200 con HSTS header
+
+# 11. Pasar al modelo stateless: borrar el clone
+cd /opt/eval
+rm -rf eval-app                    # cd.sh no necesita NUNCA un .git en el VPS
+# Los archivos del compose ya están "vivos" en los named volumes; cd.sh los
+# trae de GHCR en cada deploy y compose los lee desde /opt/eval/eval-app/.
+# Copiá la versión "viva" con scp desde tu Mac:
+#   scp docker-compose.prod.yml root@<vps>:/opt/eval/eval-app/docker-compose.prod.yml
+#   scp deploy/.env.prod.example root@<vps>:/opt/eval/eval-app/.env.prod.example  # opcional
 ```
+
+A partir de acá, deploys vía CI/CD. Si querés re-volver al modelo con repo
+clonado (no se recomienda), basta con `git clone` otra vez en el mismo path.
 
 Alias recomendado (en `~/.bashrc` o `~/.zshrc`):
 
 ```bash
-alias dp='docker compose -f docker-compose.prod.yml'
+alias dp='docker compose -f /opt/eval/eval-app/docker-compose.prod.yml'
 ```
 
 ## Operaciones del día a día
@@ -144,18 +200,47 @@ cd → Run workflow**, opcionalmente con `sha=<sha-anterior>`.
 Logs del último deploy en la UI de GitHub Actions; salida del script en el VPS
 `/var/log/eval-cd-script.log`; log del wrapper SSH en `/var/log/eval-cd.log`.
 
-### Actualizar la app manualmente (sin CI)
+### Actualizar archivos estáticos del VPS (raro, manual)
 
-Si el CI está caído y necesitas desplegar a mano:
+Los únicos archivos del VPS que cambian fuera de CI/CD son `cd.sh`,
+`cd-wrapper.sh` y `docker-compose.prod.yml`. Cambian cuando se agrega un
+servicio nuevo o se modifica la lógica del deploy — típicamente 1–2 veces al
+año. Para actualizarlos, desde tu Mac:
 
 ```bash
-cd /opt/eval/eval-app
-git pull --ff-only
-dp build                              # rebuild con el código nuevo (eval-app + omr-service)
-dp up -d postgres redis               # asegurar infra de datos
-dp run --rm migrate                   # si hay migraciones nuevas
-dp up -d                              # reinicia servicios app que cambiaron
+# Copiá cada archivo al VPS (con backup automático del existente):
+scp deploy/scripts/cd.sh          root@177.7.42.54:/opt/eval/bin/cd.sh
+scp deploy/scripts/cd-wrapper.sh  root@177.7.42.54:/opt/eval/bin/cd-wrapper.sh
+scp docker-compose.prod.yml      root@177.7.42.54:/opt/eval/eval-app/docker-compose.prod.yml
 ```
+
+Los permisos tienen que quedar en 755 para los scripts (root los ejecuta
+con sudo vía el wrapper SSH). `cd-wrapper.sh` debe seguir siendo propiedad
+de root y NO tener permiso de escritura para nadie más (es la única
+superficie de ataque de la deploy key).
+
+### Actualizar la app manualmente (sin CI)
+
+Si el CI está caído y necesitás desplegar a mano (no hay repo en el VPS,
+las imágenes viven en GHCR; lo único que necesitás es el compose y tu
+ghcr login vivo):
+
+```bash
+# Componer imágenes a partir del SHA que querés desplegar:
+ssh root@<vps> 'cd /opt/eval/eval-app && \
+  EVAL_APP_IMAGE=ghcr.io/<owner>/eval-app:git-<sha7> \
+  OMR_SERVICE_IMAGE=ghcr.io/<owner>/omr-service:git-<sha7> \
+  /opt/eval/bin/cd.sh --sha <sha-completo>'
+
+# O, equivalentemente, disparar el workflow de GH Actions con sha manual:
+# Actions → cd → Run workflow → sha=<sha>
+```
+
+NO uses `dp build` a mano: las imágenes en GHCR YA tienen el código, sólo
+falta pedírselas al registry. Si querés re-construir localmente sin CI
+(sólo en dev, no en este VPS), usá `deploy.sh` desde el repo clonado en
+tu Mac y apuntá las vars `EVAL_APP_IMAGE` / `OMR_SERVICE_IMAGE` al tag
+local.
 
 ### Ver logs
 
@@ -262,20 +347,25 @@ Desde julio 2026 el deploy a producción está automatizado con GitHub Actions:
    ssh-keygen -t ed25519 -C "eval-deploy@ecognia.pro" -f ~/.ssh/id_ed25519_eval_deploy -N ""
    ```
 
-2. **Instalar el wrapper y agregar la pública al VPS**:
+2. **Instalar el wrapper y agregar la pública al VPS** (usa la **clave
+   admin** del VPS, NO la deploy key):
 
    ```bash
-   # copiar cd-wrapper.sh y cd.sh al VPS (o git pull)
-   ssh -i <admin-key> root@<vps> '
-     mkdir -p /opt/eval/bin
-     install -m755 deploy/scripts/cd-wrapper.sh /opt/eval/bin/cd-wrapper.sh  # (ver Anexo §cd-wrapper.sh abajo)
-     # Para authorized_keys (idempotente):
-     PUB=$(cat ~/.ssh/id_ed25519_eval_deploy.pub)
-     grep -q "eval-deploy@ecognia.pro" /root/.ssh/authorized_keys 2>/dev/null || \
-       printf "command=\"/opt/eval/bin/cd-wrapper.sh\",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty %s\n" "$PUB" \
+   # 1. Copiar los scripts estáticos del repo al VPS (versión actual del repo)
+   scp deploy/scripts/cd.sh          -i ~/.ssh/<admin-key> root@<vps>:/opt/eval/bin/cd.sh
+   scp deploy/scripts/cd-wrapper.sh  -i ~/.ssh/<admin-key> root@<vps>:/opt/eval/bin/cd-wrapper.sh
+   ssh -i ~/.ssh/<admin-key> root@<vps> 'chmod 755 /opt/eval/bin/cd.sh /opt/eval/bin/cd-wrapper.sh'
+
+   # 2. Agregar la pública al authorized_keys del VPS con la whitelist
+   #    (`command=` en authorized_keys es LO QUE HACE que la deploy key
+   #    sólo pueda correr cd-wrapper.sh, no una shell libre)
+   PUB=$(cat ~/.ssh/id_ed25519_eval_deploy.pub)
+   ssh -i ~/.ssh/<admin-key> root@<vps> "
+     grep -q 'eval-deploy@ecognia.pro' /root/.ssh/authorized_keys 2>/dev/null || \
+       printf 'command=\"/opt/eval/bin/cd-wrapper.sh\",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty %s\n' '$PUB' \
        >> /root/.ssh/authorized_keys
      chmod 600 /root/.ssh/authorized_keys
-   '
+   "
    ```
 
    La opción `command=` en `authorized_keys` hace que cualquier intento de
@@ -338,26 +428,66 @@ interpreta con `eval`), no hay superficie para inyección.
 
 ### Anexo — `cd-wrapper.sh`
 
+Ésta es la versión que está en `deploy/scripts/cd-wrapper.sh` del repo. Se
+invoca con `command="/opt/eval/bin/cd-wrapper.sh"` en `authorized_keys`.
+Cualquier diferencia con tu VPS = diverge del repo (re-`scp` y `chmod 755`):
+
 ```bash
 #!/bin/bash
+# ============================================================================
+# cd-wrapper.sh — SSH dispatcher para la deploy key de eval-app
+#
+# Se invoca desde `authorized_keys` con la restricción:
+#   command="/opt/eval/bin/cd-wrapper.sh" ssh-ed25519 AAAA... eval-deploy
+#
+# Es la ÚNICA superficie de ataque de la deploy key. Aunque la clave se
+# filtre, un atacante no puede abrir shell ni ejecutar otros comandos —
+# este wrapper acepta solamente el primer token `deploy` y reenvía el
+# resto verbatim a `cd.sh`. Cualquier otra cosa se loggea y se rechaza.
+#
+# Logs: /var/log/eval-cd.log (este wrapper) + /var/log/eval-cd-script.log
+#       (cd.sh). Ambos rotan con logrotate externo.
+# ============================================================================
 set -euo pipefail
 LOG=/var/log/eval-cd.log
-echo "[--BEGIN-- $(date -Iseconds)] key=${SSH_CLIENT%% *} cmd=${SSH_ORIGINAL_COMMAND:-<no-command>}" >> "$LOG"
+mkdir -p "$(dirname "$LOG")"
+echo "[--BEGIN-- $(date -Iseconds)] user=${USER:-?} cmd=${SSH_ORIGINAL_COMMAND:-<no-command>} key=${SSH_CLIENT%% *}" >> "$LOG"
 
 CMD="${SSH_ORIGINAL_COMMAND:-}"
-[ -n "$CMD" ] || { echo "no command" >> "$LOG"; exit 1; }
+[ -z "$CMD" ] && {
+  echo "deploy key — interactive shell denied" >&2
+  echo "[--DENY-- $(date -Iseconds)] reason=no-command key=${SSH_CLIENT%% *}" >> "$LOG"
+  exit 1
+}
 
 FIRST="${CMD%% *}"
-[ "$FIRST" = "deploy" ] || { echo "forbidden: $FIRST" >> "$LOG"; exit 1; }
-REST="${CMD#deploy }"
-
-cd /opt/eval/eval-app
-# bash -c para word-split correcto de $REST.
-bash -c "./deploy/scripts/cd.sh $REST" 2>> "$LOG"
-RC=$?
-echo "[--END-- $(date -Iseconds)] rc=$RC" >> "$LOG"
-exit $RC
+REST="${CMD#${FIRST} }"
+case "$FIRST" in
+  deploy)
+    echo "[--RUN-- $(date -Iseconds)] /opt/eval/bin/cd.sh $REST" >> "$LOG"
+    /opt/eval/bin/cd.sh $REST
+    RC=$?
+    echo "[--END-- $(date -Iseconds)] rc=$RC" >> "$LOG"
+    exit $RC
+    ;;
+  *)
+    echo "deploy key — forbidden command: $FIRST" >&2
+    echo "[--DENY-- $(date -Iseconds)] first=$FIRST key=${SSH_CLIENT%% *}" >> "$LOG"
+    exit 1
+    ;;
+esac
 ```
+
+Notas de seguridad:
+
+- **NO** se usa `bash -c "$CMD …"`: ese patrón permite que cualquier cosa
+  que cuele la whitelist (p.ej. `deploy a;rm -rf /`) ejecute código
+  arbitrario. Acá sólo se whitelistea el primer token (`deploy`) y el
+  resto se pasa como **args** a `cd.sh`, que los parsea con `case "$1" in`
+  y rechaza cualquier `--foo` desconocido.
+- Logs a `/var/log/eval-cd.log` (no rotados por el script — usar
+  `logrotate` externo). Si el VPS no rota logs, este archivo crece sin
+  tope.
 
 ### Anexo — Paquetes GHCR privados
 
@@ -485,10 +615,16 @@ Causas comunes:
 
 ### El deploy de CI/CD falla con "unknown shorthand flag: 'sha'"
 
-Si alguien agregó cd.sh nuevo y agregó otra flag antes de `--sha`, GH Actions
-puede haberse desincronizado. Verificar que la línea `command: deploy --sha
-${{ steps.sha.outputs.value }}` en `.github/workflows/cd.yml` sigue
-generando un comando que cd.sh entiende (debe empezar con `--sha` o `--skip`).
+Si alguien tocó cd.sh y agregó otra flag antes de `--sha`, GH Actions
+puede haberse desincronizado. El campo correcto en `appleboy/ssh-action@v1.1.0`
+es **`script:`**, NO `command:` (eso lanza un warning en los logs).
+Verificar la línea:
+
+```yaml
+- uses: appleboy/ssh-action@v1.1.0
+  with:
+    script: deploy --sha ${{ steps.sha.outputs.value }}
+```
 
 ### El deploy queda colgado en "esperando que 'web' quede healthy"
 
@@ -497,20 +633,12 @@ Inspeccionar:
 
 ```bash
 ssh root@<vps> 'cd /opt/eval/eval-app && dp logs web --tail=100'
+ssh root@<vps> 'tail -200 /var/log/eval-cd-script.log'
 ```
 
 Causas comunes: variable de entorno faltante, runtime error de Next, o que
 `AUTH_URL` apunta a un host distinto al que nginx sirve. Tras arreglar,
 basta con re-disparar el workflow.
-
-### `HEAD local (xxx) != SHA esperado (yyy)`
-
-El VPS tiene el repo en un commit distinto al que pasó GH Actions. Sucede
-porque `git pull` corre fuera del wrapper (es trabajo humano antes del push).
-Solución: en el VPS correr `cd /opt/eval/eval-app && git pull --ff-only` y
-luego re-disparar el workflow. Si es recurrente, vale la pena que el
-wrapper haga pull antes (trade-off: el deploy depende del estado del repo
-local).
 
 ### El deploy falla con "unauthorized" al hacer pull de GHCR
 
@@ -541,20 +669,23 @@ Ver §Paquetes GHCR privados abajo.
 
 ## Archivos clave
 
-| Archivo                                   | Qué                                                           |
-| ----------------------------------------- | ------------------------------------------------------------- |
-| `Dockerfile`                              | Build multi-stage (builder + runtime)                         |
-| `docker-compose.prod.yml`                 | Stack (postgres, redis, omr-service, web, 2 workers, migrate) |
-| `omr-service/Dockerfile`                  | Imagen Python (OpenCV headless + FastAPI)                     |
-| `docker/entrypoint-web.sh`                | Copia static/ y public/, luego exec node                      |
-| `docker/entrypoint-worker.sh`             | Dispatch por `WORKER_NAME` a bundle compilado                 |
-| `docker/nginx/nginx.conf`                 | Main config (buffers, timeouts, gzip)                         |
-| `docker/nginx/conf.d/ecognia.conf`        | HTTP/HTTPS server blocks                                      |
-| `tsconfig.worker.json`                    | Compila workers a `dist-workers/`                             |
-| `deploy/.env.prod.example`                | Template de vars de prod                                      |
-| `deploy/scripts/cd.sh`                    | Deploy idempotente invocado por GH Actions (CI/CD)            |
-| `deploy/scripts/first-cert.sh`            | Helper para paso de emisión inicial del cert                  |
-| `deploy/scripts/deploy.sh`                | Deploy manual local (sin CI/CD) — alternativa a `cd.sh`       |
-| `deploy/cron/eval-certbot`                | Cron de renovación diaria                                     |
-| `/opt/eval/bin/cd-wrapper.sh` (en el VPS) | Whitelist SSH para la deploy key de GH Actions                |
-| `.github/workflows/cd.yml`                | Workflow de CD: build + push GHCR + SSH deploy                |
+| Archivo                                                  | Qué                                                                                     |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `Dockerfile`                                             | Build multi-stage de `eval-app` (builder + runtime)                                     |
+| `docker-compose.prod.yml`                                | Stack en el VPS (postgres, redis, omr-service, web, 2 workers, migrate, nginx, certbot) |
+| `omr-service/Dockerfile`                                 | Imagen Python (OpenCV headless + FastAPI)                                               |
+| `docker/entrypoint-web.sh`                               | Copia static/ y public/, luego exec node                                                |
+| `docker/entrypoint-worker.sh`                            | Dispatch por `WORKER_NAME` a bundle compilado                                           |
+| `docker/nginx/nginx.conf` + `conf.d/*.conf`              | Main config + HTTP/HTTPS server blocks                                                  |
+| `tsconfig.worker.json`                                   | Compila workers a `dist-workers/`                                                       |
+| `deploy/.env.prod.example`                               | Template de vars de prod                                                                |
+| `deploy/scripts/cd.sh`                                   | Deploy idempotente invocado por GH Actions (CI/CD)                                      |
+| `deploy/scripts/cd-wrapper.sh`                           | Versión de referencia del whitelist SSH (la del VPS está en `/opt/eval/bin`)            |
+| `deploy/scripts/first-cert.sh`                           | Helper para emisión inicial del cert (sólo en instalacion inicial)                      |
+| `deploy/scripts/deploy.sh`                               | Deploy manual con git local (dev/disaster recovery; NO usar en prod stateless)          |
+| `deploy/cron/eval-certbot`                               | Cron de renovación diaria                                                               |
+| `/opt/eval/bin/cd-wrapper.sh` (en el VPS)                | Whitelist SSH para la deploy key de GH Actions (sync con el repo)                       |
+| `/opt/eval/bin/cd.sh` (en el VPS)                        | Deploy script (sync con el repo)                                                        |
+| `/opt/eval/eval-app/.env.prod` (en el VPS)               | Variables de entorno (único archivo dinámico; gitignored)                               |
+| `/opt/eval/eval-app/docker-compose.prod.yml` (en el VPS) | Compose de prod (sync con el repo)                                                      |
+| `.github/workflows/cd.yml`                               | Workflow de CD: build + push GHCR + SSH deploy                                          |
