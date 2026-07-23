@@ -91,6 +91,19 @@ fi
 cd "$REPO_DIR"
 git config --global --add safe.directory "$REPO_DIR" 2>/dev/null || true
 
+# ---------- Traer el SHA esperado al repo local ----------
+# Defensa: el VPS tiene un clone persistente; si llega un deploy con un
+# SHA más nuevo que el último fetch, hay que traerlo antes de validar.
+# `git fetch origin` sin refspec trae todo (barato en un repo chico como este).
+# Si no se puede (sin red, sin remote, etc.) caemos al check de "HEAD == SHA"
+# que ahora puede fallar legítimamente si alguien pusheó pero no fetchó.
+log "git fetch origin…"
+if ! git fetch origin 2>&1 | sed 's/^/[cd] fetch: /'; then
+  err "git fetch origin falló — verificar remote/credenciales del clone"
+  # No abortamos todavía: si el HEAD local ya coincide con el SHA esperado,
+  # el deploy es válido igual.
+fi
+
 # ---------- Verificar SHA en el repo local ----------
 ACTUAL=$(git rev-parse HEAD 2>/dev/null || echo "")
 if [ "$ACTUAL" != "$EXPECTED_SHA" ]; then
