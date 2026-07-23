@@ -56,16 +56,33 @@ export function getRedisConnection(): IORedis {
   return connection;
 }
 
+/**
+ * Prefijo BullMQ leído de `BULLMQ_PREFIX`. Vacío en prod; en staging
+ * (u otros ambientes que compartan Redis) se setea a `"stg:"` (o el
+ * prefijo que se decida) para que cada ambiente viva bajo su propio
+ * namespace y no se pisen jobs. Devuelve `undefined` cuando está vacío
+ * para que BullMQ use su prefijo default `"bull:"` (no rompe prod).
+ */
+export function getBullMQPrefix(): string | undefined {
+  return env.BULLMQ_PREFIX ? env.BULLMQ_PREFIX : undefined;
+}
+
 let omrQueue: Queue<OmrScanJob> | undefined;
 let pdfQueue: Queue<PdfGenerationJob> | undefined;
 
 export function getOmrScanQueue(): Queue<OmrScanJob> {
-  omrQueue ??= new Queue(QUEUE_NAMES.omrScan, { connection: getRedisConnection() });
+  omrQueue ??= new Queue(QUEUE_NAMES.omrScan, {
+    connection: getRedisConnection(),
+    prefix: getBullMQPrefix(),
+  });
   return omrQueue;
 }
 
 export function getPdfGenerationQueue(): Queue<PdfGenerationJob> {
-  pdfQueue ??= new Queue(QUEUE_NAMES.pdfGeneration, { connection: getRedisConnection() });
+  pdfQueue ??= new Queue(QUEUE_NAMES.pdfGeneration, {
+    connection: getRedisConnection(),
+    prefix: getBullMQPrefix(),
+  });
   return pdfQueue;
 }
 
@@ -75,6 +92,7 @@ let pdfQueueEvents: QueueEvents | undefined;
 export function getPdfQueueEvents(): QueueEvents {
   pdfQueueEvents ??= new QueueEvents(QUEUE_NAMES.pdfGeneration, {
     connection: getRedisConnection(),
+    prefix: getBullMQPrefix(),
   });
   return pdfQueueEvents;
 }

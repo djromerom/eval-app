@@ -44,6 +44,11 @@ const serverEnvSchema = z
       .min(2, "EVAL_MAX_OPTIONS debe ser ≥ 2")
       .max(8, "EVAL_MAX_OPTIONS debe ser ≤ 8 (máximo de la librería)")
       .default(8),
+    /** Prefijo BullMQ para aislar el namespace de jobs por ambiente.
+     *  Vacío (default) en prod → BullMQ usa "bull:". En staging se setea
+     *  a "stg:" → jobs viven bajo "bull:stg:". Sin este prefijo, dos
+     *  ambientes que comparten Redis se pisan jobs entre sí. */
+    BULLMQ_PREFIX: z.string().default(""),
   })
   .refine((e) => e.EVAL_DEFAULT_OPTIONS <= e.EVAL_MAX_OPTIONS, {
     message: "EVAL_DEFAULT_OPTIONS no puede ser mayor que EVAL_MAX_OPTIONS",
