@@ -38,8 +38,9 @@ case "$FIRST" in
     exit $RC
     ;;
   deploy-staging)
-    echo "[--RUN-- $(date -Iseconds)] /opt/eval/bin/cd.sh --env-dir /opt/eval/eval-app-staging --compose docker-compose.staging.yml --image-tag-suffix -staging $REST (env=staging)" >> "$LOG"
+    echo "[--RUN-- $(date -Iseconds)] /opt/eval/bin/cd.sh --env-dir /opt/eval/eval-app-staging --env-file .env.staging --compose docker-compose.staging.yml --image-tag-suffix -staging $REST (env=staging)" >> "$LOG"
     /opt/eval/bin/cd.sh --env-dir /opt/eval/eval-app-staging \
+                        --env-file .env.staging \
                         --compose docker-compose.staging.yml \
                         --image-tag-suffix -staging \
                         $REST

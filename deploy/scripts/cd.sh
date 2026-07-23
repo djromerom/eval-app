@@ -37,11 +37,13 @@
 # ============================================================================
 set -euo pipefail
 
-# APP_DIR y COMPOSE_FILE parametrizables via flag CLI / env var para soportar
-# múltiples ambientes (prod + staging). Defaults apuntan a prod — el wrapper
-# SSH inyecta los flags de staging cuando el primer token es `deploy-staging`.
+# APP_DIR, COMPOSE_FILE y ENV_FILE parametrizables via flag CLI / env var para
+# soportar múltiples ambientes (prod + staging). Defaults apuntan a prod — el
+# wrapper SSH inyecta los flags de staging cuando el primer token es
+# `deploy-staging`.
 APP_DIR="${APP_DIR:-/opt/eval/eval-app}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+ENV_FILE="${ENV_FILE:-.env.prod}"
 LOG="/var/log/eval-cd-script.log"
 LOCKFILE="/var/run/eval-cd.lock"
 
@@ -74,22 +76,25 @@ while [ $# -gt 0 ]; do
     --sha=*)          EXPECTED_SHA="${1#*=}" ;;
     --env-dir)        APP_DIR="${2:?}"; shift ;;
     --env-dir=*)      APP_DIR="${1#*=}" ;;
+    --env-file)       ENV_FILE="${2:?}"; shift ;;
+    --env-file=*)     ENV_FILE="${1#*=}" ;;
     --compose)        COMPOSE_FILE="${2:?}"; shift ;;
     --compose=*)      COMPOSE_FILE="${1#*=}" ;;
     --image-tag-suffix)  IMAGE_TAG_SUFFIX="${2:?}"; shift ;;
     --image-tag-suffix=*) IMAGE_TAG_SUFFIX="${1#*=}" ;;
     -h|--help)
       cat <<USAGE
-Uso: deploy --sha <git-sha> [--skip-migrate] [--env-dir <path>] [--compose <file>]
-            [--image-tag-suffix <suffix>]
+Uso: deploy --sha <git-sha> [--skip-migrate] [--env-dir <path>] [--env-file <name>]
+            [--compose <file>] [--image-tag-suffix <suffix>]
 
 Compone las imágenes a desplegar a partir de:
   - \$EVAL_APP_IMAGE / \$OMR_SERVICE_IMAGE (si vienen seteadas, p.ej. en dev)
-  - o .env en APP_DIR (default /opt/eval/eval-app/.env.prod):
+  - o <env-file> en APP_DIR (default /opt/eval/eval-app/.env.prod):
       GHCR_OWNER + GHCR_IMAGE_BASE + <--sha> [+\$IMAGE_TAG_SUFFIX]
 
 Flags:
   --env-dir <path>           directorio del env (default: \$APP_DIR o /opt/eval/eval-app)
+  --env-file <name>          archivo de env (default: .env.prod)
   --compose <file>           nombre del compose (default: docker-compose.prod.yml)
   --image-tag-suffix <sfx>   sufijo para el tag (e.g. "-staging") — vacío en prod
   --skip-migrate             salta prisma migrate deploy
@@ -122,13 +127,13 @@ if [ ! -f "$APP_DIR/$COMPOSE_FILE" ]; then
   err "$APP_DIR/$COMPOSE_FILE no existe — falta instalar docker-compose.prod.yml"
   exit 1
 fi
-if [ ! -f "$APP_DIR/.env.prod" ]; then
-  err "$APP_DIR/.env.prod no existe — falta instalar el archivo de env (gitignored)"
+if [ ! -f "$APP_DIR/$ENV_FILE" ]; then
+  err "$APP_DIR/$ENV_FILE no existe — falta instalar el archivo de env (gitignored)"
   exit 1
 fi
 
 cd "$APP_DIR"
-chmod 600 .env.prod 2>/dev/null || true
+chmod 600 "$ENV_FILE" 2>/dev/null || true
 
 log "SHA a desplegar: $(echo "$EXPECTED_SHA" | cut -c1-7)"
 
@@ -140,7 +145,7 @@ log "SHA a desplegar: $(echo "$EXPECTED_SHA" | cut -c1-7)"
 # lo que se asigna durante el source.
 set -a
 # shellcheck disable=SC1091
-. ./.env.prod
+. ./"$ENV_FILE"
 set +a
 
 # ---------- Componer imágenes ----------
@@ -229,7 +234,7 @@ docker compose -f "$COMPOSE_FILE" ps
 
 docker image prune -f >/dev/null 2>&1 || true
 
-DOMAIN=$(grep '^DOMAIN=' .env.prod | cut -d= -f2)
+DOMAIN=$(grep '^DOMAIN=' "$ENV_FILE" | cut -d= -f2)
 log "DONE. Verificar con: curl -I https://${DOMAIN}/login"
 log "===================================================="
 log "$(date -Iseconds) eval-cd end (rc=0)"
