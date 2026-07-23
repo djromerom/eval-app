@@ -135,6 +135,11 @@ fi
 cd "$APP_DIR"
 chmod 600 "$ENV_FILE" 2>/dev/null || true
 
+# Exportar ENV_FILE para que docker compose (que usa
+# `env_file: ${ENV_FILE:-.env.prod}`) sepa qué archivo cargar para cada
+# servicio. No dependemos de que el .env mismo defina la var.
+export ENV_FILE
+
 log "SHA a desplegar: $(echo "$EXPECTED_SHA" | cut -c1-7)"
 
 # ---------- Cargar .env.prod en el entorno del proceso ----------

@@ -26,6 +26,11 @@
 # `.env.prod` vive en el HOST, no en el repo. Cada servicio lo carga con
 # `env_file` para que las vars sensibles (AUTH_SECRET, QR_SIGNING_SECRET,
 # contraseñas) NO queden en la imagen ni en el compose commiteado.
+#
+# El path del env_file es parametrizable: `${ENV_FILE:-.env.prod}`. Por
+# defecto usa `.env.prod` (prod). Staging lo sobreescribe via `ENV_FILE`
+# exportado por el shell antes de invocar compose (cd-wrapper.sh hace
+# `. ./.env.staging` → ENV_FILE=.env.staging queda exportado).
 # =============================================================================
 
 services:
@@ -66,7 +71,7 @@ services:
           exec redis-server --appendonly no
         fi
     env_file:
-      - .env.prod
+      - ${ENV_FILE:-.env.prod}
     volumes:
       - redisdata:/data
     healthcheck:
@@ -104,7 +109,7 @@ services:
       postgres:
         condition: service_healthy
     env_file:
-      - .env.prod
+      - ${ENV_FILE:-.env.prod}
     environment:
       # Para el CLI de Prisma: el schema vive dentro de la imagen.
       PRISMA_SCHEMA_PATH: /app/eval-app/prisma/schema.prisma
@@ -177,7 +182,7 @@ services:
       redis:
         condition: service_healthy
     env_file:
-      - .env.prod
+      - ${ENV_FILE:-.env.prod}
     environment:
       NODE_ENV: production
       PORT: "3000"
@@ -221,7 +226,7 @@ services:
       omr-service:
         condition: service_healthy
     env_file:
-      - .env.prod
+      - ${ENV_FILE:-.env.prod}
     environment:
       NODE_ENV: production
       WORKER_NAME: omr
@@ -251,7 +256,7 @@ services:
       web:
         condition: service_healthy
     env_file:
-      - .env.prod
+      - ${ENV_FILE:-.env.prod}
     environment:
       NODE_ENV: production
       WORKER_NAME: pdf
