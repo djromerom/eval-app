@@ -17,6 +17,7 @@ import {
   AI_PROMPT_SYSTEM,
 } from "@/modules/question-import/infrastructure/ai-parser";
 import {
+  makeEnqueueQuestionImport,
   makeImportQuestions,
   makeQuestionsFromEvaluation,
 } from "@/modules/question-import/infrastructure/container";
@@ -178,6 +179,74 @@ export async function loadDocxSourceAction(formData: FormData): Promise<LoadSour
     const message = e instanceof Error ? e.message : "No se pudo leer el DOCX.";
     return { questions: [], warnings: [], error: message };
   }
+}
+
+export interface EnqueueAiImportState {
+  jobId?: string;
+  error?: string;
+}
+
+/**
+ * Sube el PDF al storage institucional y encola un job BullMQ para extraer
+ * preguntas con `saber-extractor`. Devuelve `{ jobId }` para que la UI abra
+ * el SSE `/api/import/{jobId}/stream` y siga el progreso en vivo.
+ *
+ * Antes este flujo corría sincrónicamente dentro del server action
+ * (`loadAiSourceAction` legacy). Con varios docentes subiendo archivos a la
+ * vez, el server Next se bloqueaba durante decenas de segundos; ahora la
+ * cola reparte la carga entre N workers `worker-question-extract`.
+ *
+ * El cliente NO recibe las preguntas en el response: viajan por el SSE al
+ * cerrar el job. Eso permite mostrar progreso real (no solo spinner).
+ */
+export async function enqueueAiImportAction(formData: FormData): Promise<EnqueueAiImportState> {
+  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) {
+    return { error: "Falta el archivo." };
+  }
+  const isPdf = file.name.toLowerCase().endsWith(".pdf");
+  const isDocx = file.name.toLowerCase().endsWith(".docx");
+  if (!isPdf && !isDocx) {
+    return { error: "Solo se aceptan archivos PDF o DOCX." };
+  }
+
+  // Validación temprana de config IA: si no hay provider configurado, no
+  // tiene sentido encolar (el worker fallaría al instante). Mejor fallar
+  // rápido en la UI con mensaje accionable.
+  if (!process.env.ANTHROPIC_API_KEY && !process.env.MINIMAX_API_KEY) {
+    return {
+      error:
+        "La importación con IA no está configurada (define ANTHROPIC_API_KEY o MINIMAX_API_KEY).",
+    };
+  }
+
+  const evaluationIdRaw = formData.get("evaluationId");
+  const evaluationId =
+    typeof evaluationIdRaw === "string" && evaluationIdRaw.trim() ? evaluationIdRaw.trim() : null;
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  // Por ahora solo PDFs: DOCX sigue yendo por el camino legacy
+  // (`loadDocxSourceAction` + mammoth). Migrar DOCX al worker es trivial
+  // (cambiar el parser interno), pero fuera del scope de este PR.
+  if (!isPdf) {
+    return {
+      error:
+        "La importación IA con DOCX aún no está migrada al worker. Usa el flujo DOCX clásico o sube el archivo como PDF.",
+    };
+  }
+
+  const result = await makeEnqueueQuestionImport().execute({
+    actor,
+    file: buffer,
+    fileName: file.name,
+    evaluationId,
+  });
+  if (!result.ok) return { error: result.error.message };
+
+  return { jobId: result.value.jobId };
 }
 
 /**

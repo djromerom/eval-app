@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { AnswerKey } from "@/modules/evaluations/domain/evaluation";
 import type { ParsedQuestion } from "@/modules/question-import/domain/parsed-question";
 import { commitImportAction, loadSourceAction } from "./actions";
+import { ConfidenceBadge } from "./confidence-badge";
 
 const controlClass =
   "h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none";
@@ -55,9 +56,18 @@ export function ImportReviewForm({
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // El docente puede destildar preguntas y, si falta la correcta, marcarla.
-  const [included, setIncluded] = useState<Set<number>>(
-    new Set((initialQuestions ?? []).map((_, idx) => idx)),
-  );
+  // Las preguntas con `answerConfidence === "baja"` arrancan DESTILDADAS: la
+  // IA marcó la respuesta correcta con poca seguridad, así que obligamos
+  // al docente a confirmar que quiere importarla antes de que cuente para
+  // el alta.
+  const [included, setIncluded] = useState<Set<number>>(() => {
+    const initial = initialQuestions ?? [];
+    const set = new Set<number>();
+    initial.forEach((q, idx) => {
+      if (q.answerConfidence !== "baja") set.add(idx);
+    });
+    return set;
+  });
   const [corrections, setCorrections] = useState<Record<number, AnswerKey>>({});
   const [destinationKind, setDestinationKind] = useState<"evaluation" | "bank">("evaluation");
   const [destinationId, setDestinationId] = useState<string>(sections[0]?.id ?? "");
@@ -86,8 +96,15 @@ export function ImportReviewForm({
         return;
       }
       setQuestions(res.questions);
-      // Por defecto todas seleccionadas.
-      setIncluded(new Set(res.questions.map((_, idx) => idx)));
+      // Por defecto todas seleccionadas, EXCEPTO las de confianza "baja":
+      // las obligamos a confirmación manual (ver useState arriba).
+      setIncluded(
+        new Set(
+          res.questions
+            .map((q, idx) => (q.answerConfidence === "baja" ? -1 : idx))
+            .filter((i) => i >= 0),
+        ),
+      );
     });
     return () => {
       cancelled = true;
@@ -308,13 +325,26 @@ export function ImportReviewForm({
                     className="mt-1"
                   />
                   <div className="flex-1 space-y-2">
-                    <div className="text-muted-foreground text-xs">
-                      {q.sourceNumber !== null ? `Pregunta ${q.sourceNumber}` : "Sin número"} ·{" "}
-                      {q.options.length} opción(es)
+                    <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                      <span>
+                        {q.sourceNumber !== null ? `Pregunta ${q.sourceNumber}` : "Sin número"} ·{" "}
+                        {q.options.length} opción(es)
+                      </span>
+                      {q.answerConfidence ? (
+                        <ConfidenceBadge
+                          level={q.answerConfidence}
+                          rationale={q.answerRationale}
+                        />
+                      ) : null}
                       {q.warnings.length > 0 ? (
-                        <span className="text-destructive ml-2">⚠ {q.warnings.join(" · ")}</span>
+                        <span className="text-destructive">⚠ {q.warnings.join(" · ")}</span>
                       ) : null}
                     </div>
+                    {q.answerConfidence === "baja" && checked ? (
+                      <p className="bg-rose-50 text-rose-900 dark:bg-rose-950 dark:text-rose-100 rounded-md px-3 py-2 text-xs">
+                        Confianza baja: revisa la respuesta marcada por la IA antes de importar.
+                      </p>
+                    ) : null}
                     {q.image ? (
                       <img
                         src={q.image.url}

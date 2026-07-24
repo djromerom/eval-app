@@ -3,9 +3,14 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import type { ParsedQuestion } from "@/modules/question-import/domain/parsed-question";
-import { loadDocxSourceAction, loadAiSourceAction, loadSourceAction } from "./actions";
+import {
+  enqueueAiImportAction,
+  loadDocxSourceAction,
+  loadSourceAction,
+} from "./actions";
 import { QUESTIONS_CSV_TEMPLATE } from "@/modules/question-import/infrastructure/csv";
 import { ImportReviewForm } from "./review-form";
+import { ImportStream } from "./import-stream";
 
 /** Tamaño máximo de archivo para carga (15 MB). */
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
@@ -49,7 +54,9 @@ type LoadSource =
  */
 export function ImportWizard({ targetEvaluationId, sources, sections, subjects }: Props) {
   const [step, setStep] = useState<
-    { kind: "source" } | { kind: "review"; source: LoadSource; cached?: ParsedQuestion[] }
+    | { kind: "source" }
+    | { kind: "ai-streaming"; jobId: string; fileName: string }
+    | { kind: "review"; source: LoadSource; cached?: ParsedQuestion[] }
   >({ kind: "source" });
   const [error, setError] = useState<string | null>(null);
   const [csvFileName, setCsvFileName] = useState<string>("");
@@ -104,19 +111,17 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
       return;
     }
     setError(null);
+    const fileName = aiFile.name;
     startTransition(async () => {
       const fd = new FormData();
       fd.append("file", aiFile);
-      const res = await loadAiSourceAction(fd);
-      if (res.error) {
-        setError(res.error);
+      fd.append("evaluationId", targetEvaluationId);
+      const res = await enqueueAiImportAction(fd);
+      if (res.error || !res.jobId) {
+        setError(res.error ?? "No se pudo iniciar la importación con IA.");
         return;
       }
-      setStep({
-        kind: "review",
-        source: { kind: "ai", fileName: aiFile.name },
-        cached: res.questions,
-      });
+      setStep({ kind: "ai-streaming", jobId: res.jobId, fileName });
     });
   }
 
@@ -159,6 +164,31 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
           setError(null);
         }}
       />
+    );
+  }
+
+  if (step.kind === "ai-streaming") {
+    return (
+      <div className="space-y-6">
+        <ImportStream
+          jobId={step.jobId}
+          onDone={(questions, warnings) => {
+            setStep({
+              kind: "review",
+              source: { kind: "ai", fileName: step.fileName },
+              cached: questions as ParsedQuestion[],
+            });
+            // `warnings` se pierden en esta transición: el review-form no
+            // tiene slot para ellos todavía. Si la UI lo pide, lo
+            // propagamos por contexto.
+            void warnings;
+          }}
+          onError={(err) => {
+            setStep({ kind: "source" });
+            setError(err);
+          }}
+        />
+      </div>
     );
   }
 

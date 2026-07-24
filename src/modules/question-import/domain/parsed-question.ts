@@ -29,6 +29,17 @@ export interface ParsedQuestionImage {
   url: string;
 }
 
+/**
+ * Confianza de la respuesta correcta reportada por la fuente IA. Solo está
+ * presente cuando el origen sabe juzgarla (saber-extractor). En CSV y DOCX
+ * el campo no existe; el docente la marca a mano.
+ *
+ * - `alta`  → badge verde, se incluye sin forzar revisión.
+ * - `media` → badge ámbar, el docente la ve pero no se obliga a corregir.
+ * - `baja`  → badge rojo, la UI la destilda por defecto y exige corrección.
+ */
+export type AnswerConfidence = "alta" | "media" | "baja";
+
 /** Pregunta leída de una fuente externa, antes de validar y confirmar. */
 export interface ParsedQuestion {
   /**
@@ -49,6 +60,10 @@ export interface ParsedQuestion {
   image: ParsedQuestionImage | null;
   /** Lo que el parser no pudo resolver; se pinta en la revisión. */
   warnings: string[];
+  /** Confianza de la respuesta correcta reportada por la fuente IA. */
+  answerConfidence?: AnswerConfidence;
+  /** Justificación breve de la respuesta correcta (tooltip en la UI). */
+  answerRationale?: string;
 }
 
 export interface ParseResult {
