@@ -18,7 +18,7 @@ const KINDS: Array<Exclude<PrintKind, "bundle" | "answer-sheets-bundle" | "answe
 const WAIT_MS = 90_000;
 
 /**
- * Descarga del PDF de una evaluación (cartilla, hojas o clave). Encola un job de
+ * Descarga del PDF de una formulación (cartilla, hojas o clave). Encola un job de
  * generación server-side y espera a que el worker lo complete, luego transmite
  * el archivo. Requiere el worker PDF corriendo (pnpm worker:pdf).
  */
@@ -32,10 +32,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
   const kind = kindParam as (typeof KINDS)[number];
 
-  // Verifica que la evaluación exista y pertenezca a la institución del actor.
+  // Verifica que la formulación exista y pertenezca a la institución del actor.
   const evalRes = await makeGetEvaluation().execute({ actor, id });
   if (!evalRes.ok) {
-    return NextResponse.json({ error: "Evaluación no encontrada." }, { status: 404 });
+    return NextResponse.json({ error: "Formulación no encontrada." }, { status: 404 });
   }
 
   const job = await getPdfGenerationQueue().add(

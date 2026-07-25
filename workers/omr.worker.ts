@@ -2,6 +2,7 @@ import "./load-env";
 import { Worker } from "bullmq";
 import {
   QUEUE_NAMES,
+  getBullMQPrefix,
   getRedisConnection,
   type OmrScanJob,
 } from "@/shared/infrastructure/queue/queues";
@@ -36,7 +37,7 @@ const worker = new Worker<OmrScanJob>(
     );
     return { answerSheetId: result.answerSheetId, status: result.status };
   },
-  { connection: getRedisConnection(), concurrency: 2 },
+  { connection: getRedisConnection(), prefix: getBullMQPrefix(), concurrency: 2 },
 );
 
 worker.on("completed", (job) =>

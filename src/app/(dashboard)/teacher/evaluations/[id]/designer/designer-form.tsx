@@ -31,12 +31,12 @@ interface Props {
   initial: Partial<EvaluationTheme>;
   /** Tema ya colapsado con el institucional — para mostrar el estado actual al cargar. */
   resolved: ResolvedTheme;
-  /** False si la evaluación no está en DRAFT (no se puede editar). */
+  /** False si la formulación no está en DRAFT (no se puede editar). */
   editable: boolean;
 }
 
 /**
- * Form de override del tema por evaluación.
+ * Form de override del tema por formulación.
  *
  * Layout 2 columnas:
  * - Izquierda: form de override (sección por sección del cuadernillo).
@@ -118,9 +118,9 @@ export function DesignerForm({ evaluationId, initial, resolved, editable }: Prop
       <div className="space-y-4">
         <form action={formAction} className="bg-card space-y-4 rounded-xl border p-5">
           <div>
-            <h2 className="font-semibold">Tema de esta evaluación</h2>
+            <h2 className="font-semibold">Tema de esta formulación</h2>
             <p className="text-muted-foreground text-xs">
-              Sobreescribe el tema institucional. Solo aplica a esta evaluación. En blanco = hereda
+              Sobreescribe el tema institucional. Solo aplica a esta formulación. En blanco = hereda
               del colegio.
             </p>
           </div>
@@ -281,7 +281,7 @@ export function DesignerForm({ evaluationId, initial, resolved, editable }: Prop
 
           {!editable ? (
             <p className="text-muted-foreground text-xs">
-              La evaluación no está en BORRADOR. Solo se puede editar el tema mientras esté en
+              La formulación no está en BORRADOR. Solo se puede editar el tema mientras esté en
               borrador.
             </p>
           ) : null}
@@ -299,10 +299,10 @@ export function DesignerForm({ evaluationId, initial, resolved, editable }: Prop
         {/* Form independiente — "Restablecer al institucional" no puede ir
             dentro del form principal (HTML invalida forms anidadas y React
             lanza hydration error). Mismo patrón aplicado en el designer de
-            compendios (admin/bundles/[id]/designer). */}
+            cuadernillos (admin/bundles/[id]/designer). */}
         <form action={resetAction} className="bg-card space-y-3 rounded-xl border p-5">
           <p className="text-muted-foreground text-xs">
-            Restablecer borra todos los override de esta evaluación y vuelve a usar el tema
+            Restablecer borra todos los override de esta formulación y vuelve a usar el tema
             institucional como única fuente.
           </p>
           {resetState.error ? <p className="text-destructive text-sm">{resetState.error}</p> : null}

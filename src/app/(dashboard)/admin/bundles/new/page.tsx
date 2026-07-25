@@ -5,12 +5,12 @@ import { makeListEvaluations } from "@/modules/evaluations/infrastructure/contai
 import { makeListCourses } from "@/modules/academic/infrastructure/container";
 import { CreateBundleWizard } from "./wizard-form";
 
-export const metadata: Metadata = { title: "Nuevo compendio" };
+export const metadata: Metadata = { title: "Nuevo cuadernillo" };
 
 export const dynamic = "force-dynamic";
 
 /**
- * Wizard de creación de compendios. Lista las evaluaciones APPROVED/PUBLISHED
+ * Wizard de creación de cuadernillos. Lista las formulaciones APPROVED/PUBLISHED
  * de la institución (las únicas que se pueden incluir) y deja al SUPER_ADMIN
  * armar la selección, asignar nombre y bookletNumber.
  */
@@ -41,8 +41,8 @@ export default async function NewBundlePage() {
   return (
     <>
       <PageHeader
-        title="Nuevo compendio"
-        description="Agrupa evaluaciones aprobadas o publicadas en un cuadernillo único."
+        title="Nuevo cuadernillo"
+        description="Agrupa formulaciones aprobadas o publicadas en un cuadernillo único."
       />
       <CreateBundleWizard evaluations={evaluations} courses={courses} />
     </>

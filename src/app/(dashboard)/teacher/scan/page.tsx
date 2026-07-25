@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Escanear hojas" };
 const df = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short" });
 
 export default async function ScanPage() {
-  const actor = await requireAuthenticatedUser("TEACHER");
+  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
   const [listRes, bundlesRes] = await Promise.all([
     makeListEvaluations().execute({ actor }),
     makeListBundles().execute({ actor }),
@@ -34,7 +34,7 @@ export default async function ScanPage() {
     <>
       <PageHeader
         title="Escanear hojas de respuestas"
-        description="Sube las hojas escaneadas de una evaluación o un compendio para calificarlas automáticamente."
+        description="Sube las hojas escaneadas de una formulación o un cuadernillo para calificarlas automáticamente."
       />
 
       <section className="from-brand-blue-tint to-brand-mint-tint space-y-4 rounded-2xl bg-linear-to-br p-6">
@@ -56,7 +56,7 @@ export default async function ScanPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="bg-muted text-muted-foreground mr-2 rounded px-2 py-0.5 text-xs font-medium">
-                      {batch.kind === "bundle" ? "Compendio" : "Evaluación"}
+                      {batch.kind === "bundle" ? "Cuadernillo" : "Formulación"}
                     </span>
                     <span className="font-medium">{batch.title ?? "(sin nombre)"}</span>
                     <span className="text-muted-foreground ml-2 text-sm">

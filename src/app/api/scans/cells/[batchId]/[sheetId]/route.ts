@@ -10,7 +10,7 @@ import { localStorage } from "@/shared/infrastructure/storage/local-storage";
  * que persiste el worker OMR (`ProcessAnswerSheet.persistCells`) para alimentar
  * la matriz de revisión (recortes + fills por celda). El tenant-check consulta
  * la hoja por institución con el mismo patrón que el resto de scan/*: o es de
- * una evaluación del docente actual, o de un compendio de su institución.
+ * una formulación del docente actual, o de un cuadernillo de su institución.
  * Cualquier fallo → 404 (no filtra existencia a colegios ajenos).
  */
 export async function GET(

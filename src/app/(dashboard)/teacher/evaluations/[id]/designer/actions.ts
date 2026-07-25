@@ -11,7 +11,7 @@ export interface DesignerFormState {
 }
 
 /**
- * Guarda el tema de la evaluación (override por evaluación).
+ * Guarda el tema de la formulación (override por formulación).
  *
  * - TEACHER dueño + COORDINATOR: pueden editar.
  * - Solo en DRAFT (verificado por el use case UpdateEvaluationTheme).

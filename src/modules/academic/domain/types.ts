@@ -123,12 +123,22 @@ export interface GroupRepository {
   findAll(institutionId: string, courseId?: string): Promise<Group[]>;
   findById(institutionId: string, id: string): Promise<Group | null>;
   create(institutionId: string, data: CreateGroupData): Promise<Group>;
+  delete(institutionId: string, id: string): Promise<void>;
 }
 
 export interface PeriodRepository {
   findAll(institutionId: string, academicYearId?: string): Promise<Period[]>;
   findById(institutionId: string, id: string): Promise<Period | null>;
   create(institutionId: string, data: CreatePeriodData): Promise<Period>;
+  update(institutionId: string, id: string, data: UpdatePeriodData): Promise<Period | null>;
+  delete(institutionId: string, id: string): Promise<void>;
+}
+
+export interface UpdatePeriodData {
+  name?: string;
+  order?: number;
+  startDate?: Date;
+  endDate?: Date;
 }
 
 export interface CourseSubjectRepository {
@@ -137,6 +147,7 @@ export interface CourseSubjectRepository {
   findById(institutionId: string, id: string): Promise<CourseSubject | null>;
   exists(courseId: string, subjectId: string): Promise<boolean>;
   create(data: CreateCourseSubjectData): Promise<CourseSubject>;
+  delete(courseId: string, subjectId: string): Promise<void>;
 }
 
 // ===== Validación de dominio =====

@@ -108,9 +108,9 @@ export default async function SheetDetailPage({ params }: PageProps) {
         title={`Hoja ${sheet.studentName ?? sheet.studentCode ?? sheet.id.slice(0, 8)}`}
         description={
           sheet.scanBatch?.bundle
-            ? `Compendio: ${sheet.scanBatch.bundle.name}`
+            ? `Cuadernillo: ${sheet.scanBatch.bundle.name}`
             : sheet.scanBatch?.evaluation
-              ? `Evaluación: ${sheet.scanBatch.evaluation.title}`
+              ? `Formulación: ${sheet.scanBatch.evaluation.title}`
               : "Hoja de respuestas"
         }
       />

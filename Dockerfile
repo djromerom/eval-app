@@ -105,6 +105,7 @@ RUN apt-get update \
         tini \
         wget \
         curl \
+        poppler-utils \
         libnss3 \
         libnspr4 \
         libatk1.0-0 \

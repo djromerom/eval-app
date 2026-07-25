@@ -12,12 +12,12 @@ import {
   generateQrDataUrl,
 } from "@/modules/printing/infrastructure/qr-generator";
 
-export const metadata: Metadata = { title: "Hojas de respuestas del compendio" };
+export const metadata: Metadata = { title: "Hojas de respuestas del cuadernillo" };
 
 const KEYS = ANSWER_KEYS_ORDER;
 
 /** Reparte en 3 columnas. La hoja unificada del bundle trata TODAS las
- *  preguntas como una sola lista plana, ignorando secciones y evaluaciones:
+ *  preguntas como una sola lista plana, ignorando secciones y formulaciones:
  *  la numeración va 1..N de corrido de izquierda a derecha y de arriba abajo. */
 function splitIntoColumns<T>(items: T[]): T[][] {
   if (items.length === 0) return [[], [], []];
@@ -28,7 +28,7 @@ function splitIntoColumns<T>(items: T[]): T[][] {
 interface BundleQuestionRow {
   /** Posición global dentro de la hoja (1..N). */
   globalNumber: number;
-  /** Etiqueta local de la pregunta (dentro de su evaluación). */
+  /** Etiqueta local de la pregunta (dentro de su formulación). */
   localNumber: number;
   /** Número de opciones para el ancho de fila (2..8). */
   optionsLength: number;
@@ -36,14 +36,14 @@ interface BundleQuestionRow {
 }
 
 /**
- * Render server-side de la hoja de respuestas UNIFICADA del compendio.
+ * Render server-side de la hoja de respuestas UNIFICADA del cuadernillo.
  * Lo abre el worker de Puppeteer con un token firmado (kind = "answer-sheets-bundle").
  *
  * Numeración 1..N contínua a través de TODAS las preguntas de TODAS las
- * evaluaciones y secciones del compendio (sin separadores por sección,
- * sin reinicio por evaluación). El QR lleva `bundle` (no `eval`) para que
+ * formulaciones y secciones del cuadernillo (sin separadores por sección,
+ * sin reinicio por formulación). El QR lleva `bundle` (no `eval`) para que
  * el OMR worker pueda reconstruir el orden global al calificar
- * (ver Sprint 2 del módulo compendios).
+ * (ver Sprint 2 del módulo cuadernillos).
  *
  * La distribución en 3 columnas replica exactamente el estilo del PDF
  * institucional de I.E. María Doraliza López de Mejía: la lista plana se
@@ -82,7 +82,7 @@ export default async function BundleAnswerSheetsPage({
   if (students.length === 0) notFound();
 
   // Cargar questions de cada evaluation del bundle en orden y aplanarlas.
-  // Numeramos de corrido 1..N ignorando secciones y evaluaciones. Esto hace
+  // Numeramos de corrido 1..N ignorando secciones y formulaciones. Esto hace
   // N+1 queries; aceptable para una hoja de respuestas que se imprime una vez
   // por período. Si se vuelve cuello de botella, batch con
   // prisma.evaluation.findMany + include.
@@ -136,8 +136,8 @@ export default async function BundleAnswerSheetsPage({
     <div className="booklet">
       <div className="no-print bg-card sticky top-0 z-10 flex w-full max-w-[900px] items-center gap-3 rounded-lg border p-3 text-sm">
         <span className="text-muted-foreground">
-          {students.length} hoja(s) de respuestas para el compendio &laquo;{bundle.name}&raquo; (
-          {totalQuestions} preguntas, {bundle.items.length} evaluación
+          {students.length} hoja(s) de respuestas para el cuadernillo &laquo;{bundle.name}&raquo; (
+          {totalQuestions} preguntas, {bundle.items.length} formulación
           {bundle.items.length === 1 ? "" : "es"})
         </span>
       </div>
@@ -177,7 +177,7 @@ export default async function BundleAnswerSheetsPage({
             </div>
 
             {/* Grid de burbujas (3 columnas, estilo PDF institucional).
-                Numeración 1..N plana — sin separadores por sección/evaluación. */}
+                Numeración 1..N plana — sin separadores por sección/formulación. */}
             <div className="as-grid">
               {columns.map((col, colIdx) => (
                 <div key={colIdx} className="as-col">
@@ -204,7 +204,7 @@ export default async function BundleAnswerSheetsPage({
           </div>
 
           <div className="as-footer">
-            Hoja {idx + 1} de {sheets.length} · Compendio {bundle.name}
+            Hoja {idx + 1} de {sheets.length} · Cuadernillo {bundle.name}
           </div>
         </section>
       ))}

@@ -79,7 +79,7 @@ type SectionRow = {
  * Persiste la renumeración que calcula `computeRenumbering` (dominio) y deja
  * `totalQuestions` acorde.
  *
- * A diferencia del reorder de items del compendio, aquí NO hace falta el
+ * A diferencia del reorder de items del cuadernillo, aquí NO hace falta el
  * two-phase con valores temporales: `Question.number` solo tiene índice
  * (`@@index([sectionId, number])`), no constraint único, así que dos filas
  * pueden compartir número un instante sin que la BD lo rechace.
@@ -148,6 +148,11 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         bookletNumber: data.bookletNumber ?? null,
         // Sprint 7: si no se envió, queda null → heurístico en la portada.
         durationMinutes: data.durationMinutes ?? null,
+        // Default de maquetación: 2 columnas estilo ICFES (el PDF de
+        // referencia institucional fluye preguntas a dos columnas). Se persiste
+        // como override del tema institucional para que el docente lo pueda
+        // cambiar desde Diseñador sin tocar el preset del colegio.
+        theme: { questionColumns: 2 },
         status: DraftStatus.DRAFT,
       },
     });
@@ -198,6 +203,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         courseSubject: {
           include: { course: { select: { name: true } }, subject: { select: { name: true } } },
         },
+        period: { select: { id: true, name: true } },
       },
     });
     return rows.map((r) => ({
@@ -210,6 +216,8 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
       courseId: r.courseSubject.courseId,
       courseName: r.courseSubject.course.name,
       subjectName: r.courseSubject.subject.name,
+      periodId: r.periodId,
+      periodName: r.period?.name ?? null,
       updatedAt: r.updatedAt,
     }));
   }
@@ -242,7 +250,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
   ): Promise<EvaluationSection> {
     await prisma.evaluation.findFirstOrThrow({ where: { id: evaluationId, institutionId } });
     // findFirst + update por id: `updateMany` no permite `include`, y filtrar
-    // por evaluationId aquí evita editar un contexto de otra evaluación.
+    // por evaluationId aquí evita editar un contexto de otra formulación.
     const existing = await prisma.evaluationSection.findFirstOrThrow({
       where: { id: sectionId, evaluationId },
       select: { id: true },
@@ -291,7 +299,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         where: { id: evaluationId, institutionId },
       });
       await tx.evaluationSection.findFirstOrThrow({ where: { id: sectionId, evaluationId } });
-      // Numeración continua en toda la evaluación (útil para la hoja OMR).
+      // Numeración continua en toda la formulación (útil para la hoja OMR).
       const number = evaluation.totalQuestions + 1;
       const q = await tx.question.create({
         data: {
@@ -335,7 +343,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
   ): Promise<Question> {
     return prisma.$transaction(async (tx) => {
       await tx.evaluation.findFirstOrThrow({ where: { id: evaluationId, institutionId } });
-      // La pregunta debe colgar de un contexto de ESTA evaluación.
+      // La pregunta debe colgar de un contexto de ESTA formulación.
       const existing = await tx.question.findFirstOrThrow({
         where: { id: questionId, section: { evaluationId } },
         select: { id: true },
@@ -402,6 +410,104 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
     });
   }
 
+  async duplicateQuestion(
+    institutionId: string,
+    evaluationId: string,
+    questionId: string,
+  ): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await tx.evaluation.findFirstOrThrow({ where: { id: evaluationId, institutionId } });
+      // Cargamos la pregunta con sus opciones para clonar la estructura 1-a-1.
+      const source = await tx.question.findFirstOrThrow({
+        where: { id: questionId, section: { evaluationId } },
+        include: { options: true },
+      });
+      const evaluation = await tx.evaluation.findFirstOrThrow({ where: { id: evaluationId } });
+      const newNumber = evaluation.totalQuestions + 1;
+      await tx.question.create({
+        data: {
+          sectionId: source.sectionId,
+          number: newNumber,
+          text: source.text as Prisma.InputJsonValue,
+          image: source.image,
+          correctAnswer: source.correctAnswer,
+          justification: source.justification,
+          weight: source.weight,
+          soloLevel: source.soloLevel,
+          menComponent: source.menComponent,
+          competency: source.competency,
+          // bankOriginId deliberadamente null: la copia no es del banco, es
+          // una instancia propia editable de la formulación (regla del spec
+          // "importaciones son independientes").
+          bankOriginId: null,
+          options: {
+            create: source.options.map((o) => ({
+              key: o.key,
+              text: o.text as Prisma.InputJsonValue,
+            })),
+          },
+        },
+      });
+      await tx.evaluation.update({
+        where: { id: evaluationId },
+        data: { totalQuestions: newNumber },
+      });
+    });
+  }
+
+  async reorderQuestions(
+    institutionId: string,
+    evaluationId: string,
+    sectionId: string,
+    orderedQuestionIds: string[],
+  ): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await tx.evaluation.findFirstOrThrow({ where: { id: evaluationId, institutionId } });
+
+      // Cargamos las preguntas reales de la sección para validar pertenencia.
+      const actual = await tx.question.findMany({
+        where: { sectionId, section: { evaluationId } },
+        select: { id: true },
+      });
+      const actualIds = new Set(actual.map((q) => q.id));
+      if (actualIds.size !== orderedQuestionIds.length) {
+        throw new Error(
+          `Reorder: la lista recibida tiene ${orderedQuestionIds.length} ids pero la sección tiene ${actualIds.size}.`,
+        );
+      }
+      for (const id of orderedQuestionIds) {
+        if (!actualIds.has(id)) {
+          throw new Error(
+            `Reorder: el id ${id} no pertenece a la sección ${sectionId} de la formulación ${evaluationId}.`,
+          );
+        }
+      }
+
+      // Renumeramos con números temporales negativos para evitar pisar
+      // constraints únicos del índice `(sectionId, number)`. Luego asignamos
+      // el número final 1..N.
+      for (let i = 0; i < orderedQuestionIds.length; i++) {
+        await tx.question.update({
+          where: { id: orderedQuestionIds[i] },
+          data: { number: -1 - i },
+        });
+      }
+      for (let i = 0; i < orderedQuestionIds.length; i++) {
+        await tx.question.update({
+          where: { id: orderedQuestionIds[i] },
+          data: { number: i + 1 },
+        });
+      }
+
+      // El cuadernillo numera de corrido en toda la formulación, no dentro
+      // de cada sección, así que pedimos a `renumberQuestions` que recalcule
+      // `totalQuestions` y los huecos en las demás secciones (por si quedó
+      // alguno). No toca los números que acabamos de asignar porque ya son
+      // 1..N para esta sección.
+      await renumberQuestions(tx, evaluationId);
+    });
+  }
+
   async updateStatus(institutionId: string, id: string, status: EvaluationStatus): Promise<void> {
     await prisma.evaluation.updateMany({
       where: { id, institutionId },
@@ -428,7 +534,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
 
   async createNewVersion(institutionId: string, id: string): Promise<Evaluation> {
     const detail = await this.getDetail(institutionId, id);
-    if (!detail) throw new Error(`Evaluación no encontrada: ${id}`);
+    if (!detail) throw new Error(`Formulación no encontrada: ${id}`);
     const source = await prisma.evaluation.findFirstOrThrow({ where: { id, institutionId } });
 
     return prisma.$transaction(async (tx) => {
@@ -475,5 +581,24 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
       }
       return toEvaluation(copy);
     });
+  }
+
+  async existsByCourseSubjectPeriodYear(
+    institutionId: string,
+    courseSubjectId: string,
+    periodId: string | null,
+    academicYearId: string,
+  ): Promise<boolean> {
+    const row = await prisma.evaluation.findFirst({
+      where: {
+        institutionId,
+        courseSubjectId,
+        periodId,
+        academicYearId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    return row !== null;
   }
 }

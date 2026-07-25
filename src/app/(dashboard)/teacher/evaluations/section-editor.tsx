@@ -55,8 +55,11 @@ export function SectionEditor({
   title: string | null;
   content: unknown;
   questionCount: number;
-  /** Render del contenido en modo lectura (RichText del server component). */
-  children: React.ReactNode;
+  /** Render del contenido en modo lectura (RichText del server component).
+   *  Opcional: si no se pasa, el componente solo expone el header con
+   *  Editar / Eliminar, útil cuando el padre ya pinta el contenido por su
+   *  cuenta (p.ej. el banner del editor por contexto). */
+  children?: React.ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [state, formAction] = useActionState<AdminFormState, FormData>(updateSectionAction, {});
@@ -126,7 +129,7 @@ export function SectionEditor({
           {deleteState.error}
         </p>
       ) : null}
-      {children}
+      {children ? <div className="space-y-2">{children}</div> : null}
     </>
   );
 }

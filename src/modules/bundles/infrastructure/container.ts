@@ -19,7 +19,7 @@ import { PrismaBundleRepository } from "./prisma-bundle-repository";
  */
 const repository = new PrismaBundleRepository();
 // Sprint 9: CreateBundle/UpdateBundle validan que el `courseId` del
-// compendio exista en la institución del actor.
+// cuadernillo exista en la institución del actor.
 const courses = new PrismaCourseRepository();
 
 export const makeCreateBundle = () => new CreateBundle(repository, courses);

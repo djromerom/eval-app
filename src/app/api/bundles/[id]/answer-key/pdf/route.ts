@@ -13,7 +13,7 @@ const WAIT_MS = 90_000;
 
 /**
  * GET /api/bundles/[id]/answer-key/pdf — clave de respuestas unificada
- * (kind = "answer-key-bundle"). Sprint 3 del módulo compendios.
+ * (kind = "answer-key-bundle"). Sprint 3 del módulo cuadernillos.
  * Requiere que el bundle esté READY.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -27,11 +27,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const bundleRes = await makeGetBundle().execute({ actor, bundleId: id });
   if (!bundleRes.ok) {
-    return NextResponse.json({ error: "Compendio no encontrado." }, { status: 404 });
+    return NextResponse.json({ error: "Cuadernillo no encontrado." }, { status: 404 });
   }
   if (bundleRes.value.status !== "READY") {
     return NextResponse.json(
-      { error: "El compendio debe estar marcado como READY antes de imprimir." },
+      { error: "El cuadernillo debe estar marcado como READY antes de imprimir." },
       { status: 409 },
     );
   }

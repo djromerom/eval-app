@@ -1,7 +1,7 @@
 /**
  * Invariantes puras del Bundle. Validaciones que NO requieren I/O.
  * Las validaciones que requieren consultar el repo viven en las use cases.
- * Ver docs/compendios.md §"Modelo de datos — Reglas de invariante".
+ * Ver docs/cuadernillos.md §"Modelo de datos — Reglas de invariante".
  */
 
 /** Estados de evaluation que pueden entrar a un bundle. */
@@ -25,7 +25,7 @@ export function isValidBookletNumber(n: number | null | undefined): boolean {
 }
 
 /**
- * Sprint 9 — invariante curso/compendio.
+ * Sprint 9 — invariante curso/cuadernillo.
  *
  * Un bundle con `courseId` definido solo admite evaluations de ESE curso.
  * Un bundle con `courseId === null` es cross-course: admite cualquiera

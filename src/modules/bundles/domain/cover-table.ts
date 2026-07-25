@@ -3,7 +3,7 @@
  * agrupando las questions de los items por `subject.parentSubject`
  * (jerarquía Subject ⊃ Biología/Física/Química).
  *
- * Ver docs/compendios.md §"Portada del bundle" + decisión 10
+ * Ver docs/cuadernillos.md §"Portada del bundle" + decisión 10
  * (Subject.parentSubjectId agregado) + Sprint 7 (durationMinutes).
  */
 import { DEFAULT_MINUTES_PER_QUESTION } from "./bundle-rules";
@@ -94,7 +94,7 @@ export function computeCoverTable(
     // Si dos items comparten el mismo subject (ej: dos parciales de Bio),
     // sumamos questions y minutos por separado. Importante: NO se mezclan
     // preguntas+minutos heterogéneos — para mantener coherencia con el PDF
-    // de referencia real (cada evaluación con su tiempo).
+    // de referencia real (cada formulación con su tiempo).
     const existing = area.subjects.get(subjectName);
     if (existing) {
       existing.questions += questions;

@@ -18,11 +18,11 @@ const sora = Sora({
 
 export const metadata: Metadata = {
   title: {
-    default: "ecognIA — Evaluaciones inteligentes tipo ICFES",
+    default: "ecognIA — Formulaciones inteligentes tipo ICFES",
     template: "%s | ecognIA",
   },
   description:
-    "Plataforma multi-institucional para diseñar, imprimir y calificar automáticamente evaluaciones tipo ICFES con reconocimiento OMR + IA",
+    "Plataforma multi-institucional para diseñar, imprimir y calificar automáticamente formulaciones tipo ICFES con reconocimiento OMR + IA",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

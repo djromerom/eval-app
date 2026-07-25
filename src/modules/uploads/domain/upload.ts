@@ -1,5 +1,5 @@
 /**
- * Reglas de las imágenes que el docente sube al contenido de una evaluación.
+ * Reglas de las imágenes que el docente sube al contenido de una formulación.
  * Sin dependencias de infraestructura: lo usan tanto la ruta de API como el
  * inlineador de impresión.
  */

@@ -25,14 +25,14 @@ function SubmitButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" disabled={pending || disabled}>
-      {pending ? "Creando…" : "Crear compendio"}
+      {pending ? "Creando…" : "Crear cuadernillo"}
     </Button>
   );
 }
 
 /**
  * Wizard de creación. Step 1: nombre + bookletNumber. Step 2: selección de
- * evaluaciones (checkbox list con búsqueda por título/asignatura). El submit
+ * formulaciones (checkbox list con búsqueda por título/asignatura). El submit
  * envía un solo FormData al server action createBundleAction con todos los
  * evaluationIds seleccionados.
  */
@@ -46,7 +46,7 @@ export function CreateBundleWizard({
   const [state, formAction] = useActionState(createBundleAction, {} as BundleFormState);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
-  // "" = compendio cross-course: admite evaluaciones de cualquier grado.
+  // "" = cuadernillo cross-course: admite formulaciones de cualquier grado.
   const [courseId, setCourseId] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -63,7 +63,7 @@ export function CreateBundleWizard({
   });
 
   /**
-   * Al cambiar de curso descartamos la selección previa: esas evaluaciones
+   * Al cambiar de curso descartamos la selección previa: esas formulaciones
    * ya no están visibles en la lista y el use case las rechazaría, así que
    * dejarlas marcadas produciría un error confuso al enviar.
    */
@@ -95,17 +95,17 @@ export function CreateBundleWizard({
     <form ref={formRef} action={formAction} className="bg-card space-y-6 rounded-xl border p-6">
       {/* Step 1 — metadatos */}
       <section className="space-y-4">
-        <h2 className="font-semibold">1. Datos del compendio</h2>
+        <h2 className="font-semibold">1. Datos del cuadernillo</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1">
             <label htmlFor="name" className="text-sm font-medium">
-              Nombre del compendio
+              Nombre del cuadernillo
             </label>
             <Input
               id="name"
               name="name"
               required
-              placeholder="Compendio 11° — I periodo"
+              placeholder="Cuadernillo 11° — I periodo"
               minLength={3}
               maxLength={120}
             />
@@ -144,17 +144,17 @@ export function CreateBundleWizard({
           </select>
           <p className="text-muted-foreground text-xs">
             {courseId
-              ? "Solo se listan evaluaciones de este curso, y el grado se preimprime en la portada."
-              : "Sin curso, el compendio admite evaluaciones de cualquier grado y el estudiante escribe el suyo."}
+              ? "Solo se listan formulaciones de este curso, y el grado se preimprime en la portada."
+              : "Sin curso, el cuadernillo admite formulaciones de cualquier grado y el estudiante escribe el suyo."}
           </p>
         </div>
       </section>
 
-      {/* Step 2 — selección de evaluaciones */}
+      {/* Step 2 — selección de formulaciones */}
       <section className="space-y-3">
         <div className="flex items-end justify-between gap-3">
           <h2 className="font-semibold">
-            2. Evaluaciones ({selected.size} seleccionada{selected.size === 1 ? "" : "s"})
+            2. Formulaciones ({selected.size} seleccionada{selected.size === 1 ? "" : "s"})
           </h2>
           <Input
             value={filter}
@@ -166,14 +166,14 @@ export function CreateBundleWizard({
 
         {evaluations.length === 0 ? (
           <p className="text-muted-foreground rounded-md border border-dashed p-6 text-center text-sm">
-            No hay evaluaciones aprobadas o publicadas disponibles para incluir.
+            No hay formulaciones aprobadas o publicadas disponibles para incluir.
           </p>
         ) : (
           <ul className="max-h-96 space-y-1 overflow-y-auto rounded-md border p-2">
             {filtered.length === 0 ? (
               <li className="text-muted-foreground p-4 text-center text-sm">
                 {courseId
-                  ? "No hay evaluaciones de este curso. Elige otro o quita el filtro de curso."
+                  ? "No hay formulaciones de este curso. Elige otro o quita el filtro de curso."
                   : "Sin coincidencias."}
               </li>
             ) : (

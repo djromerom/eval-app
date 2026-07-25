@@ -1,0 +1,153 @@
+# =============================================================================
+# cd-staging — Continuous Deployment para eval-app en STAGING (test.ecognia.pro)
+#
+# Gemelo de cd.yml con dos diferencias clave:
+#   1. Trigger: push a `develop` (o workflow_dispatch con SHA manual) en vez de main.
+#   2. Tag de imagen: sufijo `-staging` (e.g. git-abc1234-staging).
+#
+# El SSH dispatch usa `deploy-staging` (whitelist del cd-wrapper.sh) que
+# internamente invoca cd.sh con --env-dir /opt/eval/eval-app-staging,
+# --compose docker-compose.staging.yml, --image-tag-suffix -staging.
+#
+# Secrets requeridos (mismos que cd.yml, no se agregan nuevos):
+#   VPS_HOST, VPS_USER, VPS_SSH_KEY
+# =============================================================================
+name: cd-staging
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'SHA a desplegar (default: el del evento)'
+        required: false
+        type: string
+
+# Deploy de staging concurrente con el de prod (group distinto) — no se
+# bloquean mutuamente. Si llega otro push a develop mientras corre, espera.
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # build — construye y pushea 2 imágenes en paralelo (gemelo de cd.yml).
+  # Diferencia: el tag metadata incluye sufijo `-staging`.
+  # ---------------------------------------------------------------------------
+  build:
+    name: build · ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: web
+            image_name: eval-app
+            context: .
+            # `--file` se resuelve relativo al CWD del runner (raíz del repo),
+            # NO al context. Por eso web usa `./Dockerfile` y omr-service usa
+            # `./omr-service/Dockerfile` (path desde el CWD, no desde el context).
+            dockerfile: ./Dockerfile
+          - name: omr-service
+            image_name: omr-service
+            context: ./omr-service
+            dockerfile: ./omr-service/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image_name }}
+          tags: |
+            type=sha,prefix=git-,suffix=-staging
+            type=raw,value=latest-staging,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          sbom: false
+
+  # ---------------------------------------------------------------------------
+  # deploy — SSH al VPS y corre cd.sh con flags de staging. Solo se pasa --sha
+  # (las imágenes se componen en el VPS a partir de .env.staging + ese SHA).
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: deploy
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: staging
+      url: https://test.ecognia.pro
+    steps:
+      - name: Determine SHA
+        id: sha
+        run: |
+          if [ -n "${{ inputs.sha }}" ]; then
+            echo "value=${{ inputs.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 10m
+          # `script:` (no `command:`) es el input válido en v1.1.0 — el
+          # wrapper SSH del VPS solo acepta los primeros tokens `deploy` o
+          # `deploy-staging` y reenvía el resto verbatim a `cd.sh` con los
+          # flags de ambiente correctos.
+          script: deploy-staging --sha ${{ steps.sha.outputs.value }}
+
+      - name: Smoke-test the deployed site
+        run: |
+          for i in $(seq 1 15); do
+            CODE=$(curl -sk -o /dev/null -w '%{http_code}' -L https://test.ecognia.pro/login || echo "000")
+            if [ "$CODE" = "200" ]; then
+              echo "✔ /login responde 200 (intento $i)"
+              exit 0
+            fi
+            echo "  intento $i/15: código=$CODE, esperando 2s…"
+            sleep 2
+          done
+          echo "✖ /login no respondió 200 después de 30s"
+          exit 1
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Deploy (staging)"
+            echo "- SHA: \`${{ steps.sha.outputs.value }}\`"
+            echo "- images composed on the VPS from \`GHCR_OWNER/eval-app:git-<sha>-staging\` and \`omr-service:git-<sha>-staging\`"
+          } >> "$GITHUB_STEP_SUMMARY"

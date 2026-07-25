@@ -86,6 +86,9 @@ class FakeBank implements BankQuestionRepository {
 class FakeEvaluations implements EvaluationRepository {
   detail: EvaluationDetail | null = null;
   added: CreateQuestionData[] = [];
+  /** sectionId → preguntas añadidas (en orden de inserción). */
+  addedBySection: Record<string, CreateQuestionData[]> = {};
+  addSectionCalls: Array<{ title?: string; content: unknown }> = [];
   async create(): Promise<Evaluation> {
     throw new Error("no usado");
   }
@@ -101,16 +104,29 @@ class FakeEvaluations implements EvaluationRepository {
   async findByInstitution(): Promise<EvaluationListItem[]> {
     return [];
   }
-  async addSection(): Promise<EvaluationSection> {
-    throw new Error("no usado");
+  async addSection(
+    _i: string,
+    _e: string,
+    data: { title?: string; content?: unknown },
+  ): Promise<EvaluationSection> {
+    const id = `sec-new-${this.addSectionCalls.length + 1}`;
+    this.addSectionCalls.push({ title: data.title, content: data.content });
+    return {
+      id,
+      title: data.title ?? null,
+      content: data.content ?? { type: "doc", content: [] },
+      order: (this.detail?.sections.length ?? 0) + this.addSectionCalls.length,
+      questions: [],
+    };
   }
   async addQuestion(
     _i: string,
     _e: string,
-    _s: string,
+    sectionId: string,
     data: CreateQuestionData,
   ): Promise<Question> {
     this.added.push(data);
+    (this.addedBySection[sectionId] ??= []).push(data);
     return {
       id: `q-${this.added.length}`,
       number: this.added.length,
@@ -161,6 +177,12 @@ class FakeEvaluations implements EvaluationRepository {
   async deleteQuestion(): Promise<void> {
     throw new Error("no usado");
   }
+  async reorderQuestions(): Promise<void> {
+    throw new Error("no usado");
+  }
+  async duplicateQuestion(): Promise<void> {
+    throw new Error("no usado");
+  }
   async updateStatus(): Promise<void> {}
   async updateSettings(
     _i: string,
@@ -171,6 +193,9 @@ class FakeEvaluations implements EvaluationRepository {
   }
   async createNewVersion(): Promise<Evaluation> {
     throw new Error("no usado");
+  }
+  async existsByCourseSubjectPeriodYear(): Promise<boolean> {
+    return false;
   }
 }
 
@@ -579,5 +604,99 @@ describe("ImportQuestions", () => {
     if (!r.ok) return;
     expect(evals.updateSectionCalls).toHaveLength(0);
     expect(r.value.infos).toEqual([]);
+  });
+
+  // ---------- AUTO-CREAR SECCIONES POR CONTEXTO (sin sectionId) ----------
+
+  it("sin sectionId + con contextos → crea una sección por contexto y reparte preguntas", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          contextText: "El agua es vital para la vida.",
+          contextTitle: "Ciencia",
+          text: "¿Por qué el agua es vital?",
+          correctAnswer: "B",
+        }),
+        valid({
+          sourceNumber: 2,
+          text: "¿Cuánta agua se debe beber al día?",
+          correctAnswer: "A",
+          contextText: "El agua es vital para la vida.",
+          contextTitle: "Ciencia",
+        }),
+        valid({
+          sourceNumber: 3,
+          text: "¿Cuál es la capital de Francia?",
+          correctAnswer: "D",
+          contextText: "Europa tiene muchos países.",
+          contextTitle: "Geografía",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.imported).toBe(3);
+    expect(evals.addSectionCalls).toHaveLength(2);
+    // Las preguntas se repartieron entre las dos secciones nuevas
+    const sectionIds = Object.keys(evals.addedBySection);
+    expect(sectionIds).toHaveLength(2);
+    // Las dos preguntas del contexto "Ciencia" caen en una sección,
+    // la de "Geografía" en la otra.
+    const counts = sectionIds.map((id) => evals.addedBySection[id]!.length).sort();
+    expect(counts).toEqual([1, 2]);
+    // Cada addSection recibió un content no vacío (el texto del contexto)
+    expect(evals.addSectionCalls.every((c) => c.content)).toBe(true);
+    expect(r.value.infos.some((m) => /Se crearon 2 secci/i.test(m))).toBe(true);
+  });
+
+  it("sin sectionId + sin contextos → rechaza con error claro", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [valid(), valid({ sourceNumber: 2 })],
+      destination: { kind: "evaluation", evaluationId: "e1" },
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("VALIDATION");
+    expect(r.error.message).toMatch(/contexto destino/i);
+    expect(evals.addSectionCalls).toHaveLength(0);
+    expect(evals.added).toHaveLength(0);
+  });
+
+  it("sin sectionId + algunas preguntas sin contexto → caen a la primera sección creada", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          contextText: "Contexto A.",
+          contextTitle: "A",
+          text: "Pregunta con contexto A",
+          correctAnswer: "A",
+        }),
+        valid({
+          sourceNumber: 2,
+          text: "Pregunta suelta sin contexto",
+          correctAnswer: "A",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(evals.addSectionCalls).toHaveLength(1);
+    expect(evals.added).toHaveLength(2);
+    // Las dos preguntas van a la única sección creada
+    const sectionIds = Object.keys(evals.addedBySection);
+    expect(sectionIds).toHaveLength(1);
+    expect(evals.addedBySection[sectionIds[0]!]).toHaveLength(2);
+    expect(r.value.infos.some((m) => /sin contexto/i.test(m))).toBe(true);
   });
 });

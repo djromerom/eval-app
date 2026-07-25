@@ -5,7 +5,11 @@ import {
 } from "@/shared/application/authenticated-user";
 import type { UseCase } from "@/shared/application/use-case";
 import { NotFoundError, type Result, ValidationError, fail, ok } from "@/shared/domain/result";
-import type { CourseSubjectRepository, PeriodRepository } from "@/modules/academic/domain/types";
+import type {
+  CourseRepository,
+  CourseSubjectRepository,
+  PeriodRepository,
+} from "@/modules/academic/domain/types";
 import type { EvaluationStatus } from "../domain/evaluation-status";
 import {
   type CreateEvaluationData,
@@ -29,12 +33,21 @@ export interface CreateEvaluationInput {
   data: CreateEvaluationData;
 }
 
-/** Crea una evaluación en BORRADOR (docente o coordinador). §3.3 */
+/** Crea una formulación en BORRADOR (docente o coordinador). §3.3
+ *
+ * Regla de unicidad: no pueden coexistir dos formulaciones con la misma
+ * combinación `(asignatura-curso, periodo, año académico)` en la misma
+ * institución. Si ya existe, devolvemos `ValidationError` con un mensaje
+ * claro para que el docente decida si archivar la anterior o ajustar
+ * el periodo. La BD no enforce esta regla (constraint no agregado a
+ * propósito — ver docstring en `existsByCourseSubjectPeriodYear`); la
+ * validación es solo de aplicación. */
 export class CreateEvaluation implements UseCase<CreateEvaluationInput, Evaluation> {
   constructor(
     private readonly evaluations: EvaluationRepository,
     private readonly courseSubjects: CourseSubjectRepository,
     private readonly periods: PeriodRepository,
+    private readonly courses: CourseRepository,
   ) {}
 
   async execute({ actor, data }: CreateEvaluationInput): Promise<Result<Evaluation>> {
@@ -53,9 +66,32 @@ export class CreateEvaluation implements UseCase<CreateEvaluationInput, Evaluati
     const cs = await this.courseSubjects.findById(actor.institutionId, data.courseSubjectId);
     if (!cs) return fail(new ValidationError("La asignatura-curso no existe en tu institución."));
 
+    // Necesitamos el año académico del curso para la validación de unicidad.
+    // (El repo deriva `academicYearId = courseSubject.course.academicYearId`
+    // al persistir; hacemos lo mismo aquí para mantener la regla consistente.)
+    const course = await this.courses.findById(actor.institutionId, cs.courseId);
+    if (!course) return fail(new ValidationError("El curso no existe en tu institución."));
+
     if (data.periodId) {
       const period = await this.periods.findById(actor.institutionId, data.periodId);
       if (!period) return fail(new ValidationError("El periodo no existe en tu institución."));
+    }
+
+    // Unicidad: bloquea dos formulaciones con misma (asignatura-curso, periodo, año).
+    const duplicate = await this.evaluations.existsByCourseSubjectPeriodYear(
+      actor.institutionId,
+      data.courseSubjectId,
+      data.periodId ?? null,
+      course.academicYearId,
+    );
+    if (duplicate) {
+      return fail(
+        new ValidationError(
+          data.periodId
+            ? "Ya existe una formulación para esta asignatura-curso, periodo y año académico."
+            : "Ya existe una formulación para esta asignatura-curso y año académico (sin periodo).",
+        ),
+      );
     }
 
     return ok(await this.evaluations.create(actor.institutionId, actor.userId, data));
@@ -98,11 +134,11 @@ export class GetEvaluation implements UseCase<GetEvaluationInput, EvaluationDeta
     if (!authorized.ok) return authorized;
 
     const detail = await this.evaluations.getDetail(actor.institutionId, id);
-    if (!detail) return fail(new NotFoundError("Evaluación", id));
+    if (!detail) return fail(new NotFoundError("Formulación", id));
 
     // El docente solo ve las suyas; coordinador/admin ven todas.
     if (!hasRole(actor, "COORDINATOR", "ECU_MASTER") && detail.teacherId !== actor.userId) {
-      return fail(new NotFoundError("Evaluación", id));
+      return fail(new NotFoundError("Formulación", id));
     }
     return ok(detail);
   }
@@ -116,12 +152,12 @@ async function loadOwnedDraft(
   evaluationId: string,
 ): Promise<Result<Evaluation>> {
   const evaluation = await evaluations.findById(actor.institutionId, evaluationId);
-  if (!evaluation) return fail(new NotFoundError("Evaluación", evaluationId));
+  if (!evaluation) return fail(new NotFoundError("Formulación", evaluationId));
   if (evaluation.teacherId !== actor.userId) {
-    return fail(new ValidationError("Solo el autor puede editar la evaluación."));
+    return fail(new ValidationError("Solo el autor puede editar la formulación."));
   }
   if (evaluation.status !== "DRAFT") {
-    return fail(new ValidationError("Solo se puede editar una evaluación en BORRADOR."));
+    return fail(new ValidationError("Solo se puede editar una formulación en BORRADOR."));
   }
   return ok(evaluation);
 }
@@ -300,6 +336,41 @@ export class DeleteQuestion implements UseCase<DeleteQuestionInput, void> {
   }
 }
 
+export interface DuplicateQuestionInput {
+  actor: AuthenticatedUser;
+  evaluationId: string;
+  questionId: string;
+}
+
+/**
+ * Duplica una pregunta dentro de la misma formulación. La copia hereda todo
+ * el contenido (enunciado, opciones, correcta, peso, justificación, etc.)
+ * y se inserta al final de la numeración. La copia pierde `bankOriginId`:
+ * deja de estar "anclada" al banco de preguntas, tal como cualquier
+ * pregunta importada y luego editada.
+ *
+ * Reglas:
+ *  - Solo `TEACHER` y `COORDINATOR`.
+ *  - Solo en `DRAFT` (mismo que el resto de mutaciones de preguntas).
+ *  - La pregunta origen debe pertenecer a la formulación.
+ */
+export class DuplicateQuestion implements UseCase<DuplicateQuestionInput, void> {
+  constructor(private readonly evaluations: EvaluationRepository) {}
+
+  async execute({
+    actor,
+    evaluationId,
+    questionId,
+  }: DuplicateQuestionInput): Promise<Result<void>> {
+    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    if (!authorized.ok) return authorized;
+    const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
+    if (!owned.ok) return owned;
+    await this.evaluations.duplicateQuestion(actor.institutionId, evaluationId, questionId);
+    return ok(undefined);
+  }
+}
+
 // ===== Sprint 7 — Panel Settings (duración) =====
 
 export interface UpdateEvaluationSettingsInput {
@@ -337,19 +408,19 @@ export class UpdateEvaluationSettings implements UseCase<
     if (!authorized.ok) return authorized;
 
     const evaluation = await this.evaluations.findById(actor.institutionId, evaluationId);
-    if (!evaluation) return fail(new NotFoundError("Evaluación", evaluationId));
+    if (!evaluation) return fail(new NotFoundError("Formulación", evaluationId));
 
     // COORDINATOR/ADMIN pueden editar settings de cualquier evaluation de su
     // institución; TEACHER solo las suyas.
     const isPrivileged = hasRole(actor, "COORDINATOR", "ECU_MASTER");
     if (!isPrivileged && evaluation.teacherId !== actor.userId) {
-      return fail(new NotFoundError("Evaluación", evaluationId));
+      return fail(new NotFoundError("Formulación", evaluationId));
     }
 
     if (evaluation.status !== "DRAFT") {
       return fail(
         new ValidationError(
-          "Solo se puede editar la duración mientras la evaluación esté en BORRADOR.",
+          "Solo se puede editar la duración mientras la formulación esté en BORRADOR.",
         ),
       );
     }
@@ -358,5 +429,57 @@ export class UpdateEvaluationSettings implements UseCase<
     if (durationError) return fail(new ValidationError(durationError));
 
     return ok(await this.evaluations.updateSettings(actor.institutionId, evaluationId, data));
+  }
+}
+
+// ===== Reorder questions (drag & drop en el editor por contexto, Fase 10) =====
+
+export interface ReorderQuestionsInput {
+  actor: AuthenticatedUser;
+  evaluationId: string;
+  sectionId: string;
+  /** IDs de las preguntas en el orden deseado tras el drop. */
+  orderedQuestionIds: string[];
+}
+
+/**
+ * Reordena las preguntas de una sección. Las IDs recibidas deben corresponder
+ * 1-a-1 con las preguntas actuales de la sección y deben estar **dentro** del
+ * rango de preguntas que pertenecen al evaluationId de la request (regla
+ * multi-tenant).
+ *
+ * El repositorio renumera cada pregunta según su posición en la lista y
+ * recalcula `totalQuestions`. La numeración del cuadernillo queda continua
+ * (la hoja OMR la asume así).
+ */
+export class ReorderQuestions implements UseCase<ReorderQuestionsInput, void> {
+  constructor(private readonly evaluations: EvaluationRepository) {}
+
+  async execute({
+    actor,
+    evaluationId,
+    sectionId,
+    orderedQuestionIds,
+  }: ReorderQuestionsInput): Promise<Result<void>> {
+    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    if (!authorized.ok) return authorized;
+
+    if (orderedQuestionIds.length === 0) {
+      return fail(new ValidationError("La lista de preguntas está vacía."));
+    }
+    if (new Set(orderedQuestionIds).size !== orderedQuestionIds.length) {
+      return fail(new ValidationError("La lista de preguntas contiene duplicados."));
+    }
+
+    const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
+    if (!owned.ok) return owned;
+
+    await this.evaluations.reorderQuestions(
+      actor.institutionId,
+      evaluationId,
+      sectionId,
+      orderedQuestionIds,
+    );
+    return ok(undefined);
   }
 }

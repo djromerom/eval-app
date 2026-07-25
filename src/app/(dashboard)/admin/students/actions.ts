@@ -1,10 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/session";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import type { ImportError } from "@/modules/students/domain/student";
-import { makeCreateStudent, makeImportStudents } from "@/modules/students/infrastructure/container";
+import {
+  makeCreateStudent,
+  makeDeleteStudent,
+  makeImportStudents,
+  makeUpdateStudent,
+} from "@/modules/students/infrastructure/container";
 import { parseStudentsCsv } from "@/modules/students/infrastructure/csv";
 
 const PATH = "/admin/students";
@@ -32,6 +38,54 @@ export async function createStudentAction(
   if (!result.ok) return { error: result.error.message };
   revalidatePath(PATH);
   return { success: true };
+}
+
+/**
+ * Edita un estudiante desde el drawer (Fase 12). Tras éxito redirige a la
+ * página principal — el formulario vive en `/admin/students/[id]/edit`.
+ *
+ * NO edita el código: `code` tiene su propio flujo (`ChangeStudentCode`)
+ * con historial. Si en el form viene `studentId`, lo extrae del hidden
+ * field.
+ */
+export async function updateStudentAction(
+  _p: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  const result = await makeUpdateStudent().execute({
+    actor,
+    studentId: str(formData, "studentId"),
+    data: {
+      groupId: str(formData, "groupId"),
+      name: str(formData, "name"),
+      idType: str(formData, "idType"),
+      idNumber: str(formData, "idNumber"),
+      enrollmentYear: Number(str(formData, "enrollmentYear")),
+      isActive: formData.get("isActive") === "on",
+    },
+  });
+  if (!result.ok) return { error: result.error.message };
+  revalidatePath(PATH);
+  redirect(PATH);
+}
+
+/**
+ * Soft-delete: marca deletedAt y desactiva. Tras éxito redirige a la página
+ * principal (el usuario verá la fila desaparecer del listado).
+ */
+export async function deleteStudentAction(
+  _p: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  const result = await makeDeleteStudent().execute({
+    actor,
+    studentId: str(formData, "studentId"),
+  });
+  if (!result.ok) return { error: result.error.message };
+  revalidatePath(PATH);
+  redirect(PATH);
 }
 
 export interface ImportState {

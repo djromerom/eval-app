@@ -11,12 +11,12 @@ export interface BundleDesignerFormState {
 }
 
 /**
- * Guarda el tema del compendio (override por compendio sobre el institucional).
+ * Guarda el tema del cuadernillo (override por cuadernillo sobre el institucional).
  *
- * - Solo SUPER_ADMIN: el compendio es multi-evaluación y solo el
+ * - Solo SUPER_ADMIN: el cuadernillo es multi-formulación y solo el
  *   administrador institucional puede personalizarlo.
  * - Solo en DRAFT (verificado por el use case UpdateBundleTheme, que
- *   retorna `ValidationError` si el compendio ya está READY).
+ *   retorna `ValidationError` si el cuadernillo ya está READY).
  *
  * Si un campo viene vacío se omite del `Partial<BundleTheme>` (cae al
  * institucional). El `null` global se usa para "reset al institucional"

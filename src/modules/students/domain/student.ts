@@ -19,6 +19,18 @@ export interface CreateStudentData {
   enrollmentYear: number;
 }
 
+/** Campos editables desde el drawer de edición. NO incluye `code` — el
+ *  cambio de código tiene su propio caso de uso (`ChangeStudentCode`) que
+ *  preserva el historial de QR. */
+export interface UpdateStudentData {
+  groupId: string;
+  name: string;
+  idType: string;
+  idNumber: string;
+  enrollmentYear: number;
+  isActive: boolean;
+}
+
 /** Fila cruda de una importación masiva (Excel/CSV) antes de validar. */
 export interface StudentImportRow {
   name: string;
@@ -52,6 +64,12 @@ export interface StudentRepository {
   createMany(institutionId: string, data: CreateStudentData[]): Promise<number>;
   /** Cambia el código dejando registro en el historial (§3.2). */
   changeCode(institutionId: string, studentId: string, newCode: string): Promise<void>;
+  /** Edita los campos NO relacionados al código. Devuelve el estudiante
+   *  actualizado. Lanza si la fila no existe o pertenece a otra institución. */
+  update(institutionId: string, id: string, data: UpdateStudentData): Promise<Student>;
+  /** Soft-delete: marca `deletedAt` y `isActive=false`. Preserva el historial
+   *  de códigos (los QR viejos siguen funcionando). */
+  softDelete(institutionId: string, id: string): Promise<void>;
 }
 
 const CODE_PATTERN = /^[A-Za-z0-9._-]{1,32}$/;

@@ -37,8 +37,13 @@
 # ============================================================================
 set -euo pipefail
 
-APP_DIR="/opt/eval/eval-app"
-COMPOSE_FILE="docker-compose.prod.yml"
+# APP_DIR, COMPOSE_FILE y ENV_FILE parametrizables via flag CLI / env var para
+# soportar múltiples ambientes (prod + staging). Defaults apuntan a prod — el
+# wrapper SSH inyecta los flags de staging cuando el primer token es
+# `deploy-staging`.
+APP_DIR="${APP_DIR:-/opt/eval/eval-app}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+ENV_FILE="${ENV_FILE:-.env.prod}"
 LOG="/var/log/eval-cd-script.log"
 LOCKFILE="/var/run/eval-cd.lock"
 
@@ -66,19 +71,38 @@ SKIP_MIGRATE=0
 EXPECTED_SHA=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --skip-migrate) SKIP_MIGRATE=1 ;;
-    --sha)           EXPECTED_SHA="${2:-}"; shift ;;
-    --sha=*)         EXPECTED_SHA="${1#*=}" ;;
+    --skip-migrate)   SKIP_MIGRATE=1 ;;
+    --sha)            EXPECTED_SHA="${2:-}"; shift ;;
+    --sha=*)          EXPECTED_SHA="${1#*=}" ;;
+    --env-dir)        APP_DIR="${2:?}"; shift ;;
+    --env-dir=*)      APP_DIR="${1#*=}" ;;
+    --env-file)       ENV_FILE="${2:?}"; shift ;;
+    --env-file=*)     ENV_FILE="${1#*=}" ;;
+    --compose)        COMPOSE_FILE="${2:?}"; shift ;;
+    --compose=*)      COMPOSE_FILE="${1#*=}" ;;
+    --image-tag-suffix)  IMAGE_TAG_SUFFIX="${2:?}"; shift ;;
+    --image-tag-suffix=*) IMAGE_TAG_SUFFIX="${1#*=}" ;;
     -h|--help)
       cat <<USAGE
-Uso: deploy --sha <git-sha> [--skip-migrate]
+Uso: deploy --sha <git-sha> [--skip-migrate] [--env-dir <path>] [--env-file <name>]
+            [--compose <file>] [--image-tag-suffix <suffix>]
 
 Compone las imágenes a desplegar a partir de:
   - \$EVAL_APP_IMAGE / \$OMR_SERVICE_IMAGE (si vienen seteadas, p.ej. en dev)
-  - o .env.prod: GHCR_OWNER + GHCR_IMAGE_BASE + <--sha>
+  - o <env-file> en APP_DIR (default /opt/eval/eval-app/.env.prod):
+      GHCR_OWNER + GHCR_IMAGE_BASE + <--sha> [+\$IMAGE_TAG_SUFFIX]
+
+Flags:
+  --env-dir <path>           directorio del env (default: \$APP_DIR o /opt/eval/eval-app)
+  --env-file <name>          archivo de env (default: .env.prod)
+  --compose <file>           nombre del compose (default: docker-compose.prod.yml)
+  --image-tag-suffix <sfx>   sufijo para el tag (e.g. "-staging") — vacío en prod
+  --skip-migrate             salta prisma migrate deploy
+  --sha <git-sha>            SHA a desplegar (obligatorio)
 
 Ejemplo:
   deploy --sha a1b2c3d4
+  deploy-staging --sha a1b2c3d4 --skip-migrate
 USAGE
       exit 0
       ;;
@@ -103,32 +127,44 @@ if [ ! -f "$APP_DIR/$COMPOSE_FILE" ]; then
   err "$APP_DIR/$COMPOSE_FILE no existe — falta instalar docker-compose.prod.yml"
   exit 1
 fi
-if [ ! -f "$APP_DIR/.env.prod" ]; then
-  err "$APP_DIR/.env.prod no existe — falta instalar el archivo de env (gitignored)"
+if [ ! -f "$APP_DIR/$ENV_FILE" ]; then
+  err "$APP_DIR/$ENV_FILE no existe — falta instalar el archivo de env (gitignored)"
   exit 1
 fi
 
 cd "$APP_DIR"
-chmod 600 .env.prod 2>/dev/null || true
+chmod 600 "$ENV_FILE" 2>/dev/null || true
+
+# Exportar ENV_FILE para que docker compose (que usa
+# `env_file: ${ENV_FILE:-.env.prod}`) sepa qué archivo cargar para cada
+# servicio. No dependemos de que el .env mismo defina la var.
+export ENV_FILE
 
 log "SHA a desplegar: $(echo "$EXPECTED_SHA" | cut -c1-7)"
+
+# ---------- Cargar .env.prod en el entorno del proceso ----------
+# BUG histórico: docker-compose.prod.yml usa interpolación obligatoria
+# `${POSTGRES_PASSWORD:?...}` en bloques `environment:` — si esas vars
+# no están exportadas en el shell del `docker compose pull`, falla con
+# "required variable X is missing a value". `set -a` auto-exporta todo
+# lo que se asigna durante el source.
+set -a
+# shellcheck disable=SC1091
+. ./"$ENV_FILE"
+set +a
 
 # ---------- Componer imágenes ----------
 # Si el caller las exportó (modo dev/staging), se respetan.
 # Si no, se componen desde .env.prod + EXPECTED_SHA.
 if [ -z "${EVAL_APP_IMAGE:-}" ] || [ -z "${OMR_SERVICE_IMAGE:-}" ]; then
-  # Source .env.prod SIN contaminar el resto del script con vars globales.
-  set +u
-  # shellcheck disable=SC1091
-  . ./.env.prod
-  set -u
-
   GHCR_OWNER="${GHCR_OWNER:-?}"
   GHCR_IMAGE_BASE="${GHCR_IMAGE_BASE:-ghcr.io}"
   SHORT_SHA=$(echo "$EXPECTED_SHA" | cut -c1-7)
-  EVAL_APP_IMAGE="${GHCR_IMAGE_BASE}/${GHCR_OWNER}/eval-app:git-${SHORT_SHA}"
-  OMR_SERVICE_IMAGE="${GHCR_IMAGE_BASE}/${GHCR_OWNER}/omr-service:git-${SHORT_SHA}"
+  TAG_SUFFIX="${IMAGE_TAG_SUFFIX:-}"
+  EVAL_APP_IMAGE="${GHCR_IMAGE_BASE}/${GHCR_OWNER}/eval-app:git-${SHORT_SHA}${TAG_SUFFIX}"
+  OMR_SERVICE_IMAGE="${GHCR_IMAGE_BASE}/${GHCR_OWNER}/omr-service:git-${SHORT_SHA}${TAG_SUFFIX}"
 fi
+set -u
 
 # Exportar imágenes para que compose las vea en TODOS los servicios que
 # referencian $EVAL_APP_IMAGE / $OMR_SERVICE_IMAGE.
@@ -203,7 +239,7 @@ docker compose -f "$COMPOSE_FILE" ps
 
 docker image prune -f >/dev/null 2>&1 || true
 
-DOMAIN=$(grep '^DOMAIN=' .env.prod | cut -d= -f2)
+DOMAIN=$(grep '^DOMAIN=' "$ENV_FILE" | cut -d= -f2)
 log "DONE. Verificar con: curl -I https://${DOMAIN}/login"
 log "===================================================="
 log "$(date -Iseconds) eval-cd end (rc=0)"

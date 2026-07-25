@@ -14,7 +14,7 @@ const WAIT_MS = 120_000;
 
 /**
  * GET /api/bundles/[id]/answer-sheets/pdf?students=<csv> — genera la hoja
- * de respuestas UNIFICADA del compendio (kind = "answer-sheets-bundle").
+ * de respuestas UNIFICADA del cuadernillo (kind = "answer-sheets-bundle").
  * Si no se pasa `students`, devuelve error 400 (no hay a quién imprimirle).
  *
  * Sprint 2: solo se imprime si el bundle está READY. La query `students`
@@ -41,11 +41,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   // Verifica que el bundle exista y esté READY.
   const bundleRes = await makeGetBundle().execute({ actor, bundleId: id });
   if (!bundleRes.ok) {
-    return NextResponse.json({ error: "Compendio no encontrado." }, { status: 404 });
+    return NextResponse.json({ error: "Cuadernillo no encontrado." }, { status: 404 });
   }
   if (bundleRes.value.status !== "READY") {
     return NextResponse.json(
-      { error: "El compendio debe estar marcado como READY antes de imprimir." },
+      { error: "El cuadernillo debe estar marcado como READY antes de imprimir." },
       { status: 409 },
     );
   }

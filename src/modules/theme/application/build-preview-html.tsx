@@ -1,8 +1,8 @@
 /**
  * Construye un HTML reducido del cuadernillo aplicando `themeToCssVars()`.
  *
- * Se usa tanto en el designer de evaluación (teacher) como en el de
- * compendio (admin bundles). Reutilizable porque la maqueta es la misma:
+ * Se usa tanto en el designer de formulación (teacher) como en el de
+ * cuadernillo (admin bundles). Reutilizable porque la maqueta es la misma:
  * una hoja de preview que muestra cómo afecta cada ajuste del tema al
  * cuadernillo final (cover, intro, separador, footer).
  *

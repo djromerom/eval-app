@@ -10,6 +10,7 @@ import {
   type PdfGenerationJob,
   type PdfGenerationResult,
   QUEUE_NAMES,
+  getBullMQPrefix,
   getRedisConnection,
 } from "@/shared/infrastructure/queue/queues";
 import { logger } from "@/shared/infrastructure/logger";
@@ -133,7 +134,7 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
 
     return { evaluationId, bundleId, institutionId, kind, path: filePath };
   },
-  { connection: getRedisConnection(), concurrency: 1 },
+  { connection: getRedisConnection(), prefix: getBullMQPrefix(), concurrency: 1 },
 );
 
 worker.on("completed", (job) => log.info({ jobId: job.id }, "PDF generado"));

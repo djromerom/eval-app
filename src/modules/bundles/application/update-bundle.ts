@@ -29,7 +29,7 @@ export interface UpdateBundleInput {
  *
  * Sprint 9 — asignar/cambiar `courseId`:
  *   - El curso debe existir en la institución.
- *   - Si el compendio ya tiene items, TODOS deben ser de ese curso; si
+ *   - Si el cuadernillo ya tiene items, TODOS deben ser de ese curso; si
  *     alguno no coincide se rechaza (hay que quitarlos primero). Esto
  *     mantiene la invariante "bundle con curso ⇒ items homogéneos".
  *   - `courseId: null` limpia el curso (vuelve a cross-course) sin
@@ -46,17 +46,19 @@ export class UpdateBundle implements UseCase<UpdateBundleInput, Bundle> {
     if (!authorized.ok) return authorized;
 
     const existing = await this.bundles.findById(actor.institutionId, bundleId);
-    if (!existing) return fail(new NotFoundError("Compendio", bundleId));
+    if (!existing) return fail(new NotFoundError("Cuadernillo", bundleId));
 
     if (isLocked(existing.status)) {
       return fail(
-        new ValidationError("El compendio está sellado (READY). Desmárcate primero para editarlo."),
+        new ValidationError(
+          "El cuadernillo está sellado (READY). Desmárcate primero para editarlo.",
+        ),
       );
     }
 
     if (data.name !== undefined && !isValidBundleName(data.name)) {
       return fail(
-        new ValidationError("El nombre del compendio debe tener entre 3 y 120 caracteres."),
+        new ValidationError("El nombre del cuadernillo debe tener entre 3 y 120 caracteres."),
       );
     }
     if (data.bookletNumber !== undefined && !isValidBookletNumber(data.bookletNumber)) {
@@ -70,7 +72,7 @@ export class UpdateBundle implements UseCase<UpdateBundleInput, Bundle> {
       if (clash) {
         return fail(
           new ConflictError(
-            `Ya existe un compendio con el número de cuadernillo ${data.bookletNumber}.`,
+            `Ya existe un cuadernillo con el número de cuadernillo ${data.bookletNumber}.`,
           ),
         );
       }
@@ -90,7 +92,7 @@ export class UpdateBundle implements UseCase<UpdateBundleInput, Bundle> {
       if (mismatch) {
         return fail(
           new ValidationError(
-            `No puedes asignar el curso ${course.name}: el compendio ya tiene items de otros cursos (p. ej. "${mismatch.evaluationTitle}" es de ${mismatch.courseName}). Quítalos primero.`,
+            `No puedes asignar el curso ${course.name}: el cuadernillo ya tiene items de otros cursos (p. ej. "${mismatch.evaluationTitle}" es de ${mismatch.courseName}). Quítalos primero.`,
           ),
         );
       }

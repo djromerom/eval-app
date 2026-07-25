@@ -4,7 +4,7 @@ import { makeRemoveFromBundle } from "@/modules/bundles/infrastructure/container
 import { errorResponse, unauthorizedResponse } from "../../../../_lib/domain-error";
 
 /**
- * DELETE /api/bundles/[id]/items/[itemId] — quita una evaluation del compendio.
+ * DELETE /api/bundles/[id]/items/[itemId] — quita una evaluation del cuadernillo.
  * Acceso: SUPER_ADMIN. Solo si DRAFT.
  */
 export async function DELETE(

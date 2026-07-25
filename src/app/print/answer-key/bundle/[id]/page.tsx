@@ -8,7 +8,7 @@ import { makeGetMyInstitution } from "@/modules/institutions/infrastructure/cont
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import { PrintButton } from "../../../evaluation/[id]/print-button";
 
-export const metadata: Metadata = { title: "Clave de respuestas del compendio" };
+export const metadata: Metadata = { title: "Clave de respuestas del cuadernillo" };
 
 interface BundleKeyRow {
   globalNumber: number;
@@ -27,7 +27,7 @@ interface BundleKeySection {
 }
 
 /**
- * Render server-side de la clave de respuestas UNIFICADA del compendio.
+ * Render server-side de la clave de respuestas UNIFICADA del cuadernillo.
  * Numeración global continua; cada fila = (pregunta, respuesta correcta,
  * justificación). El worker de Puppeteer abre esta ruta con un token
  * firmado (kind = "answer-key-bundle"). Sprint 3.
@@ -94,14 +94,14 @@ export default async function BundleAnswerKeyPage({
     <div className="booklet">
       <div className="no-print bg-card sticky top-0 z-10 flex w-full max-w-[900px] items-center gap-3 rounded-lg border p-3 text-sm">
         <span className="text-muted-foreground">
-          Clave de respuestas del compendio &laquo;{bundle.name}&raquo;
+          Clave de respuestas del cuadernillo &laquo;{bundle.name}&raquo;
         </span>
         <PrintButton />
       </div>
 
       <section className="sheet" style={{ padding: "2rem", maxWidth: "700px" }}>
         <h1 style={{ fontSize: "14pt", fontWeight: 700, marginBottom: "0.3rem" }}>
-          Clave de respuestas — Compendio
+          Clave de respuestas — Cuadernillo
         </h1>
         <p style={{ fontSize: "11pt", marginBottom: "0.2rem" }}>{bundle.name}</p>
         <p style={{ fontSize: "9pt", color: "#666", marginBottom: "1rem" }}>
@@ -109,7 +109,7 @@ export default async function BundleAnswerKeyPage({
         </p>
 
         {sections.flatMap((s) => s.rows).length === 0 ? (
-          <p className="text-muted-foreground">Este compendio no tiene preguntas.</p>
+          <p className="text-muted-foreground">Este cuadernillo no tiene preguntas.</p>
         ) : (
           <table
             className="key-table"

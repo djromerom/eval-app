@@ -17,6 +17,11 @@ interface NavItem {
    *  gestionar bundles, solo se toca `can("manage-bundles", roles)` y
    *  este menú se actualiza sin editar `navFor`. */
   requires: Capability;
+  /** Filtro opcional de roles: si está definido, el item SOLO se muestra
+   *  cuando el actor tiene al menos uno de estos roles (la capability
+   *  sigue siendo obligatoria). Útil para ocultar features del docente
+   *  sin romper el capability global. */
+  roles?: readonly Role[];
 }
 
 /** Navegación por capability. Cada item declara qué necesita; el menú
@@ -50,23 +55,38 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: "/admin/teachers", label: "Docentes", requires: "manage-users" },
   { href: "/admin/students", label: "Estudiantes", requires: "manage-users" },
   { href: "/admin/theme", label: "Tema institucional", requires: "manage-institutional-theme" },
-  // Compendios: hoy ECU_MASTER. Si SUPER_ADMIN debe poder gestionarlos
+  // Cuadernillos: hoy ECU_MASTER. Si SUPER_ADMIN debe poder gestionarlos
   // (multi-rol), se añade a `can("manage-bundles", roles)` en
   // capabilities.ts — NO se toca este menú.
-  { href: "/admin/bundles", label: "Compendios", requires: "manage-bundles" },
+  { href: "/admin/bundles", label: "Cuadernillos", requires: "manage-bundles" },
   // Sección coordinador.
   { href: "/coordinator", label: "Panel", requires: "review-evaluations" },
   { href: "/coordinator/review", label: "Revisión", requires: "review-evaluations" },
   // Sección docente.
   { href: "/teacher", label: "Panel", requires: "create-evaluations" },
-  { href: "/teacher/evaluations", label: "Evaluaciones", requires: "create-evaluations" },
-  { href: "/teacher/templates", label: "Plantillas", requires: "create-evaluations" },
+  { href: "/teacher/evaluations", label: "Formulaciones", requires: "create-evaluations" },
+  // Plantillas y escaneo: ocultos al TEACHER (solo COORDINATOR y superiores).
+  {
+    href: "/teacher/templates",
+    label: "Plantillas",
+    requires: "create-evaluations",
+    roles: ["COORDINATOR", "ECU_MASTER"],
+  },
   { href: "/teacher/question-bank", label: "Banco de preguntas", requires: "create-evaluations" },
-  { href: "/teacher/scan", label: "Escanear", requires: "create-evaluations" },
+  {
+    href: "/teacher/scan",
+    label: "Escanear",
+    requires: "create-evaluations",
+    roles: ["COORDINATOR", "ECU_MASTER"],
+  },
 ] as const;
 
 function navFor(roles: Role[]): NavItem[] {
-  return NAV_ITEMS.filter((item) => can(item.requires, roles));
+  return NAV_ITEMS.filter((item) => {
+    if (!can(item.requires, roles)) return false;
+    if (item.roles && !item.roles.some((r) => roles.includes(r))) return false;
+    return true;
+  });
 }
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {

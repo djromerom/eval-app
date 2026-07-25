@@ -39,15 +39,15 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
     if (!authorized.ok) return authorized;
 
     const evaluation = await this.evaluations.findById(actor.institutionId, evaluationId);
-    if (!evaluation) return fail(new NotFoundError("Evaluación", evaluationId));
+    if (!evaluation) return fail(new NotFoundError("Formulación", evaluationId));
 
     const transition = findTransition(evaluation.status, to);
     if (!transition || !transition.allowedRoles.some((r) => actor.roles.includes(r))) {
       return fail(new ValidationError(`Transición no permitida: ${evaluation.status} → ${to}.`));
     }
-    // El autor no puede enviar a revisión evaluaciones ajenas.
+    // El autor no puede enviar a revisión formulaciones ajenas.
     if (to === "IN_REVIEW" && evaluation.teacherId !== actor.userId) {
-      return fail(new ValidationError("Solo el autor puede enviar la evaluación a revisión."));
+      return fail(new ValidationError("Solo el autor puede enviar la formulación a revisión."));
     }
     if (transition.requiresComment && !comment?.trim()) {
       return fail(new ValidationError("El rechazo requiere un comentario."));
@@ -67,7 +67,7 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
     to: EvaluationStatus,
     comment?: string,
   ): Promise<void> {
-    const teacherLink = `/teacher/evaluations/${evaluation.id}`;
+    const teacherLink = `/teacher/evaluations/${evaluation.id}/contexts`;
     const reviewLink = `/coordinator/review`;
 
     if (to === "IN_REVIEW") {
@@ -77,7 +77,7 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
           this.notifications.send({
             userId,
             type: "EVALUATION_PENDING_REVIEW",
-            title: "Evaluación pendiente de revisión",
+            title: "Formulación pendiente de revisión",
             body: `"${evaluation.title}" fue enviada a revisión.`,
             link: reviewLink,
           }),
@@ -89,7 +89,7 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
       await this.notifications.send({
         userId: evaluation.teacherId,
         type: "EVALUATION_APPROVED",
-        title: "Evaluación aprobada",
+        title: "Formulación aprobada",
         body: `"${evaluation.title}" fue aprobada.`,
         link: teacherLink,
       });
@@ -100,7 +100,7 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
       await this.notifications.send({
         userId: evaluation.teacherId,
         type: "EVALUATION_REJECTED",
-        title: "Evaluación rechazada",
+        title: "Formulación rechazada",
         body: comment ?? "Sin comentario.",
         link: teacherLink,
       });

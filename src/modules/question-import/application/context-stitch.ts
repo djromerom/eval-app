@@ -2,7 +2,7 @@ import type { ParsedQuestion } from "../domain/parsed-question";
 
 /**
  * Helpers para preservar el contexto compartido cuando importamos preguntas
- * desde DOCX/CSV/otra evaluación.
+ * desde DOCX/CSV/otra formulación.
  *
  * Hoy la BD no tiene una columna `contextText` por pregunta:
  *  - En `EvaluationSection`, el contexto se almacena en `section.content`
@@ -83,7 +83,7 @@ export function collectUniqueContexts(questions: ParsedQuestion[]): string[] {
 
 /**
  * Combina los contextos compartidos con el contenido actual del contexto de
- * evaluación. Si el destino ya tiene contenido, inserta un `horizontalRule`
+ * formulación. Si el destino ya tiene contenido, inserta un `horizontalRule`
  * antes del primer contexto nuevo para que el docente los distinga en la
  * maquetación.
  *
@@ -105,7 +105,7 @@ export function mergeContextsIntoSectionContent(current: unknown, contexts: stri
  *
  * Se usa en la ruta al banco porque `QuestionBank` no tiene slot propio
  * para contexto compartido. Es una pérdida de estructura: si la pregunta
- * se reusa en una evaluación, el contexto la "sigue" como parte de su
+ * se reusa en una formulación, el contexto la "sigue" como parte de su
  * enunciado.
  */
 export function prependContextToBankQuestion(
@@ -127,7 +127,7 @@ export function prependContextToBankQuestion(
 /**
  * Devuelve una copia de las preguntas SIN `contextText`/`contextTitle`,
  * para evitar duplicar el contexto si lo acabamos de promover al section
- * (ruta evaluación) o si la ruta de banco va a embeberlo en el `text`
+ * (ruta formulación) o si la ruta de banco va a embeberlo en el `text`
  * (que ya no debería traer la cadena original).
  */
 export function stripContextFromQuestions(questions: ParsedQuestion[]): ParsedQuestion[] {

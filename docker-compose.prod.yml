@@ -26,6 +26,11 @@
 # `.env.prod` vive en el HOST, no en el repo. Cada servicio lo carga con
 # `env_file` para que las vars sensibles (AUTH_SECRET, QR_SIGNING_SECRET,
 # contraseñas) NO queden en la imagen ni en el compose commiteado.
+#
+# El path del env_file es parametrizable: `${ENV_FILE:-.env.prod}`. Por
+# defecto usa `.env.prod` (prod). Staging lo sobreescribe via `ENV_FILE`
+# exportado por el shell antes de invocar compose (cd-wrapper.sh hace
+# `. ./.env.staging` → ENV_FILE=.env.staging queda exportado).
 # =============================================================================
 
 services:
@@ -66,7 +71,7 @@ services:
           exec redis-server --appendonly no
         fi
     env_file:
-      - .env.prod
+      - ${ENV_FILE:-.env.prod}
     volumes:
       - redisdata:/data
     healthcheck:
@@ -104,7 +109,7 @@ services:
       postgres:
         condition: service_healthy
     env_file:
-      - .env.prod
+      - ${ENV_FILE:-.env.prod}
     environment:
       # Para el CLI de Prisma: el schema vive dentro de la imagen.
       PRISMA_SCHEMA_PATH: /app/eval-app/prisma/schema.prisma
@@ -177,15 +182,17 @@ services:
       redis:
         condition: service_healthy
     env_file:
-      - .env.prod
+      - ${ENV_FILE:-.env.prod}
     environment:
       NODE_ENV: production
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
     # Publica 3000 solo en loopback del host → el nginx del host (apt) hace
-    # proxy_pass a http://127.0.0.1:3000. No exponemos 3000 al exterior.
+    # proxy_pass a http://127.0.0.1:${WEB_HOST_PORT:-3000}. Default 3000 en
+    # prod; el override de staging (docker-compose.staging.yml) usa
+    # WEB_HOST_PORT=3001 para no chocar con prod en el mismo VPS.
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${WEB_HOST_PORT:-3000}:3000"
     volumes:
       - storage:/var/eval/storage
     healthcheck:
@@ -219,7 +226,7 @@ services:
       omr-service:
         condition: service_healthy
     env_file:
-      - .env.prod
+      - ${ENV_FILE:-.env.prod}
     environment:
       NODE_ENV: production
       WORKER_NAME: omr
@@ -249,13 +256,51 @@ services:
       web:
         condition: service_healthy
     env_file:
-      - .env.prod
+      - ${ENV_FILE:-.env.prod}
     environment:
       NODE_ENV: production
       WORKER_NAME: pdf
       # El bundle de Chromium vive en $PUPPETEER_CACHE_DIR dentro de la imagen
       # (configurado en el Dockerfile runtime). Si se necesita sobreescribir:
       # PUPPETEER_EXECUTABLE_PATH=/path/to/chrome
+    volumes:
+      - storage:/var/eval/storage
+    entrypoint: ["/usr/bin/tini", "--"]
+    command: ["/entrypoint/entrypoint-worker.sh"]
+    networks:
+      - eval-net
+
+  # ---------------------------------------------------------------------------
+  # Worker Question-Extract — extracción IA de preguntas desde PDF con
+  # `saber-extractor`. Concurrencia 2. Necesita poppler-utils (incluido en
+  # el stage runtime del Dockerfile) para recortar figuras con `pdfimages`.
+  # Lee PDFs de `imports/{institutionId}/...` (mismo storage que web) y
+  # escribe las figuras en `evaluations/{institutionId}/...` vía la misma
+  # pipeline que el parser DOCX.
+  # ---------------------------------------------------------------------------
+  worker-question-extract:
+    image: ${EVAL_APP_IMAGE:-eval-app:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    user: "1001:1001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    env_file:
+      - ${ENV_FILE:-.env.prod}
+    environment:
+      NODE_ENV: production
+      WORKER_NAME: question-extract
+      # Provider IA: si .env.prod trae ANTHROPIC_API_KEY usa Claude (Sonnet
+      # para extract, Opus con thinking para solve); si no, cae a MINIMAX_*.
+      # Misma lógica que el parser legacy. No requiere flag — el worker
+      # inspecciona process.env en cada job.
     volumes:
       - storage:/var/eval/storage
     entrypoint: ["/usr/bin/tini", "--"]

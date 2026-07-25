@@ -70,10 +70,10 @@ export default async function GenerateSheetsPage({ params }: Props) {
 
       <div className="mb-4">
         <Link
-          href={`/teacher/evaluations/${id}`}
+          href={`/teacher/evaluations/${id}/contexts`}
           className="text-muted-foreground text-sm hover:underline"
         >
-          ← Volver a la evaluación
+          ← Volver a la formulación
         </Link>
       </div>
 

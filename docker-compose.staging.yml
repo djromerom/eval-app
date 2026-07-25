@@ -1,0 +1,48 @@
+# ============================================================================
+# docker-compose.staging.yml — override para el ambiente STAGING
+#
+# Apunta al subdominio test.ecognia.pro. Convive en el mismo VPS con prod
+# (ecognia.pro) usando:
+#   - distinto puerto host del web (3001 vs 3000)
+#   - distinto DB name en el mismo Postgres (eval_staging vs eval)
+#   - distinto DB lógico en el mismo Redis (1 vs 0)
+#   - distinto volumen de storage (storage-staging vs storage)
+#   - distinto prefijo BullMQ (BULLMQ_PREFIX=stg:) para que las colas no
+#     se pisen con prod
+#   - distintas imágenes en GHCR (tag con sufijo -staging)
+#
+# SYNC: este archivo se copia al VPS junto con docker-compose.prod.yml:
+#   scp docker-compose.prod.yml     root@<vps>:/opt/eval/eval-app-staging/
+#   scp docker-compose.staging.yml  root@<vps>:/opt/eval/eval-app-staging/
+#   scp docker/nginx/test.ecognia.conf  root@<vps>:/etc/nginx/sites-enabled/
+#   cp .env.staging.example /opt/eval/eval-app-staging/.env.staging
+#
+# Uso en el VPS:
+#   alias dpg='docker compose -f /opt/eval/eval-app-staging/docker-compose.staging.yml'
+#   dpg up -d postgres redis      # primero la infra
+#   dpg run --rm migrate          # aplica migraciones a eval_staging
+#   dpg up -d                     # el resto
+# ============================================================================
+
+include:
+  - path: ./docker-compose.prod.yml
+
+services:
+  # ---- Web: distinto puerto host para no chocar con prod (3000) ----
+  web:
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-3001}:3000"
+
+  # ---- Postgres: mismo container compartido, distinto DB name ----
+  # DATABASE_URL en .env.staging apunta a eval_staging; el container la crea
+  # en el primer arranque gracias al POSTGRES_DB de abajo. No recreamos
+  # el container — solo cambiamos la env var.
+  postgres:
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-eval_staging}
+
+volumes:
+  storage-staging:
+    # Volumen nombrado nuevo (NO se reutiliza el de prod).
+    # Si se recrea el compose de staging, los logos/hojas/PDFs de staging
+    # quedan vivos en este volumen.

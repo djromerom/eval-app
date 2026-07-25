@@ -16,9 +16,9 @@ import { TABLOID_PT, buildImposedPageOrder, padToMultipleOf4 } from "./booklet";
  *
  * Soporta `coverPages` (≥ 0): las primeras N páginas del PDF lineal se
  * copian tal cual al output (sin imposition) y solo el resto se impone.
- * Uso típico: compendios (`coverPages: 1`) cuya portada institucional NO
+ * Uso típico: cuadernillos (`coverPages: 1`) cuya portada institucional NO
  * debe impositionarse — si se impone, queda media hoja tabloid desperdiciada.
- * Para cuadernillos de una sola evaluación se deja en 0 (comportamiento
+ * Para cuadernillos de una sola formulación se deja en 0 (comportamiento
  * histórico: portada y contraportada comparten pliego exterior).
  *
  * Convenciones:
@@ -33,7 +33,7 @@ export interface ImposeBookletOptions {
   /**
    * Cuántas páginas del INICIO del PDF lineal se preservan sin imposition
    * (tamaño original, normalmente carta). Por defecto 0 = saddle-stitch
-   * TODO el PDF (comportamiento legacy). Usar 1 para compendios.
+   * TODO el PDF (comportamiento legacy). Usar 1 para cuadernillos.
    */
   coverPages?: number;
 }

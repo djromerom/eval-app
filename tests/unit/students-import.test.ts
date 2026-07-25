@@ -11,8 +11,8 @@ import type { Group, GroupRepository } from "@/modules/academic/domain/types";
 
 class InMemoryStudents implements StudentRepository {
   items: Student[] = [];
-  async findById() {
-    return null;
+  async findById(institutionId: string, id: string) {
+    return this.items.find((s) => s.institutionId === institutionId && s.id === id) ?? null;
   }
   async findByCode(institutionId: string, code: string) {
     return this.items.find((s) => s.institutionId === institutionId && s.code === code) ?? null;
@@ -36,6 +36,36 @@ class InMemoryStudents implements StudentRepository {
     return data.length;
   }
   async changeCode() {}
+  async update(
+    institutionId: string,
+    id: string,
+    data: {
+      groupId: string;
+      name: string;
+      idType: string;
+      idNumber: string;
+      enrollmentYear: number;
+      isActive: boolean;
+    },
+  ) {
+    const s = this.items.find((x) => x.institutionId === institutionId && x.id === id);
+    if (!s) {
+      const err = new Error("Not found") as Error & { code: string };
+      err.code = "P2025";
+      throw err;
+    }
+    Object.assign(s, data);
+    return s;
+  }
+  async softDelete(institutionId: string, id: string) {
+    const s = this.items.find((x) => x.institutionId === institutionId && x.id === id);
+    if (!s) {
+      const err = new Error("Not found") as Error & { code: string };
+      err.code = "P2025";
+      throw err;
+    }
+    s.isActive = false;
+  }
 }
 
 class InMemoryGroups implements GroupRepository {
@@ -48,6 +78,9 @@ class InMemoryGroups implements GroupRepository {
   }
   async create(): Promise<Group> {
     throw new Error("no usado");
+  }
+  async delete(): Promise<void> {
+    // no usado en este test
   }
 }
 

@@ -1,7 +1,7 @@
 /**
  * Formato intermedio de la importación de preguntas.
  *
- * Los tres orígenes —documento del docente, plantilla CSV y otra evaluación
+ * Los tres orígenes —documento del docente, plantilla CSV y otra formulación
  * del sistema— convierten a esta forma, y de aquí sale una única pantalla de
  * revisión y un único camino de alta. Añadir un origen nuevo es escribir un
  * parser que devuelva `ParseResult`; nada más del flujo cambia.
@@ -29,6 +29,17 @@ export interface ParsedQuestionImage {
   url: string;
 }
 
+/**
+ * Confianza de la respuesta correcta reportada por la fuente IA. Solo está
+ * presente cuando el origen sabe juzgarla (saber-extractor). En CSV y DOCX
+ * el campo no existe; el docente la marca a mano.
+ *
+ * - `alta`  → badge verde, se incluye sin forzar revisión.
+ * - `media` → badge ámbar, el docente la ve pero no se obliga a corregir.
+ * - `baja`  → badge rojo, la UI la destilda por defecto y exige corrección.
+ */
+export type AnswerConfidence = "alta" | "media" | "baja";
+
 /** Pregunta leída de una fuente externa, antes de validar y confirmar. */
 export interface ParsedQuestion {
   /**
@@ -49,6 +60,10 @@ export interface ParsedQuestion {
   image: ParsedQuestionImage | null;
   /** Lo que el parser no pudo resolver; se pinta en la revisión. */
   warnings: string[];
+  /** Confianza de la respuesta correcta reportada por la fuente IA. */
+  answerConfidence?: AnswerConfidence;
+  /** Justificación breve de la respuesta correcta (tooltip en la UI). */
+  answerRationale?: string;
 }
 
 export interface ParseResult {
@@ -91,7 +106,7 @@ export function validateParsedQuestion(q: ParsedQuestion): string | null {
   }
 
   // El resto (claves consecutivas y únicas, correcta entre las opciones) ya lo
-  // sabe el dominio de evaluaciones.
+  // sabe el dominio de formulaciones.
   return validateQuestionShape({ options: q.options, correctAnswer: q.correctAnswer });
 }
 

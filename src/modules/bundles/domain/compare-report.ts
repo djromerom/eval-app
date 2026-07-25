@@ -1,6 +1,6 @@
 /**
  * Reporte comparativo entre las evaluations de un bundle.
- * Ver docs/compendios.md §"Sprint 3 — Reporte comparativo" y §"Sprint 4
+ * Ver docs/cuadernillos.md §"Sprint 3 — Reporte comparativo" y §"Sprint 4
  * — Drill-down por item/hoja".
  *
  * El reporte agrega, por evaluation del bundle:

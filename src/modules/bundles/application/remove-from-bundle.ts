@@ -21,18 +21,18 @@ export class RemoveFromBundle implements UseCase<RemoveFromBundleInput, void> {
     if (!authorized.ok) return authorized;
 
     const bundle = await this.bundles.findById(actor.institutionId, bundleId);
-    if (!bundle) return fail(new NotFoundError("Compendio", bundleId));
+    if (!bundle) return fail(new NotFoundError("Cuadernillo", bundleId));
     if (isLocked(bundle.status)) {
       return fail(
         new ValidationError(
-          "El compendio está sellado (READY). Desmárcate primero para quitar items.",
+          "El cuadernillo está sellado (READY). Desmárcate primero para quitar items.",
         ),
       );
     }
 
     const removed = await this.bundles.removeItem(actor.institutionId, bundleId, itemId);
     if (!removed) {
-      return fail(new NotFoundError("Item del compendio", itemId));
+      return fail(new NotFoundError("Item del cuadernillo", itemId));
     }
     return ok(undefined);
   }

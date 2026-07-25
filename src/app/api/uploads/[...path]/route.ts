@@ -5,7 +5,7 @@ import { institutionIdFromPath } from "@/modules/uploads/domain/upload";
 
 /**
  * GET /api/uploads/evaluations/{institutionId}/{id}.jpg — sirve una imagen
- * subida al contenido de una evaluación.
+ * subida al contenido de una formulación.
  *
  * Requiere sesión y que la imagen pertenezca a la institución del usuario:
  * la ruta lleva el `institutionId`, así que basta compararlo sin ir a la BD.

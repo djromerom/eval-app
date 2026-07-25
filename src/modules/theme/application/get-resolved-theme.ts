@@ -1,6 +1,6 @@
 /**
  * Helper de lectura: dado (institutionId, evaluationId), devuelve el tema
- * ya colapsado (institucional ⊕ override de evaluación) listo para aplicar.
+ * ya colapsado (institucional ⊕ override de formulación) listo para aplicar.
  *
  * La ruta de print NO usa use cases para esto — son más pesados y no
  * necesitamos chequeos de rol (el actor ya pasó por resolvePrintActor antes).

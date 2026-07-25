@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { AnswerKey } from "@/modules/evaluations/domain/evaluation";
 import type { ParsedQuestion } from "@/modules/question-import/domain/parsed-question";
 import { commitImportAction, loadSourceAction } from "./actions";
+import { ConfidenceBadge } from "./confidence-badge";
 
 const controlClass =
   "h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none";
@@ -37,7 +38,7 @@ interface Props {
 /**
  * Wizard de revisión de la importación.
  *
- * Carga las preguntas con `loadSourceAction` (origen "otra evaluación" en
+ * Carga las preguntas con `loadSourceAction` (origen "otra formulación" en
  * Fase 1, "CSV" en Fase 2), deja que el docente descarte y corrija la
  * respuesta correcta cuando falte, y al confirmar envía todo el array al
  * server action `commitImportAction`. El estado NO se persiste: vive en
@@ -55,9 +56,18 @@ export function ImportReviewForm({
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // El docente puede destildar preguntas y, si falta la correcta, marcarla.
-  const [included, setIncluded] = useState<Set<number>>(
-    new Set((initialQuestions ?? []).map((_, idx) => idx)),
-  );
+  // Las preguntas con `answerConfidence === "baja"` arrancan DESTILDADAS: la
+  // IA marcó la respuesta correcta con poca seguridad, así que obligamos
+  // al docente a confirmar que quiere importarla antes de que cuente para
+  // el alta.
+  const [included, setIncluded] = useState<Set<number>>(() => {
+    const initial = initialQuestions ?? [];
+    const set = new Set<number>();
+    initial.forEach((q, idx) => {
+      if (q.answerConfidence !== "baja") set.add(idx);
+    });
+    return set;
+  });
   const [corrections, setCorrections] = useState<Record<number, AnswerKey>>({});
   const [destinationKind, setDestinationKind] = useState<"evaluation" | "bank">("evaluation");
   const [destinationId, setDestinationId] = useState<string>(sections[0]?.id ?? "");
@@ -86,8 +96,15 @@ export function ImportReviewForm({
         return;
       }
       setQuestions(res.questions);
-      // Por defecto todas seleccionadas.
-      setIncluded(new Set(res.questions.map((_, idx) => idx)));
+      // Por defecto todas seleccionadas, EXCEPTO las de confianza "baja":
+      // las obligamos a confirmación manual (ver useState arriba).
+      setIncluded(
+        new Set(
+          res.questions
+            .map((q, idx) => (q.answerConfidence === "baja" ? -1 : idx))
+            .filter((i) => i >= 0),
+        ),
+      );
     });
     return () => {
       cancelled = true;
@@ -117,7 +134,7 @@ export function ImportReviewForm({
   if (questions.length === 0) {
     return (
       <p className="text-muted-foreground rounded-lg border border-dashed p-6 text-sm">
-        La evaluación origen no tiene preguntas.
+        La formulación origen no tiene preguntas.
       </p>
     );
   }
@@ -153,10 +170,10 @@ export function ImportReviewForm({
         ) : null}
         <div className="flex gap-3">
           <Link
-            href={`/teacher/evaluations/${targetEvaluationId}`}
+            href={`/teacher/evaluations/${targetEvaluationId}/contexts`}
             className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 rounded-md px-4 text-sm font-medium"
           >
-            Volver a la evaluación
+            Volver a la formulación
           </Link>
         </div>
       </section>
@@ -214,7 +231,7 @@ export function ImportReviewForm({
                 setDestinationId(sections[0]?.id ?? "");
               }}
             />
-            Añadir a esta evaluación
+            Añadir a esta formulación
             {hasContexts ? (
               <span className="text-muted-foreground ml-1 text-xs">
                 (se crearán secciones por cada contexto del documento)
@@ -308,13 +325,23 @@ export function ImportReviewForm({
                     className="mt-1"
                   />
                   <div className="flex-1 space-y-2">
-                    <div className="text-muted-foreground text-xs">
-                      {q.sourceNumber !== null ? `Pregunta ${q.sourceNumber}` : "Sin número"} ·{" "}
-                      {q.options.length} opción(es)
+                    <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                      <span>
+                        {q.sourceNumber !== null ? `Pregunta ${q.sourceNumber}` : "Sin número"} ·{" "}
+                        {q.options.length} opción(es)
+                      </span>
+                      {q.answerConfidence ? (
+                        <ConfidenceBadge level={q.answerConfidence} rationale={q.answerRationale} />
+                      ) : null}
                       {q.warnings.length > 0 ? (
-                        <span className="text-destructive ml-2">⚠ {q.warnings.join(" · ")}</span>
+                        <span className="text-destructive">⚠ {q.warnings.join(" · ")}</span>
                       ) : null}
                     </div>
+                    {q.answerConfidence === "baja" && checked ? (
+                      <p className="rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-900 dark:bg-rose-950 dark:text-rose-100">
+                        Confianza baja: revisa la respuesta marcada por la IA antes de importar.
+                      </p>
+                    ) : null}
                     {q.image ? (
                       <img
                         src={q.image.url}

@@ -13,7 +13,7 @@ import {
 } from "@/modules/bundles/domain/compare-report";
 import { cn } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Reporte comparativo del compendio" };
+export const metadata: Metadata = { title: "Reporte comparativo del cuadernillo" };
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +25,11 @@ const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%
  *   - Tabla por evaluation: correctRate medio y dificultad.
  *   - Tabla por pregunta: correctRate y answeredCount (numeración global).
  *   - Sprint 4: drill-down por hoja × item (correctRate por estudiante
- *     en cada evaluation del compendio). Solo si los StudentAnswer
+ *     en cada evaluation del cuadernillo). Solo si los StudentAnswer
  *     tienen bundleItemId poblado (i.e. calificados con la nueva versión
  *     del worker OMR).
  *
- * Ver docs/compendios.md §"Sprint 3 — Reporte comparativo" y §"Sprint 4".
+ * Ver docs/cuadernillos.md §"Sprint 3 — Reporte comparativo" y §"Sprint 4".
  */
 export default async function BundleReportPage({ params }: { params: Promise<{ id: string }> }) {
   const actor = await requireAuthenticatedUser(
@@ -152,8 +152,8 @@ export default async function BundleReportPage({ params }: { params: Promise<{ i
         title={`Reporte — ${bundle.name}`}
         description={
           <>
-            Comparativa entre las {bundle.items.length} evaluaciones del compendio. Datos basados en
-            las {report.totalScannedSheets} hoja(s) escaneada(s).
+            Comparativa entre las {bundle.items.length} formulaciones del cuadernillo. Datos basados
+            en las {report.totalScannedSheets} hoja(s) escaneada(s).
           </>
         }
       />
@@ -163,13 +163,13 @@ export default async function BundleReportPage({ params }: { params: Promise<{ i
           href={`/admin/bundles/${bundle.id}`}
           className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
         >
-          ← Volver al compendio
+          ← Volver al cuadernillo
         </Link>
       </div>
 
       {report.totalScannedSheets === 0 ? (
         <p className="bg-card text-muted-foreground rounded-xl border p-6 text-sm">
-          Aún no se han escaneado hojas para este compendio. El reporte se habilitará cuando los
+          Aún no se han escaneado hojas para este cuadernillo. El reporte se habilitará cuando los
           estudiantes empiecen a responder.
         </p>
       ) : (
@@ -179,7 +179,7 @@ export default async function BundleReportPage({ params }: { params: Promise<{ i
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-muted-foreground border-b text-left">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Evaluación</th>
+                  <th className="px-4 py-3 font-medium">Formulación</th>
                   <th className="px-4 py-3 font-medium">Preguntas</th>
                   <th className="px-4 py-3 font-medium">CorrectRate medio</th>
                   <th className="px-4 py-3 font-medium">Dificultad</th>
@@ -213,7 +213,7 @@ export default async function BundleReportPage({ params }: { params: Promise<{ i
               <thead className="bg-muted/40 text-muted-foreground border-b text-left">
                 <tr>
                   <th className="px-4 py-2 font-medium">N.º</th>
-                  <th className="px-4 py-2 font-medium">Evaluación</th>
+                  <th className="px-4 py-2 font-medium">Formulación</th>
                   <th className="px-4 py-2 font-medium">CorrectRate</th>
                   <th className="px-4 py-2 font-medium">Respondidas</th>
                 </tr>

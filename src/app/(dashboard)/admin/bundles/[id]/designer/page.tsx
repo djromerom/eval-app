@@ -8,19 +8,19 @@ import { getResolvedBundleTheme } from "@/modules/theme/application/get-resolved
 import { parseEvaluationTheme } from "@/modules/theme/domain/theme";
 import { BundleDesignerForm } from "./designer-form";
 
-export const metadata: Metadata = { title: "Diseñador del compendio" };
+export const metadata: Metadata = { title: "Diseñador del cuadernillo" };
 
 export const dynamic = "force-dynamic";
 
 /**
- * Pestaña Diseñador — override del tema por compendio + preview iframe
+ * Pestaña Diseñador — override del tema por cuadernillo + preview iframe
  * de la maqueta del cuadernillo.
  *
  * El SUPER_ADMIN puede ajustar subtítulo, pie, color, tipografía, densidad,
  * separador y bloque intro. Solo en DRAFT (validado en UpdateBundleTheme).
  *
  * Diferencias con el designer de evaluation:
- * - Auth: solo SUPER_ADMIN (los compendios son multi-evaluación, no
+ * - Auth: solo SUPER_ADMIN (los cuadernillos son multi-formulación, no
  *   pertenecen a un solo docente).
  * - Resolver: `getResolvedBundleTheme` mergea institución + override del
  *   bundle (no de la primera evaluation, como hacía el antiguo print).
@@ -41,7 +41,7 @@ export default async function BundleDesignerPage({ params }: { params: Promise<{
     <>
       <PageHeader
         title={`Diseñador — ${bundle.name}`}
-        description="Personaliza el cuadernillo de este compendio. Los cambios se ven inmediatamente en la vista previa."
+        description="Personaliza el cuadernillo de este cuadernillo. Los cambios se ven inmediatamente en la vista previa."
       />
 
       <div className="mb-4 flex items-center gap-3 text-sm">
@@ -49,7 +49,7 @@ export default async function BundleDesignerPage({ params }: { params: Promise<{
           href={`/admin/bundles/${bundle.id}`}
           className="text-muted-foreground hover:underline"
         >
-          ← Volver al compendio
+          ← Volver al cuadernillo
         </Link>
         <Link
           href={`/print/bundle/${bundle.id}`}

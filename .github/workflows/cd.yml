@@ -27,6 +27,9 @@ name: cd
 on:
   push:
     branches: [main]
+    # Defense-in-depth: nunca disparar deploy a prod desde un push a develop
+    # (aunque la rama tenga branch protection rota, esto lo bloquea).
+    branches-ignore: [develop]
   workflow_dispatch:
     inputs:
       sha:

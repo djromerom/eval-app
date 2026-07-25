@@ -41,7 +41,7 @@ export interface AnswerSheet {
   institutionId: string;
   /** Legacy (single-evaluation) o una hoja del Sprint 1+ antes de bundles. */
   evaluationId: string | null;
-  /** Hoja de un compendio (Sprint 1 del módulo compendios). */
+  /** Hoja de un cuadernillo (Sprint 1 del módulo cuadernillos). */
   bundleId: string | null;
   studentId: string | null;
   studentName: string | null;
@@ -58,9 +58,9 @@ export interface AnswerSheet {
 export interface ScanBatch {
   id: string;
   institutionId: string;
-  /** Legacy: batch de una evaluación individual. null para batches de compendio. */
+  /** Legacy: batch de una formulación individual. null para batches de cuadernillo. */
   evaluationId: string | null;
-  /** Sprint 1 del módulo compendios: batch cuyas hojas son de un compendio.
+  /** Sprint 1 del módulo cuadernillos: batch cuyas hojas son de un cuadernillo.
    *  null para batches legacy. La invariante XOR (evaluationId XOR bundleId)
    *  se enforceza en el use case, no en el schema. */
   bundleId: string | null;
@@ -71,7 +71,7 @@ export interface ScanBatch {
 
 export interface StudentAnswerRecord {
   questionId: string;
-  /** Sprint 4 del módulo compendios: si la hoja pertenece a un bundle, el
+  /** Sprint 4 del módulo cuadernillos: si la hoja pertenece a un bundle, el
    *  item del bundle al que pertenece esta question. Permite drill-down del
    *  reporte comparativo por (student/hoja × item). null en hojas legacy. */
   bundleItemId: string | null;

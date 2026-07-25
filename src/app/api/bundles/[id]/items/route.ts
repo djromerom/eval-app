@@ -9,7 +9,7 @@ import {
 import { addItemSchema } from "../../_schemas";
 
 /**
- * POST /api/bundles/[id]/items — añade una evaluation al compendio.
+ * POST /api/bundles/[id]/items — añade una evaluation al cuadernillo.
  * Acceso: SUPER_ADMIN. Solo si DRAFT.
  * Body: { evaluationId, order? }
  */

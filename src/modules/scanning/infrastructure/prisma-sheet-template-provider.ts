@@ -8,11 +8,11 @@ import { logger } from "@/shared/infrastructure/logger";
 const log = logger.child({ component: "sheet-template-provider" });
 
 /**
- * Obtiene la geometría de la hoja de un compendio, midiéndola del render
+ * Obtiene la geometría de la hoja de un cuadernillo, midiéndola del render
  * real la primera vez y cacheándola en `EvaluationBundle.sheetTemplate`.
  *
  * La medición arranca Chromium (~2–3 s), demasiado caro para hacerlo en cada
- * hoja de un lote de 200. Como la rejilla depende del compendio y no del
+ * hoja de un lote de 200. Como la rejilla depende del cuadernillo y no del
  * estudiante, se mide una vez y se reutiliza.
  *
  * El caché NO se invalida solo. Es deliberado: si el layout de impresión
