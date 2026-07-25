@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Diseñador" };
 export const dynamic = "force-dynamic";
 
 /**
- * Pestaña Diseñador — override del tema por evaluación + preview iframe
+ * Pestaña Diseñador — override del tema por formulación + preview iframe
  * del cuadernillo real (`/print/evaluation/[id]`).
  *
  * El docente dueño (o un COORDINATOR) puede ajustar el tema sin tocar el
@@ -35,15 +35,15 @@ export default async function DesignerPage({ params }: { params: Promise<{ id: s
     <>
       <PageHeader
         title={`Diseñador — ${evaluation.title}`}
-        description="Personaliza el cuadernillo de esta evaluación. Los cambios se ven inmediatamente en la vista previa."
+        description="Personaliza el cuadernillo de esta formulación. Los cambios se ven inmediatamente en la vista previa."
       />
 
       <div className="mb-4 flex items-center gap-3 text-sm">
         <Link
-          href={`/teacher/evaluations/${evaluation.id}`}
+          href={`/teacher/evaluations/${evaluation.id}/contexts`}
           className="text-muted-foreground hover:underline"
         >
-          ← Volver a la evaluación
+          ← Volver a la formulación
         </Link>
         <Link
           href={`/print/evaluation/${evaluation.id}`}

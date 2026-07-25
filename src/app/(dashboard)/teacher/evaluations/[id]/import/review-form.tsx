@@ -38,7 +38,7 @@ interface Props {
 /**
  * Wizard de revisión de la importación.
  *
- * Carga las preguntas con `loadSourceAction` (origen "otra evaluación" en
+ * Carga las preguntas con `loadSourceAction` (origen "otra formulación" en
  * Fase 1, "CSV" en Fase 2), deja que el docente descarte y corrija la
  * respuesta correcta cuando falte, y al confirmar envía todo el array al
  * server action `commitImportAction`. El estado NO se persiste: vive en
@@ -134,7 +134,7 @@ export function ImportReviewForm({
   if (questions.length === 0) {
     return (
       <p className="text-muted-foreground rounded-lg border border-dashed p-6 text-sm">
-        La evaluación origen no tiene preguntas.
+        La formulación origen no tiene preguntas.
       </p>
     );
   }
@@ -170,10 +170,10 @@ export function ImportReviewForm({
         ) : null}
         <div className="flex gap-3">
           <Link
-            href={`/teacher/evaluations/${targetEvaluationId}`}
+            href={`/teacher/evaluations/${targetEvaluationId}/contexts`}
             className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 rounded-md px-4 text-sm font-medium"
           >
-            Volver a la evaluación
+            Volver a la formulación
           </Link>
         </div>
       </section>
@@ -231,7 +231,7 @@ export function ImportReviewForm({
                 setDestinationId(sections[0]?.id ?? "");
               }}
             />
-            Añadir a esta evaluación
+            Añadir a esta formulación
             {hasContexts ? (
               <span className="text-muted-foreground ml-1 text-xs">
                 (se crearán secciones por cada contexto del documento)
@@ -331,17 +331,14 @@ export function ImportReviewForm({
                         {q.options.length} opción(es)
                       </span>
                       {q.answerConfidence ? (
-                        <ConfidenceBadge
-                          level={q.answerConfidence}
-                          rationale={q.answerRationale}
-                        />
+                        <ConfidenceBadge level={q.answerConfidence} rationale={q.answerRationale} />
                       ) : null}
                       {q.warnings.length > 0 ? (
                         <span className="text-destructive">⚠ {q.warnings.join(" · ")}</span>
                       ) : null}
                     </div>
                     {q.answerConfidence === "baja" && checked ? (
-                      <p className="bg-rose-50 text-rose-900 dark:bg-rose-950 dark:text-rose-100 rounded-md px-3 py-2 text-xs">
+                      <p className="rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-900 dark:bg-rose-950 dark:text-rose-100">
                         Confianza baja: revisa la respuesta marcada por la IA antes de importar.
                       </p>
                     ) : null}

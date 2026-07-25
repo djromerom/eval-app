@@ -8,7 +8,7 @@ import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/containe
 import { DEFAULT_MINUTES_PER_QUESTION } from "@/modules/bundles/domain/bundle-rules";
 import { EvaluationSettingsForm } from "./settings-form";
 
-export const metadata: Metadata = { title: "Configuración de evaluación" };
+export const metadata: Metadata = { title: "Configuración de formulación" };
 
 export default async function EvaluationSettingsPage({
   params,
@@ -39,10 +39,10 @@ export default async function EvaluationSettingsPage({
           {evaluation.totalQuestions} pregunta(s)
         </span>
         <Link
-          href={`/teacher/evaluations/${evaluation.id}`}
+          href={`/teacher/evaluations/${evaluation.id}/contexts`}
           className="text-muted-foreground ml-auto text-sm hover:underline"
         >
-          ← Volver a la evaluación
+          ← Volver a la formulación
         </Link>
       </div>
 
@@ -57,12 +57,12 @@ export default async function EvaluationSettingsPage({
       <section className="bg-muted/30 mt-6 rounded-xl border p-4 text-sm">
         <h3 className="mb-1 font-semibold">Cómo se usa</h3>
         <p className="text-muted-foreground">
-          Si dejas el campo vacío, la portada del compendio calcula la duración como{" "}
+          Si dejas el campo vacío, la portada del cuadernillo calcula la duración como{" "}
           <code>
             {evaluation.totalQuestions} × {DEFAULT_MINUTES_PER_QUESTION} = {fallbackMinutes} min
           </code>
           . Si capturas un valor explícito, ese es el que aparece. Ambos casos son editables
-          mientras la evaluación esté en BORRADOR; al aprobarse, la duración se congela.
+          mientras la formulación esté en BORRADOR; al aprobarse, la duración se congela.
         </p>
       </section>
     </>

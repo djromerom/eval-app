@@ -219,48 +219,65 @@ export function QuestionForm({
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <label className="text-muted-foreground block text-xs font-medium">Nivel SOLO</label>
-          <select
-            name="soloLevel"
-            defaultValue={initial?.soloLevel ?? ""}
-            className="border-input bg-background focus-visible:ring-ring h-9 rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
-          >
-            {SOLO_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label className="text-muted-foreground block text-xs font-medium">Componente MEN</label>
-          <Input
-            name="menComponent"
-            placeholder="(opcional)"
-            className="w-40"
-            defaultValue={initial?.menComponent ?? ""}
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="text-muted-foreground block text-xs font-medium">Competencia</label>
-          <Input
-            name="competency"
-            placeholder="(opcional)"
-            className="w-40"
-            defaultValue={initial?.competency ?? ""}
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="text-muted-foreground block text-xs font-medium">Puntaje</label>
-          <Input
-            name="weight"
-            type="number"
-            step="0.5"
-            defaultValue={initial?.weight ?? 1}
-            className="w-24"
-          />
-        </div>
+        {/* Campo Nivel SOLO oculto temporalmente — el backend sigue aceptando el
+            valor si el browser lo envía (no lo hacemos required), pero el
+            formulario ya no lo expone. Reactivar descomentando el bloque. */}
+        {false && (
+          <div className="space-y-1">
+            <label className="text-muted-foreground block text-xs font-medium">Nivel SOLO</label>
+            <select
+              name="soloLevel"
+              defaultValue={initial?.soloLevel ?? ""}
+              className="border-input bg-background focus-visible:ring-ring h-9 rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
+            >
+              {SOLO_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {/* Campos auxiliares ocultos en el alta y en la edición: ya no pedimos
+            Componente MEN, Competencia ni Puntaje desde el form. La información
+            previa (si existe) sigue visible en el `QuestionReadView` para que
+            el docente la vea, pero no se ofrece edición inline. El backend
+            sigue aceptando el valor si el browser lo envía, pero el form no
+            los expone. Reactivar cambiando `false` por `true`. */}
+        {false && (
+          <>
+            <div className="space-y-1">
+              <label className="text-muted-foreground block text-xs font-medium">
+                Componente MEN
+              </label>
+              <Input
+                name="menComponent"
+                placeholder="(opcional)"
+                className="w-40"
+                defaultValue={initial?.menComponent ?? ""}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-muted-foreground block text-xs font-medium">Competencia</label>
+              <Input
+                name="competency"
+                placeholder="(opcional)"
+                className="w-40"
+                defaultValue={initial?.competency ?? ""}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-muted-foreground block text-xs font-medium">Puntaje</label>
+              <Input
+                name="weight"
+                type="number"
+                step="0.5"
+                defaultValue={initial?.weight ?? 1}
+                className="w-24"
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {state.error ? <p className="text-destructive text-sm">{state.error}</p> : null}

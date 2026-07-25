@@ -3,11 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import type { ParsedQuestion } from "@/modules/question-import/domain/parsed-question";
-import {
-  enqueueAiImportAction,
-  loadDocxSourceAction,
-  loadSourceAction,
-} from "./actions";
+import { enqueueAiImportAction, loadDocxSourceAction, loadSourceAction } from "./actions";
 import { QUESTIONS_CSV_TEMPLATE } from "@/modules/question-import/infrastructure/csv";
 import { ImportReviewForm } from "./review-form";
 import { ImportStream } from "./import-stream";
@@ -195,10 +191,10 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
   return (
     <div className="space-y-6">
       <section className="bg-card space-y-3 rounded-xl border p-6">
-        <h2 className="font-semibold">Copiar de otra evaluación</h2>
+        <h2 className="font-semibold">Copiar de otra formulación</h2>
         {sources.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            No tienes otras evaluaciones con preguntas.
+            No tienes otras formulaciones con preguntas.
           </p>
         ) : (
           <>
@@ -226,7 +222,7 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
                 }}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 rounded-md px-4 text-sm font-medium disabled:opacity-50"
               >
-                Usar esta evaluación →
+                Usar esta formulación →
               </button>
             </div>
           </>
@@ -352,8 +348,11 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
       ) : null}
 
       <p className="text-muted-foreground text-xs">
-        <Link href={`/teacher/evaluations/${targetEvaluationId}`} className="hover:underline">
-          ← Volver a la evaluación
+        <Link
+          href={`/teacher/evaluations/${targetEvaluationId}/contexts`}
+          className="hover:underline"
+        >
+          ← Volver a la formulación
         </Link>
       </p>
     </div>

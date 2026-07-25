@@ -11,7 +11,7 @@ import {
 } from "@/modules/academic/infrastructure/container";
 import { createEvaluationAction } from "./actions";
 
-export const metadata: Metadata = { title: "Evaluaciones" };
+export const metadata: Metadata = { title: "Formulaciones" };
 
 const df = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
 
@@ -35,12 +35,16 @@ export default async function EvaluationsPage() {
   return (
     <>
       <PageHeader
-        title="Mis evaluaciones"
-        description="Crea evaluaciones tipo ICFES, agrégales preguntas y envíalas a revisión."
+        title="Mis formulaciones"
+        description="Crea formulaciones tipo ICFES, agrégales preguntas y envíalas a revisión."
       />
 
       <section className="bg-card space-y-4 rounded-xl border p-6">
-        <h2 className="font-semibold">Nueva evaluación</h2>
+        <h2 className="font-semibold">Nueva formulación</h2>
+        <p className="text-muted-foreground -mt-2 text-sm">
+          El título se genera automáticamente como{" "}
+          <span className="text-foreground font-mono text-xs">Asignatura · Curso · Año</span>.
+        </p>
         <EntityForm
           action={createEvaluationAction}
           submitLabel="Crear borrador"
@@ -51,13 +55,6 @@ export default async function EvaluationsPage() {
           }
           fields={[
             {
-              name: "title",
-              label: "Título",
-              type: "text",
-              required: true,
-              placeholder: "Prueba I Periodo",
-            },
-            {
               name: "courseSubjectId",
               label: "Asignatura-curso",
               type: "select",
@@ -65,17 +62,6 @@ export default async function EvaluationsPage() {
               options: csOptions,
             },
             { name: "periodId", label: "Periodo", type: "select", options: periodOptions },
-            { name: "bookletNumber", label: "Cuadernillo", type: "number", placeholder: "1" },
-            {
-              name: "durationMinutes",
-              label: "Duración estimada (min)",
-              type: "number",
-              placeholder: "ej. 90",
-              min: 1,
-              max: 600,
-              helpText:
-                "Aparece en la portada del compendio. Si la dejas vacía, se calcula con preguntas × 2.5 min. Editable después en Configuración.",
-            },
           ]}
         />
       </section>
@@ -86,6 +72,7 @@ export default async function EvaluationsPage() {
             <tr>
               <th className="px-4 py-3 font-medium">Título</th>
               <th className="px-4 py-3 font-medium">Asignatura-curso</th>
+              <th className="px-4 py-3 font-medium">Periodo</th>
               <th className="px-4 py-3 font-medium">Estado</th>
               <th className="px-4 py-3 font-medium">Ver.</th>
               <th className="px-4 py-3 font-medium">Preg.</th>
@@ -95,20 +82,26 @@ export default async function EvaluationsPage() {
           <tbody>
             {evaluations.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-muted-foreground px-4 py-8 text-center">
-                  Aún no hay evaluaciones.
+                <td colSpan={7} className="text-muted-foreground px-4 py-8 text-center">
+                  Aún no hay formulaciones.
                 </td>
               </tr>
             ) : (
               evaluations.map((e) => (
                 <tr key={e.id} className="border-b last:border-0">
                   <td className="px-4 py-3 font-medium">
-                    <Link href={`/teacher/evaluations/${e.id}`} className="hover:underline">
+                    <Link
+                      href={`/teacher/evaluations/${e.id}/contexts`}
+                      className="hover:underline"
+                    >
                       {e.title}
                     </Link>
                   </td>
                   <td className="text-muted-foreground px-4 py-3">
                     {e.courseName} · {e.subjectName}
+                  </td>
+                  <td className="text-muted-foreground px-4 py-3">
+                    {e.periodName ?? <span className="text-muted-foreground/60">—</span>}
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={e.status} />

@@ -52,9 +52,9 @@ export async function commitImportAction(
     return { error: "Elige un destino para la importación." };
   }
   if (!evaluationId) {
-    return { error: "Falta la evaluación destino." };
+    return { error: "Falta la formulación destino." };
   }
-  // Destino evaluación: el sectionId es OPCIONAL. Si el form lo trae, vamos
+  // Destino formulación: el sectionId es OPCIONAL. Si el form lo trae, vamos
   // al camino legacy (anclar todo a una sección que el docente eligió). Si NO
   // lo trae (caso "importación con contextos → auto-crear secciones"), el
   // use case crea una sección por contexto y reparte las preguntas. Solo
@@ -121,7 +121,7 @@ export interface LoadSourceState {
 
 /**
  * Carga las preguntas de la fuente seleccionada por el docente. Es el
- * único punto de entrada para todos los orígenes: hoy "evaluación", "CSV"
+ * único punto de entrada para todos los orígenes: hoy "formulación", "CSV"
  * y "DOCX"; mañana "PDF" cae aquí sin tocar la pantalla de revisión.
  */
 export type LoadSourceInput =
