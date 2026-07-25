@@ -135,7 +135,8 @@ export function ContextsView({
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-xl font-bold">
-            {contexts.length} contexto{contexts.length === 1 ? "" : "s"}
+            {contexts.length} contexto{contexts.length === 1 ? "" : "s"} / {totalQuestions} ítem
+            {totalQuestions === 1 ? "" : "s"}
           </h2>
           <p className="text-muted-foreground text-sm">
             {contexts.length === 0
