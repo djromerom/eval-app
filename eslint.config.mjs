@@ -19,6 +19,12 @@ const eslintConfig = [
       "playwright-report/**",
       // Archivo generado por Next.js (referencias triple-slash a tipos internos).
       "next-env.d.ts",
+      // Motor ICFES embebido — código de terceros adaptado in-house con sus
+      // propias convenciones (incluye `as any` para casts a tipos del SDK
+      // Anthropic que no queremos defender contra el lint del repo). Si en
+      // el futuro se quiere endurecer, mejor primero tipar el SDK con
+      // declaraciones locales que meter disables por línea.
+      "src/lib/saber-extractor/**",
     ],
   },
   {

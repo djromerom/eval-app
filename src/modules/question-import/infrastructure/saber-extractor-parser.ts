@@ -1,8 +1,8 @@
 /**
- * Adapter de `saber-extractor.extractExam()` al contrato `ParseResult` del
+ * Adapter de `extractExam()` al contrato `ParseResult` del
  * módulo de import. Encapsula:
  *
- *   1. Escritura del PDF recibido como Buffer a un tempdir (saber-extractor
+ *   1. Escritura del PDF recibido como Buffer a un tempdir (el motor
  *      exige `pdfPath`, no buffer).
  *   2. Selección del provider IA: Anthropic si hay `ANTHROPIC_API_KEY`,
  *      si no MiniMax con las `MINIMAX_*` ya conocidas.
@@ -15,19 +15,22 @@
  *
  * Se mantiene PURO de dependencias de BullMQ / Prisma: recibe el buffer y
  * la función de upload por parámetro. Eso lo hace 100 % testeable con
- * `vi.mock("saber-extractor", ...)` sin tocar Redis ni la BD.
+ * `vi.mock("@/lib/saber-extractor", ...)` sin tocar Redis ni la BD.
+ *
+ * NOTA de arquitectura: el motor vive en `src/lib/saber-extractor/` y NO
+ * es una dep npm externa — fue codeado in-house y embebido en eval-app
+ * para evitar dependencia circular con un repo GH separado (que rompía
+ * CI/CD por temas de cross-repo auth). Si en algún momento se quiere
+ * extraer de nuevo a un paquete independiente, el límite limpio es esta
+ * carpeta.
  */
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
-import { extractExam, type AuditedQuestion, type Figure } from "saber-extractor";
+import { extractExam, type AuditedQuestion, type Figure } from "@/lib/saber-extractor";
 import type { UploadImageFn } from "../infrastructure/docx-parser";
-import type {
-  AnswerConfidence,
-  ParseResult,
-  ParsedQuestion,
-} from "../domain/parsed-question";
+import type { AnswerConfidence, ParseResult, ParsedQuestion } from "../domain/parsed-question";
 import type { QuestionExtractProgress } from "../domain/question-import-queue";
 import { ANSWER_KEYS_ORDER } from "@/modules/evaluations/domain/evaluation";
 
@@ -70,9 +73,7 @@ function pickProvider(): ProviderSelection {
       extractModel: process.env.MINIMAX_MODEL,
     };
   }
-  throw new Error(
-    "Importación con IA no configurada: define ANTHROPIC_API_KEY o MINIMAX_API_KEY.",
-  );
+  throw new Error("Importación con IA no configurada: define ANTHROPIC_API_KEY o MINIMAX_API_KEY.");
 }
 
 /**
@@ -145,7 +146,9 @@ function mapAuditedQuestion(
   const imageId = q.imageId ?? null;
   const imageUrl = imageId ? (figIdToUrl.get(imageId) ?? null) : null;
 
-  const contextText = q.contextText?.trim() || (q.contextTitle ? contextsByTitle.get(q.contextTitle) ?? null : null);
+  const contextText =
+    q.contextText?.trim() ||
+    (q.contextTitle ? (contextsByTitle.get(q.contextTitle) ?? null) : null);
 
   const answerConfidence = q.answerConfidence as AnswerConfidence | undefined;
 
@@ -185,7 +188,9 @@ export async function parseQuestionsFromPdf(
     const sel = pickProvider();
     const result = await extractExam(pdfPath, {
       provider: { type: sel.provider },
-      ...(sel.extractModel ? { models: { extractModel: sel.extractModel, solveModel: sel.solveModel ?? "" } } : {}),
+      ...(sel.extractModel
+        ? { models: { extractModel: sel.extractModel, solveModel: sel.solveModel ?? "" } }
+        : {}),
       images: { dir: imagesDir, dpi: 200 },
       parallelExtraction: false,
       onProgress: (ev) => {
