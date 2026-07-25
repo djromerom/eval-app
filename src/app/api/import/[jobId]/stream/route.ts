@@ -1,17 +1,11 @@
 import { getAuthenticatedUser } from "@/lib/session";
-import {
-  getQuestionExtractEvents,
-  QUEUE_NAMES,
-  getBullMQPrefix,
-} from "@/shared/infrastructure/queue/queues";
+import { getQuestionExtractEvents, getBullMQPrefix } from "@/shared/infrastructure/queue/queues";
 import { makeQuestionImportJobRepo } from "@/modules/question-import/infrastructure/container";
 import {
   snapshotProgressToSseEvent,
   snapshotToSseEvent,
 } from "@/modules/question-import/infrastructure/question-extract-handler";
-import type {
-  QuestionExtractSseEvent,
-} from "@/modules/question-import/domain/question-import-queue";
+import type { QuestionExtractSseEvent } from "@/modules/question-import/domain/question-import-queue";
 
 /**
  * GET /api/import/[jobId]/stream — Server-Sent Events del progreso de un job
@@ -85,9 +79,7 @@ export async function GET(
       //    aunque el cliente se conecte a mitad del job).
       const lastProgress = snapshotProgressToSseEvent(snapshot);
       if (lastProgress) {
-        controller.enqueue(
-          encoder.encode(formatSse({ type: "progress", progress: lastProgress })),
-        );
+        controller.enqueue(encoder.encode(formatSse({ type: "progress", progress: lastProgress })));
       }
 
       // 2) Nos suscribimos a los eventos de BullMQ para este job concreto.
@@ -114,9 +106,7 @@ export async function GET(
           if (!current) return;
           const progress = snapshotProgressToSseEvent(current);
           if (progress) {
-            controller.enqueue(
-              encoder.encode(formatSse({ type: "progress", progress })),
-            );
+            controller.enqueue(encoder.encode(formatSse({ type: "progress", progress })));
           }
           const terminalEvt = snapshotToSseEvent(current);
           if (terminalEvt) {
@@ -189,5 +179,8 @@ function sseResponse(stream: ReadableStream<Uint8Array>): Response {
   });
 }
 
-// Re-exporta para que el tree-shaker no se queje de imports no usados.
-export { QUEUE_NAMES };
+// `QUEUE_NAMES` fue removido del import: Next.js 15 sólo permite exports
+// `GET/POST/.../runtime/dynamic/...` en un Route file. El re-export de un
+// símbolo arbitrario rompe el type-checker ("QUEUE_NAMES is not a valid
+// Route export field"). Como la constante no se usa dentro del handler, se
+// borra del import en lugar de moverla a un módulo aparte.
