@@ -26,10 +26,13 @@ name: cd
 
 on:
   push:
-    branches: [main]
     # Defense-in-depth: nunca disparar deploy a prod desde un push a develop
-    # (aunque la rama tenga branch protection rota, esto lo bloquea).
-    branches-ignore: [develop]
+    # (aunque la rama tenga branch protection rota, esto lo bloquea). El
+    # patrón de negación vive en el mismo `branches:` porque GitHub Actions
+    # rechaza combinar `branches` + `branches-ignore` en el mismo evento.
+    branches:
+      - main
+      - "!develop"
   workflow_dispatch:
     inputs:
       sha:
