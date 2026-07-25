@@ -99,6 +99,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # Libs de Chromium para Puppeteer + utilidades mínimas (tini para señales,
 # wget para healthcheck, curl para debug, ca-certificates para TLS).
+# `poppler-utils` es dependencia del worker `question-extract` (pdfinfo +
+# pdftoppm/pdftocairo) — vive embebido en `src/lib/saber-extractor/`.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         ca-certificates \
