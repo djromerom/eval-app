@@ -1,6 +1,6 @@
 import { type AuthenticatedUser, requireRole } from "@/shared/application/authenticated-user";
 import type { UseCase } from "@/shared/application/use-case";
-import { type Result, ValidationError, fail, ok } from "@/shared/domain/result";
+import { type Result, NotFoundError, ValidationError, fail, ok } from "@/shared/domain/result";
 import {
   type CourseRepository,
   type CreateGroupData,
@@ -47,5 +47,32 @@ export class ListGroups implements UseCase<ListGroupsInput, Group[]> {
     const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
     return ok(await this.groups.findAll(actor.institutionId, courseId));
+  }
+}
+
+// ===== Delete (Fase 11 — card del curso) =====
+
+export interface DeleteGroupInput {
+  actor: AuthenticatedUser;
+  groupId: string;
+}
+
+/**
+ * Elimina un grupo. Solo `ECU_MASTER`. La pre-verificación con findById
+ * garantiza que borramos algo que pertenece a la institución del actor
+ * (un GROUP con id de otra institución es indistinguible de uno inexistente).
+ */
+export class DeleteGroup implements UseCase<DeleteGroupInput, void> {
+  constructor(private readonly groups: GroupRepository) {}
+
+  async execute({ actor, groupId }: DeleteGroupInput): Promise<Result<void>> {
+    const authorized = requireRole(actor, "ECU_MASTER");
+    if (!authorized.ok) return authorized;
+
+    const current = await this.groups.findById(actor.institutionId, groupId);
+    if (!current) return fail(new NotFoundError("Grupo", groupId));
+
+    await this.groups.delete(actor.institutionId, groupId);
+    return ok(undefined);
   }
 }
