@@ -198,6 +198,29 @@ export interface EvaluationRepository {
    * siendo continua (la hoja OMR la asume así) y recalcula `totalQuestions`.
    */
   deleteQuestion(institutionId: string, evaluationId: string, questionId: string): Promise<void>;
+
+  /**
+   * Duplica la pregunta: clona enunciado, opciones, correctAnswer, peso y
+   * metadatos (justificación, competencia, etc.) en una pregunta nueva al
+   * final de la formulación. La copia queda con `bankOriginId = null` (ya no
+   * es del banco, es una instancia propia editable con independencia total).
+   * Incrementa `totalQuestions` en 1.
+   */
+  duplicateQuestion(institutionId: string, evaluationId: string, questionId: string): Promise<void>;
+
+  /**
+   * Reordena las preguntas de una sección según el orden de
+   * `orderedQuestionIds`. Renumera `number` 1..N consecutivamente en el
+   * evaluation (la hoja OMR asume numeración continua) y recalcula
+   * `totalQuestions`. Las IDs deben pertenecer a la sección de la
+   * evaluation dada — cualquier ID ajena lanza `ValidationError`.
+   */
+  reorderQuestions(
+    institutionId: string,
+    evaluationId: string,
+    sectionId: string,
+    orderedQuestionIds: string[],
+  ): Promise<void>;
   updateStatus(institutionId: string, id: string, status: EvaluationStatus): Promise<void>;
   /**
    * Actualiza los campos de metadata editables desde el panel Settings
@@ -211,6 +234,19 @@ export interface EvaluationRepository {
   ): Promise<Evaluation>;
   /** Cada aprobación crea una copia inmutable con version + 1 (§3.3). */
   createNewVersion(institutionId: string, id: string): Promise<Evaluation>;
+  /**
+   * Indica si ya existe una formulación (no borrada) en la institución con
+   * la misma combinación `courseSubjectId + periodId + academicYearId`. La
+   * validación la usa `CreateEvaluation` para impedir duplicados. Si
+   * `periodId` es `null`, se compara solo con formulaciones sin periodo
+   * asignado en ese año académico y asignatura-curso.
+   */
+  existsByCourseSubjectPeriodYear(
+    institutionId: string,
+    courseSubjectId: string,
+    periodId: string | null,
+    academicYearId: string,
+  ): Promise<boolean>;
 }
 
 /** Cota inferior y superior para `durationMinutes` (Sprint 7).

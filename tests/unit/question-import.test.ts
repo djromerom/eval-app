@@ -177,6 +177,12 @@ class FakeEvaluations implements EvaluationRepository {
   async deleteQuestion(): Promise<void> {
     throw new Error("no usado");
   }
+  async reorderQuestions(): Promise<void> {
+    throw new Error("no usado");
+  }
+  async duplicateQuestion(): Promise<void> {
+    throw new Error("no usado");
+  }
   async updateStatus(): Promise<void> {}
   async updateSettings(
     _i: string,
@@ -187,6 +193,9 @@ class FakeEvaluations implements EvaluationRepository {
   }
   async createNewVersion(): Promise<Evaluation> {
     throw new Error("no usado");
+  }
+  async existsByCourseSubjectPeriodYear(): Promise<boolean> {
+    return false;
   }
 }
 

@@ -114,6 +114,9 @@ class InMemoryCourseSubjects implements CourseSubjectRepository {
   async create(): Promise<CourseSubject> {
     throw new Error("no usado");
   }
+  async delete(): Promise<void> {
+    // no usado en este test
+  }
 }
 
 const admin: AuthenticatedUser = { userId: "a", institutionId: "i1", roles: ["ECU_MASTER"] };
