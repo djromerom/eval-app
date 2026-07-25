@@ -5,7 +5,7 @@ import { errorResponse, unauthorizedResponse, validationResponse } from "../_lib
 import { createBundleSchema } from "./_schemas";
 
 /**
- * GET /api/bundles — lista los compendios de la institución del actor.
+ * GET /api/bundles — lista los cuadernillos de la institución del actor.
  * Acceso: cualquier rol autenticado (coordinador/docente ven solo lectura;
  * la UI ya filtra las acciones de edición al SUPER_ADMIN).
  */
@@ -19,7 +19,7 @@ export async function GET() {
 }
 
 /**
- * POST /api/bundles — crea un compendio en DRAFT.
+ * POST /api/bundles — crea un cuadernillo en DRAFT.
  * Acceso: SUPER_ADMIN (verificado en el use case).
  * Body: { name, bookletNumber?, evaluationIds[], theme? }
  */

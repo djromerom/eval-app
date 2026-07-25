@@ -17,8 +17,8 @@ const df = new Intl.DateTimeFormat("es-CO", {
 
 const TYPE_LABELS: Record<string, string> = {
   EVALUATION_PENDING_REVIEW: "Pendiente de revisión",
-  EVALUATION_APPROVED: "Evaluación aprobada",
-  EVALUATION_REJECTED: "Evaluación rechazada",
+  EVALUATION_APPROVED: "Formulación aprobada",
+  EVALUATION_REJECTED: "Formulación rechazada",
   SCANNING_COMPLETED: "Escaneo completado",
   SCANNING_ERROR: "Error de escaneo",
   NEW_STUDENT_ASSIGNED: "Nuevo estudiante asignado",

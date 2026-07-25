@@ -34,11 +34,11 @@ function AddSubmitButton({ disabled }: { disabled: boolean }) {
 }
 
 /**
- * Gestor de items del compendio (solo editable en DRAFT):
+ * Gestor de items del cuadernillo (solo editable en DRAFT):
  *   - Lista los items con su orden, título, área y total de preguntas.
  *   - Botones ↑/↓ para mover una posición (server action moveItemAction).
  *   - Botón × para quitar (server action removeItemAction).
- *   - Form de selección para añadir nuevas evaluaciones (server action addItemAction).
+ *   - Form de selección para añadir nuevas formulaciones (server action addItemAction).
  */
 export function ItemsManager({
   bundleId,
@@ -57,12 +57,12 @@ export function ItemsManager({
   return (
     <div className="bg-card space-y-4 rounded-xl border p-6">
       <div className="flex items-end justify-between gap-2">
-        <h2 className="font-semibold">Evaluaciones incluidas ({items.length})</h2>
+        <h2 className="font-semibold">Formulaciones incluidas ({items.length})</h2>
       </div>
 
       {items.length === 0 ? (
         <p className="text-muted-foreground rounded-md border border-dashed p-6 text-center text-sm">
-          Aún no agregaste evaluaciones.
+          Aún no agregaste formulaciones.
         </p>
       ) : (
         <ol className="space-y-1">
@@ -131,16 +131,16 @@ export function ItemsManager({
       {isDraft ? (
         <form action={addFormAction} className="border-t pt-4">
           <input type="hidden" name="bundleId" value={bundleId} />
-          <h3 className="mb-2 text-sm font-medium">Añadir evaluación</h3>
+          <h3 className="mb-2 text-sm font-medium">Añadir formulación</h3>
           {candidates.length === 0 ? (
             <p className="text-muted-foreground text-xs">
-              No hay evaluaciones aprobadas o publicadas pendientes de incluir.
+              No hay formulaciones aprobadas o publicadas pendientes de incluir.
             </p>
           ) : (
             <div className="flex items-end gap-2">
               <div className="flex-1 space-y-1">
                 <label htmlFor="evaluationId" className="sr-only">
-                  Evaluación
+                  Formulación
                 </label>
                 <select
                   id="evaluationId"

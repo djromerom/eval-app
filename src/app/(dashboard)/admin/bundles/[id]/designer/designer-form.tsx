@@ -31,12 +31,12 @@ interface Props {
   initial: Partial<EvaluationTheme>;
   /** Tema ya colapsado con el institucional — para mostrar el estado actual al cargar. */
   resolved: ResolvedTheme;
-  /** False si el compendio no está en DRAFT (no se puede editar). */
+  /** False si el cuadernillo no está en DRAFT (no se puede editar). */
   editable: boolean;
 }
 
 /**
- * Form de override del tema por compendio.
+ * Form de override del tema por cuadernillo.
  *
  * Layout 2 columnas:
  * - Izquierda: form de override (cover, intro, footer, colores, tipografía).
@@ -120,9 +120,9 @@ export function BundleDesignerForm({ bundleId, initial, resolved, editable }: Pr
       <div className="space-y-4">
         <form action={formAction} className="bg-card space-y-4 rounded-xl border p-5">
           <div>
-            <h2 className="font-semibold">Tema de este compendio</h2>
+            <h2 className="font-semibold">Tema de este cuadernillo</h2>
             <p className="text-muted-foreground text-xs">
-              Sobreescribe el tema institucional. Solo aplica a este compendio. En blanco = hereda
+              Sobreescribe el tema institucional. Solo aplica a este cuadernillo. En blanco = hereda
               del colegio.
             </p>
           </div>
@@ -283,7 +283,7 @@ export function BundleDesignerForm({ bundleId, initial, resolved, editable }: Pr
 
           {!editable ? (
             <p className="text-muted-foreground text-xs">
-              El compendio no está en BORRADOR. Solo se puede editar el tema mientras esté en
+              El cuadernillo no está en BORRADOR. Solo se puede editar el tema mientras esté en
               borrador.
             </p>
           ) : null}
@@ -304,7 +304,7 @@ export function BundleDesignerForm({ bundleId, initial, resolved, editable }: Pr
             abajo del form para que el feedback sea contextualmente claro. */}
         <form action={resetAction} className="bg-card space-y-3 rounded-xl border p-5">
           <p className="text-muted-foreground text-xs">
-            Restablecer borra todos los override de este compendio y vuelve a usar el tema
+            Restablecer borra todos los override de este cuadernillo y vuelve a usar el tema
             institucional como única fuente.
           </p>
           {resetState.error ? <p className="text-destructive text-sm">{resetState.error}</p> : null}

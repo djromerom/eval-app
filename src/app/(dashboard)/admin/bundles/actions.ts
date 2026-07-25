@@ -17,7 +17,7 @@ export interface BundleFormState {
 }
 
 /**
- * Crea un compendio. Usado por el wizard /admin/bundles/new.
+ * Crea un cuadernillo. Usado por el wizard /admin/bundles/new.
  * Tras éxito redirige a la página de detalle.
  */
 export async function createBundleAction(
@@ -29,12 +29,12 @@ export async function createBundleAction(
   const name = String(formData.get("name") ?? "").trim();
   const bookletNumberRaw = String(formData.get("bookletNumber") ?? "").trim();
   const evaluationIds = formData.getAll("evaluationIds").map(String).filter(Boolean);
-  // "" en el select = compendio cross-course (sin curso asignado).
+  // "" en el select = cuadernillo cross-course (sin curso asignado).
   const courseId = String(formData.get("courseId") ?? "").trim() || null;
 
   if (!name) return { error: "El nombre es obligatorio." };
   if (evaluationIds.length === 0) {
-    return { error: "Selecciona al menos una evaluación aprobada o publicada." };
+    return { error: "Selecciona al menos una formulación aprobada o publicada." };
   }
 
   const bookletNumber = bookletNumberRaw === "" ? null : Number(bookletNumberRaw);
@@ -57,7 +57,7 @@ export async function createBundleAction(
   redirect(`/admin/bundles/${result.value.id}`);
 }
 
-/** Edita metadatos del compendio (name, bookletNumber, courseId). Solo DRAFT. */
+/** Edita metadatos del cuadernillo (name, bookletNumber, courseId). Solo DRAFT. */
 export async function updateBundleAction(
   _prev: BundleFormState,
   formData: FormData,
@@ -72,7 +72,7 @@ export async function updateBundleAction(
     return { error: "El número de cuadernillo debe ser un entero positivo." };
   }
   if (!name) return { error: "El nombre es obligatorio." };
-  // "" en el select = limpiar el curso (compendio cross-course).
+  // "" en el select = limpiar el curso (cuadernillo cross-course).
   const courseId = String(formData.get("courseId") ?? "").trim() || null;
 
   const result = await makeUpdateBundle().execute({
@@ -87,7 +87,7 @@ export async function updateBundleAction(
   return { success: true };
 }
 
-/** Sella / desella el compendio. */
+/** Sella / desella el cuadernillo. */
 export async function toggleBundleReadyAction(
   _prev: BundleFormState,
   formData: FormData,
@@ -107,7 +107,7 @@ export async function toggleBundleReadyAction(
   return { success: true };
 }
 
-/** Elimina un compendio en DRAFT. */
+/** Elimina un cuadernillo en DRAFT. */
 export async function deleteBundleAction(
   _prev: BundleFormState,
   formData: FormData,

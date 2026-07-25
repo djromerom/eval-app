@@ -97,7 +97,7 @@ export default async function PrintEvaluationPage({
         <span className="text-muted-foreground">
           Vista previa de impresión
           {!isPrintable(evaluation.status)
-            ? " — la evaluación aún no está PUBLICADA (borrador de referencia)."
+            ? " — la formulación aún no está PUBLICADA (borrador de referencia)."
             : "."}
         </span>
         <PrintButton />

@@ -12,7 +12,7 @@
  *
  * Roles actuales (Sprint 8A): SUPER_ADMIN, ECU_MASTER, COORDINATOR, TEACHER.
  * `ECU_MASTER` reemplaza el antiguo `ADMIN`: es el admin institucional que
- * gestiona usuarios, estructura académica, tema institucional y compendios.
+ * gestiona usuarios, estructura académica, tema institucional y cuadernillos.
  */
 import { hasRole, type Role } from "./authenticated-user";
 
@@ -25,7 +25,7 @@ export type Capability =
   | "manage-academic-structure"
   /** Tema institucional (logo, colores, tipografía). ECU_MASTER. */
   | "manage-institutional-theme"
-  /** Compendios multi-evaluación (create/update/theme/items/READY). ECU_MASTER. */
+  /** Cuadernillos multi-formulación (create/update/theme/items/READY). ECU_MASTER. */
   | "manage-bundles"
   /** Revisar y aprobar evaluations. COORDINATOR (también ECU_MASTER por
    *  visibilidad institucional, aunque no aprueba por defecto). */

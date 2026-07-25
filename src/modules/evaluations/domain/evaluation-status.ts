@@ -31,7 +31,7 @@ const TRANSITIONS: StatusTransition[] = [
     allowedRoles: ["COORDINATOR", "TEACHER"],
     requiresComment: false,
   },
-  // Editar una evaluación publicada la regresa a borrador y notifica al coordinador
+  // Editar una formulación publicada la regresa a borrador y notifica al coordinador
   { from: "PUBLISHED", to: "DRAFT", allowedRoles: ["TEACHER"], requiresComment: false },
 ];
 
@@ -52,7 +52,7 @@ export function canTransition(
   return transition.allowedRoles.some((r) => roles.includes(r));
 }
 
-/** Solo las evaluaciones publicadas se pueden imprimir. */
+/** Solo las formulaciones publicadas se pueden imprimir. */
 export function isPrintable(status: EvaluationStatus): boolean {
   return status === "PUBLISHED";
 }

@@ -26,8 +26,8 @@ export default async function TemplatesPage() {
   return (
     <>
       <PageHeader
-        title="Plantillas de evaluación"
-        description="Crea plantillas reutilizables para generar evaluaciones rápidamente."
+        title="Plantillas de formulación"
+        description="Crea plantillas reutilizables para generar formulaciones rápidamente."
       />
 
       <Link href="/teacher/templates/new">

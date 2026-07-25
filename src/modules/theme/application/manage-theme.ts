@@ -3,9 +3,9 @@
  *
  * Los temas viven en tablas existentes:
  *   - `Institution.theme` — base institucional (lo edita el ADMIN del colegio)
- *   - `Evaluation.theme` — override por evaluación (lo edita el TEACHER dueño)
+ *   - `Evaluation.theme` — override por formulación (lo edita el TEACHER dueño)
  *
- * Para LEER un tema ya resuelto (institucional ⊕ evaluación), basta con
+ * Para LEER un tema ya resuelto (institucional ⊕ formulación), basta con
  * extender `GetEvaluation` / `GetMyInstitution` para incluir su `theme`,
  * y luego llamar a `mergeTheme()` en la capa de presentación (print page).
  *
@@ -48,7 +48,7 @@ export interface UpdateInstitutionThemeInput {
 export interface UpdateEvaluationThemeInput {
   actor: AuthenticatedUser;
   evaluationId: string;
-  /** Si true, limpia el override de la evaluación y vuelve al tema institucional. */
+  /** Si true, limpia el override de la formulación y vuelve al tema institucional. */
   reset?: boolean;
   theme?: Partial<EvaluationTheme>;
 }
@@ -92,7 +92,7 @@ export class UpdateEvaluationTheme implements UseCase<
 > {
   constructor(
     private readonly themes: ThemeRepository,
-    /** Repositorio de evaluaciones para verificar ownership y multi-tenancy. */
+    /** Repositorio de formulaciones para verificar ownership y multi-tenancy. */
     private readonly evaluations: {
       getDetail: (
         institutionId: string,
@@ -111,14 +111,14 @@ export class UpdateEvaluationTheme implements UseCase<
     if (!authorized.ok) return authorized;
 
     const evalRow = await this.evaluations.getDetail(actor.institutionId, evaluationId);
-    if (!evalRow) return fail(new ValidationError("Evaluación no encontrada."));
+    if (!evalRow) return fail(new ValidationError("Formulación no encontrada."));
     if (evalRow.teacherId !== actor.userId && !actor.roles.includes("COORDINATOR")) {
       return fail(new ValidationError("Solo el docente dueño puede editar el tema."));
     }
     if (evalRow.status !== "DRAFT") {
       return fail(
         new ValidationError(
-          "El tema de la evaluación solo se puede editar mientras está en borrador.",
+          "El tema de la formulación solo se puede editar mientras está en borrador.",
         ),
       );
     }

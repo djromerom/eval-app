@@ -15,7 +15,7 @@ import { MAX_UPLOAD_BYTES, UPLOAD_URL_PREFIX } from "@/modules/uploads/domain/up
  *
  * Los archivos de import viven bajo `imports/{institutionId}/...` (no
  * `evaluations/`) para que un cron de limpieza los pueda barrer por
- * subdirectorio sin tocar las imágenes de evaluaciones publicadas.
+ * subdirectorio sin tocar las imágenes de formulaciones publicadas.
  */
 export type UploadFileFn = (params: {
   institutionId: string;

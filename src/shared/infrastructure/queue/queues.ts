@@ -30,12 +30,12 @@ export interface OmrScanJob {
 
 /**
  * Job de generación de PDF server-side. Soporta dos familias:
- *   - evaluación única: lleva evaluationId + kind ∈ {booklet, answer-sheets, answer-key}
- *   - compendio:        lleva bundleId + kind ∈ {bundle, answer-sheets-bundle}
+ *   - formulación única: lleva evaluationId + kind ∈ {booklet, answer-sheets, answer-key}
+ *   - cuadernillo:        lleva bundleId + kind ∈ {bundle, answer-sheets-bundle}
  * El campo del identificador que NO aplique debe ser undefined (XOR en runtime).
  *
  * `extraQuery` se concatena a la URL de Puppeteer. Sirve para pasar p.ej.
- * `students=<csv>` en la hoja de respuestas del compendio (Sprint 2).
+ * `students=<csv>` en la hoja de respuestas del cuadernillo (Sprint 2).
  */
 export interface PdfGenerationJob {
   evaluationId?: string;

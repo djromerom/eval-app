@@ -9,7 +9,7 @@ import {
 import { reorderItemsSchema } from "../../../_schemas";
 
 /**
- * PATCH /api/bundles/[id]/items/reorder — reordena los items del compendio.
+ * PATCH /api/bundles/[id]/items/reorder — reordena los items del cuadernillo.
  * Acceso: SUPER_ADMIN. Solo si DRAFT.
  * Body: { itemIds: string[] } — el orden de la lista ES el nuevo orden.
  */

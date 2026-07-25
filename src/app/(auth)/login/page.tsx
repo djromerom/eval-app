@@ -36,7 +36,7 @@ export default async function LoginPage(props: {
             Califica con IA.
           </h1>
           <p className="text-muted-foreground mt-5 text-lg leading-relaxed">
-            Diseña evaluaciones tipo ICFES con la identidad de tu colegio, imprímelas listas para
+            Diseña formulaciones tipo ICFES con la identidad de tu colegio, imprímelas listas para
             tus estudiantes y obtén resultados al instante gracias al reconocimiento OMR + IA.
           </p>
 

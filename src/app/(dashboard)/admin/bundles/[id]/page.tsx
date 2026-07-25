@@ -13,7 +13,7 @@ import { BundleActionPanel } from "./action-buttons";
 import { BundleEditForm } from "./edit-form";
 import { ItemsManager } from "./items-manager";
 
-export const metadata: Metadata = { title: "Detalle del compendio" };
+export const metadata: Metadata = { title: "Detalle del cuadernillo" };
 
 const dateFmt = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
 
@@ -39,7 +39,7 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
     ...(published.ok ? published.value : []),
   ];
   const seen = new Set(bundle.items.map((i) => i.evaluationId));
-  // Deduplicar, excluir las que ya están en el compendio y —si el compendio
+  // Deduplicar, excluir las que ya están en el cuadernillo y —si el cuadernillo
   // tiene curso— las de otros cursos: el use case las rechazaría igualmente.
   const candSeen = new Set<string>();
   const candidatesDedup = candidatesRaw.filter((e) => {
@@ -67,7 +67,7 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
             >
               {isDraft ? "Borrador" : "Listo"}
             </span>{" "}
-            · {bundle.items.length} evaluación{bundle.items.length === 1 ? "" : "es"} ·{" "}
+            · {bundle.items.length} formulación{bundle.items.length === 1 ? "" : "es"} ·{" "}
             {coverTable.totalQuestions} preguntas ({formatDuration(coverTable.totalMinutes)})
             {" · creado "}
             {dateFmt.format(bundle.createdAt)}
@@ -95,7 +95,7 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
                 <strong>{bundle.courseName ?? "sin curso específico"}</strong>
               </p>
               <p className="text-muted-foreground text-xs">
-                El compendio está sellado (READY). Desmárcate para editarlo.
+                El cuadernillo está sellado (READY). Desmárcate para editarlo.
               </p>
             </div>
           )}

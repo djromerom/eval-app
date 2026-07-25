@@ -71,5 +71,5 @@ export async function applyTemplateAction(formData: FormData) {
     });
   if (!result.ok) throw new Error(result.error.message);
   revalidatePath(`/teacher/evaluations/${evaluationId}`);
-  redirect(`/teacher/evaluations/${evaluationId}`);
+  redirect(`/teacher/evaluations/${evaluationId}/contexts`);
 }

@@ -7,18 +7,18 @@ import type { ParseResult, ParsedQuestion } from "../domain/parsed-question";
 
 export interface QuestionsFromEvaluationInput {
   actor: AuthenticatedUser;
-  /** Evaluación de la que se copian las preguntas. */
+  /** Formulación de la que se copian las preguntas. */
   evaluationId: string;
   /** Si se indica, solo las preguntas de ese contexto. */
   sectionId?: string;
 }
 
 /**
- * Origen "otra evaluación": convierte las preguntas de una evaluación
+ * Origen "otra formulación": convierte las preguntas de una formulación
  * existente al formato intermedio de la importación.
  *
  * No copia nada por sí mismo — solo lee. El alta la hace `ImportQuestions`,
- * igual que con los orígenes de archivo, así que la copia entre evaluaciones
+ * igual que con los orígenes de archivo, así que la copia entre formulaciones
  * pasa por la misma pantalla de revisión y el docente puede descartar o
  * ajustar antes de confirmar.
  *
@@ -39,7 +39,7 @@ export class QuestionsFromEvaluation implements UseCase<QuestionsFromEvaluationI
     // `getDetail` filtra por institución, así que no se pueden leer preguntas
     // de otro colegio aunque se acierte el id.
     const detail = await this.evaluations.getDetail(actor.institutionId, evaluationId);
-    if (!detail) return fail(new NotFoundError("Evaluación", evaluationId));
+    if (!detail) return fail(new NotFoundError("Formulación", evaluationId));
 
     const sections = sectionId
       ? detail.sections.filter((s) => s.id === sectionId)

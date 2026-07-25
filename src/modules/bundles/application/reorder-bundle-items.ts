@@ -29,11 +29,11 @@ export class ReorderBundleItems implements UseCase<ReorderBundleItemsInput, void
     if (!authorized.ok) return authorized;
 
     const bundle = await this.bundles.findById(actor.institutionId, bundleId);
-    if (!bundle) return fail(new NotFoundError("Compendio", bundleId));
+    if (!bundle) return fail(new NotFoundError("Cuadernillo", bundleId));
     if (isLocked(bundle.status)) {
       return fail(
         new ValidationError(
-          "El compendio está sellado (READY). Desmárcate primero para reordenar.",
+          "El cuadernillo está sellado (READY). Desmárcate primero para reordenar.",
         ),
       );
     }
@@ -48,7 +48,7 @@ export class ReorderBundleItems implements UseCase<ReorderBundleItemsInput, void
     if (itemIds.length !== currentItems.length) {
       return fail(
         new ValidationError(
-          `La lista tiene ${itemIds.length} items pero el compendio tiene ${currentItems.length}.`,
+          `La lista tiene ${itemIds.length} items pero el cuadernillo tiene ${currentItems.length}.`,
         ),
       );
     }
@@ -57,7 +57,7 @@ export class ReorderBundleItems implements UseCase<ReorderBundleItemsInput, void
     }
     for (const id of itemIds) {
       if (!currentIds.has(id)) {
-        return fail(new NotFoundError("Item del compendio", id));
+        return fail(new NotFoundError("Item del cuadernillo", id));
       }
     }
 

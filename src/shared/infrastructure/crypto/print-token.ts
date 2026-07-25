@@ -2,7 +2,7 @@ import { env } from "@/config/env";
 import { signPayload, verifySignature } from "./hmac";
 
 /** Tipo de documento imprimible; alineado con PdfGenerationJob.
- *  Sprint 1 del módulo compendios: agrega "bundle" para el booklet combinado.
+ *  Sprint 1 del módulo cuadernillos: agrega "bundle" para el booklet combinado.
  *  Sprint 2: "answer-sheets-bundle" para la hoja unificada.
  *  Sprint 3: "answer-key-bundle" para la clave de respuestas unificada. */
 export type PrintKind =

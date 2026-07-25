@@ -96,7 +96,7 @@ export class DeleteTemplate implements UseCase<DeleteTemplateInput, void> {
 }
 
 /**
- * Aplica una plantilla a una evaluación ya creada: genera las secciones
+ * Aplica una plantilla a una formulación ya creada: genera las secciones
  * y preguntas vacías según la estructura de la plantilla.
  */
 export class ApplyTemplate implements UseCase<ApplyTemplateInput, void> {
@@ -113,10 +113,10 @@ export class ApplyTemplate implements UseCase<ApplyTemplateInput, void> {
     if (!tpl) return fail(new ValidationError("Plantilla no encontrada."));
 
     const evalDetail = await this.evaluations.getDetail(actor.institutionId, evaluationId);
-    if (!evalDetail) return fail(new ValidationError("Evaluación no encontrada."));
+    if (!evalDetail) return fail(new ValidationError("Formulación no encontrada."));
     if (evalDetail.status !== "DRAFT")
       return fail(
-        new ValidationError("Solo se puede aplicar plantilla a evaluaciones en borrador."),
+        new ValidationError("Solo se puede aplicar plantilla a formulaciones en borrador."),
       );
 
     for (const sec of tpl.structure) {

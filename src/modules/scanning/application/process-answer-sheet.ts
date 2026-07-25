@@ -12,13 +12,13 @@ import { ANSWER_KEYS_ORDER } from "@/modules/evaluations/domain/evaluation";
 import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 
 export interface EvaluationQuestionsProvider {
-  /** Hoja legacy de una sola evaluación. */
+  /** Hoja legacy de una sola formulación. */
   getCorrectAnswers(
     institutionId: string,
     evaluationId: string,
   ): Promise<{ id: string; number: number; correctAnswer: AnswerKey; optionsLength: number }[]>;
 
-  /** Hoja de un compendio: une en orden todas las questions de cada item.
+  /** Hoja de un cuadernillo: une en orden todas las questions de cada item.
    *  `number` es la posición global en la hoja unificada (1-based).
    *  `bundleItemId` permite drill-down del reporte comparativo por item
    *  (Sprint 4). */
@@ -38,7 +38,7 @@ export interface EvaluationQuestionsProvider {
 
 /** Layout de la grilla de burbujas en una hoja escaneada. Las coordenadas
  *  son fracciones del ancho/alto de la imagen. Desde Sprint 2 del módulo
- *  compendios, una hoja de bundle renderiza las preguntas en 3 columnas
+ *  cuadernillos, una hoja de bundle renderiza las preguntas en 3 columnas
  *  verticales (estilo PDF institucional), por lo que el lector debe
  *  mapear cada questionIdx → (col, row) antes de muestrear las burbujas. */
 export interface BubbleLayout {
@@ -94,7 +94,7 @@ export const LEGACY_BUBBLE_LAYOUT: BubbleLayout = {
   bubbleSizePct: 0.018,
 };
 
-/** Layout para hojas unificadas de compendio — 3 columnas verticales de
+/** Layout para hojas unificadas de cuadernillo — 3 columnas verticales de
  *  preguntas (estilo PDF institucional Prueba__11º_I_periodo_C3). Cada
  *  columna apila preguntas con 8 burbujas horizontales.
  *
@@ -153,7 +153,7 @@ export function questionIdxToCell(
  *  (0..optionsLength-1) para la pregunta con índice global `idx`,
  *  en una imagen de tamaño `imgW × imgH` siguiendo el `layout` dado.
  *  Usado tanto para hojas legacy 1-col como para hojas unificadas 3-col
- *  de compendios. */
+ *  de cuadernillos. */
 export function bubbleCenter(
   idx: number,
   bubbleIdx: number,

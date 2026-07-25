@@ -41,7 +41,7 @@ export default async function QuestionBankPage({
     <>
       <PageHeader
         title="Banco de preguntas"
-        description="Preguntas reutilizables (institucional y personal). Impórtalas a tus evaluaciones."
+        description="Preguntas reutilizables (institucional y personal). Impórtalas a tus formulaciones."
       />
 
       <section className="bg-card space-y-4 rounded-xl border p-6">

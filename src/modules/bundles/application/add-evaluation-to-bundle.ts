@@ -41,11 +41,11 @@ export class AddEvaluationToBundle implements UseCase<AddEvaluationToBundleInput
     if (!authorized.ok) return authorized;
 
     const bundle = await this.bundles.findById(actor.institutionId, bundleId);
-    if (!bundle) return fail(new NotFoundError("Compendio", bundleId));
+    if (!bundle) return fail(new NotFoundError("Cuadernillo", bundleId));
     if (isLocked(bundle.status)) {
       return fail(
         new ValidationError(
-          "El compendio está sellado (READY). Desmárcate primero para añadir items.",
+          "El cuadernillo está sellado (READY). Desmárcate primero para añadir items.",
         ),
       );
     }
@@ -55,29 +55,29 @@ export class AddEvaluationToBundle implements UseCase<AddEvaluationToBundleInput
     ]);
     const ev = evaluations[0];
     if (!ev) {
-      return fail(new NotFoundError("Evaluación", data.evaluationId));
+      return fail(new NotFoundError("Formulación", data.evaluationId));
     }
     if (ev.institutionId !== actor.institutionId) {
-      return fail(new ValidationError(`La evaluación pertenece a otra institución.`));
+      return fail(new ValidationError(`La formulación pertenece a otra institución.`));
     }
     if (!isPrintableEvaluationStatus(ev.status)) {
       return fail(
         new ValidationError(
-          `La evaluación "${ev.title}" debe estar aprobada o publicada (actual: ${ev.status}).`,
+          `La formulación "${ev.title}" debe estar aprobada o publicada (actual: ${ev.status}).`,
         ),
       );
     }
     if (!evaluationMatchesBundleCourse(bundle.courseId, ev.courseId)) {
       return fail(
         new ValidationError(
-          `El compendio es del curso ${bundle.courseName ?? bundle.courseId} y la evaluación "${ev.title}" es del curso ${ev.courseName}.`,
+          `El cuadernillo es del curso ${bundle.courseName ?? bundle.courseId} y la formulación "${ev.title}" es del curso ${ev.courseName}.`,
         ),
       );
     }
 
     const existingItems = await this.bundles.listItemsOrdered(bundleId);
     if (existingItems.some((i) => i.evaluationId === data.evaluationId)) {
-      return fail(new ConflictError(`La evaluación "${ev.title}" ya está en el compendio.`));
+      return fail(new ConflictError(`La formulación "${ev.title}" ya está en el cuadernillo.`));
     }
 
     try {

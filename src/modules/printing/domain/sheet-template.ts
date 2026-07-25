@@ -53,7 +53,7 @@ export interface TemplateBubble {
 }
 
 /**
- * Plantilla completa de una hoja. Es función pura del compendio (mismas
+ * Plantilla completa de una hoja. Es función pura del cuadernillo (mismas
  * preguntas ⇒ misma cuadrícula), NO del estudiante: el QR y el nombre
  * cambian por hoja, pero la rejilla de burbujas es idéntica. Por eso se
  * cachea una vez por `bundleId`.

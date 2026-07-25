@@ -38,7 +38,7 @@ export default async function AnswerKeyPage({ params, searchParams }: Props) {
         <p style={{ fontSize: "11pt", marginBottom: "1rem" }}>{evaluation.title}</p>
 
         {allQuestions.length === 0 ? (
-          <p className="text-muted-foreground">Esta evaluación no tiene preguntas.</p>
+          <p className="text-muted-foreground">Esta formulación no tiene preguntas.</p>
         ) : (
           <table
             className="key-table"

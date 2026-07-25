@@ -1,7 +1,7 @@
 /**
- * Entidad Bundle (compendio multi-evaluación) + puerto de persistencia.
+ * Entidad Bundle (cuadernillo multi-formulación) + puerto de persistencia.
  * El dominio no conoce Prisma: solo tipos y contratos.
- * Ver docs/compendios.md.
+ * Ver docs/cuadernillos.md.
  */
 import type { BundleStatus } from "./bundle-status";
 import type {
@@ -29,7 +29,7 @@ export interface Bundle {
   name: string;
   bookletNumber: number | null;
   /**
-   * Curso del compendio (Sprint 9). `null` = compendio cross-course
+   * Curso del cuadernillo (Sprint 9). `null` = cuadernillo cross-course
    * (simulacro institucional que mezcla grados). Si está definido, todos
    * los items deben ser evaluations de ese curso — invariante validada en
    * CreateBundle / AddEvaluationToBundle / UpdateBundle, no en la DB.
@@ -39,7 +39,7 @@ export interface Bundle {
   courseName: string | null;
   status: BundleStatus;
   /**
-   * Override visual por compendio. JSONB crudo: la capa de aplicación no
+   * Override visual por cuadernillo. JSONB crudo: la capa de aplicación no
    * lo estructura — `getResolvedBundleTheme()` lo valida con
    * `parseEvaluationTheme()` antes de mergearlo. Tipeado como `unknown`
    * por consistencia con `Evaluation.theme`.
@@ -50,7 +50,7 @@ export interface Bundle {
   updatedAt: Date;
 }
 
-/** Una evaluación dentro de un bundle. Tiene `order` (1-based). */
+/** Una formulación dentro de un bundle. Tiene `order` (1-based). */
 export interface BundleItem {
   id: string;
   bundleId: string;
@@ -100,7 +100,7 @@ export interface BundleDetail extends Bundle {
 export interface CreateBundleData {
   name: string;
   bookletNumber?: number | null;
-  /** Curso del compendio. `null`/omitido = cross-course. */
+  /** Curso del cuadernillo. `null`/omitido = cross-course. */
   courseId?: string | null;
   evaluationIds: string[];
   theme?: Partial<BundleTheme> | null;

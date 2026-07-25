@@ -1,7 +1,7 @@
 /**
  * Formato intermedio de la importación de preguntas.
  *
- * Los tres orígenes —documento del docente, plantilla CSV y otra evaluación
+ * Los tres orígenes —documento del docente, plantilla CSV y otra formulación
  * del sistema— convierten a esta forma, y de aquí sale una única pantalla de
  * revisión y un único camino de alta. Añadir un origen nuevo es escribir un
  * parser que devuelva `ParseResult`; nada más del flujo cambia.
@@ -106,7 +106,7 @@ export function validateParsedQuestion(q: ParsedQuestion): string | null {
   }
 
   // El resto (claves consecutivas y únicas, correcta entre las opciones) ya lo
-  // sabe el dominio de evaluaciones.
+  // sabe el dominio de formulaciones.
   return validateQuestionShape({ options: q.options, correctAnswer: q.correctAnswer });
 }
 

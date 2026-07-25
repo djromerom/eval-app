@@ -20,7 +20,7 @@ import {
 
 /**
  * A dónde van las preguntas importadas. Lo elige el docente en la pantalla de
- * revisión: puede meterlas en la evaluación que está armando, o guardarlas en
+ * revisión: puede meterlas en la formulación que está armando, o guardarlas en
  * el banco para reutilizarlas después.
  *
  * `sectionId` es OPCIONAL cuando el destino es "evaluation": si falta y las
@@ -62,7 +62,7 @@ export interface ImportQuestionsResult {
  * Sobre el contexto compartido (Fase 3 → corrección): los parsers ya lo leen
  * pero la BD no tiene una columna `contextText` por pregunta, así que aquí
  * decidimos a dónde va:
- *  - **Evaluación destino**: el contexto se PROMUeve al `section.content`
+ *  - **Formulación destino**: el contexto se PROMUeve al `section.content`
  *    (TipTap) UNA sola vez para todas las preguntas que lo compartían. Si ya
  *    había contenido en la sección, se concatena con un separador.
  *  - **Banco destino**: el contexto se EMBEBE al inicio del TipTap `text` de
@@ -108,7 +108,7 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
     return ok({ imported: result.value.imported, problems, infos: result.value.infos });
   }
 
-  /** Añade a un contexto de una evaluación propia y en BORRADOR. */
+  /** Añade a un contexto de una formulación propia y en BORRADOR. */
   private async intoEvaluation(
     actor: AuthenticatedUser,
     questions: ParsedQuestion[],
@@ -117,12 +117,12 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
     // Necesitamos `getDetail` (no `findById`) porque vamos a leer el contenido
     // actual del contexto para fusionar el contexto compartido entrante.
     const detail = await this.evaluations.getDetail(actor.institutionId, destination.evaluationId);
-    if (!detail) return fail(new NotFoundError("Evaluación", destination.evaluationId));
+    if (!detail) return fail(new NotFoundError("Formulación", destination.evaluationId));
     if (detail.teacherId !== actor.userId) {
-      return fail(new ValidationError("Solo el autor puede editar la evaluación."));
+      return fail(new ValidationError("Solo el autor puede editar la formulación."));
     }
     if (detail.status !== "DRAFT") {
-      return fail(new ValidationError("Solo se puede editar una evaluación en BORRADOR."));
+      return fail(new ValidationError("Solo se puede editar una formulación en BORRADOR."));
     }
 
     const infos: string[] = [];
@@ -153,7 +153,7 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
       if (uniqueContexts.length > 0) {
         const explicit = detail.sections.find((s) => s.id === destination.sectionId);
         if (!explicit) {
-          return fail(new NotFoundError("Contexto de evaluación", destination.sectionId));
+          return fail(new NotFoundError("Contexto de formulación", destination.sectionId));
         }
         const merged = mergeContextsIntoSectionContent(explicit.content, uniqueContexts);
         await this.evaluations.updateSection(
@@ -164,11 +164,11 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
         );
         if (uniqueContexts.length === 1) {
           infos.push(
-            "El contexto compartido se guardó en el contexto de evaluación (afecta a todas las preguntas que lo compartían).",
+            "El contexto compartido se guardó en el contexto de formulación (afecta a todas las preguntas que lo compartían).",
           );
         } else {
           infos.push(
-            `Se encontraron ${uniqueContexts.length} contextos distintos y se concatenaron en el contexto de evaluación. Si varios no comparten texto, conviene dividirlos en varias importaciones.`,
+            `Se encontraron ${uniqueContexts.length} contextos distintos y se concatenaron en el contexto de formulación. Si varios no comparten texto, conviene dividirlos en varias importaciones.`,
           );
         }
       }

@@ -44,7 +44,7 @@ export default async function CoordinatorDashboardPage() {
     <>
       <PageHeader
         title="Panel de coordinación"
-        description="Revisa y aprueba las evaluaciones enviadas por los docentes."
+        description="Revisa y aprueba las formulaciones enviadas por los docentes."
       />
 
       {/* Summary cards */}
@@ -61,21 +61,21 @@ export default async function CoordinatorDashboardPage() {
         </Link>
       </div>
 
-      {/* Evaluaciones pendientes */}
+      {/* Formulaciones pendientes */}
       <section className="bg-card rounded-xl border p-5 shadow-sm">
         <h3 className="font-display mb-4 text-lg font-semibold">
-          Evaluaciones pendientes de revisión ({inReview.length})
+          Formulaciones pendientes de revisión ({inReview.length})
         </h3>
         {inReview.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            No hay evaluaciones pendientes de revisión.
+            No hay formulaciones pendientes de revisión.
           </p>
         ) : (
           <div className="space-y-1">
             {inReview.map((e) => (
               <Link
                 key={e.id}
-                href={`/teacher/evaluations/${e.id}`}
+                href={`/teacher/evaluations/${e.id}/contexts`}
                 className="hover:bg-accent/60 flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors"
               >
                 <div className="min-w-0 flex-1">

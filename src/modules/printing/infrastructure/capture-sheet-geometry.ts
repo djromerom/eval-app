@@ -5,7 +5,7 @@ import { decodeQrWithPoints } from "@/modules/scanning/infrastructure/qr-decoder
 import type { SheetTemplate, TemplateBubble } from "../domain/sheet-template";
 
 /**
- * Captura la geometría REAL de una hoja de respuestas de compendio abriendo
+ * Captura la geometría REAL de una hoja de respuestas de cuadernillo abriendo
  * la misma ruta `/print/answer-sheets/bundle/[id]` que usa el generador de
  * PDF, y midiendo con `getBoundingClientRect()` dónde quedó cada burbuja.
  *
@@ -14,7 +14,7 @@ import type { SheetTemplate, TemplateBubble } from "../domain/sheet-template";
  * resultado del único render que existe.
  *
  * Coste: un arranque de Chromium (~1–2 s). Se ejecuta **una vez por
- * compendio** y el resultado se cachea (la rejilla no depende del
+ * cuadernillo** y el resultado se cachea (la rejilla no depende del
  * estudiante), así que no está en el camino caliente del escaneo.
  */
 /** Carta (8.5×11 in) a 96 DPI, la caja que usa Puppeteer para
@@ -26,10 +26,10 @@ const SCREENSHOT_SCALE = 3;
 
 export async function captureSheetGeometry(input: {
   bundleId: string;
-  /** Institución dueña del compendio: el token de impresión la exige y la
+  /** Institución dueña del cuadernillo: el token de impresión la exige y la
    *  ruta la usa para filtrar por tenant. */
   institutionId: string;
-  /** Un studentId cualquiera del compendio: la ruta exige al menos uno para
+  /** Un studentId cualquiera del cuadernillo: la ruta exige al menos uno para
    *  renderizar, pero la rejilla resultante es idéntica para todos. */
   sampleStudentId: string;
 }): Promise<SheetTemplate> {

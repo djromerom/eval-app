@@ -17,7 +17,7 @@ import { RichText, RichTextInline } from "@/components/editor/rich-text";
 import { richTextToPlain } from "@/components/editor/render";
 import { PrintButton } from "../../evaluation/[id]/print-button";
 
-export const metadata: Metadata = { title: "Vista previa del compendio" };
+export const metadata: Metadata = { title: "Vista previa del cuadernillo" };
 
 const INSTRUCTIONS = [
   "Lee cada pregunta cuidadosamente y elige UNA opción.",
@@ -52,7 +52,7 @@ function buildCompetencyRows(
 }
 
 /** Pregunta con el campo extra `globalNumber` (numeración continua del
- *  compendio 1..N). El resto de campos del `Question` se preservan con `&`,
+ *  cuadernillo 1..N). El resto de campos del `Question` se preservan con `&`,
  *  pero el helper los serializa por construcción. */
 type BundledQuestion = {
   id: string;
@@ -61,18 +61,18 @@ type BundledQuestion = {
   globalNumber: number;
 };
 
-/** Asigna a cada pregunta del compendio un número global 1..N respetando el
+/** Asigna a cada pregunta del cuadernillo un número global 1..N respetando el
  *  orden del bundle (items.order → sections.order → questions.number). Las
- *  evaluaciones independientes arrastran su `q.number` original (que puede
+ *  formulaciones independientes arrastran su `q.number` original (que puede
  *  tener gaps o solaparse entre sí); el booklet, la hoja de respuestas y la
- *  clave del compendio comparten esta numeración continua.
+ *  clave del cuadernillo comparten esta numeración continua.
  *
  *  Trabajamos con `unknown` y un cast final porque el shape completo del
  *  `Evaluation` (con `RichText` y decenas de campos) es demasiado ruidoso
  *  para pasarlo por una mónada genérica, y la maquetación solo necesita saber
  *  que `q.globalNumber` existe. La forma se valida implícitamente cuando el
  *  componente la recorre para renderizar. */
-function renumberCompendioQuestions<Item>(
+function renumberCuadernilloQuestions<Item>(
   entries: { item: Item; evaluation: unknown }[],
 ): { item: Item; evaluation: unknown }[] {
   let counter = 1;
@@ -97,7 +97,7 @@ function renumberCompendioQuestions<Item>(
 }
 
 /**
- * Render server-side del booklet completo del bundle (compendio). Lo abre
+ * Render server-side del booklet completo del bundle (cuadernillo). Lo abre
  * el worker de Puppeteer con un token firmado (kind = "bundle"). Genera:
  *   1. Portada con tabla de áreas agrupadas por parentSubject.
  *   2. Booklet de cada evaluation en orden, con numeración continua.
@@ -132,7 +132,7 @@ export default async function PrintBundlePage({
     bundle.items.map(async (item) => {
       const r = await getEvaluation.execute({ actor, id: item.evaluationId });
       if (!r.ok) return null;
-      // Igual que en el booklet de una evaluación: las imágenes se incrustan
+      // Igual que en el booklet de una formulación: las imágenes se incrustan
       // porque Puppeteer no puede autenticarse contra /api/uploads.
       return {
         item,
@@ -144,7 +144,7 @@ export default async function PrintBundlePage({
     }),
   );
   const filteredEvaluations = evaluations.filter((e): e is NonNullable<typeof e> => e !== null);
-  // Renumerar todas las preguntas del compendio de corrido 1..N. La hoja
+  // Renumerar todas las preguntas del cuadernillo de corrido 1..N. La hoja
   // unificada de respuestas y la clave de respuestas ya usan su propio
   // `globalCounter` (mismo orden ⇒ mismos números); aquí los hacemos
   // coincidir con una sola fuente de verdad visual.
@@ -156,7 +156,7 @@ export default async function PrintBundlePage({
       >["evaluation"]["sections"][number]["questions"][number] & { globalNumber: number })[];
     }[];
   };
-  const renumbered = renumberCompendioQuestions(
+  const renumbered = renumberCuadernilloQuestions(
     filteredEvaluations as {
       item: NonNullable<(typeof filteredEvaluations)[number]>["item"];
       evaluation: unknown;
@@ -173,9 +173,9 @@ export default async function PrintBundlePage({
   // Para el booklet label usamos bookletNumber o "1".
   const bookletLabel = `CUADERNILLO ${bundle.bookletNumber ?? 1}`;
 
-  // Tema: institución + override del compendio. Antes heredaba del tema
-  // de la primera evaluación del bundle (cualquier edición del admin al
-  // tema del compendio se ignoraba). Ver get-resolved-bundle-theme.ts.
+  // Tema: institución + override del cuadernillo. Antes heredaba del tema
+  // de la primera formulación del bundle (cualquier edición del admin al
+  // tema del cuadernillo se ignoraba). Ver get-resolved-bundle-theme.ts.
   const theme = await getResolvedBundleTheme(actor.institutionId, bundle.id);
   const logoSrc = await readLogoIfNeeded(institution?.logo, theme.showLogo);
   const cssVars = themeToCssVars(theme) as Record<string, string>;
@@ -184,13 +184,13 @@ export default async function PrintBundlePage({
     <div className="booklet" style={cssVars}>
       <div className="no-print bg-card sticky top-0 z-10 flex w-full max-w-[900px] items-center gap-3 rounded-lg border p-3 text-sm">
         <span className="text-muted-foreground">
-          Vista previa de impresión — Compendio ({bundle.items.length} evaluación
+          Vista previa de impresión — Cuadernillo ({bundle.items.length} formulación
           {bundle.items.length === 1 ? "" : "es"}, {coverTable.totalQuestions} preguntas)
         </span>
         <PrintButton />
       </div>
 
-      {/* ===== Página 1: portada del compendio ===== */}
+      {/* ===== Página 1: portada del cuadernillo ===== */}
       <section className="sheet cover">
         {logoSrc ? <img src={logoSrc} alt="" className="cover-logo" /> : null}
         <p className="cover-institution print-accent">{institutionName}</p>
@@ -268,7 +268,7 @@ export default async function PrintBundlePage({
           </div>
           <div className="student-field">
             <span className="student-field-label">Grado:</span>
-            {/* Si el compendio es de un curso concreto, el grado va preimpreso;
+            {/* Si el cuadernillo es de un curso concreto, el grado va preimpreso;
                 si es cross-course, el estudiante lo escribe sobre la línea. */}
             {bundle.courseName ? (
               <span className="student-field-value">{bundle.courseName}</span>
@@ -290,9 +290,9 @@ export default async function PrintBundlePage({
         const competencyRows = buildCompetencyRows(evaluation.sections);
         return (
           <div key={item.id} className="bundle-eval-section">
-            {/* Apertura de la evaluación: franja destacada que encadena con
+            {/* Apertura de la formulación: franja destacada que encadena con
                 sus preguntas en la misma hoja. Antes era una página completa
-                para dos líneas — en un compendio de 3 asignaturas eso son 3
+                para dos líneas — en un cuadernillo de 3 asignaturas eso son 3
                 cartas casi vacías. La franja sigue marcando con claridad
                 dónde empieza cada asignatura. */}
             {evalIdx > 0 ? (
@@ -303,8 +303,8 @@ export default async function PrintBundlePage({
                 </span>
               </div>
             ) : null}
-            {/* UN solo contenedor por evaluación, igual que en el booklet de
-                una evaluación suelta: a dos columnas el texto fluye de la
+            {/* UN solo contenedor por formulación, igual que en el booklet de
+                una formulación suelta: a dos columnas el texto fluye de la
                 izquierda a la derecha y de ahí a la página siguiente. Con un
                 contenedor por contexto, Chrome balancea mal al fragmentar. */}
             <section className="sheet questions">
@@ -361,7 +361,7 @@ export default async function PrintBundlePage({
               </div>
               <div className="fold-line" />
             </section>
-            {/* Sin `sheet`: encadena tras las preguntas de su evaluación en
+            {/* Sin `sheet`: encadena tras las preguntas de su formulación en
                 lugar de abrir hoja nueva. `break-inside: avoid` en el CSS
                 evita que la tabla se parta por la mitad. */}
             {competencyRows.length > 0 && (

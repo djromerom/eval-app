@@ -73,10 +73,10 @@ export default async function TemplateDetailPage({ params }: Props) {
       </div>
 
       <div className="bg-card rounded-xl border p-4">
-        <h3 className="mb-3 font-semibold">Aplicar a una evaluación</h3>
+        <h3 className="mb-3 font-semibold">Aplicar a una formulación</h3>
         {draftEvaluations.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            No hay evaluaciones en borrador. Crea una evaluación primero y luego aplica esta
+            No hay formulaciones en borrador. Crea una formulación primero y luego aplica esta
             plantilla.
           </p>
         ) : (
@@ -84,7 +84,7 @@ export default async function TemplateDetailPage({ params }: Props) {
             <input type="hidden" name="templateId" value={tpl.id} />
             <div className="flex-1 space-y-1">
               <label className="text-muted-foreground block text-xs font-medium">
-                Evaluación en borrador
+                Formulación en borrador
               </label>
               <select
                 name="evaluationId"
@@ -105,7 +105,7 @@ export default async function TemplateDetailPage({ params }: Props) {
           </form>
         )}
         <p className="text-muted-foreground mt-2 text-xs">
-          Al aplicar la plantilla se agregarán las secciones y preguntas vacías a la evaluación
+          Al aplicar la plantilla se agregarán las secciones y preguntas vacías a la formulación
           seleccionada.
         </p>
       </div>

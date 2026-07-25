@@ -9,7 +9,7 @@ import { errorResponse, unauthorizedResponse, validationResponse } from "../../_
 import { updateBundleSchema } from "../_schemas";
 
 /**
- * GET /api/bundles/[id] — devuelve el detalle del compendio (con items).
+ * GET /api/bundles/[id] — devuelve el detalle del cuadernillo (con items).
  * Acceso: cualquier rol autenticado de la misma institución.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -44,7 +44,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 /**
- * DELETE /api/bundles/[id] — elimina el compendio (cascade de items).
+ * DELETE /api/bundles/[id] — elimina el cuadernillo (cascade de items).
  * Acceso: SUPER_ADMIN. Solo si DRAFT.
  */
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
