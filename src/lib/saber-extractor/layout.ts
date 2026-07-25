@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { BBox } from "./types";
 
@@ -36,8 +35,17 @@ export interface LayoutOptions {
 const FIGURE_LABELS = new Set(["figure", "table", "isolate_formula"]);
 
 function packageRoot(): string {
-  // dist/layout.js o src/layout.ts → raíz del paquete
-  return resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  // dist/layout.js o src/layout.ts → raíz del paquete.
+  //
+  // Antes: `dirname(fileURLToPath(import.meta.url))`. Reemplazado por
+  // `__filename` para poder compilar bajo DOS tsconfigs distintos:
+  //   - tsconfig.json → module: "esnext"   (Next.js app)   → import.meta OK
+  //   - tsconfig.worker.json → module: "commonjs" (workers) → import.meta NO
+  // El worker `question-extract` importa `saber-extractor-parser` (que
+  // importa este módulo) y TS1343 rechaza `import.meta` en commonjs.
+  // `__filename` es un global reconocido en ambos targets (Node CJS lo
+  // expone nativamente; Next/webpack lo polyfillea para el bundle ESM).
+  return resolve(dirname(__filename), "..");
 }
 
 /** Intérprete a usar: el venv del proyecto, SABER_PYTHON, o python3 del PATH. */
