@@ -1,6 +1,6 @@
 import { type AuthenticatedUser, requireRole } from "@/shared/application/authenticated-user";
 import type { UseCase } from "@/shared/application/use-case";
-import { type Result, ValidationError, fail, ok } from "@/shared/domain/result";
+import { type Result, NotFoundError, ValidationError, fail, ok } from "@/shared/domain/result";
 import type { GroupRepository } from "@/modules/academic/domain/types";
 import {
   type CreateStudentData,
@@ -8,6 +8,7 @@ import {
   type Student,
   type StudentImportRow,
   type StudentRepository,
+  type UpdateStudentData,
   isValidIdType,
   isValidStudentCode,
 } from "../domain/student";
@@ -170,5 +171,96 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
       result.created = await this.students.createMany(actor.institutionId, valid);
     }
     return ok(result);
+  }
+}
+
+// ============== Edición / baja (Fase 12 — drawer de estudiante) ==============
+
+export interface GetStudentInput {
+  actor: AuthenticatedUser;
+  studentId: string;
+}
+
+/**
+ * Carga un estudiante por id verificando que pertenezca a la institución del
+ * actor. Usado por la sub-ruta `/admin/students/[id]/edit` para alimentar el
+ * drawer de edición.
+ */
+export class GetStudent implements UseCase<GetStudentInput, Student> {
+  constructor(private readonly students: StudentRepository) {}
+
+  async execute({ actor, studentId }: GetStudentInput): Promise<Result<Student>> {
+    const authorized = requireRole(actor, "ECU_MASTER");
+    if (!authorized.ok) return authorized;
+
+    const student = await this.students.findById(actor.institutionId, studentId);
+    if (!student) return fail(new NotFoundError("Estudiante", studentId));
+    return ok(student);
+  }
+}
+
+export interface UpdateStudentInput {
+  actor: AuthenticatedUser;
+  studentId: string;
+  data: UpdateStudentData;
+}
+
+/**
+ * Edita los campos editables de un estudiante (NO incluye `code` — ese flujo
+ * tiene su propio caso de uso con historial). Valida formato + tenancy del
+ * grupo antes de delegar al repositorio.
+ */
+export class UpdateStudent implements UseCase<UpdateStudentInput, Student> {
+  constructor(
+    private readonly students: StudentRepository,
+    private readonly groups: GroupRepository,
+  ) {}
+
+  async execute({ actor, studentId, data }: UpdateStudentInput): Promise<Result<Student>> {
+    const authorized = requireRole(actor, "ECU_MASTER");
+    if (!authorized.ok) return authorized;
+
+    if (!data.name.trim()) return fail(new ValidationError("El nombre es obligatorio."));
+    if (!data.idNumber.trim())
+      return fail(new ValidationError("El número de documento es obligatorio."));
+    if (!isValidIdType(data.idType)) {
+      return fail(new ValidationError(`Tipo de documento inválido: "${data.idType}".`));
+    }
+    if (!Number.isInteger(data.enrollmentYear) || data.enrollmentYear < 1990) {
+      return fail(new ValidationError("Año de ingreso inválido."));
+    }
+
+    const group = await this.groups.findById(actor.institutionId, data.groupId);
+    if (!group) return fail(new ValidationError("El grupo indicado no existe en tu institución."));
+
+    const current = await this.students.findById(actor.institutionId, studentId);
+    if (!current) return fail(new NotFoundError("Estudiante", studentId));
+
+    return ok(await this.students.update(actor.institutionId, studentId, data));
+  }
+}
+
+export interface DeleteStudentInput {
+  actor: AuthenticatedUser;
+  studentId: string;
+}
+
+/**
+ * Baja lógica: marca `deletedAt` y desactiva. Preserva el historial de
+ * códigos — un estudiante dado de baja sigue siendo identificable por su
+ * QR viejo.
+ */
+export class DeleteStudent implements UseCase<DeleteStudentInput, void> {
+  constructor(private readonly students: StudentRepository) {}
+
+  async execute({ actor, studentId }: DeleteStudentInput): Promise<Result<void>> {
+    const authorized = requireRole(actor, "ECU_MASTER");
+    if (!authorized.ok) return authorized;
+
+    const current = await this.students.findById(actor.institutionId, studentId);
+    if (!current) return fail(new NotFoundError("Estudiante", studentId));
+
+    await this.students.softDelete(actor.institutionId, studentId);
+    return ok(undefined);
   }
 }

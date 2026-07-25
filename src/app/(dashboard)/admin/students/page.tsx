@@ -1,26 +1,51 @@
 import type { Metadata } from "next";
-import { requireAuthenticatedUser } from "@/lib/session";
+import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
-import { EntityForm } from "@/components/admin/entity-form";
-import { ID_TYPES } from "@/modules/students/domain/student";
-import { makeListStudents } from "@/modules/students/infrastructure/container";
+import { requireAuthenticatedUser } from "@/lib/session";
 import { makeListGroups } from "@/modules/academic/infrastructure/container";
-import { createStudentAction } from "./actions";
-import { ImportForm } from "./import-form";
+import { makeListStudents } from "@/modules/students/infrastructure/container";
+import { StudentsKpiStrip } from "./_components/students-kpi-strip";
+import { StudentsPageClient } from "./_components/students-page-client";
 
 export const metadata: Metadata = { title: "Estudiantes" };
 
+/**
+ * Página principal de `admin/students` (Fase 12).
+ *
+ * Server component que:
+ * 1) Autentica + carga el listado de estudiantes y grupos de la institución.
+ * 2) Calcula las 4 stats del KPI strip (total / activos / grupos usados /
+ *    ingresados este año) en server.
+ * 3) Pasa los datos al cliente (`<StudentsPageClient>`) que se encarga de
+ *    búsqueda, filtros, sort, tabla densa y drawers/inline forms vía
+ *    query params (`?new=1`, `?import=1`, `/[id]/edit`).
+ *
+ * La sub-ruta `/[id]/edit` renderiza el drawer de edición encima de esta
+ * misma página (patrón `Admin · Edit Period drawer`).
+ */
 export default async function StudentsPage() {
   const actor = await requireAuthenticatedUser("ECU_MASTER");
   const [studentsRes, groupsRes] = await Promise.all([
     makeListStudents().execute({ actor }),
     makeListGroups().execute({ actor }),
   ]);
+
   const students = studentsRes.ok ? studentsRes.value : [];
   const groups = groupsRes.ok ? groupsRes.value : [];
-  const groupOptions = groups.map((g) => ({ value: g.id, label: g.name }));
-  const groupLabel = new Map(groups.map((g) => [g.id, g.name]));
   const currentYear = new Date().getFullYear();
+
+  // ===== Stats del KPI strip =====
+  const active = students.filter((s) => s.isActive).length;
+  const groupsUsed = new Set(students.map((s) => s.groupId)).size;
+  const enrolledThisYear = students.filter((s) => s.enrollmentYear === currentYear).length;
+
+  // ===== Lookup para que la tabla cliente renderice nombres de grupo =====
+  const groupsById: Record<string, string> = {};
+  const groupsOptions: { value: string; label: string }[] = [];
+  for (const g of groups) {
+    groupsById[g.id] = g.name;
+    groupsOptions.push({ value: g.id, label: g.name });
+  }
 
   return (
     <>
@@ -29,96 +54,22 @@ export default async function StudentsPage() {
         description="Gestiona los estudiantes de tu institución. El código va embebido en el QR."
       />
 
-      <div className="space-y-6">
-        <section className="bg-card space-y-4 rounded-xl border p-6">
-          <h2 className="font-semibold">Nuevo estudiante</h2>
-          <EntityForm
-            action={createStudentAction}
-            submitLabel="Agregar"
-            disabledReason={
-              groups.length === 0 ? "Crea primero un grupo en Estructura académica." : undefined
-            }
-            fields={[
-              {
-                name: "groupId",
-                label: "Grupo",
-                type: "select",
-                required: true,
-                options: groupOptions,
-              },
-              {
-                name: "name",
-                label: "Nombre",
-                type: "text",
-                required: true,
-                placeholder: "Ana Pérez",
-              },
-              {
-                name: "idType",
-                label: "Tipo doc.",
-                type: "select",
-                required: true,
-                options: ID_TYPES.map((t) => ({ value: t, label: t })),
-              },
-              { name: "idNumber", label: "N.º doc.", type: "text", required: true },
-              {
-                name: "code",
-                label: "Código",
-                type: "text",
-                required: true,
-                placeholder: "EST-001",
-              },
-              {
-                name: "enrollmentYear",
-                label: "Año ingreso",
-                type: "number",
-                required: true,
-                placeholder: String(currentYear),
-              },
-            ]}
-          />
-        </section>
+      <StudentsKpiStrip
+        total={students.length}
+        active={active}
+        groupsUsed={groupsUsed}
+        enrolledThisYear={enrolledThisYear}
+        currentYear={currentYear}
+      />
 
-        <section className="bg-card space-y-4 rounded-xl border p-6">
-          <h2 className="font-semibold">Importación masiva</h2>
-          <ImportForm />
-        </section>
-
-        <section className="overflow-x-auto rounded-xl border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-muted-foreground border-b text-left">
-              <tr>
-                <th className="px-4 py-3 font-medium">Nombre</th>
-                <th className="px-4 py-3 font-medium">Documento</th>
-                <th className="px-4 py-3 font-medium">Código</th>
-                <th className="px-4 py-3 font-medium">Grupo</th>
-                <th className="px-4 py-3 font-medium">Ingreso</th>
-              </tr>
-            </thead>
-            <tbody>
-              {students.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="text-muted-foreground px-4 py-8 text-center">
-                    Aún no hay estudiantes.
-                  </td>
-                </tr>
-              ) : (
-                students.map((s) => (
-                  <tr key={s.id} className="border-b last:border-0">
-                    <td className="px-4 py-3 font-medium">{s.name}</td>
-                    <td className="text-muted-foreground px-4 py-3">
-                      {s.idType} {s.idNumber}
-                    </td>
-                    <td className="text-muted-foreground px-4 py-3">{s.code}</td>
-                    <td className="text-muted-foreground px-4 py-3">{groupLabel.get(s.groupId)}</td>
-                    <td className="text-muted-foreground px-4 py-3">{s.enrollmentYear}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </section>
-      </div>
+      {/* `useSearchParams` requiere Suspense en producción */}
+      <Suspense fallback={null}>
+        <StudentsPageClient
+          students={students}
+          groups={{ byId: groupsById, options: groupsOptions }}
+          currentYear={currentYear}
+        />
+      </Suspense>
     </>
   );
 }

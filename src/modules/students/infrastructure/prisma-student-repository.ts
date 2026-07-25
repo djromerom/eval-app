@@ -1,6 +1,11 @@
 import type { Student as PrismaStudent } from "@prisma/client";
 import { prisma } from "@/shared/infrastructure/db/prisma";
-import type { CreateStudentData, Student, StudentRepository } from "../domain/student";
+import type {
+  CreateStudentData,
+  Student,
+  StudentRepository,
+  UpdateStudentData,
+} from "../domain/student";
 
 function toStudent(r: PrismaStudent): Student {
   return {
@@ -86,5 +91,35 @@ export class PrismaStudentRepository implements StudentRepository {
       }),
       prisma.student.update({ where: { id: studentId }, data: { code: newCode } }),
     ]);
+  }
+
+  async update(institutionId: string, id: string, data: UpdateStudentData): Promise<Student> {
+    // `findFirstOrThrow` con filtro de institución + deletedAt garantiza
+    // que un id de otra institución o ya borrado devuelve P2025 (not found).
+    const row = await prisma.student.findFirstOrThrow({
+      where: { id, institutionId, ...notDeleted },
+    });
+    return toStudent(
+      await prisma.student.update({
+        where: { id: row.id },
+        data: {
+          groupId: data.groupId,
+          name: data.name,
+          idType: data.idType,
+          idNumber: data.idNumber,
+          enrollmentYear: data.enrollmentYear,
+          isActive: data.isActive,
+        },
+      }),
+    );
+  }
+
+  async softDelete(institutionId: string, id: string): Promise<void> {
+    // Marca deletedAt y baja isActive — preserva el historial de códigos
+    // (los QR viejos deben seguir funcionando aunque el estudiante se dé de baja).
+    await prisma.student.update({
+      where: { id, institutionId },
+      data: { deletedAt: new Date(), isActive: false },
+    });
   }
 }
