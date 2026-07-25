@@ -699,4 +699,46 @@ describe("ImportQuestions", () => {
     expect(evals.addedBySection[sectionIds[0]!]).toHaveLength(2);
     expect(r.value.infos.some((m) => /sin contexto/i.test(m))).toBe(true);
   });
+
+  it("contexto con [TABLA: ...] → la sección auto-creada recibe un nodo table real, no el string literal", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const tableContext = `Lea las descripciones de la columna izquierda.
+[TABLA: In the kitchen - Descripciones y Palabras | Descripciones | Palabras |
+|---------------|----------|
+| 1. These are round. | A. bowls |
+| 2. Hot drink. | B. cake |]`;
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          contextText: tableContext,
+          contextTitle: "In the kitchen",
+          text: "¿Cuál concuerda?",
+          correctAnswer: "A",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(evals.addSectionCalls).toHaveLength(1);
+    const content = evals.addSectionCalls[0]!.content as {
+      type: string;
+      content: { type: string; content?: unknown }[];
+    };
+    // El section content NO debe contener el string literal [TABLA:...
+    const flat = JSON.stringify(content);
+    expect(flat).not.toContain("[TABLA:");
+    // Debe contener un nodo `table` con la cabecera "Descripciones"
+    expect(content.type).toBe("doc");
+    const tableNode = content.content.find((n) => n.type === "table");
+    expect(tableNode).toBeDefined();
+    // El heading(4) con el título del bloque va antes de la tabla
+    const headingNode = content.content.find(
+      (n) => n.type === "heading" && (n as { attrs?: { level?: number } }).attrs?.level === 4,
+    ) as { content: { text: string }[] } | undefined;
+    expect(headingNode).toBeDefined();
+    expect(headingNode!.content[0]!.text).toBe("In the kitchen - Descripciones y Palabras");
+  });
 });

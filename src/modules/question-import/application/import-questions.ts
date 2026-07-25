@@ -17,6 +17,7 @@ import {
   prependContextToBankQuestion,
   stripContextFromQuestions,
 } from "./context-stitch";
+import { contextTextToTipTap } from "./context-to-tiptap";
 
 /**
  * A dónde van las preguntas importadas. Lo elige el docente en la pantalla de
@@ -197,7 +198,7 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
           destination.evaluationId,
           {
             title: deriveSectionTitle(ctx),
-            content: toRichText(ctx),
+            content: contextTextToRichText(ctx),
           },
         );
         contextToSection.set(ctx, sec.id);
@@ -312,6 +313,18 @@ function toRichText(text: string): unknown {
     type: "doc",
     content: [{ type: "paragraph", content: [{ type: "text", text }] }],
   };
+}
+
+/**
+ * Igual que `toRichText` pero parsea bloques `[TABLA: ...]` del LLM y los
+ * convierte en nodos `table` reales. Usado para los contexts que van al
+ * `section.content` cuando auto-creamos secciones por contexto: el LLM mete
+ * la instrucción y la tabla en el mismo bloque y queremos que la tabla
+ * llegue renderizable al editor y al PDF, no como un literal `[TABLA: ...]`.
+ */
+function contextTextToRichText(text: string): unknown {
+  const nodes = contextTextToTipTap(text);
+  return { type: "doc", content: nodes };
 }
 
 /**

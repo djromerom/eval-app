@@ -84,6 +84,31 @@ describe("mergeContextsIntoSectionContent", () => {
       content: [{ type: "paragraph", content: [{ type: "text", text: "X" }] }],
     });
   });
+
+  it("convierte [TABLA: ...] dentro de cada contexto en un nodo table real", () => {
+    const ctx1 = `Antes de la tabla.
+[TABLA: Notas
+| Materia | Nota |
+|---|---|
+| Matemáticas | 4.5 |]`;
+    const ctx2 = `Otra lectura sin tabla, solo texto.`;
+
+    const merged = mergeContextsIntoSectionContent(null, [ctx1, ctx2]);
+    // ctx1 → paragraph + heading(4) + table
+    // ctx2 → paragraph
+    expect(merged.content).toHaveLength(4);
+    expect(merged.content[0]).toMatchObject({ type: "paragraph" });
+    expect(merged.content[1]).toMatchObject({
+      type: "heading",
+      attrs: { level: 4 },
+      content: [{ type: "text", text: "Notas" }],
+    });
+    expect(merged.content[2]).toMatchObject({ type: "table" });
+    expect(merged.content[3]).toMatchObject({
+      type: "paragraph",
+      content: [{ type: "text", text: "Otra lectura sin tabla, solo texto." }],
+    });
+  });
 });
 
 describe("prependContextToBankQuestion", () => {
@@ -121,6 +146,53 @@ describe("prependContextToBankQuestion", () => {
       type: "heading",
       attrs: { level: 3 },
       content: [{ type: "text", text: "Texto introductorio" }],
+    });
+  });
+
+  it("convierte [TABLA: ...] dentro del contexto en un nodo table real", () => {
+    const contextText = `Lea las descripciones.
+[TABLA: In the kitchen | Descripciones | Palabras |
+|---|---|---|
+| Some are round. | A. bowls |]`;
+    const out = prependContextToBankQuestion(
+      {
+        type: "doc",
+        content: [{ type: "paragraph", content: [{ type: "text", text: "¿Cuál escoge?" }] }],
+      },
+      null,
+      contextText,
+    );
+
+    // heading(3) "Contexto" + paragraph("Lea las descripciones.") +
+    // heading(4) "In the kitchen" + table + paragraph pregunta
+    expect(out.content).toHaveLength(5);
+    expect(out.content[0]).toMatchObject({ type: "heading", attrs: { level: 3 } });
+    expect(out.content[1]).toMatchObject({ type: "paragraph" });
+    expect(out.content[2]).toMatchObject({
+      type: "heading",
+      attrs: { level: 4 },
+      content: [{ type: "text", text: "In the kitchen" }],
+    });
+    expect(out.content[3]).toMatchObject({ type: "table" });
+    // La pregunta original queda al final
+    expect(out.content[4]).toMatchObject({
+      type: "paragraph",
+      content: [{ type: "text", text: "¿Cuál escoge?" }],
+    });
+  });
+
+  it("contexto sin tablas sigue produciendo un único paragraph (compat)", () => {
+    // Garantiza que el cambio es retro-compatible: textos planos
+    // siguen generando el mismo shape `[header, paragraph, ...]`.
+    const out = prependContextToBankQuestion(
+      { type: "doc", content: [] },
+      null,
+      "Solo texto, sin tablas.",
+    );
+    expect(out.content).toHaveLength(2);
+    expect(out.content[1]).toEqual({
+      type: "paragraph",
+      content: [{ type: "text", text: "Solo texto, sin tablas." }],
     });
   });
 });

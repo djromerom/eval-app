@@ -1,4 +1,5 @@
 import type { ParsedQuestion } from "../domain/parsed-question";
+import { contextTextToTipTap } from "./context-to-tiptap";
 
 /**
  * Helpers para preservar el contexto compartido cuando importamos preguntas
@@ -29,11 +30,6 @@ export type TipTapDoc = {
   type: "doc";
   content: TipTapNode[];
 };
-
-/** Bloque mínimo: un párrafo con texto plano. */
-function paragraph(text: string): TipTapNode {
-  return { type: "paragraph", content: [{ type: "text", text }] };
-}
 
 /** Bloque separador entre contextos cuando la sección ya tenía contenido. */
 function horizontalRule(): TipTapNode {
@@ -93,7 +89,11 @@ export function collectUniqueContexts(questions: ParsedQuestion[]): string[] {
 export function mergeContextsIntoSectionContent(current: unknown, contexts: string[]): TipTapDoc {
   if (contexts.length === 0) return asTipTapDoc(current);
   const base = asTipTapDoc(current);
-  const blocks: TipTapNode[] = contexts.map(paragraph);
+  // Cada contexto se parsea en busca de bloques `[TABLA: ...]` para
+  // emitir nodos `table` reales; el resto queda como `paragraph`. El
+  // comportamiento para contextos SIN tablas es idéntico al anterior
+  // (un solo `paragraph` con todo el texto).
+  const blocks: TipTapNode[] = contexts.flatMap((c) => contextTextToTipTap(c));
   const separator = base.content.length > 0 ? [horizontalRule()] : [];
   return { type: "doc", content: [...base.content, ...separator, ...blocks] };
 }
@@ -117,10 +117,13 @@ export function prependContextToBankQuestion(
   const trimmed = contextText.trim();
   if (trimmed.length === 0) return base;
   const header = contextHeading(contextTitle);
-  const intro = paragraph(trimmed);
+  // Parsea el contexto en busca de bloques `[TABLA: ...]` para emitir
+  // nodos `table` reales; el resto queda como `paragraph`. Para un
+  // contexto SIN tablas, el resultado es el mismo `paragraph` de antes.
+  const intro = contextTextToTipTap(trimmed);
   return {
     type: "doc",
-    content: [header, intro, ...base.content],
+    content: [header, ...intro, ...base.content],
   };
 }
 

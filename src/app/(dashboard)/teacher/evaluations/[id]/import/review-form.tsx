@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import type { AnswerKey } from "@/modules/evaluations/domain/evaluation";
 import type { ParsedQuestion } from "@/modules/question-import/domain/parsed-question";
+import { contextTextToTipTap } from "@/modules/question-import/application/context-to-tiptap";
+import { RichText } from "@/components/editor/rich-text";
 import { commitImportAction, loadSourceAction } from "./actions";
 import { ConfidenceBadge } from "./confidence-badge";
 
@@ -302,7 +304,11 @@ export function ImportReviewForm({
               q.contextText && q.contextTitle ? (
                 <details className="text-muted-foreground ml-7 text-xs">
                   <summary className="cursor-pointer">{q.contextTitle}</summary>
-                  <div className="mt-1 whitespace-pre-wrap">{q.contextText}</div>
+                  <div className="mt-1">
+                    <RichText
+                      value={{ type: "doc", content: contextTextToTipTap(q.contextText) }}
+                    />
+                  </div>
                 </details>
               ) : null;
 
