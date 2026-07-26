@@ -70,14 +70,15 @@ function resolvePackageRoot(): string | null {
   try {
     // `require` está disponible tanto en CJS como en ESM-compiled-to-CJS;
     // tsx y Next/webpack lo exponen vía createRequire cuando hace falta.
+    //
+    // Usamos `__filename` (NO `import.meta.url`) porque `tsconfig.worker.json`
+    // compila con `module: "commonjs"` y TS1343 rechaza `import.meta` ahí.
+    // `__filename` es un global reconocido en ambos targets: CJS nativo lo
+    // expone, y Next/webpack lo polyfillea para el bundle ESM.
     const createRequire = (globalThis as { createRequire?: typeof import("module").createRequire })
       .createRequire;
     const req =
-      typeof require === "function"
-        ? require
-        : createRequire
-          ? createRequire(import.meta.url)
-          : null;
+      typeof require === "function" ? require : createRequire ? createRequire(__filename) : null;
     if (!req) return null;
     const pkgJson = req.resolve("saber-extractor/package.json");
     return dirname(pkgJson);
