@@ -127,6 +127,7 @@ RUN apt-get update \
         libxkbcommon0 \
         libxcomposite1 \
         libxdamage1 \
+        libxfixes3 \
         libxrandr2 \
         libgbm1 \
         libpango-1.0-0 \
