@@ -22,7 +22,10 @@ export const authConfig = {
       const { pathname } = request.nextUrl;
 
       const isPublic =
-        pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/api/auth");
+        pathname === "/" ||
+        pathname.startsWith("/login") ||
+        pathname.startsWith("/accept-invite") ||
+        pathname.startsWith("/api/auth");
       if (isPublic) return true;
 
       // /print/* se auto-protege dentro de cada página (sesión O token de
