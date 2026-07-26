@@ -17,6 +17,9 @@ const eslintConfig = [
       ".next/**",
       "coverage/**",
       "playwright-report/**",
+      // Build output de los workers (compilado por `tsc` para producción).
+      // Trackeado en .gitignore pero eslint a veces lo pisa igual.
+      "dist-workers/**",
       // Archivo generado por Next.js (referencias triple-slash a tipos internos).
       "next-env.d.ts",
       // Motor ICFES embebido — código de terceros adaptado in-house con sus
