@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import type { BBox } from "./types";
 
@@ -37,7 +37,7 @@ const FIGURE_LABELS = new Set(["figure", "table", "isolate_formula"]);
 function packageRoot(): string {
   // dist/layout.js o src/layout.ts → raíz del paquete.
   //
-  // Antes: `dirname(fileURLToPath(import.meta.url))`. Reemplazado por
+  // Antes: `dirname(fileURLToPath(import.meta.url))`. Reemplado por
   // `__filename` para poder compilar bajo DOS tsconfigs distintos:
   //   - tsconfig.json → module: "esnext"   (Next.js app)   → import.meta OK
   //   - tsconfig.worker.json → module: "commonjs" (workers) → import.meta NO
@@ -48,15 +48,140 @@ function packageRoot(): string {
   return resolve(dirname(__filename), "..");
 }
 
-/** Intérprete a usar: el venv del proyecto, SABER_PYTHON, o python3 del PATH. */
+/**
+ * Raíz real del paquete `saber-extractor`, resolviendo correctamente en
+ * ambos modos de consumo:
+ *
+ *  - **En el repo (pnpm)** — `eval-app/src/lib/saber-extractor/layout.ts`
+ *    vive fuera de la carpeta del paquete; el `@/lib/saber-extractor`
+ *    apunta a `src/...`, NO a `node_modules/.../saber-extractor/`. `__filename`
+ *    queda en `src/lib/`, así que `packageRoot()` resuelve a un dir que
+ *    no contiene el script. `require.resolve("saber-extractor/package.json")`
+ *    atraviesa el `node_modules/.pnpm/...` y nos da la raíz real.
+ *
+ *  - **Paquete publicado (npm)** — `__filename` ya está dentro del paquete
+ *    y el require también; ambos coinciden.
+ *
+ * Devuelve `null` si ninguno puede ubicar el paquete (caso patológico:
+ * el módulo está bundleado sin node_modules accesibles, p.ej. Next.js
+ * server components que no preservan el virtual FS).
+ */
+function resolvePackageRoot(): string | null {
+  try {
+    // `require` está disponible tanto en CJS como en ESM-compiled-to-CJS;
+    // tsx y Next/webpack lo exponen vía createRequire cuando hace falta.
+    const createRequire = (globalThis as { createRequire?: typeof import("module").createRequire })
+      .createRequire;
+    const req =
+      typeof require === "function"
+        ? require
+        : createRequire
+          ? createRequire(import.meta.url)
+          : null;
+    if (!req) return null;
+    const pkgJson = req.resolve("saber-extractor/package.json");
+    return dirname(pkgJson);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cuando `saber-extractor` se instala con el protocolo `file:` de pnpm,
+ * el store es una **copia física** del paquete (no un symlink), así que
+ * el `.venv` (que está en la fuente) no es alcanzable desde el path
+ * que devuelve `resolvePackageRoot()`. Para resolver el path de la
+ * fuente original, decodificamos el nombre del directorio del store:
+ *
+ *   …/.pnpm/saber-extractor@file+djromero+Solinces+saber-extractor_HASH/node_modules/saber-extractor
+ *
+ * → `name = saber-extractor`, el source path codificado con `+` como
+ *   separador es `djromero/Solinces/saber-extractor`, y el pnpm root
+ *   (parent de `node_modules/`) es donde se monta el source relativo.
+ *
+ * Esto funciona tanto para `file:/abs/path` (pnpm normaliza a relativo
+ * al package.json declarante) como para `file:../relative/path`
+ * (segmentos `..` se preservan y `path.join` los resuelve). Si la
+ * convención de pnpm cambia o el `.venv` no está en la fuente, este
+ * helper devuelve `null` y caemos al fallback de `python3`.
+ */
+function resolveSourceRoot(): string | null {
+  const storePackageRoot = resolvePackageRoot();
+  if (!storePackageRoot) return null;
+
+  // Subir hasta el directorio `.pnpm` y luego **dos** niveles más:
+  // la jerarquía es `<workspace>/node_modules/.pnpm/<entry>/node_modules/<name>`,
+  // y el `file:` protocol es relativo al package.json en el `<workspace>`,
+  // NO al `node_modules/`. `dirname(dirname(dir))` salta `.pnpm` y
+  // su `node_modules` padre.
+  let dir = storePackageRoot;
+  while (dir !== "/" && basename(dir) !== ".pnpm") dir = dirname(dir);
+  if (basename(dir) !== ".pnpm") return null;
+  const pnpmRoot = dirname(dirname(dir));
+
+  // Extraer el nombre del entry a partir de
+  // `<pnpmRoot>/node_modules/.pnpm/<entry>/node_modules/<name>`.
+  const afterPnpm = storePackageRoot.split(`/.pnpm/`)[1];
+  if (!afterPnpm) return null;
+  const entryDir = afterPnpm.split("/")[0];
+  if (!entryDir) return null;
+
+  // Formato: `<name>@<protocol>+<encoded-path>_<hash>`.
+  // Solo nos interesa el protocolo `file:`; los demás (portal, git…)
+  // no son copias locales y no tienen `.venv` que buscar.
+  // El hash usa base-62 (a-z, 0-9), no hex — `[a-z0-9]` para cubrirlo.
+  const m = entryDir.match(/^[^@]+@file\+(.+)_[a-z0-9]+$/);
+  if (!m) return null;
+  // El regex garantiza que m[1] existe; con `noUncheckedIndexedAccess`
+  // TS lo ve como `string | undefined`, así que el `!` es seguro.
+  const sourceRel = m[1]!.replaceAll("+", "/");
+  return join(pnpmRoot, sourceRel);
+}
+
+/**
+ * Intérprete a usar: el venv del proyecto, SABER_PYTHON, o python3 del PATH.
+ *
+ * Orden de búsqueda:
+ *  1. Argumento explícito del caller.
+ *  2. `SABER_PYTHON` por env var (override de operador).
+ *  3. `python/.venv/bin/python` dentro del **store** de pnpm (caso
+ *     npm-puro o paquete auto-consumido).
+ *  4. `python/.venv/bin/python` dentro de la **fuente** original
+ *     (caso pnpm con `file:` — el store es copia sin `.venv`).
+ *  5. `python/.venv/bin/python` calculado desde `__filename` (legacy;
+ *     solo aplica al paquete auto-consumido).
+ *  6. `python3` del PATH como último recurso.
+ */
 export function pythonPath(explicit?: string): string {
   if (explicit) return explicit;
   if (process.env.SABER_PYTHON) return process.env.SABER_PYTHON;
+
+  const storeRoot = resolvePackageRoot();
+  if (storeRoot) {
+    const venv = join(storeRoot, "python", ".venv", "bin", "python");
+    if (existsSync(venv)) return venv;
+  }
+
+  const sourceRoot = resolveSourceRoot();
+  if (sourceRoot) {
+    const venv = join(sourceRoot, "python", ".venv", "bin", "python");
+    if (existsSync(venv)) return venv;
+  }
+
+  // Fallback de legado: junto a __filename. Solo aplica al paquete
+  // auto-consumido o self-published, ya casi nunca en uso.
   const venv = join(packageRoot(), "python", ".venv", "bin", "python");
   return existsSync(venv) ? venv : "python3";
 }
 
 function scriptPath(): string {
+  // 1) Raíz REAL del paquete (incluye el caso pnpm, donde __filename está
+  //    fuera de la carpeta del paquete y `packageRoot()` falla).
+  const realRoot = resolvePackageRoot();
+  if (realRoot) return join(realRoot, "python", "detect_layout.py");
+
+  // 2) Fallback de legado: junto a __filename. Solo aplica al paquete
+  //    auto-consumido o self-published, ya casi nunca en uso.
   return join(packageRoot(), "python", "detect_layout.py");
 }
 

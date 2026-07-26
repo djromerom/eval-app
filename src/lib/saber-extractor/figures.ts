@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -11,6 +12,30 @@ import { BBoxSchema } from "./types";
 import type { BBox, Context, ExtractedFigure, ExtractedQuestion, Figure } from "./types";
 
 const run = promisify(execFile);
+
+/**
+ * Resuelve la ruta absoluta de un binario externo (`pdfimages`,
+ * `pdftoppm`). Busca primero en `$PATH` y luego en una lista de
+ * ubicaciones conocidas de Homebrew/system. Misma lógica que
+ * `pythonPath()` en `layout.ts` para el intérprete de Python: ser
+ * robustos en el path de despliegue sin pedirle al operador que
+ * edite env vars. En shells no-login (típicos de procesos PM2, IDE
+ * y subprocess hijos de Claude Code) `/opt/homebrew/bin` no está
+ * en PATH aunque `brew install poppler` haya dejado los binarios ahí.
+ */
+function resolveBin(name: string): string {
+  const pathEnv = process.env.PATH ?? "";
+  for (const dir of pathEnv.split(":")) {
+    if (!dir) continue;
+    const candidate = join(dir, name);
+    if (existsSync(candidate)) return candidate;
+  }
+  for (const dir of ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]) {
+    const candidate = join(dir, name);
+    if (existsSync(candidate)) return candidate;
+  }
+  return name;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Numeración global                                                  */
@@ -191,7 +216,7 @@ function parseImageList(stdout: string): EmbeddedImage[] {
 
 /** Inventario crudo de imágenes incrustadas del PDF, vía `pdfimages -list`. */
 export async function listEmbeddedImages(pdfPath: string): Promise<EmbeddedImage[]> {
-  const { stdout } = await run("pdfimages", ["-list", pdfPath], {
+  const { stdout } = await run(resolveBin("pdfimages"), ["-list", pdfPath], {
     maxBuffer: 32 * 1024 * 1024,
   });
   return parseImageList(stdout);
@@ -559,7 +584,7 @@ async function renderPage(
   tmpDir: string,
 ): Promise<string> {
   const prefix = join(tmpDir, `.page-${page}`);
-  await run("pdftoppm", [
+  await run(resolveBin("pdftoppm"), [
     "-png",
     "-r",
     String(dpi),
@@ -587,7 +612,15 @@ async function extractEmbedded(
   id: string,
 ): Promise<void> {
   const prefix = join(outDir, `.tmp-${id}`);
-  await run("pdfimages", ["-png", "-f", String(page), "-l", String(page), pdfPath, prefix]);
+  await run(resolveBin("pdfimages"), [
+    "-png",
+    "-f",
+    String(page),
+    "-l",
+    String(page),
+    pdfPath,
+    prefix,
+  ]);
   // Al limitar a una página, el sufijo del archivo reinicia en 000 y coincide
   // con la columna `num` de `pdfimages -list -f P -l P`.
   const produced = (await readdir(outDir)).filter((f) => f.startsWith(`.tmp-${id}-`));
@@ -629,7 +662,7 @@ async function cropRegion(
   const h = Math.max(1, Math.round((y1 - y0) * pxH));
 
   const prefix = join(outDir, `.tmp-${id}`);
-  await run("pdftoppm", [
+  await run(resolveBin("pdftoppm"), [
     "-png",
     "-r",
     String(dpi),
@@ -663,10 +696,12 @@ async function assertPoppler(): Promise<void> {
   if (popplerChecked) return;
   for (const bin of ["pdfimages", "pdftoppm"]) {
     try {
-      await run(bin, ["-v"]);
-    } catch {
+      await run(resolveBin(bin), ["-v"]);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
       throw new Error(
         `Falta "${bin}" (poppler), necesario para extraer imágenes. ` +
+          `Detalle: ${detail}. ` +
           `Instálalo con "brew install poppler" o usa el pipeline sin --images.`,
       );
     }

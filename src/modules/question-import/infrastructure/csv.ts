@@ -171,6 +171,9 @@ export function parseQuestionsCsv(text: string): ParsedQuestionsCsv {
         evidence: record.evidence?.trim() || null,
         contextTitle: null,
         contextText: record.context?.trim() || null,
+        // CSV no tiene canal para imágenes de contexto; el docente las
+        // añade en el editor visual después del alta.
+        contextImages: {},
         image: null,
         warnings: [],
       }),

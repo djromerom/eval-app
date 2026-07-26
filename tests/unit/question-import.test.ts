@@ -215,6 +215,7 @@ const valid = (over: Partial<ParsedQuestion> = {}): ParsedQuestion => ({
   evidence: null,
   contextTitle: null,
   contextText: null,
+  contextImages: {},
   image: null,
   warnings: [],
   ...over,
@@ -581,6 +582,42 @@ describe("ImportQuestions", () => {
     expect(ctxPara.content?.[0]?.text).toBe("Texto introductorio");
   });
 
+  it("contextImages del banco → embebe el nodo `image` en el TipTap", async () => {
+    const url = "/api/uploads/evaluations/inst-1/uuid-1.jpg";
+    const bank = new FakeBank();
+    const r = await new ImportQuestions(new FakeEvaluations(), bank).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          contextText: "Observe el gráfico: [IMAGEN p04-fig1] y responda.",
+          correctAnswer: "B",
+          contextImages: { "p04-fig1": url },
+        }),
+      ],
+      destination: { kind: "bank", subjectId: "s1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const data = bank.createManyCalls[0]![0]!;
+    const tipTap = data.text as {
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    // header (h3 "Contexto") + paragraph ("Observe el gráfico:") + image
+    // + paragraph ("y responda.") + paragraph (el `text` de la pregunta)
+    expect(tipTap.content).toHaveLength(5);
+    expect(tipTap.content[0]!.type).toBe("heading");
+    expect(tipTap.content[1]!.type).toBe("paragraph");
+    expect(tipTap.content[1]!.content?.[0]?.text).toBe("Observe el gráfico:");
+    expect(tipTap.content[2]).toEqual({
+      type: "image",
+      attrs: { src: url, width: 80 },
+    });
+    expect(tipTap.content[3]!.type).toBe("paragraph");
+    expect(tipTap.content[3]!.content?.[0]?.text).toBe("y responda.");
+    expect(tipTap.content[4]!.type).toBe("paragraph");
+    expect(tipTap.content[4]!.content?.[0]?.text).toBe("¿Cuál es la respuesta?");
+  });
+
   it("preguntas SIN contexto no producen info ni modifican el section content", async () => {
     const evals = new FakeEvaluations();
     evals.detail = {
@@ -604,6 +641,91 @@ describe("ImportQuestions", () => {
     if (!r.ok) return;
     expect(evals.updateSectionCalls).toHaveLength(0);
     expect(r.value.infos).toEqual([]);
+  });
+
+  it("contextImages en formulación (Camino A) → nodo `image` en section.content", async () => {
+    const url = "/api/uploads/evaluations/inst-1/uuid-1.jpg";
+    const evals = new FakeEvaluations();
+    evals.detail = {
+      ...draft(),
+      sections: [
+        {
+          id: "sec1",
+          title: null,
+          content: { type: "doc", content: [] },
+          order: 1,
+          questions: [],
+        },
+      ],
+    };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          contextText: "Observe el gráfico: [IMAGEN p04-fig1] y responda.",
+          correctAnswer: "B",
+          contextImages: { "p04-fig1": url },
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(evals.updateSectionCalls).toHaveLength(1);
+    const content = evals.updateSectionCalls[0]!.content as {
+      type: string;
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    // paragraph + image + paragraph
+    expect(content.content).toHaveLength(3);
+    expect(content.content[0]).toMatchObject({ type: "paragraph" });
+    expect(content.content[1]).toEqual({
+      type: "image",
+      attrs: { src: url, width: 80 },
+    });
+    expect(content.content[2]).toMatchObject({ type: "paragraph" });
+  });
+
+  it("Camino A con `contextImages` undefined en una pregunta no rompe (defensa)", async () => {
+    // Reproduce el bug de runtime que ocurrió tras desplegar el campo
+    // `contextImages`: el payload persistido en BD por builds previos
+    // llega a `commitImportAction` sin la key. `aggregateContextImages`
+    // debe tolerarlo y seguir como si la pregunta no tuviera figuras.
+    const evals = new FakeEvaluations();
+    evals.detail = {
+      ...draft(),
+      sections: [
+        {
+          id: "sec1",
+          title: null,
+          content: { type: "doc", content: [] },
+          order: 1,
+          questions: [],
+        },
+      ],
+    };
+    const q1 = valid({
+      contextText: "Contexto compartido",
+      correctAnswer: "B",
+    });
+    // Simulamos el bug: el campo NO está presente en el JSON.
+    const { contextImages: _drop, ...broken } = q1;
+    void _drop;
+    expect((broken as { contextImages?: unknown }).contextImages).toBeUndefined();
+
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [broken as unknown as ParsedQuestion, broken as unknown as ParsedQuestion],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // El contexto se preserva, las imágenes del contexto son {}.
+    const content = evals.updateSectionCalls[0]!.content as {
+      content: { type: string }[];
+    };
+    expect(content.content).toHaveLength(1);
+    expect(content.content[0]).toMatchObject({ type: "paragraph" });
   });
 
   // ---------- AUTO-CREAR SECCIONES POR CONTEXTO (sin sectionId) ----------
@@ -698,5 +820,47 @@ describe("ImportQuestions", () => {
     expect(sectionIds).toHaveLength(1);
     expect(evals.addedBySection[sectionIds[0]!]).toHaveLength(2);
     expect(r.value.infos.some((m) => /sin contexto/i.test(m))).toBe(true);
+  });
+
+  it("contexto con [TABLA: ...] → la sección auto-creada recibe un nodo table real, no el string literal", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const tableContext = `Lea las descripciones de la columna izquierda.
+[TABLA: In the kitchen - Descripciones y Palabras | Descripciones | Palabras |
+|---------------|----------|
+| 1. These are round. | A. bowls |
+| 2. Hot drink. | B. cake |]`;
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          contextText: tableContext,
+          contextTitle: "In the kitchen",
+          text: "¿Cuál concuerda?",
+          correctAnswer: "A",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(evals.addSectionCalls).toHaveLength(1);
+    const content = evals.addSectionCalls[0]!.content as {
+      type: string;
+      content: { type: string; content?: unknown }[];
+    };
+    // El section content NO debe contener el string literal [TABLA:...
+    const flat = JSON.stringify(content);
+    expect(flat).not.toContain("[TABLA:");
+    // Debe contener un nodo `table` con la cabecera "Descripciones"
+    expect(content.type).toBe("doc");
+    const tableNode = content.content.find((n) => n.type === "table");
+    expect(tableNode).toBeDefined();
+    // El heading(4) con el título del bloque va antes de la tabla
+    const headingNode = content.content.find(
+      (n) => n.type === "heading" && (n as { attrs?: { level?: number } }).attrs?.level === 4,
+    ) as { content: { text: string }[] } | undefined;
+    expect(headingNode).toBeDefined();
+    expect(headingNode!.content[0]!.text).toBe("In the kitchen - Descripciones y Palabras");
   });
 });

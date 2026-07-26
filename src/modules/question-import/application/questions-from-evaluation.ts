@@ -61,6 +61,14 @@ export class QuestionsFromEvaluation implements UseCase<QuestionsFromEvaluationI
         evidence: null, // `Question` no expone `evidence` en el dominio
         contextTitle: section.title,
         contextText,
+        // Esta ruta RE-importa una formulación ya existente; las
+        // figuras del contexto, si las hay, ya están embebidas como
+        // nodos `image` en `section.content` (no como un mapa
+        // separado). Se podría re-derivar el mapa escaneando el
+        // TipTap, pero no es necesario para el flujo actual (el
+        // docente edita el contexto en el editor visual, no en
+        // esta re-importación).
+        contextImages: {},
         image: null, // copiar de BD: no se re-sube lo que ya está en disco
         warnings: [],
       }));

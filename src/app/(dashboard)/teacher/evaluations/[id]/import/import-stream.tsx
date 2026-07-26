@@ -120,8 +120,7 @@ export function ImportStream({ jobId, onDone, onError }: Props) {
       <p className="text-muted-foreground text-sm">{state.message}</p>
       <ProgressBar phase={state.phase} />
       <p className="text-muted-foreground text-xs">
-        Esto puede tomar entre 20 segundos y un par de minutos según el tamaño del PDF. Podés
-        dejar la pestaña abierta o volver más tarde: tu progreso se guarda automáticamente.
+        Esto puede tomar entre 20 segundos y un par de minutos según el tamaño del PDF.
       </p>
     </section>
   );

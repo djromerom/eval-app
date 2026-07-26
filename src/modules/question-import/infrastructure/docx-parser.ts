@@ -312,6 +312,12 @@ async function buildQuestionsFromBlocks(params: {
       evidence: current.evidence ?? fromKey?.evidence ?? null,
       contextTitle: null,
       contextText: contextSanitized.text ?? null,
+      // DOCX no tiene figuras con id globalizado que vincule al
+      // contexto (los `!!IMAGEN N!!` se sanean arriba con
+      // `sanitizeImagePlaceholders`). Dejamos el campo presente y
+      // vacío para que la BD y los callers aguas abajo no tengan que
+      // tratarlo como opcional.
+      contextImages: {},
       image,
       warnings,
     };

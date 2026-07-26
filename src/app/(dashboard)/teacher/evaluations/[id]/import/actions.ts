@@ -73,6 +73,19 @@ export async function commitImportAction(
     return { error: "El formulario de revisión está corrupto. Recarga la página." };
   }
 
+  // Normalizamos los campos obligatorios del dominio que pueden llegar
+  // ausentes tras cruzar el boundary FormData → JSON.parse. Caso típico:
+  // un `QuestionImportJob` persistido en BD por un build previo a la
+  // introducción de `contextImages` (commit hace un refresh y reusa la
+  // snapshot). Sin esto, `aggregateContextImages` revienta con
+  // "Cannot convert undefined or null to object". Solo rellenamos lo que
+  // NO pueda reconstruirse desde el resto de los campos.
+  questions = questions.map((q) => ({
+    ...q,
+    contextImages: q.contextImages ?? {},
+    warnings: q.warnings ?? [],
+  }));
+
   let corrections: Record<number, AnswerKey> = {};
   try {
     corrections = JSON.parse(correctionsRaw) as Record<number, AnswerKey>;

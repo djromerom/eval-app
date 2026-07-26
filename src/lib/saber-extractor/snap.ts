@@ -1,10 +1,32 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { BBox } from "./types";
 
 const run = promisify(execFile);
+
+/**
+ * Resuelve la ruta absoluta de un binario externo (típicamente
+ * `pdftoppm` para el render de páginas). Misma lógica que
+ * `resolveBin` en `figures.ts` — ver docstring allí para el
+ * rationale completo. En shells no-login `/opt/homebrew/bin`
+ * no está en PATH aunque los binarios estén ahí.
+ */
+function resolveBin(name: string): string {
+  const pathEnv = process.env.PATH ?? "";
+  for (const dir of pathEnv.split(":")) {
+    if (!dir) continue;
+    const candidate = join(dir, name);
+    if (existsSync(candidate)) return candidate;
+  }
+  for (const dir of ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]) {
+    const candidate = join(dir, name);
+    if (existsSync(candidate)) return candidate;
+  }
+  return name;
+}
 
 /**
  * Ajuste determinista del bbox de una figura.
@@ -37,7 +59,7 @@ export async function renderPageGray(
   tmpDir: string,
 ): Promise<GrayImage> {
   const prefix = join(tmpDir, `.gray-${page}`);
-  await run("pdftoppm", [
+  await run(resolveBin("pdftoppm"), [
     "-gray",
     "-r",
     String(dpi),
