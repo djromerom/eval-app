@@ -56,6 +56,19 @@ export interface ParsedQuestion {
   /** Contexto al que pertenecía, si la fuente agrupaba preguntas. */
   contextTitle: string | null;
   contextText: string | null;
+  /**
+   * Mapa id globalizado de figura ("p04-fig1") → URL del upload
+   * institucional, SOLO para las figuras referenciadas dentro de
+   * `contextText` (placeholders del tipo `[IMAGEN p04-fig1]`). Las
+   * imágenes de la pregunta viven en `image` (campo aparte). Si el
+   * contexto no tiene figuras, queda como `{}` (no `null`), para que
+   * `Object.entries(q.contextImages)` sea seguro sin optional chaining.
+   *
+   * El parser lo hidrata desde el `figIdToUrl` global del extractor —
+   * ver `saber-extractor-parser.ts:mapAuditedQuestion`. DOCX/CSV no
+   * referencian figuras del contexto; ahí siempre es `{}`.
+   */
+  contextImages: Record<string, string>;
   /** Imagen inline adjunta (DOCX principalmente). */
   image: ParsedQuestionImage | null;
   /** Lo que el parser no pudo resolver; se pinta en la revisión. */

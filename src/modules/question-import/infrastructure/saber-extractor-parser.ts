@@ -28,7 +28,13 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
-import { extractExam, type AuditedQuestion, type Figure } from "@/lib/saber-extractor";
+import {
+  extractExam,
+  figureIdsInText,
+  layoutAvailable,
+  type AuditedQuestion,
+  type Figure,
+} from "@/lib/saber-extractor";
 import type { UploadImageFn } from "../infrastructure/docx-parser";
 import type { AnswerConfidence, ParseResult, ParsedQuestion } from "../domain/parsed-question";
 import type { QuestionExtractProgress } from "../domain/question-import-queue";
@@ -150,6 +156,19 @@ function mapAuditedQuestion(
     q.contextText?.trim() ||
     (q.contextTitle ? (contextsByTitle.get(q.contextTitle) ?? null) : null);
 
+  // Hidratamos `contextImages` con todas las figuras referenciadas DENTRO
+  // del `contextText` (no solo la primera). `figureIdsInText` ya filtra
+  // por ids globalizados (`/^p\d+-fig\d+$/`) y deduplica, así que el
+  // mapa solo trae entries con URLs reales (las que se subieron bien)
+  // y nunca trae IDs basura del LLM.
+  const contextImages: Record<string, string> = {};
+  if (contextText) {
+    for (const id of figureIdsInText(contextText)) {
+      const url = figIdToUrl.get(id);
+      if (url) contextImages[id] = url;
+    }
+  }
+
   const answerConfidence = q.answerConfidence as AnswerConfidence | undefined;
 
   return {
@@ -161,11 +180,61 @@ function mapAuditedQuestion(
     evidence: q.evidence ?? null,
     contextTitle: q.contextTitle ?? null,
     contextText,
+    contextImages,
     image: imageUrl ? { url: imageUrl } : null,
     warnings: [],
     ...(answerConfidence ? { answerConfidence } : {}),
     ...(q.answerRationale ? { answerRationale: q.answerRationale } : {}),
   };
+}
+
+/**
+ * Decide si se le pide al motor que use el detector de layout (DocLayout-YOLO)
+ * para afinar los bboxes de las figuras. Layout es **ON-por-defecto**: probeamos
+ * el detector Python una vez al primer job (`layoutAvailable` corre
+ * `detect_layout.py --check`, que descarga el modelo la primera vez), y
+ * cacheamos el resultado en memoria para no pagar el probe por cada extracción.
+ *
+ * - Si el detector responde → `true` y logueamos INFO una vez.
+ * - Si no responde (venv no instalado, onnxruntime faltante, sin red para
+ *   descargar el modelo) → `false` y logueamos INFO con el motivo. Sin WARN
+ *   porque el fallback es el comportamiento histórico; no es un error.
+ * - Si querés forzar el camino "bbox del LLM" (e.g. depuración), exportá
+ *   `SABER_EXTRACT_LAYOUT_ENABLED=0` antes de arrancar el worker.
+ *
+ * ¿Por qué auto-on y no flag-gated? El flag original obligaba al operador a
+ * recordar configurarlo, mientras que el sidecar Python ya viene en el árbol
+ * del paquete saber-extractor: con `pip install` único, todas las figuras
+ * salen ajustadas. Quitar el flag elimina un "ya lo configuraré" que se
+ * traducía en crops sucios en producción.
+ *
+ * Cachear el resultado es válido porque el worker es un proceso PM2 estable:
+ * si cambian las deps Python (instalás onnxruntime), basta reiniciar el
+ * worker para que el probe se vuelva a correr.
+ */
+let layoutCheckPromise: Promise<boolean> | null = null;
+
+async function resolveLayoutEnabled(): Promise<boolean> {
+  if (process.env.SABER_EXTRACT_LAYOUT_ENABLED === "0") {
+    console.info("[saber-extractor-parser] layout desactivado por SABER_EXTRACT_LAYOUT_ENABLED=0.");
+    return false;
+  }
+  if (!layoutCheckPromise) {
+    layoutCheckPromise = (async () => {
+      const check = await layoutAvailable();
+      if (check.ok) {
+        console.info(
+          "[saber-extractor-parser] layout detector activo: recortes ajustados con DocLayout-YOLO.",
+        );
+        return true;
+      }
+      console.info(
+        `[saber-extractor-parser] layout no disponible (${check.reason}); usando bbox del LLM.`,
+      );
+      return false;
+    })();
+  }
+  return layoutCheckPromise;
 }
 
 /**
@@ -185,13 +254,27 @@ export async function parseQuestionsFromPdf(
 
   try {
     await writeFile(pdfPath, buffer);
+
+    // Layout: decidido ANTES de invocar el motor para no pasar la opción
+    // cuando el detector Python no esté listo. `resolveLayoutEnabled` ya
+    // loggea el motivo si la flag está ON pero el detector no responde,
+    // así que aquí solo propagamos el booleano limpio.
+    const layoutEnabled = await resolveLayoutEnabled();
     const sel = pickProvider();
     const result = await extractExam(pdfPath, {
       provider: { type: sel.provider },
       ...(sel.extractModel
         ? { models: { extractModel: sel.extractModel, solveModel: sel.solveModel ?? "" } }
         : {}),
-      images: { dir: imagesDir, dpi: 200 },
+      images: {
+        dir: imagesDir,
+        dpi: 200,
+        layout: layoutEnabled,
+        // `layoutDpi` no se setea: usamos el default del motor (150 DPI).
+        // Subirlo mejora precisión en figuras pequeñas pero multiplica
+        // el coste de inferencia (cuadrático en DPI). Reconfigurable
+        // desde aquí si vemos recortes incompletos en escaneos.
+      },
       parallelExtraction: false,
       onProgress: (ev) => {
         // Mapeo 1:1 del ProgressEvent de saber-extractor a nuestro subset.

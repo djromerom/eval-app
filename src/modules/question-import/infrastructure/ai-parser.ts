@@ -171,6 +171,11 @@ export function parseQuestionsWithAi(documentText: string, aiJson: string): Pars
         evidence: q.evidence?.trim() || null,
         contextTitle,
         contextText,
+        // El parser IA genérico no tiene vínculo a figuras recortadas
+        // del PDF (eso es responsabilidad del saber-extractor-parser).
+        // Dejamos el campo presente y vacío para que la BD y los
+        // callers aguas abajo no tengan que tratarlo como opcional.
+        contextImages: {},
         image: q.imagePlaceholder ? { url: q.imagePlaceholder } : null,
         warnings: [],
       }),

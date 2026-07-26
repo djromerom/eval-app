@@ -156,7 +156,19 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
         if (!explicit) {
           return fail(new NotFoundError("Contexto de formulación", destination.sectionId));
         }
-        const merged = mergeContextsIntoSectionContent(explicit.content, uniqueContexts);
+        // Construimos el mapa contextText → { id → url } agregando las
+        // figuras de TODAS las preguntas que comparten ese contexto.
+        // Es la misma figura, así que la primera URL que aparezca es la
+        // válida (los IDs vienen del `FigureRegistry` global del extractor).
+        const contextImagesByText: Record<string, Record<string, string>> = {};
+        for (const ctx of uniqueContexts) {
+          contextImagesByText[ctx] = aggregateContextImages(questions, ctx);
+        }
+        const merged = mergeContextsIntoSectionContent(
+          explicit.content,
+          uniqueContexts,
+          contextImagesByText,
+        );
         await this.evaluations.updateSection(
           actor.institutionId,
           destination.evaluationId,
@@ -193,12 +205,13 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
       const titleToSection = new Map<string, string>();
 
       for (const ctx of uniqueContexts) {
+        const imageMap = aggregateContextImages(questions, ctx);
         const sec = await this.evaluations.addSection(
           actor.institutionId,
           destination.evaluationId,
           {
             title: deriveSectionTitle(ctx),
-            content: contextTextToRichText(ctx),
+            content: contextTextToRichText(ctx, imageMap),
           },
         );
         contextToSection.set(ctx, sec.id);
@@ -274,7 +287,12 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
     const withContextInlined = questions.map((q) => {
       if (!q.contextText) return { text: toRichText(q.text) };
       return {
-        text: prependContextToBankQuestion(toRichText(q.text), q.contextTitle, q.contextText),
+        text: prependContextToBankQuestion(
+          toRichText(q.text),
+          q.contextTitle,
+          q.contextText,
+          q.contextImages,
+        ),
       };
     });
 
@@ -316,14 +334,17 @@ function toRichText(text: string): unknown {
 }
 
 /**
- * Igual que `toRichText` pero parsea bloques `[TABLA: ...]` del LLM y los
- * convierte en nodos `table` reales. Usado para los contexts que van al
- * `section.content` cuando auto-creamos secciones por contexto: el LLM mete
- * la instrucción y la tabla en el mismo bloque y queremos que la tabla
- * llegue renderizable al editor y al PDF, no como un literal `[TABLA: ...]`.
+ * Igual que `toRichText` pero parsea bloques `[TABLA: ...]` y
+ * placeholders `[IMAGEN id]` del LLM y los convierte en nodos `table`
+ * / `image` reales. Usado para los contexts que van al `section.content`
+ * cuando auto-creamos secciones por contexto: el LLM mete la instrucción
+ * y la tabla en el mismo bloque y queremos que la tabla llegue
+ * renderizable al editor y al PDF, no como un literal `[TABLA: ...]`.
+ * Igual con las figuras: los `[IMAGEN id]` se resuelven a `<img>` con
+ * `src` apuntando al upload institucional.
  */
-function contextTextToRichText(text: string): unknown {
-  const nodes = contextTextToTipTap(text);
+function contextTextToRichText(text: string, imageMap?: Record<string, string>): unknown {
+  const nodes = contextTextToTipTap(text, imageMap);
   return { type: "doc", content: nodes };
 }
 
@@ -342,4 +363,37 @@ function deriveSectionTitle(raw: string): string | undefined {
     .find(Boolean);
   if (!firstLine) return undefined;
   return firstLine.length > 80 ? `${firstLine.slice(0, 77)}…` : firstLine;
+}
+
+/**
+ * Agrega los `contextImages` de todas las preguntas que comparten un
+ * mismo `contextText` en un único mapa `id → url`. Si varias preguntas
+ * traen la misma figura, gana la primera (las URLs son estables por
+ * id y vienen del `FigureRegistry` global del extractor).
+ *
+ * La razón de agregar es que el `contextText` se guarda UNA sola vez
+ * en `section.content` para todas las preguntas que lo comparten; el
+ * mapa de imágenes tiene que reflejar TODAS las figuras que el
+ * extracto[or] detectó para ese contexto, no solo las de la primera
+ * pregunta.
+ */
+function aggregateContextImages(
+  questions: ParsedQuestion[],
+  contextText: string,
+): Record<string, string> {
+  const agg: Record<string, string> = {};
+  for (const q of questions) {
+    if (q.contextText !== contextText) continue;
+    // Defensa: `contextImages` es `Record<string, string>` en el dominio,
+    // pero al cruzar boundaries de confianza (FormData → JSON.parse → BD)
+    // puede llegar `undefined` (campo ausente en builds previos). Sin esta
+    // guarda `Object.entries(undefined)` lanza "Cannot convert undefined or
+    // null to object" en `commitImportAction`. Tratamos la ausencia como
+    // "sin imágenes del contexto" y seguimos.
+    const imgs = q.contextImages ?? {};
+    for (const [id, url] of Object.entries(imgs)) {
+      agg[id] = url; // first wins; URLs son estables por id
+    }
+  }
+  return agg;
 }

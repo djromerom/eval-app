@@ -85,15 +85,28 @@ export function collectUniqueContexts(questions: ParsedQuestion[]): string[] {
  *
  * Si `contexts` está vacío, devuelve `current` tal cual (útil cuando una
  * importación llega sin contexto compartido).
+ *
+ * `contextImagesByText` mapea cada `contextText` único al mapa
+ * `id → url` para las figuras referenciadas dentro de él. Si una
+ * entrada falta, ese contexto se parsea igual pero los placeholders
+ * `[IMAGEN id]` quedan como texto literal (comportamiento por
+ * defecto).
  */
-export function mergeContextsIntoSectionContent(current: unknown, contexts: string[]): TipTapDoc {
+export function mergeContextsIntoSectionContent(
+  current: unknown,
+  contexts: string[],
+  contextImagesByText?: Record<string, Record<string, string>>,
+): TipTapDoc {
   if (contexts.length === 0) return asTipTapDoc(current);
   const base = asTipTapDoc(current);
-  // Cada contexto se parsea en busca de bloques `[TABLA: ...]` para
-  // emitir nodos `table` reales; el resto queda como `paragraph`. El
-  // comportamiento para contextos SIN tablas es idéntico al anterior
-  // (un solo `paragraph` con todo el texto).
-  const blocks: TipTapNode[] = contexts.flatMap((c) => contextTextToTipTap(c));
+  // Cada contexto se parsea en busca de bloques `[TABLA: ...]` y
+  // placeholders `[IMAGEN id]` para emitir nodos `table` / `image`
+  // reales; el resto queda como `paragraph`. El comportamiento para
+  // contextos SIN tablas ni imágenes es idéntico al anterior (un
+  // solo `paragraph` con todo el texto).
+  const blocks: TipTapNode[] = contexts.flatMap((c) =>
+    contextTextToTipTap(c, contextImagesByText?.[c]),
+  );
   const separator = base.content.length > 0 ? [horizontalRule()] : [];
   return { type: "doc", content: [...base.content, ...separator, ...blocks] };
 }
@@ -107,20 +120,26 @@ export function mergeContextsIntoSectionContent(current: unknown, contexts: stri
  * para contexto compartido. Es una pérdida de estructura: si la pregunta
  * se reusa en una formulación, el contexto la "sigue" como parte de su
  * enunciado.
+ *
+ * `contextImages` es el mapa `id → url` para las figuras referenciadas
+ * dentro del `contextText`. Si no se pasa, los placeholders `[IMAGEN id]`
+ * quedan como texto literal.
  */
 export function prependContextToBankQuestion(
   text: unknown,
   contextTitle: string | null,
   contextText: string,
+  contextImages?: Record<string, string>,
 ): TipTapDoc {
   const base = asTipTapDoc(text);
   const trimmed = contextText.trim();
   if (trimmed.length === 0) return base;
   const header = contextHeading(contextTitle);
-  // Parsea el contexto en busca de bloques `[TABLA: ...]` para emitir
-  // nodos `table` reales; el resto queda como `paragraph`. Para un
-  // contexto SIN tablas, el resultado es el mismo `paragraph` de antes.
-  const intro = contextTextToTipTap(trimmed);
+  // Parsea el contexto en busca de bloques `[TABLA: ...]` y
+  // placeholders `[IMAGEN id]` para emitir nodos `table` / `image`
+  // reales; el resto queda como `paragraph`. Para un contexto SIN
+  // tablas ni imágenes, el resultado es el mismo `paragraph` de antes.
+  const intro = contextTextToTipTap(trimmed, contextImages);
   return {
     type: "doc",
     content: [header, ...intro, ...base.content],

@@ -260,4 +260,220 @@ Final.`;
       expect(rowCellsText(table.content![1]!)).toEqual(["D1", "D2"]);
     });
   });
+
+  describe("imágenes ([IMAGEN id])", () => {
+    const isImage = (n: TipTapNode): boolean => n.type === "image";
+    const imageAttrs = (n: TipTapNode): Record<string, unknown> => (n.attrs ?? {}) as never;
+
+    it("con `imageMap` undefined preserva el placeholder como texto", () => {
+      const input = "Observe el gráfico: [IMAGEN p04-fig1] y responda.";
+      const nodes = contextTextToTipTap(input);
+      expect(nodes).toHaveLength(1);
+      expect(isParagraph(nodes[0]!)).toBe(true);
+      expect(paragraphText(nodes[0]!)).toContain("[IMAGEN p04-fig1]");
+      expect(nodes.find(isImage)).toBeUndefined();
+    });
+
+    it("con `imageMap` vacío preserva el placeholder como texto", () => {
+      const input = "Observe el gráfico: [IMAGEN p04-fig1] y responda.";
+      const nodes = contextTextToTipTap(input, {});
+      expect(nodes.filter(isImage)).toHaveLength(0);
+      expect(paragraphText(nodes[0]!)).toContain("[IMAGEN p04-fig1]");
+    });
+
+    it("imageMap con 1 id → emite un nodo `image` con `src` y `width: 80`", () => {
+      const url = "/api/uploads/evaluations/inst-1/uuid-1.jpg";
+      const input = "Observe el gráfico: [IMAGEN p04-fig1] y responda.";
+      const nodes = contextTextToTipTap(input, { "p04-fig1": url });
+      // 2 paragraphs (antes y después) + 1 image intercalada
+      expect(nodes).toHaveLength(3);
+      expect(isParagraph(nodes[0]!)).toBe(true);
+      expect(paragraphText(nodes[0]!)).toBe("Observe el gráfico:");
+      expect(isImage(nodes[1]!)).toBe(true);
+      expect(imageAttrs(nodes[1]!)).toEqual({ src: url, width: 80 });
+      expect(isParagraph(nodes[2]!)).toBe(true);
+      expect(paragraphText(nodes[2]!)).toBe("y responda.");
+    });
+
+    it("texto + imagen + texto + imagen → 3 paragraphs + 2 images", () => {
+      const urlA = "/api/uploads/inst/uuid-a.jpg";
+      const urlB = "/api/uploads/inst/uuid-b.jpg";
+      const input = "A [IMAGEN p04-fig1] B [IMAGEN p04-fig2] C";
+      const nodes = contextTextToTipTap(input, {
+        "p04-fig1": urlA,
+        "p04-fig2": urlB,
+      });
+      expect(nodes).toHaveLength(5);
+      const paragraphs = nodes.filter(isParagraph);
+      expect(paragraphs.map(paragraphText)).toEqual(["A", "B", "C"]);
+      const images = nodes.filter(isImage);
+      expect(images).toHaveLength(2);
+      expect(imageAttrs(images[0]!)).toEqual({ src: urlA, width: 80 });
+      expect(imageAttrs(images[1]!)).toEqual({ src: urlB, width: 80 });
+    });
+
+    it("imagen al inicio del texto", () => {
+      const url = "/api/uploads/inst/uuid-a.jpg";
+      const input = "[IMAGEN p04-fig1]\nTexto posterior.";
+      const nodes = contextTextToTipTap(input, { "p04-fig1": url });
+      expect(nodes).toHaveLength(2);
+      expect(isImage(nodes[0]!)).toBe(true);
+      expect(isParagraph(nodes[1]!)).toBe(true);
+      expect(paragraphText(nodes[1]!)).toBe("Texto posterior.");
+    });
+
+    it("imagen al final del texto", () => {
+      const url = "/api/uploads/inst/uuid-a.jpg";
+      const input = "Texto previo.\n[IMAGEN p04-fig1]";
+      const nodes = contextTextToTipTap(input, { "p04-fig1": url });
+      expect(nodes).toHaveLength(2);
+      expect(isParagraph(nodes[0]!)).toBe(true);
+      expect(paragraphText(nodes[0]!)).toBe("Texto previo.");
+      expect(isImage(nodes[1]!)).toBe(true);
+    });
+
+    it("solo imagen, sin texto", () => {
+      const url = "/api/uploads/inst/uuid-a.jpg";
+      const nodes = contextTextToTipTap("[IMAGEN p04-fig1]", {
+        "p04-fig1": url,
+      });
+      expect(nodes).toHaveLength(1);
+      expect(isImage(nodes[0]!)).toBe(true);
+      expect(imageAttrs(nodes[0]!)).toEqual({ src: url, width: 80 });
+    });
+
+    it("id huérfana (no en imageMap) → placeholder literal como paragraph", () => {
+      const input = "Antes [IMAGEN p04-figX] después.";
+      const nodes = contextTextToTipTap(input, { "p04-fig1": "/u/1.jpg" });
+      expect(nodes.filter(isImage)).toHaveLength(0);
+      expect(paragraphText(nodes[0]!)).toContain("[IMAGEN p04-figX]");
+    });
+
+    it("mezcla con tabla: párrafo + imagen + tabla (orden preservado)", () => {
+      const url = "/api/uploads/inst/uuid-a.jpg";
+      const input = `Intro.
+[IMAGEN p04-fig1]
+[TABLA: T
+| H |
+|---|
+| D |]`;
+      const nodes = contextTextToTipTap(input, { "p04-fig1": url });
+      // 1 paragraph + 1 image + 1 heading + 1 table
+      expect(nodes).toHaveLength(4);
+      expect(isParagraph(nodes[0]!)).toBe(true);
+      expect(paragraphText(nodes[0]!)).toBe("Intro.");
+      expect(isImage(nodes[1]!)).toBe(true);
+      expect(isHeading(nodes[2]!, 4)).toBe(true);
+      expect(isTable(nodes[3]!)).toBe(true);
+    });
+
+    it("`!!IMAGEN id!!` (formato de la imagen de la pregunta) NO se confunde", () => {
+      const url = "/api/uploads/inst/uuid-a.jpg";
+      const input = "Texto con !!IMAGEN p04-fig1!! embebido.";
+      const nodes = contextTextToTipTap(input, { "p04-fig1": url });
+      // El formato `!!IMAGEN` no matchea el regex `[IMAGEN ...]`, queda
+      // como paragraph literal.
+      expect(nodes.filter(isImage)).toHaveLength(0);
+      expect(paragraphText(nodes[0]!)).toContain("!!IMAGEN p04-fig1!!");
+    });
+
+    it("imagen con whitespace irregular dentro del placeholder", () => {
+      const url = "/api/uploads/inst/uuid-a.jpg";
+      const input = "Antes [IMAGEN    p04-fig1   ] después.";
+      const nodes = contextTextToTipTap(input, { "p04-fig1": url });
+      expect(nodes.filter(isImage)).toHaveLength(1);
+      expect(imageAttrs(nodes.filter(isImage)[0]!)).toEqual({ src: url, width: 80 });
+    });
+
+    describe("descripción tras el id (formato del motor con caption)", () => {
+      it("`[IMAGEN id: descripción]` → image con `alt` y `title`", () => {
+        const url = "/api/uploads/inst/uuid-a.jpg";
+        const desc = "pintura cubista de Picasso titulada The Three Dancers";
+        const nodes = contextTextToTipTap(`Observe [IMAGEN p04-fig1: ${desc}] y responda.`, {
+          "p04-fig1": url,
+        });
+        const images = nodes.filter(isImage);
+        expect(images).toHaveLength(1);
+        // El placeholder INCLUIDO en el texto: el regex relaja hasta el `]`
+        // inclusive, no deja restos literales.
+        expect(nodes.filter(isParagraph).every((n) => !paragraphText(n).includes("[IMAGEN"))).toBe(
+          true,
+        );
+        expect(imageAttrs(images[0]!)).toEqual({
+          src: url,
+          width: 80,
+          alt: desc,
+          title: desc,
+        });
+      });
+
+      it("sin espacio tras `:` también matchea", () => {
+        const url = "/api/uploads/inst/uuid-a.jpg";
+        const nodes = contextTextToTipTap("[IMAGEN p04-fig1:cuadro al óleo]", {
+          "p04-fig1": url,
+        });
+        const images = nodes.filter(isImage);
+        expect(images).toHaveLength(1);
+        expect(imageAttrs(images[0]!)).toEqual({
+          src: url,
+          width: 80,
+          alt: "cuadro al óleo",
+          title: "cuadro al óleo",
+        });
+      });
+
+      it("descripción con comillas se preserva literal", () => {
+        const url = "/api/uploads/inst/uuid-a.jpg";
+        const nodes = contextTextToTipTap(
+          `[IMAGEN p04-fig1: "The Three Dancers", mostrando figuras bailando]`,
+          { "p04-fig1": url },
+        );
+        const images = nodes.filter(isImage);
+        expect(images).toHaveLength(1);
+        expect(imageAttrs(images[0]!).alt).toBe('"The Three Dancers", mostrando figuras bailando');
+      });
+
+      it("descripción huérfana (id no en map) → conserva placeholder literal", () => {
+        const nodes = contextTextToTipTap("Antes [IMAGEN p04-figX: descripción perdida] después.", {
+          "p04-fig1": "/u/1.jpg",
+        });
+        expect(nodes.filter(isImage)).toHaveLength(0);
+        expect(paragraphText(nodes[0]!)).toContain("[IMAGEN p04-figX: descripción perdida]");
+      });
+
+      it("mezcla imagen-con-desc y imagen-sin-desc en el mismo contexto", () => {
+        const urlA = "/api/uploads/inst/uuid-a.jpg";
+        const urlB = "/api/uploads/inst/uuid-b.jpg";
+        const nodes = contextTextToTipTap(
+          "Inicio. [IMAGEN p04-fig1: con caption] medio [IMAGEN p04-fig2] final.",
+          {
+            "p04-fig1": urlA,
+            "p04-fig2": urlB,
+          },
+        );
+        const images = nodes.filter(isImage);
+        expect(images).toHaveLength(2);
+        expect(imageAttrs(images[0]!)).toEqual({
+          src: urlA,
+          width: 80,
+          alt: "con caption",
+          title: "con caption",
+        });
+        expect(imageAttrs(images[1]!)).toEqual({
+          src: urlB,
+          width: 80,
+        });
+      });
+
+      it("descripción vacía tras `:` no añade `alt`/`title`", () => {
+        const url = "/api/uploads/inst/uuid-a.jpg";
+        const nodes = contextTextToTipTap("[IMAGEN p04-fig1:] x", { "p04-fig1": url });
+        const images = nodes.filter(isImage);
+        expect(images).toHaveLength(1);
+        expect(imageAttrs(images[0]!)).toEqual({ src: url, width: 80 });
+        expect(imageAttrs(images[0]!)).not.toHaveProperty("alt");
+        expect(imageAttrs(images[0]!)).not.toHaveProperty("title");
+      });
+    });
+  });
 });

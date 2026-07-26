@@ -19,6 +19,7 @@ const q = (over: Partial<ParsedQuestion> = {}): ParsedQuestion => ({
   evidence: null,
   contextTitle: null,
   contextText: null,
+  contextImages: {},
   image: null,
   warnings: [],
   ...over,
@@ -109,6 +110,30 @@ describe("mergeContextsIntoSectionContent", () => {
       content: [{ type: "text", text: "Otra lectura sin tabla, solo texto." }],
     });
   });
+
+  it("con `contextImagesByText` resuelve placeholders `[IMAGEN id]` a nodos `image`", () => {
+    const url = "/api/uploads/inst/uuid-1.jpg";
+    const merged = mergeContextsIntoSectionContent(null, ["Observe [IMAGEN p04-fig1]."], {
+      "Observe [IMAGEN p04-fig1].": { "p04-fig1": url },
+    });
+    // 1 paragraph ("Observe") + 1 image + 1 paragraph (".")
+    expect(merged.content).toHaveLength(3);
+    expect(merged.content[0]).toMatchObject({ type: "paragraph" });
+    expect(merged.content[1]).toEqual({
+      type: "image",
+      attrs: { src: url, width: 80 },
+    });
+    expect(merged.content[2]).toMatchObject({ type: "paragraph" });
+  });
+
+  it("sin `contextImagesByText` (undefined) los placeholders quedan como texto", () => {
+    const merged = mergeContextsIntoSectionContent(null, ["Vea [IMAGEN p04-fig1]."]);
+    expect(merged.content).toHaveLength(1);
+    expect(merged.content[0]).toEqual({
+      type: "paragraph",
+      content: [{ type: "text", text: "Vea [IMAGEN p04-fig1]." }],
+    });
+  });
 });
 
 describe("prependContextToBankQuestion", () => {
@@ -193,6 +218,49 @@ describe("prependContextToBankQuestion", () => {
     expect(out.content[1]).toEqual({
       type: "paragraph",
       content: [{ type: "text", text: "Solo texto, sin tablas." }],
+    });
+  });
+
+  it("con imagen en el contexto → emite un nodo `image` con `src` resuelto", () => {
+    const url = "/api/uploads/evaluations/inst-1/uuid-1.jpg";
+    const out = prependContextToBankQuestion(
+      { type: "doc", content: [] },
+      "Contexto",
+      "Observe el gráfico: [IMAGEN p04-fig1] y responda.",
+      { "p04-fig1": url },
+    );
+    // header + paragraph + image + paragraph
+    expect(out.content).toHaveLength(4);
+    expect(out.content[0]).toEqual({
+      type: "heading",
+      attrs: { level: 3 },
+      content: [{ type: "text", text: "Contexto" }],
+    });
+    expect(out.content[1]).toEqual({
+      type: "paragraph",
+      content: [{ type: "text", text: "Observe el gráfico:" }],
+    });
+    expect(out.content[2]).toEqual({
+      type: "image",
+      attrs: { src: url, width: 80 },
+    });
+    expect(out.content[3]).toEqual({
+      type: "paragraph",
+      content: [{ type: "text", text: "y responda." }],
+    });
+  });
+
+  it("sin `contextImages` (undefined) → comportamiento idéntico al previo", () => {
+    // No pasamos el cuarto parámetro: el placeholder queda como texto.
+    const out = prependContextToBankQuestion(
+      { type: "doc", content: [] },
+      null,
+      "Vea [IMAGEN p04-fig1] antes de responder.",
+    );
+    expect(out.content).toHaveLength(2);
+    expect(out.content[1]).toEqual({
+      type: "paragraph",
+      content: [{ type: "text", text: "Vea [IMAGEN p04-fig1] antes de responder." }],
     });
   });
 });

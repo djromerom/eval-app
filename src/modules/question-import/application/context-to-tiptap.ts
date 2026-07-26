@@ -1,12 +1,14 @@
 /**
  * Convierte un `contextText` (string que puede contener bloques
- * `[TABLA: ...]`) en un array de nodos TipTap de bloque.
+ * `[TABLA: ...]` y placeholders `[IMAGEN id]`) en un array de nodos
+ * TipTap de bloque.
  *
  *   - Texto entre bloques  → 1+ `paragraph` (split por líneas no vacías)
  *   - Bloque `[TABLA: ...]` → 1 `heading` level-4 con el título (si
  *     no está vacío) + 1 `table/tableRow/tableHeader/tableCell`
- *   - Placeholders `[IMAGEN N]` se preservan como texto del paragraph
- *     (la asociación a `Figure` recortada es otra capa; ver plan).
+ *   - Placeholders `[IMAGEN id]` → 1 `image` node con `src` resuelto
+ *     desde el `imageMap` opcional. Si el id no está en el map, el
+ *     placeholder se conserva como texto literal.
  *
  * El LLM tiene una instrucción explícita en `saber-extractor/prompts.ts`
  * de escribir CADA FILA en su PROPIA línea, pero en la práctica las
@@ -37,8 +39,9 @@ export type TipTapNode = {
 // ---------- API pública ----------
 
 /**
- * Convierte un `contextText` en nodos TipTap de bloque (paragraphs +
- * headings + tables). Trim del input.
+ * Convierte un `contextText` (string que puede contener placeholders
+ * `[IMAGEN id]` además de bloques `[TABLA: ...]`) en nodos TipTap de
+ * bloque (paragraphs + headings + tables + images). Trim del input.
  *
  * Casos:
  *   - Input vacío → `[]`.
@@ -47,8 +50,16 @@ export type TipTapNode = {
  *   - Texto + tablas intercaladas → orden preservado.
  *   - Bloque con typo (ej. `[ABLA: T]`) → no se reconoce, queda como
  *     texto literal del paragraph; nunca perdemos contenido.
+ *   - Placeholders `[IMAGEN id]` → un nodo `image` por cada uno, con
+ *     `src` resuelto desde `imageMap` (si viene). Si el id no está en
+ *     el map (figura huérfana / no subida), el placeholder se conserva
+ *     como texto literal para no perder la referencia.
+ *
+ * `imageMap` es opcional: si no se pasa, los placeholders `[IMAGEN id]`
+ * se preservan como texto idéntico al comportamiento previo (no rompemos
+ * a los callers que no pasen imágenes).
  */
-export function contextTextToTipTap(text: string): TipTapNode[] {
+export function contextTextToTipTap(text: string, imageMap?: Record<string, string>): TipTapNode[] {
   const trimmed = text.trim();
   if (trimmed.length === 0) return [];
 
@@ -57,9 +68,10 @@ export function contextTextToTipTap(text: string): TipTapNode[] {
   let cursor = 0;
   let match: RegExpExecArray | null;
   while ((match = blockRe.exec(trimmed)) !== null) {
-    // Texto entre el cursor y el inicio del bloque → paragraphs.
+    // Texto entre el cursor y el inicio del bloque → paragraphs (con
+    // imágenes intercaladas si las hubiera).
     const between = trimmed.slice(cursor, match.index);
-    pushTextBlocks(blocks, between);
+    pushTextBlocks(blocks, between, imageMap);
 
     // El bloque en sí → heading + table.
     const body = match[1] ?? "";
@@ -80,7 +92,7 @@ export function contextTextToTipTap(text: string): TipTapNode[] {
 
   // Texto restante tras el último bloque.
   const tail = trimmed.slice(cursor);
-  pushTextBlocks(blocks, tail);
+  pushTextBlocks(blocks, tail, imageMap);
 
   return blocks;
 }
@@ -88,22 +100,139 @@ export function contextTextToTipTap(text: string): TipTapNode[] {
 // ---------- helpers internos ----------
 
 /** Convierte un fragmento de texto (sin bloques `[TABLA:...]`) en
- *  paragraphs. Vacío → no emite nada. */
-function pushTextBlocks(out: TipTapNode[], text: string): void {
+ *  paragraphs intercalando nodos `image` cuando aparecen placeholders
+ *  `[IMAGEN id]`. Vacío → no emite nada. */
+function pushTextBlocks(out: TipTapNode[], text: string, imageMap?: Record<string, string>): void {
   const trimmed = text.trim();
   if (trimmed.length === 0) return;
-  // Cada línea no vacía es un paragraph. No usamos `\n{2,}` para
-  // párrafos múltiples: el contexto del LLM típicamente llega con
-  // saltos simples, y partir por cada línea da un espaciado más
-  // predecible al renderizar.
-  for (const line of trimmed.split("\n")) {
-    const lineTrimmed = line.trim();
-    if (lineTrimmed.length === 0) continue;
-    out.push({
-      type: "paragraph",
-      content: [{ type: "text", text: lineTrimmed }],
-    });
+  // Estrategia: split el texto en segmentos alternados de TEXTO e
+  // IMAGEN. Cada segmento TEXT se procesa como antes (split por `\n`,
+  // un paragraph por línea); los nodos IMAGE se insertan TAL CUAL
+  // entre paragraphs (no se anidan dentro de un <p> — son leaf block
+  // nodes en el schema de TipTap).
+  const segments = splitTextByImages(trimmed, imageMap);
+  for (const seg of segments) {
+    if (seg.kind === "image") {
+      out.push(seg.node);
+      continue;
+    }
+    for (const line of seg.text.split("\n")) {
+      const lineTrimmed = line.trim();
+      if (lineTrimmed.length === 0) continue;
+      out.push({
+        type: "paragraph",
+        content: [{ type: "text", text: lineTrimmed }],
+      });
+    }
   }
+}
+
+/**
+ * Un segmento del split por placeholders `[IMAGEN id]`. El tag
+ * `kind: "text"` representa un fragmento de texto plano que luego
+ * `pushTextBlocks` parte por líneas; `kind: "image"` representa un
+ * nodo `image` TipTap listo para empujar al output.
+ */
+type TextSegment = { kind: "text"; text: string };
+type ImageSegment = { kind: "image"; node: TipTapNode };
+type Segment = TextSegment | ImageSegment;
+
+/**
+ * Split por placeholders `[IMAGEN id]` (y `[IMAGEN id: descripción]`)
+ * dentro de un fragmento de texto. Captura el id y, si está en
+ * `imageMap`, emite un nodo `image` con `src` resuelto. Si el
+ * placeholder trae una descripción (lo que el motor emite por
+ * convención de prompt — ver `lib/saber-extractor/prompts.ts`),
+ * se conserva como `alt` y `title` del nodo para accesibilidad y
+ * como pista visual cuando el docente esté revisando.
+ *
+ * Comportamiento por fast-path: si NO hay `imageMap`, o si ningún
+ * placeholder matchea una entrada del `imageMap`, devuelve el texto
+ * como un único `TextSegment` — preservando el comportamiento previo
+ * (un solo `paragraph` con todo el texto). Esto evita romper los
+ * callers que pasan contextos sin imágenes, o contextos con
+ * placeholders huérfanos (e.g. figura no subida).
+ *
+ * Importante: el formato `[IMAGEN id]` (con corchetes) NO se confunde
+ * con `!!IMAGEN id!!` (formato de la imagen de la pregunta) — el
+ * regex exige `[` al inicio.
+ *
+ * Formato aceptado por el regex:
+ *   [IMAGEN p04-fig1]                          → id solo
+ *   [IMAGEN p04-fig1]                          → whitespace tolerante
+ *   [IMAGEN p04-fig1: descripción]             → descripción como alt/title
+ *   [IMAGEN p04-fig1:cuadro al óleo]           → sin espacio tras `:`
+ *   [IMAGEN p04-fig1: "Título con comillas"]   → comillas literales se preservan
+ *
+ * Limitación: si la descripción contiene `]` anidados (ej.
+ * `[IMAGEN p04-fig1: cuadro [óleo]]`), el corte se hace en el
+ * PRIMER `]` y el resto queda como texto. Raro en la práctica: el
+ * motor emite descripciones planas.
+ */
+const IMAGE_RE = /\[IMAGEN\s+([\w-]+)(?::\s*([^\]]*))?\s*\]/gi;
+
+type ImageMatch = {
+  start: number;
+  end: number;
+  url: string;
+  /** Descripción textual tras `:`, o `null` si no viene. */
+  description: string | null;
+};
+
+function splitTextByImages(text: string, imageMap?: Record<string, string>): Segment[] {
+  // Fast-path: sin imageMap no hay nada que emitir como image.
+  if (!imageMap) return [{ kind: "text", text }];
+
+  // Pre-pasada: ¿hay AL MENOS un match con URL? Si no, devolvemos
+  // texto plano (preservamos los placeholders literales).
+  IMAGE_RE.lastIndex = 0;
+  const matchingRanges: ImageMatch[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = IMAGE_RE.exec(text)) !== null) {
+    const id = m[1]!;
+    const url = imageMap[id];
+    if (url) {
+      const description = m[2]?.trim() ? m[2].trim() : null;
+      matchingRanges.push({
+        start: m.index,
+        end: m.index + m[0].length,
+        url,
+        description,
+      });
+    }
+  }
+  if (matchingRanges.length === 0) return [{ kind: "text", text }];
+
+  // Split real: emitir text + image + text + image + ...
+  const out: Segment[] = [];
+  let cursor = 0;
+  for (const r of matchingRanges) {
+    if (r.start > cursor) {
+      out.push({ kind: "text", text: text.slice(cursor, r.start) });
+    }
+    const attrs: Record<string, unknown> = {
+      src: r.url,
+      // `width: 80` es el default razonable para figuras de
+      // contexto en un cuadernillo ICFES (deja margen a la columna
+      // de opciones). Configurable desde el editor visual: la
+      // `ResizableImage` persiste `attrs.width` en el node.
+      width: 80,
+    };
+    // La descripción del motor es útil como `alt` (accesibilidad)
+    // y como `title` (tooltip al pasar el mouse). TipTap Image
+    // expone ambos attrs; si vienen vacíos los omitimos para no
+    // guardar strings `""` que ensucien el doc JSON.
+    if (r.description) {
+      attrs.alt = r.description;
+      attrs.title = r.description;
+    }
+    out.push({ kind: "image", node: { type: "image", attrs } });
+    cursor = r.end;
+  }
+  if (cursor < text.length) {
+    out.push({ kind: "text", text: text.slice(cursor) });
+  }
+  return out;
 }
 
 /** Una fila de la "tabla cruda" parseada. */
