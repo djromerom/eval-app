@@ -210,7 +210,16 @@ fi
 
 # ---------- Rollout ----------
 log "rolling out: omr-service, web, workers…"
-docker compose -f "$COMPOSE_FILE" up -d omr-service web worker-omr worker-pdf
+# Importante incluir TODOS los workers que montan `env_file`. Si un worker
+# nuevo se añade al compose y se olvida acá, sus env vars (p.ej. las AI keys
+# del `worker-question-extract`) NUNCA se releen tras un `deploy --sha` y
+# un cambio de `.env.prod` queda sin efecto hasta un recreate manual.
+docker compose -f "$COMPOSE_FILE" up -d \
+  omr-service \
+  web \
+  worker-omr \
+  worker-pdf \
+  worker-question-extract
 
 # ---------- Healthcheck del web ----------
 log "esperando que 'web' quede healthy…"
