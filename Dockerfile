@@ -80,6 +80,15 @@ RUN pnpm next build
 RUN pnpm tsc -p tsconfig.worker.json \
  && pnpm tsc-alias -p tsconfig.worker.json
 
+# Empaqueta el script Python del detector de layout en el bundle de workers.
+# `tsc` solo emite `.js` (no `.py`), así que sin este COPY el worker
+# `question-extract` registra "layout no disponible" en cada extracción.
+# El shim `src/lib/saber-extractor/layout.ts > scriptPath()` busca
+# `<packageRoot>/python/detect_layout.py`; en el contenedor `packageRoot()`
+# resuelve a `dist-workers/src/lib/`, así que la ruta final es
+# `dist-workers/src/lib/python/detect_layout.py`. Coincide con este COPY.
+COPY src/lib/python/ dist-workers/src/lib/python/
+
 # Limpia devDependencies. Puppeteer y Chromium descargado se quedan (puppeteer
 # es prodDep; el cache vive en .puppeteer-cache/ y lo copiamos al runtime).
 # --ignore-scripts: salta el `postinstall: prisma generate` (prisma es devDep
