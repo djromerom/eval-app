@@ -105,7 +105,7 @@ export function ContextEditor({ data }: { data: ContextEditorData }) {
 
         <div className="min-w-0 flex-1 space-y-2">
           <p className="text-accent-foreground text-xs font-bold tracking-wider uppercase">
-            Contexto compartido
+            Contexto Común
           </p>
           <RichText value={data.section.content} className="text-foreground text-sm" />
         </div>

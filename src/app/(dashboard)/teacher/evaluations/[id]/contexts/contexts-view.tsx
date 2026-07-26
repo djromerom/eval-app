@@ -97,7 +97,7 @@ function ContextCard({ ctx, evaluationId }: { ctx: ContextCardData; evaluationId
       <footer className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
         <span className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold">
           <ListChecks className="h-3 w-3" />
-          {ctx.questionCount} pregunta{ctx.questionCount === 1 ? "" : "s"}
+          {ctx.questionCount} enunciados{ctx.questionCount === 1 ? "" : "s"}
         </span>
         <span className="inline-flex items-center gap-1 font-medium">
           <Timer className="h-3 w-3" />~{estimatedMinutes(ctx.questionCount)} min
@@ -114,7 +114,7 @@ function ContextCard({ ctx, evaluationId }: { ctx: ContextCardData; evaluationId
           href={detailHref}
           className="text-primary ml-auto inline-flex items-center gap-1 font-semibold hover:underline"
         >
-          Ver preguntas →
+          Ver Enunciados →
         </Link>
       </footer>
     </article>
@@ -135,7 +135,7 @@ export function ContextsView({
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-xl font-bold">
-            {contexts.length} contexto{contexts.length === 1 ? "" : "s"} / {totalQuestions} ítem
+            {contexts.length} Contexto{contexts.length === 1 ? "" : "s"} / {totalQuestions} Ítem
             {totalQuestions === 1 ? "" : "s"}
           </h2>
           <p className="text-muted-foreground text-sm">

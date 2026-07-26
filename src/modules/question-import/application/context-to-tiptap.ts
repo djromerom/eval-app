@@ -214,18 +214,22 @@ function parseTablaBlock(body: string): TablaParsed {
   return { title, headers, rows };
 }
 
-/** "A | B | C" → ["A","B","C"]; "| A | B |" → ["A","B"]; "  A  " → ["A"]. */
+/** "A | B | C" → ["A","B","C"]; "| A | B |" → ["A","B"]; "  A  " → ["A"].
+ *  "| A | | B |" → ["A","","B"] — celdas vacías INTERMEDIAS se preservan
+ *  (el LLM las emite para filas tipo "| | B. cake |" en ejercicios matching,
+ *  y para la última fila "| 5. Some people put this... | |" donde la col
+ *  derecha queda vacía). Las vacías en los EXTREMOS se descartan SÓLO si
+ *  la línea empieza/termina con `|` (los `|` de borde son delimitadores
+ *  de fila, no celdas). */
 function parseLine(line: string): RawLine {
-  // Split por `|`, trim, descarta vacíos. Esto ignora intencionalmente
-  // celdas vacías intermedias (el LLM no las emite y manejar `\|` no
-  // está en la spec). Si en el futuro se quiere soportar celdas vacías,
-  // cambiar a `line.split("|").map(s => s.trim())` y aceptar "" como
-  // celda válida.
-  const cells = line
-    .split("|")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  return { cells };
+  let trimmed = line;
+  // Saca el `|` inicial/final SOLO si la línea está claramente delimitada
+  // (empieza/termina con `|`). Si no, se respetan como parte del contenido.
+  if (trimmed.startsWith("|")) trimmed = trimmed.slice(1);
+  if (trimmed.endsWith("|")) trimmed = trimmed.slice(0, -1);
+  return {
+    cells: trimmed.split("|").map((s) => s.trim()),
+  };
 }
 
 /** Línea separadora: todas sus celdas son solo guiones (`---`). */
@@ -240,15 +244,31 @@ function normalizeRow(cells: string[], width: number): string[] {
   return [...cells, ...Array.from({ length: width - cells.length }, () => "")];
 }
 
-/** Construye un nodo TipTap `table` con headers + data rows. */
+/** Construye un nodo TipTap `table` con headers + data rows.
+ *
+ * OJO: ProseMirror rechaza nodos `text` con string vacío (`Empty text nodes
+ * are not allowed`). El LLM a veces emite celdas vacías (ej. `| | B. cake |`
+ * para una opción sin descripción), así que cada celda produce un paragraph
+ * cuyo `content` es `[{ text }]` solo si el texto NO está vacío — si está
+ * vacío, el paragraph se queda sin text node (válido: paragraph admite 0
+ * marks inline). */
 function buildTableNode(headers: string[], rows: string[][]): TipTapNode {
+  const cellText = (text: string): TipTapNode[] => {
+    if (text.length === 0) return [];
+    return [{ type: "text", text }];
+  };
+  const cellParagraph = (text: string): TipTapNode => ({
+    type: "paragraph",
+    content: cellText(text),
+  });
+
   const headerRow: TipTapNode | null =
     headers.length > 0
       ? {
           type: "tableRow",
           content: headers.map((h) => ({
             type: "tableHeader",
-            content: [{ type: "paragraph", content: [{ type: "text", text: h }] }],
+            content: [cellParagraph(h)],
           })),
         }
       : null;
@@ -257,7 +277,7 @@ function buildTableNode(headers: string[], rows: string[][]): TipTapNode {
     type: "tableRow",
     content: r.map((c) => ({
       type: "tableCell",
-      content: [{ type: "paragraph", content: [{ type: "text", text: c }] }],
+      content: [cellParagraph(c)],
     })),
   }));
 

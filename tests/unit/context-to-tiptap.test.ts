@@ -200,6 +200,26 @@ Después de la tabla.`;
       expect(nodes.find(isTable)).toBeUndefined();
     });
 
+    it("celdas vacías no producen nodos text vacíos (ProseMirror los rechaza)", () => {
+      // El LLM emite filas como `| | B. cake |` donde la col 1 está
+      // vacía. Antes del fix, el parser emitía `{ type: "text", text: "" }`
+      // para esas celdas, lo que revienta el schema de ProseMirror con
+      // "Empty text nodes are not allowed". El cell debe ser un paragraph
+      // SIN text node (válido: paragraph admite 0 marks inline).
+      const input = `[TABLA: T
+| Col1 | Col2 |
+|---|---|
+| A | |
+| | B |]`;
+      const nodes = contextTextToTipTap(input);
+      const table = nodes.find(isTable)!;
+      // Verificar que el JSON del cell vacío no contiene text=""
+      const cellA2 = table.content![1]!.content![1]!; // row 1 (data), col 1
+      const cellB1 = table.content![2]!.content![0]!; // row 2 (data), col 0
+      expect(cellA2.content).toEqual([{ type: "paragraph", content: [] }]);
+      expect(cellB1.content).toEqual([{ type: "paragraph", content: [] }]);
+    });
+
     it("input solo con el bloque de tabla, sin texto alrededor", () => {
       const input = `[TABLA: T
 | H |
