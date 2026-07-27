@@ -125,7 +125,7 @@ export function latexTextToTipTapNodes(text: string): TipTapNode[] {
   // partido por inline math (puede seguir inline aunque no haya blocks).
   if (blockTokens.length === 1 && blockTokens[0]?.kind === "text") {
     const paragraph = paragraphFromText(blockTokens[0].text);
-    return paragraph ? [paragraph] : [];
+    return paragraph ? applyPostParseHeuristics([paragraph]) : [];
   }
 
   const out: TipTapNode[] = [];
@@ -151,13 +151,22 @@ export function latexTextToTipTapNodes(text: string): TipTapNode[] {
       if (it.kind === "inlineMath") {
         pendingParaContent.push({ type: "inlineMath", attrs: { tex: it.tex } });
       } else if (it.text.length > 0) {
-        pendingParaContent.push({ type: "text", text: it.text });
+        // Cada text puede contener matches del heurístico post-parse
+        // (e.g. "[10+6-4(8/2)]^0"). splitByHeuristics devuelve nodos
+        // text/inlineMath que se mergean al paragraph acumulado.
+        for (const part of splitByHeuristics(it.text)) {
+          if (part.type === "inlineMath") {
+            pendingParaContent.push(part);
+          } else if (part.text && part.text.length > 0) {
+            pendingParaContent.push({ type: "text", text: part.text });
+          }
+        }
       }
     }
   }
   flushParagraph();
 
-  return out;
+  return applyPostParseHeuristics(out);
 }
 
 /**
@@ -178,4 +187,112 @@ function paragraphFromText(text: string): TipTapNode | null {
   }
   if (content.length === 0) return null;
   return { type: "paragraph", content };
+}
+
+// ============================================================
+// HEURÍSTICA POST-PARSE: pseudo-notación matemática sin delimitadores
+// ============================================================
+
+/**
+ * Detecta `[expr]^N` donde `expr` contiene al menos un operador
+ * (`+ - * / = < >`). Cobertura típica del cuadernillo ICFES cuando la IA
+ * emite la expresión como texto plano:
+ *
+ *   "[10 + 6 - 4(8/2)]^0 + 5"   →   "$[10 + 6 - 4(8/2)]^{0} + 5$"
+ *
+ * Restricciones (alineadas con `applyKatex` legacy):
+ *   - No permite `[`/`]` anidados (romperían fórmulas reales).
+ *   - No permite `&lt;`/`&gt;` dentro del delimitador.
+ *   - El `^N` exige dígitos (positivos o negativos) inmediatamente
+ *     después del `]`. Un `^` suelto (sin dígitos) NO matchea.
+ *
+ * Por qué es SEGURO (bajo riesgo de falsos positivos):
+ *   - Los corchetes literales en prosa castellana son rarísimos.
+ *   - El operador obligatorio filtra "[1] ver página 2" (lista numeral
+ *     sin operador: NO matchea) y "[nota al pie]" (sin operador).
+ *   - El `^N` pegado es todavía más raro fuera de fórmulas.
+ */
+const BRACKETED_POW_RE = /\[([^\[\]<>\n]+?)\]\^(-?\d+)/g;
+
+/** Devuelve true si `s` contiene al menos un operador matemático ASCII. */
+function hasOperator(s: string): boolean {
+  return /[+\-*/=<>]/.test(s);
+}
+
+/**
+ * Parte un fragmento de texto por matches de `BRACKETED_POW_RE`. Cada match
+ * se convierte en un nodo `inlineMath` con el LaTeX corregido (`{...}`
+ * explícito para que KaTeX renderice el superíndice). El texto entre
+ * matches y alrededor queda como nodos `text`.
+ *
+ * Si no hay matches, devuelve un único nodo `text` con el texto intacto
+ * (no rompe el shape — los callers siguen recibiendo un array de nodos).
+ */
+function splitByHeuristics(text: string): TipTapNode[] {
+  const matches: { start: number; end: number; tex: string }[] = [];
+  BRACKETED_POW_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = BRACKETED_POW_RE.exec(text)) !== null) {
+    const inner = m[1] ?? "";
+    if (hasOperator(inner)) {
+      const exp = m[2] ?? "";
+      matches.push({
+        start: m.index,
+        end: m.index + m[0].length,
+        tex: `[${inner}]^{${exp}}`,
+      });
+    }
+  }
+  if (matches.length === 0) {
+    return [{ type: "text", text }];
+  }
+  const out: TipTapNode[] = [];
+  let cursor = 0;
+  for (const match of matches) {
+    if (match.start > cursor) {
+      out.push({ type: "text", text: text.slice(cursor, match.start) });
+    }
+    out.push({ type: "inlineMath", attrs: { tex: match.tex } });
+    cursor = match.end;
+  }
+  if (cursor < text.length) {
+    out.push({ type: "text", text: text.slice(cursor) });
+  }
+  return out;
+}
+
+/**
+ * Recorre los nodos resultantes del parser y reemplaza runs de `text` que
+ * matchean `BRACKETED_POW_RE` por `inlineMath` con la versión LaTeX.
+ * Trabaja SOLO sobre nodos `paragraph.content` (no toca `blockMath`,
+ * `inlineMath`, `image`, etc.). Es idempotente y ortogonal al parser
+ * principal: si no hay matches, el array de entrada se devuelve intacto.
+ *
+ * Exportada para que los tests unitarios la puedan verificar aislada.
+ *
+ * Patrones pendientes (TODO documentado, fuera de scope de este PR):
+ *   - Sub-índices `E_p`/`C_P` (MAYÚSCULA + MINÚSCULA pegadas sin guión).
+ *     Riesgo de falsos positivos con palabras castellanas ("Es", "Ya",
+ *     "Si"). Decidir tras smoke real con el corpus ICFES.
+ *   - Superíndice aplanado del PDF (`t2` → `t^2`). Resolver en
+ *     pre-procesado del LLM, no en el parser.
+ *   - Fracciones partidas en 2 renglones del PDF. Mismo lugar que arriba.
+ *   - Botón "Convertir a LaTeX" en la pantalla `/import/review` para
+ *     casos manuales que la heurística no cubra.
+ */
+export function applyPostParseHeuristics(nodes: TipTapNode[]): TipTapNode[] {
+  return nodes.map((node) => {
+    if (node.type !== "paragraph" || !node.content) return node;
+    const rewritten: TipTapNode[] = [];
+    for (const child of node.content) {
+      if (child.type !== "text" || !child.text) {
+        rewritten.push(child);
+        continue;
+      }
+      for (const part of splitByHeuristics(child.text)) {
+        rewritten.push(part);
+      }
+    }
+    return { ...node, content: rewritten };
+  });
 }

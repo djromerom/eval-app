@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { latexTextToTipTapNodes } from "@/modules/question-import/application/latex-to-tiptap";
+import {
+  applyPostParseHeuristics,
+  latexTextToTipTapNodes,
+  type TipTapNode,
+} from "@/modules/question-import/application/latex-to-tiptap";
 
 /**
  * Helper para inspeccionar un array de nodos sin escribir todo el shape a
@@ -175,5 +179,173 @@ describe("latexTextToTipTapNodes", () => {
         { type: "text", text: " da el resultado" },
       ],
     });
+  });
+
+  // ---------- HEURÍSTICA POST-PARSE: pseudo-notación [expr]^N ----------
+
+  it("enunciado de la profesora con corchetes literales + ^N → inlineMath + texto", () => {
+    // Caso real que motivó el heurístico: la IA devolvió el enunciado como
+    // texto plano. Sin el heurístico, esto queda como un único text node
+    // y la profesora ve "[10 + 6 - 4(8/2)]^0 + 5" sin KaTeX.
+    const out = latexTextToTipTapNodes("El resultado de la expresión [10 + 6 - 4(8/2)]^0 + 5, es:");
+    expect(out).toHaveLength(1);
+    expect(out[0]!.type).toBe("paragraph");
+    expect(out[0]!.content).toEqual<Node[]>([
+      { type: "text", text: "El resultado de la expresión " },
+      { type: "inlineMath", attrs: { tex: "[10 + 6 - 4(8/2)]^{0}" } },
+      { type: "text", text: " + 5, es:" },
+    ]);
+  });
+
+  it("[x + y]^2 → un único inlineMath con el LaTeX corregido", () => {
+    const out = latexTextToTipTapNodes("Calcula [x + y]^2");
+    expect(out).toHaveLength(1);
+    expect(out[0]!.content).toEqual<Node[]>([
+      { type: "text", text: "Calcula " },
+      { type: "inlineMath", attrs: { tex: "[x + y]^{2}" } },
+    ]);
+  });
+
+  it("[abc]^3 SIN operador dentro → queda como texto literal", () => {
+    // Sin operador dentro, NO es una fórmula — es prosa. El heurístico
+    // exige al menos un operador (+ - * / = < >) para aceptar el match.
+    const out = latexTextToTipTapNodes("Mira [abc]^3 por favor");
+    expect(out).toEqual<Node[]>([
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "Mira [abc]^3 por favor" }],
+      },
+    ]);
+  });
+
+  it("[1]^5 sin operador dentro → queda como texto literal (numeral sin operador)", () => {
+    // Caso típico de "[1] ver página 2": numeral entre corchetes sin
+    // operador. NO debe convertirse en fórmula.
+    const out = latexTextToTipTapNodes("Item [1]^5 del listado");
+    expect(out).toEqual<Node[]>([
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "Item [1]^5 del listado" }],
+      },
+    ]);
+  });
+
+  it("texto sin corchetes ni ^ → queda intacto (no regresión)", () => {
+    const out = latexTextToTipTapNodes("Hola mundo, sin fórmulas aquí.");
+    expect(out).toEqual<Node[]>([
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "Hola mundo, sin fórmulas aquí." }],
+      },
+    ]);
+  });
+
+  it("precio con $ suelto NO se toca (red de seguridad legacy)", () => {
+    // El regex INLINE_MATH_RE exige pareja balanceada: "$2.99 USD" tiene
+    // UN solo $ literal → no casa. La heurística nueva tampoco toca este
+    // caso (no hay corchetes ni ^). El precio queda intacto.
+    const out = latexTextToTipTapNodes("Cuesta $2.99 USD");
+    expect(out).toEqual<Node[]>([
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "Cuesta $2.99 USD" }],
+      },
+    ]);
+  });
+
+  it("mix: $inline$ de LaTeX + [a+b]^2 de heurística → ambos conviven en el paragraph", () => {
+    const out = latexTextToTipTapNodes("Si $x$ y [a+b]^2 juntos");
+    expect(out).toHaveLength(1);
+    expect(out[0]!.content).toEqual<Node[]>([
+      { type: "text", text: "Si " },
+      { type: "inlineMath", attrs: { tex: "x" } },
+      { type: "text", text: " y " },
+      { type: "inlineMath", attrs: { tex: "[a+b]^{2}" } },
+      { type: "text", text: " juntos" },
+    ]);
+  });
+
+  it("block $$...$$ → la heurística NO entra (sale como blockMath antes)", () => {
+    // El bloque `$$...$$` se extrae en la pasada 1 como blockMath top-level.
+    // El heurístico solo recorre nodos paragraph, así que un blockMath con
+    // `[a+b]^2` dentro NO se toca (su `tex` ya es lo que la IA escribió).
+    const out = latexTextToTipTapNodes("$$[a+b]^2$$ fin");
+    expect(out).toEqual<Node[]>([
+      { type: "blockMath", attrs: { tex: "[a+b]^2" } },
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: " fin" }],
+      },
+    ]);
+  });
+
+  it("[a<b]^3 NO se detecta — < prohibido dentro del delimitador (igual que applyKatex)", () => {
+    // Misma restricción que el regex legacy: < y > rompen el HTML al
+    // serializar, así que el heurístico los prohíbe también.
+    const out = latexTextToTipTapNodes("Si [a<b]^3 entonces");
+    expect(out).toEqual<Node[]>([
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "Si [a<b]^3 entonces" }],
+      },
+    ]);
+  });
+
+  it("varios matches en el mismo texto → cada uno se convierte a inlineMath", () => {
+    const out = latexTextToTipTapNodes("Entre [a+b]^2 y [c-d]^3 hay más");
+    expect(out).toHaveLength(1);
+    expect(out[0]!.content).toEqual<Node[]>([
+      { type: "text", text: "Entre " },
+      { type: "inlineMath", attrs: { tex: "[a+b]^{2}" } },
+      { type: "text", text: " y " },
+      { type: "inlineMath", attrs: { tex: "[c-d]^{3}" } },
+      { type: "text", text: " hay más" },
+    ]);
+  });
+});
+
+// ============================================================
+// applyPostParseHeuristics (verificación aislada del helper)
+// ============================================================
+
+describe("applyPostParseHeuristics", () => {
+  it("array vacío → array vacío", () => {
+    expect(applyPostParseHeuristics([])).toEqual([]);
+  });
+
+  it("blockMath → bloque NO se toca (solo paragraph.content se reescribe)", () => {
+    const nodes: TipTapNode[] = [{ type: "blockMath", attrs: { tex: "[a+b]^2" } }];
+    expect(applyPostParseHeuristics(nodes)).toEqual(nodes);
+  });
+
+  it("paragraph sin text nodes → queda intacto", () => {
+    const nodes: TipTapNode[] = [
+      { type: "paragraph", content: [{ type: "inlineMath", attrs: { tex: "x" } }] },
+    ];
+    expect(applyPostParseHeuristics(nodes)).toEqual(nodes);
+  });
+
+  it("paragraph con text sin matches → devuelve nodos equivalentes (mismo text)", () => {
+    const nodes: TipTapNode[] = [
+      { type: "paragraph", content: [{ type: "text", text: "Hola mundo" }] },
+    ];
+    expect(applyPostParseHeuristics(nodes)).toEqual(nodes);
+  });
+
+  it("paragraph con text que matchea → reescribe el content", () => {
+    const nodes: TipTapNode[] = [
+      { type: "paragraph", content: [{ type: "text", text: "Antes [a+b]^2 después" }] },
+    ];
+    const out = applyPostParseHeuristics(nodes);
+    expect(out).toEqual<TipTapNode[]>([
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Antes " },
+          { type: "inlineMath", attrs: { tex: "[a+b]^{2}" } },
+          { type: "text", text: " después" },
+        ],
+      },
+    ]);
   });
 });

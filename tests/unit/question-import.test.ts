@@ -981,4 +981,38 @@ describe("ImportQuestions", () => {
       { type: "text", text: " son positivos…" },
     ]);
   });
+
+  // ---------- HEURÍSTICA POST-PARSE: pseudo-notación [expr]^N ----------
+
+  it("pregunta con corchetes literales + ^N (sin delimitadores LaTeX) → heurística produce inlineMath", async () => {
+    // Caso real que motivó el heurístico (PR #18): la IA emite el
+    // enunciado como texto plano y la profesora quiere ver la fórmula
+    // renderizada. El helper de import debe detectar el patrón
+    // `[expr]^N` y emitir un inlineMath con la versión LaTeX correcta.
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          text: "El resultado de la expresión [10 + 6 - 4(8/2)]^0 + 5, es:",
+          correctAnswer: "B",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const data = evals.added[0]!;
+    const tipTap = data.text as {
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    expect(tipTap.content).toHaveLength(1);
+    expect(tipTap.content[0]!.type).toBe("paragraph");
+    expect(tipTap.content[0]!.content).toEqual([
+      { type: "text", text: "El resultado de la expresión " },
+      { type: "inlineMath", attrs: { tex: "[10 + 6 - 4(8/2)]^{0}" } },
+      { type: "text", text: " + 5, es:" },
+    ]);
+  });
 });
