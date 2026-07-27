@@ -230,13 +230,8 @@ function assemble(
     const answer = solved?.answer ?? fallbackAnswer(q);
     const contextText =
       hydrate && q.contextTitle ? (ctxByTitle.get(q.contextTitle)?.text ?? "") : "";
-    // El vínculo pregunta→figura sale del placeholder si el modelo lo llenó;
-    // si no, se hereda del contexto compartido, que sí trae la referencia.
     const ctx = q.contextTitle ? ctxByTitle.get(q.contextTitle) : undefined;
-    const imageId = figures
-      ? (figureIdFromPlaceholder(q.imagePlaceholder) ??
-        (ctx ? (figureIdsInText(ctx.text)[0] ?? null) : null))
-      : null;
+    const imageId = resolveImageId(q, ctx, figures);
     return {
       number: q.number,
       contextTitle: q.contextTitle,
@@ -257,6 +252,40 @@ function assemble(
       answerRationale: solved?.rationale ?? "Sin resolver.",
     };
   });
+}
+
+/**
+ * Resuelve el id de la figura asociada a una pregunta en este orden de
+ * preferencia:
+ *
+ *  1. `imagePlaceholder` que llenó el LLM (forma explícita, siempre gana).
+ *  2. Primera figura referenciada dentro del contexto compartido (caso
+ *     típico: lectura con figuras que varias preguntas aprovechan).
+ *  3. Primera figura referenciada dentro del PROPIO texto de la pregunta.
+ *     Este tercer fallback rescata el caso "pregunta con su propia
+ *     figura" cuando el LLM olvidó llenar `imagePlaceholder` pero sí
+ *     puso la referencia `[IMAGEN N]` en el `text`. Sin esto, las
+ *     figuras dentro de preguntas individuales (sin contexto compartido)
+ *     quedaban huérfanas: recortadas a disco pero sin vínculo a la
+ *     pregunta que las usa.
+ *
+ * Después de `globalizeFigures` las referencias en `text` ya están en
+ * formato global (`p04-fig1`), que es el que `figureIdsInText` acepta.
+ *
+ * Exportada para tests; el motor la invoca vía `assemble`.
+ */
+export function resolveImageId(
+  question: ExtractedQuestion,
+  context: Context | undefined,
+  figures: Figure[] | null,
+): string | null {
+  if (!figures) return null;
+  return (
+    figureIdFromPlaceholder(question.imagePlaceholder) ??
+    (context ? (figureIdsInText(context.text)[0] ?? null) : null) ??
+    figureIdsInText(question.text)[0] ??
+    null
+  );
 }
 
 function fallbackAnswer(q: ExtractedQuestion): AuditedQuestion["correctAnswer"] {
