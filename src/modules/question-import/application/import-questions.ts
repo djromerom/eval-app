@@ -137,10 +137,16 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
     //    ya existe".
     //  - SIN sectionId: el docente NO eligió sección porque quiere que el
     //    sistema reparta las preguntas según el contexto que el parser ya
-    //    detectó. Se crea UNA sección nueva por cada contexto único y cada
-    //    pregunta va a la suya (cotejo por contextText / contextTitle). Las
-    //    preguntas sin contexto caen a la PRIMERA sección creada (con info
-    //    explícito al docente para que no se sorprenda).
+    //    detectó. Hay dos sub-casos:
+    //      · Hay contextos compartidos: una sección nueva por cada contexto
+    //        y cada pregunta va a la suya (cotejo por contextText /
+    //        contextTitle). Las preguntas sin contexto caen a la PRIMERA
+    //        sección creada (con info explícito al docente).
+    //      · NO hay contextos compartidos: una sola sección vacía para
+    //        anclar todas las preguntas. Resuelve el caso típico del
+    //        importador por IA de preguntas sueltas en una formulación
+    //        recién creada (sin secciones aún): antes bloqueábamos al
+    //        docente con "Elige un contexto destino…".
 
     let sectionForQuestion: (q: ParsedQuestion, idx: number) => string | null;
 
@@ -188,63 +194,85 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
       const anchorSectionId = destination.sectionId;
       sectionForQuestion = () => anchorSectionId;
     } else {
-      // ---- Camino B: auto-crear secciones por contexto ----
+      // ---- Camino B: sin sectionId elegido ----
+      // Sub-caso B1: hay contextos compartidos → una sección por cada uno.
+      // Sub-caso B2: NO hay contextos compartidos → una sección vacía única
+      //               con todas las preguntas.
+
       if (uniqueContexts.length === 0) {
-        return fail(
-          new ValidationError(
-            "Elige un contexto destino: la importación no trae contextos compartidos y no hay sección elegida donde anclar las preguntas.",
-          ),
-        );
-      }
-
-      // Mapa contextText → sectionId (y fallback contextTitle → sectionId para
-      // preguntas que solo referencian el contexto por título sin repetir el
-      // texto). El parser ya hace esta resolución, pero aquí defendemos
-      // contra parsers que no la apliquen.
-      const contextToSection = new Map<string, string>();
-      const titleToSection = new Map<string, string>();
-
-      for (const ctx of uniqueContexts) {
-        const imageMap = aggregateContextImages(questions, ctx);
+        // ---- Camino B2: una sección vacía para todas las preguntas ----
+        // Caso típico del importador IA: el parser no detectó contextos
+        // compartidos (cada pregunta trae solo su enunciado) y la
+        // formulación destino aún no tiene secciones donde anclar. Antes
+        // este escenario terminaba en "Elige un contexto destino", dejando
+        // al docente sin salida si la evaluación estaba recién creada.
+        // Creamos una sección con título derivado del primer enunciado
+        // para que el docente pueda ubicarla en la vista de Contextos.
+        const fallbackTitle = deriveFallbackSectionTitle(questions);
         const sec = await this.evaluations.addSection(
           actor.institutionId,
           destination.evaluationId,
           {
-            title: deriveSectionTitle(ctx),
-            content: contextTextToRichText(ctx, imageMap),
+            title: fallbackTitle,
+            content: { type: "doc", content: [] },
           },
         );
-        contextToSection.set(ctx, sec.id);
-        if (sec.title) titleToSection.set(sec.title, sec.id);
-      }
-
-      // Fallback: preguntas SIN contexto van a la primera sección creada.
-      // El docente ve el aviso en `infos`.
-      const fallbackSectionId = contextToSection.values().next().value as string | undefined;
-
-      // IMPORTANTE: capturamos el sectionId por ÍNDICE de la pregunta antes
-      // de `stripContextFromQuestions`, porque el strip devuelve objetos
-      // NUEVOS (spread) y perderíamos la referencia.
-      const sectionByIndex: (string | null)[] = questions.map((q) => {
-        if (q.contextText && contextToSection.has(q.contextText)) {
-          return contextToSection.get(q.contextText)!;
-        }
-        if (q.contextTitle && titleToSection.has(q.contextTitle)) {
-          return titleToSection.get(q.contextTitle)!;
-        }
-        return fallbackSectionId ?? null;
-      });
-
-      sectionForQuestion = (_q, idx) => sectionByIndex[idx] ?? null;
-
-      const withoutContextCount = questions.filter((q) => !q.contextText).length;
-      infos.push(
-        `Se crearon ${uniqueContexts.length} sección(es) nuevas, una por cada contexto compartido detectado.`,
-      );
-      if (withoutContextCount > 0) {
+        const fallbackSectionId = sec.id;
+        sectionForQuestion = () => fallbackSectionId;
         infos.push(
-          `${withoutContextCount} pregunta(s) sin contexto se asignaron a la primera sección creada; revisalas o muévelas desde el editor.`,
+          `La importación no traía contextos compartidos. Se creó el contexto "${sec.title ?? fallbackTitle}" para anclar las ${questions.length} pregunta(s). Puedes renombrarlo o añadir contenido desde la vista de Contextos.`,
         );
+      } else {
+        // ---- Camino B1: una sección por cada contexto compartido ----
+        // Mapa contextText → sectionId (y fallback contextTitle → sectionId
+        // para preguntas que solo referencian el contexto por título sin
+        // repetir el texto). El parser ya hace esta resolución, pero aquí
+        // defendemos contra parsers que no la apliquen.
+        const contextToSection = new Map<string, string>();
+        const titleToSection = new Map<string, string>();
+
+        for (const ctx of uniqueContexts) {
+          const imageMap = aggregateContextImages(questions, ctx);
+          const sec = await this.evaluations.addSection(
+            actor.institutionId,
+            destination.evaluationId,
+            {
+              title: deriveSectionTitle(ctx),
+              content: contextTextToRichText(ctx, imageMap),
+            },
+          );
+          contextToSection.set(ctx, sec.id);
+          if (sec.title) titleToSection.set(sec.title, sec.id);
+        }
+
+        // Fallback: preguntas SIN contexto van a la primera sección creada.
+        // El docente ve el aviso en `infos`.
+        const fallbackSectionId = contextToSection.values().next().value as string | undefined;
+
+        // IMPORTANTE: capturamos el sectionId por ÍNDICE de la pregunta antes
+        // de `stripContextFromQuestions`, porque el strip devuelve objetos
+        // NUEVOS (spread) y perderíamos la referencia.
+        const sectionByIndex: (string | null)[] = questions.map((q) => {
+          if (q.contextText && contextToSection.has(q.contextText)) {
+            return contextToSection.get(q.contextText)!;
+          }
+          if (q.contextTitle && titleToSection.has(q.contextTitle)) {
+            return titleToSection.get(q.contextTitle)!;
+          }
+          return fallbackSectionId ?? null;
+        });
+
+        sectionForQuestion = (_q, idx) => sectionByIndex[idx] ?? null;
+
+        const withoutContextCount = questions.filter((q) => !q.contextText).length;
+        infos.push(
+          `Se crearon ${uniqueContexts.length} sección(es) nuevas, una por cada contexto compartido detectado.`,
+        );
+        if (withoutContextCount > 0) {
+          infos.push(
+            `${withoutContextCount} pregunta(s) sin contexto se asignaron a la primera sección creada; revisalas o muévelas desde el editor.`,
+          );
+        }
       }
     }
 
@@ -363,6 +391,29 @@ function deriveSectionTitle(raw: string): string | undefined {
     .find(Boolean);
   if (!firstLine) return undefined;
   return firstLine.length > 80 ? `${firstLine.slice(0, 77)}…` : firstLine;
+}
+
+/**
+ * Título para la sección fallback del Camino B2 (importación sin contextos
+ * compartidos). Toma la primera línea no vacía del enunciado de la primera
+ * pregunta y la trunca a 80 chars — el mismo criterio que
+ * `deriveSectionTitle`, aplicado al texto de la pregunta en vez del contexto.
+ * Si todas las preguntas están vacías cae a "Contexto 1" (la UI ya nombra las
+ * secciones sin título como "Contexto N" usando el order, pero aquí
+ * devolvemos un literal para que el `infos` siempre tenga un nombre concreto
+ * que mostrar).
+ */
+function deriveFallbackSectionTitle(questions: ParsedQuestion[]): string {
+  for (const q of questions) {
+    const firstLine = q.text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find(Boolean);
+    if (firstLine) {
+      return firstLine.length > 80 ? `${firstLine.slice(0, 77)}…` : firstLine;
+    }
+  }
+  return "Contexto 1";
 }
 
 /**
