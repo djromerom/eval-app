@@ -822,6 +822,167 @@ describe("ImportQuestions", () => {
     expect(r.value.infos.some((m) => /sin contexto/i.test(m))).toBe(true);
   });
 
+  // ---------- IMAGEN DE LA PREGUNTA (q.image) → nodo TipTap ----------
+
+  it("imagen de la pregunta (evaluación) → nodo `image` en TipTap + columna `image`", async () => {
+    // Reproduce el caso reportado: el motor extrae figuras pero no las pone
+    // en el doc TipTap; el docente abría la pregunta y no veía la imagen.
+    // Ahora: el nodo va DENTRO del `text` TipTap (renderizable en editor
+    // y PDF) Y la URL también queda en `Question.image` (que ya usaba el
+    // módulo de printing para abrir el ancho completo de página).
+    const url = "/api/uploads/evaluations/inst-1/uuid-fig.jpg";
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [valid({ image: { url }, correctAnswer: "B" })],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(evals.added).toHaveLength(1);
+    const data = evals.added[0]!;
+    expect(data.image).toBe(url);
+
+    const tipTap = data.text as {
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    // image primero (block-level), luego el paragraph del enunciado
+    expect(tipTap.content).toHaveLength(2);
+    expect(tipTap.content[0]).toEqual({
+      type: "image",
+      attrs: { src: url, width: 80 },
+    });
+    expect(tipTap.content[1]!.type).toBe("paragraph");
+    expect(tipTap.content[1]!.content?.[0]?.text).toBe("¿Cuál es la respuesta?");
+  });
+
+  it("pregunta sin imagen (evaluación) → solo un paragraph, sin campo `image`", async () => {
+    // Comportamiento previo intacto: si el extractor no devuelve figura,
+    // el TipTap queda igual al de antes del fix y NO se setea la columna.
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [valid()],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const data = evals.added[0]!;
+    expect(data.image).toBeUndefined();
+
+    const tipTap = data.text as {
+      content: { type: string; content?: { text?: string }[] }[];
+    };
+    expect(tipTap.content).toHaveLength(1);
+    expect(tipTap.content[0]!.type).toBe("paragraph");
+    expect(tipTap.content[0]!.content?.[0]?.text).toBe("¿Cuál es la respuesta?");
+  });
+
+  it("imagen de la pregunta (banco, sin contexto) → nodo `image` antes del enunciado", async () => {
+    // El banco no expone la columna `image` en `CreateBankQuestionData`,
+    // pero sí persiste el nodo dentro del `text` TipTap (que es lo que
+    // ve la docente al abrir la pregunta del banco, y lo que se copia
+    // si la importa luego a una formulación).
+    const url = "/api/uploads/evaluations/inst-1/uuid-fig.jpg";
+    const bank = new FakeBank();
+    const r = await new ImportQuestions(new FakeEvaluations(), bank).execute({
+      actor: teacher,
+      questions: [valid({ image: { url } })],
+      destination: { kind: "bank", subjectId: "s1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const data = bank.createManyCalls[0]![0]!;
+    const tipTap = data.text as {
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    expect(tipTap.content).toHaveLength(2);
+    expect(tipTap.content[0]).toEqual({
+      type: "image",
+      attrs: { src: url, width: 80 },
+    });
+    expect(tipTap.content[1]!.content?.[0]?.text).toBe("¿Cuál es la respuesta?");
+  });
+
+  it("imagen de la pregunta (banco, CON contexto compartido) → nodo `image` justo antes del enunciado", async () => {
+    // El contexto va al inicio como bloque [heading "Contexto" + paragraphs
+    // del contextText]; la imagen de la pregunta va DESPUÉS del contexto y
+    // ANTES del enunciado (que es `base.content[último]`). Mantiene el
+    // orden lógico: contexto compartido → figura propia de la pregunta →
+    // enunciado con sus opciones.
+    const ctxUrl = "/api/uploads/evaluations/inst-1/uuid-ctx.jpg";
+    const qUrl = "/api/uploads/evaluations/inst-1/uuid-fig.jpg";
+    const bank = new FakeBank();
+    const r = await new ImportQuestions(new FakeEvaluations(), bank).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          contextText: "Observe el gráfico adjunto.",
+          contextTitle: "Lectura",
+          contextImages: { "p01-fig1": ctxUrl },
+          image: { url: qUrl },
+          correctAnswer: "B",
+        }),
+      ],
+      destination: { kind: "bank", subjectId: "s1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const data = bank.createManyCalls[0]![0]!;
+    const tipTap = data.text as {
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    // heading "Contexto" → paragraph del contextText → image (de la pregunta)
+    // → paragraph del enunciado
+    expect(tipTap.content).toHaveLength(4);
+    expect(tipTap.content[0]!.type).toBe("heading");
+    expect(tipTap.content[1]!.type).toBe("paragraph");
+    expect(tipTap.content[1]!.content?.[0]?.text).toBe("Observe el gráfico adjunto.");
+    expect(tipTap.content[2]).toEqual({
+      type: "image",
+      attrs: { src: qUrl, width: 80 },
+    });
+    expect(tipTap.content[3]!.type).toBe("paragraph");
+    expect(tipTap.content[3]!.content?.[0]?.text).toBe("¿Cuál es la respuesta?");
+  });
+
+  it("camino B (sin sectionId, con contexto) + pregunta con imagen → sección auto-creada, imagen dentro del enunciado", async () => {
+    // La sección auto-creada recibe el contextText sin imagen (es de la
+    // pregunta, no del contexto); la pregunta embebida sí lleva el nodo
+    // `image` en su `text` TipTap, además de poblar `Question.image`.
+    const url = "/api/uploads/evaluations/inst-1/uuid-fig.jpg";
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          contextText: "El agua es vital para la vida.",
+          contextTitle: "Ciencia",
+          image: { url },
+          correctAnswer: "B",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(evals.addSectionCalls).toHaveLength(1);
+    const data = evals.added[0]!;
+    expect(data.image).toBe(url);
+    const tipTap = data.text as {
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    expect(tipTap.content).toHaveLength(2);
+    expect(tipTap.content[0]).toEqual({
+      type: "image",
+      attrs: { src: url, width: 80 },
+    });
+    expect(tipTap.content[1]!.content?.[0]?.text).toBe("¿Cuál es la respuesta?");
+  });
+
   it("contexto con [TABLA: ...] → la sección auto-creada recibe un nodo table real, no el string literal", async () => {
     const evals = new FakeEvaluations();
     evals.detail = { ...draft(), sections: [] };
