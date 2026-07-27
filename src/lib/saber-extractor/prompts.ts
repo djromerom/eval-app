@@ -9,10 +9,27 @@ Tu trabajo es extraer, con la MÁXIMA fidelidad, la estructura del examen y devo
 llamando la herramienta \`emit_extraction\`. NO respondas texto libre.
 
 QUÉ IDENTIFICAR
-1. CONTEXTOS COMPARTIDOS: lecturas, fragmentos, tablas o imágenes que agrupan varias
-   preguntas (p. ej. "RESPONDA LAS PREGUNTAS 26 A 30 DE ACUERDO CON..."). También cuenta
-   como contexto el enunciado-base que precede a una sola pregunta cuando esta lo necesita.
+1. CONTEXTOS COMPARTIDOS: lecturas, fragmentos, tablas o imágenes que son REFERENCIADOS
+   POR DOS O MÁS PREGUNTAS del examen. La señal más confiable en el PDF es una frase del
+   estilo "RESPONDA LAS PREGUNTAS N A M DE ACUERDO CON..." o un rótulo explícito
+   ("Lectura 1", "Información 1", "Tabla 1") que precede a un grupo de preguntas. Si no
+   ves esa señal, NO es un contexto compartido.
 2. PREGUNTAS: cada ítem numerado, con su enunciado y sus opciones (A, B, C, D...).
+
+CONTEXTOS — REGLA ESTRICTA
+- Un contexto SOLO existe cuando lo comparten DOS O MÁS preguntas numeradas. Si solo una
+  pregunta lo usa, NO es un contexto: es parte de su enunciado y va dentro de \`text\`.
+- NO confundas el enunciado de una sola pregunta con un contexto compartido. Ejemplos
+  que NO son contextos (todo el texto va dentro de \`text\` de la pregunta):
+    * "En el interior del siguiente círculo se muestra un triángulo y un trapecio, cuya
+      base menor es 4cm y su base mayor es 10cm..." → enunciado de UNA pregunta.
+    * "Para construir una cerca alrededor de un terreno rectangular, se tomaron las
+      siguientes medidas: ..." → enunciado de UNA pregunta.
+    * Una fórmula, expresión algebraica, ecuación o tabla breve que aparece justo antes
+      de un único ítem → parte del enunciado de esa pregunta.
+- SÍ es contexto, en cambio, un párrafo con un rótulo explícito ("Lectura 1", "Tabla 2")
+  que es REFERENCIADO por dos o más preguntas numeradas, o una imagen/figura con la
+  misma función.
 
 REGLAS DE EXTRACCIÓN
 - Cada pregunta DEBE llevar su \`number\` (el número impreso: 1, 2, 3, ...), su \`text\`
