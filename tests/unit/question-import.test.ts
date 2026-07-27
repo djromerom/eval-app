@@ -863,4 +863,122 @@ describe("ImportQuestions", () => {
     expect(headingNode).toBeDefined();
     expect(headingNode!.content[0]!.text).toBe("In the kitchen - Descripciones y Palabras");
   });
+
+  // ---------- LATEX: $...$ / $$...$$ → nodos inlineMath / blockMath ----------
+
+  it("pregunta con $inline$ → nodo inlineMath dentro del paragraph del enunciado", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [valid({ text: "La energía $E=mc^2$ es famosa", correctAnswer: "B" })],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const data = evals.added[0]!;
+    const tipTap = data.text as {
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    expect(tipTap.content).toHaveLength(1);
+    expect(tipTap.content[0]!.type).toBe("paragraph");
+    expect(tipTap.content[0]!.content).toEqual([
+      { type: "text", text: "La energía " },
+      { type: "inlineMath", attrs: { tex: "E=mc^2" } },
+      { type: "text", text: " es famosa" },
+    ]);
+  });
+
+  it("pregunta con $$block$$ al inicio → blockMath top-level + paragraph con el resto", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          text: "$$x^2 + y^2 = z^2$$ Es el teorema de Pitágoras.",
+          correctAnswer: "A",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const data = evals.added[0]!;
+    const tipTap = data.text as {
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    // blockMath top-level ($$...$$ toma todo el contenido) + paragraph con el resto
+    expect(tipTap.content).toHaveLength(2);
+    expect(tipTap.content[0]).toEqual({
+      type: "blockMath",
+      attrs: { tex: "x^2 + y^2 = z^2" },
+    });
+    expect(tipTap.content[1]!.type).toBe("paragraph");
+    expect(tipTap.content[1]!.content?.[0]?.text).toBe(" Es el teorema de Pitágoras.");
+  });
+
+  it("contexto compartido con $inline$ → nodo inlineMath dentro del section.content (Camino A)", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = {
+      ...draft(),
+      sections: [
+        {
+          id: "sec1",
+          title: null,
+          content: { type: "doc", content: [] },
+          order: 1,
+          questions: [],
+        },
+      ],
+    };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          contextText: "Aplica la fórmula $\\Delta = b^2 - 4ac$ al caso.",
+          correctAnswer: "B",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(evals.updateSectionCalls).toHaveLength(1);
+    const content = evals.updateSectionCalls[0]!.content as {
+      type: string;
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    expect(content.content).toHaveLength(1);
+    expect(content.content[0]!.type).toBe("paragraph");
+    expect(content.content[0]!.content).toEqual([
+      { type: "text", text: "Aplica la fórmula " },
+      { type: "inlineMath", attrs: { tex: "\\Delta = b^2 - 4ac" } },
+      { type: "text", text: " al caso." },
+    ]);
+  });
+
+  it("banco con pregunta que trae $inline$ → el nodo inlineMath llega al doc TipTap persistido", async () => {
+    const bank = new FakeBank();
+    const r = await new ImportQuestions(new FakeEvaluations(), bank).execute({
+      actor: teacher,
+      questions: [valid({ text: "Si $x$ y $y$ son positivos…", correctAnswer: "A" })],
+      destination: { kind: "bank", subjectId: "s1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const data = bank.createManyCalls[0]![0]!;
+    const tipTap = data.text as {
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    expect(tipTap.content).toHaveLength(1);
+    expect(tipTap.content[0]!.type).toBe("paragraph");
+    expect(tipTap.content[0]!.content).toEqual([
+      { type: "text", text: "Si " },
+      { type: "inlineMath", attrs: { tex: "x" } },
+      { type: "text", text: " y " },
+      { type: "inlineMath", attrs: { tex: "y" } },
+      { type: "text", text: " son positivos…" },
+    ]);
+  });
 });

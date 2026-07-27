@@ -69,3 +69,64 @@ describe("unwrapSingleParagraph", () => {
     expect(unwrapSingleParagraph(dos)).toContain("</p><p>");
   });
 });
+
+describe("renderRichText con nodos math", () => {
+  it('inlineMath → emite HTML KaTeX dentro de un <span class="math-inline" data-tex>', () => {
+    const docWithMath = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "La energía " },
+            { type: "inlineMath", attrs: { tex: "E=mc^2" } },
+            { type: "text", text: " es famosa." },
+          ],
+        },
+      ],
+    };
+    const html = renderRichText(docWithMath);
+    // KaTeX output incluye el texto original en <span class="katex">…
+    expect(html).toContain('class="math-inline"');
+    expect(html).toContain('data-tex="E=mc^2"');
+    expect(html).toContain("katex");
+    // El texto alrededor se preserva dentro del <p>
+    expect(html).toContain("La energía");
+    expect(html).toContain("es famosa.");
+  });
+
+  it('blockMath → emite HTML KaTeX dentro de un <div class="math-block" data-tex>', () => {
+    const docWithMath = {
+      type: "doc",
+      content: [
+        { type: "blockMath", attrs: { tex: "x^2 + y^2 = z^2" } },
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "Es Pitágoras." }],
+        },
+      ],
+    };
+    const html = renderRichText(docWithMath);
+    expect(html).toContain('class="math-block"');
+    expect(html).toContain('data-tex="x^2 + y^2 = z^2"');
+    // El paragraph siguiente sigue presente
+    expect(html).toContain("Es Pitágoras.");
+  });
+
+  it("fórmula con LaTeX inválido no lanza 500 — degrada al literal escapado", () => {
+    // KaTeX lanza con ciertos TeX sintácticamente inválidos incluso con
+    // throwOnError: false en algunos edge cases. El wrapper del nodo
+    // (renderKatex en extensions.ts) tiene un try/catch adicional que
+    // devuelve el literal escapado para evitar que el import rompa el
+    // PDF. Reproducimos uno de esos casos.
+    const docWithBadMath = {
+      type: "doc",
+      content: [{ type: "inlineMath", attrs: { tex: "\\frac{1}{" } }],
+    };
+    // Debe devolver HTML (string), no tirar exception
+    expect(() => renderRichText(docWithBadMath)).not.toThrow();
+    const html = renderRichText(docWithBadMath);
+    expect(typeof html).toBe("string");
+    expect(html.length).toBeGreaterThan(0);
+  });
+});

@@ -4,15 +4,107 @@ import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import TableRow from "@tiptap/extension-table-row";
 import StarterKit from "@tiptap/starter-kit";
-import type { Extensions } from "@tiptap/core";
+import { Node, type Extensions } from "@tiptap/core";
+import katex from "katex";
 import { TextAlign } from "./text-align";
 
 /**
  * Extensiones de TipTap compartidas por el editor (cliente) y el renderer
  * server-side (`generateHTML`). Marco agnóstico: NO importar @tiptap/react aquí.
- * Las fórmulas KaTeX se manejan como texto `$...$` y se renderizan al mostrar
- * (ver components/editor/render.ts), no como nodo, para funcionar en servidor.
+ *
+ * Las fórmulas KaTeX se manejan como NODOS (`inlineMath` / `blockMath`) desde
+ * el PR que añadió el import LaTeX-aware. Previamente vivían como `$...$`
+ * literales en el doc, lo que impedía editarlas/copiarlas; ahora son átomos
+ * con su `tex` en un atributo. La red de seguridad para preguntas LEGACY
+ * con `$...$` como texto sigue siendo `applyKatex` en `render.ts`.
  */
+
+/**
+ * Renderiza un fragmento LaTeX con KaTeX a HTML. Server-safe
+ * (`katex.renderToString` no toca el DOM). Si la fórmula es sintácticamente
+ * inválida, degrada al literal escapado con sus delimitadores — así nunca
+ * lanzamos un 500 en una pregunta mal importada: la profesora ve `$x<$` o
+ * `$$x<y$$` y puede corregirla desde el editor.
+ */
+function renderKatex(tex: string, displayMode: boolean): string {
+  try {
+    return katex.renderToString(tex, {
+      displayMode,
+      throwOnError: false,
+      output: "html",
+    });
+  } catch {
+    const d = displayMode ? "$$" : "$";
+    const safe = tex.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return `${d}${safe}${d}`;
+  }
+}
+
+function safeTex(raw: unknown): string {
+  return typeof raw === "string" ? raw : "";
+}
+
+/**
+ * Fórmula en línea (`$x^2$`). Atómica: el cursor entra al nodo como una unidad
+ * y no se puede editar el `tex` carácter por carácter — coherente con el
+ * modelo "se edita LaTeX, no se renderiza carácter a carácter".
+ *
+ * El HTML emitido en `renderHTML` envuelve el resultado de KaTeX en un
+ * `<span class="math-inline" data-tex="…">` para que (a) el editor visual lo
+ * muestre como un bloque (TipTap usa el HTML como NodeView por defecto),
+ * (b) el CSS global pueda afinar tamaño/espaciado, y (c) el backfill futuro
+ * pueda re-extraer el `tex` desde el DOM si hace falta migrar preguntas
+ * pre-PR.
+ */
+export const InlineMath = Node.create({
+  name: "inlineMath",
+  group: "inline",
+  inline: true,
+  atom: true,
+  addAttributes() {
+    return {
+      tex: {
+        default: "",
+        parseHTML: (element) => element.getAttribute("data-tex") ?? "",
+        renderHTML: (attributes) => ({ "data-tex": safeTex(attributes.tex) }),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "span.math-inline" }];
+  },
+  renderHTML({ node }) {
+    const tex = safeTex(node.attrs.tex);
+    return ["span", { class: "math-inline", "data-tex": tex }, renderKatex(tex, false)];
+  },
+});
+
+/**
+ * Fórmula en bloque (`$$x^2 + y^2 = z^2$$`). Nodo top-level (no puede ir
+ * dentro de un `paragraph`) — los parsers deben emitirlo al mismo nivel que
+ * los párrafos. Misma política de fallback que `InlineMath`.
+ */
+export const BlockMath = Node.create({
+  name: "blockMath",
+  group: "block",
+  atom: true,
+  addAttributes() {
+    return {
+      tex: {
+        default: "",
+        parseHTML: (element) => element.getAttribute("data-tex") ?? "",
+        renderHTML: (attributes) => ({ "data-tex": safeTex(attributes.tex) }),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "div.math-block" }];
+  },
+  renderHTML({ node }) {
+    const tex = safeTex(node.attrs.tex);
+    return ["div", { class: "math-block", "data-tex": tex }, renderKatex(tex, true)];
+  },
+});
 /**
  * Imagen con ancho ajustable, guardado como PORCENTAJE del ancho disponible.
  *
@@ -134,6 +226,14 @@ export const richTextExtensions: Extensions = [
   ResizableTableRow,
   PrintableTableHeader,
   PrintableTableCell,
+  // Nodos para fórmulas LaTeX. Los detecta el import (`latex-to-tiptap.ts`)
+  // al construir el doc y los persiste como átomos; en render
+  // (`generateHTML` server-side / NodeView por defecto en cliente) emiten
+  // KaTeX renderizado. La detección de texto crudo `$...$` que ya existía en
+  // `render.ts: applyKatex` se conserva como red de seguridad para datos
+  // importados antes de este cambio.
+  InlineMath,
+  BlockMath,
 ];
 
 /** Documento TipTap vacío (valor inicial de un editor sin contenido). */
