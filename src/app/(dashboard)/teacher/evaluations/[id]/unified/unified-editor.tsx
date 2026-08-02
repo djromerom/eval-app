@@ -522,16 +522,24 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         return;
       }
 
-      // Éxito: limpiar borradores (contexto) y resetear el form de
-      // pregunta (enunciado/opciones). Mantenemos `nextSectionId` como
-      // nueva targetSectionId para que la próxima pregunta siga cayendo
-      // en la misma sección, hasta que el docente decida cambiar.
-      setDraftSectionTitle("");
-      setDraftSectionContent(null);
+      // Éxito: limpiamos SOLO el form de pregunta (enunciado/opciones). El
+      // bloque "Contexto" se queda precargado con el título y contenido
+      // del nuevo contexto, igual que "Agregar enunciado" deja el
+      // contexto precargado tras crear una sección. Si el docente quiere
+      // cambiar de contexto, edita el título o usa el botón explícito de
+      // otra sección; si quiere empezar de cero, pulsa "Cancelar".
+      //
+      // NO reseteamos `newSectionFormRef` ni los drafts: el <Input> del
+      // título es no-controlado (defaultValue) y, sin reset, mantiene el
+      // valor que el docente acaba de escribir. Lo mismo con el state.
+      // Limpiar `draftSectionContent` aquí sería inconsistente: el
+      // RichTextEditor no se vacía con reset() de form cuando su value
+      // es controlado por state interno; en cambio dejamos `setDraft`
+      // sin tocar — el form sigue mostrando el contenido hasta que el
+      // docente lo edite o cancele.
       setTargetSectionId(nextSectionId);
       setActionStatus("saved");
       questionForm.reset();
-      newSectionFormRef.current?.reset();
       setTimeout(() => {
         setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
       }, 2500);
