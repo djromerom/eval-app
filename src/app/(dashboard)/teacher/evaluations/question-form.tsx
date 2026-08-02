@@ -261,15 +261,39 @@ export function QuestionForm({
       // submit por campo vacío; reescribimos el mensaje a español y lo
       // limpiamos en `onInput` cuando el usuario empieza a escribir.
       onInvalid={(e) => {
-        const t = e.target as HTMLInputElement;
-        if (t.validity.valueMissing) {
+        // `e.target` puede ser cualquier form control (input, select,
+        // textarea, button). Solo los controles nativos tienen
+        // `setCustomValidity`; los textareas también lo tienen. Chequeamos
+        // dinámicamente para no crashear si el form contiene un elemento
+        // custom (p.ej. el RichTextEditor de TipTap usa contenteditable).
+        const t = e.target as HTMLElement;
+        if (
+          "setCustomValidity" in t &&
+          (t instanceof HTMLInputElement ||
+            t instanceof HTMLTextAreaElement ||
+            t instanceof HTMLSelectElement) &&
+          t.validity.valueMissing
+        ) {
           t.setCustomValidity("Llena este campo antes de guardar.");
         }
       }}
       onInput={(e) => {
-        const t = e.target as HTMLInputElement;
-        t.setCustomValidity("");
-        // También limpiamos errores del cliente al primer keystroke.
+        // El `onInput` burbujea desde CUALQUIER elemento editable dentro
+        // del form (incluido el <div contenteditable> del RichTextEditor,
+        // que NO es HTMLInputElement y por tanto NO tiene
+        // `setCustomValidity`). Sin el guard anterior, este handler
+        // crasheaba con `t.setCustomValidity is not a function` cada vez
+        // que el docente escribía en el enunciado.
+        const t = e.target as HTMLElement;
+        if (
+          t instanceof HTMLInputElement ||
+          t instanceof HTMLTextAreaElement ||
+          t instanceof HTMLSelectElement
+        ) {
+          t.setCustomValidity("");
+        }
+        // También limpiamos errores del cliente al primer keystroke en
+        // cualquier elemento del form (incluido el RichTextEditor).
         if (clientError) setClientError(null);
       }}
       className="space-y-3 rounded-lg border border-dashed"
