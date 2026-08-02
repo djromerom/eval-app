@@ -55,6 +55,11 @@ model User {
   emailVerified        DateTime?
   inviteToken          String? // bcrypt del token de invitación
   inviteTokenExpiresAt DateTime?
+  // sha256 del token de recuperación de contraseña. @unique permite lookup
+  // directo por token (URL sin email en la query string). Set a null tras
+  // aplicar el reset o cuando expira.
+  passwordResetToken      String?   @unique
+  passwordResetExpiresAt  DateTime?
   institutionId        String      @db.Uuid
   institution          Institution @relation(fields: [institutionId], references: [id])
   isActive             Boolean     @default(true)
