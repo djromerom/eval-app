@@ -508,20 +508,18 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         return;
       }
 
-      // Éxito: a diferencia de "Agregar enunciado" (que conserva el
-      // contexto precargado para reusarlo en el siguiente ítem), aquí
-      // LIMPIAMOS el bloque "Contexto" tras crear el contexto. La
-      // semántica de "Nuevo contexto" es "el próximo empieza de cero":
-      // si dejáramos el título precargado, un segundo click accidental
-      // volvería a crear otro contexto con el mismo nombre (el
-      // orquestador ya NO deduplica por título — esa decisión la toma
-      // el docente al elegir entre los dos botones).
+      // Éxito: NO limpiamos el bloque "Contexto" tras "Nuevo contexto".
+      // El docente decide explícitamente cuándo cambiar el contexto (lo
+      // edita encima o pulsa "Cancelar"). Si el siguiente ítem lo quiere
+      // seguir, lo deja; si quiere otro, lo sobreescribe. Mantener el
+      // estado precargado es lo que el docente pidió.
       //
-      // Reseteamos tanto el <form> nativo (Input no-controlado) como
-      // los drafts del RichTextEditor (state del componente padre).
-      newSectionFormRef.current?.reset();
-      setDraftSectionTitle("");
-      setDraftSectionContent(null);
+      // Sí limpiamos el form de pregunta (enunciado/opciones) para que
+      // el siguiente ítem arranque vacío. Y —NOTA IMPORTANTE— el
+      // orquestador de "Nuevo contexto" SIEMPRE crea sección nueva
+      // (ver bloque más arriba): si el docente repite el mismo título,
+      // obtiene una segunda sección con el mismo rótulo por decisión
+      // suya, no por bug.
       setTargetSectionId(nextSectionId);
       setActionStatus("saved");
       questionForm.reset();
