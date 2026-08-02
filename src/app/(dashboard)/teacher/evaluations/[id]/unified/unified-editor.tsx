@@ -443,80 +443,26 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     submittingRef.current = true;
     lastSubmitTsRef.current = Date.now();
     try {
-      // DIAGNÓSTICO (jul-ago 2026): el docente reporta que "Nuevo
-      // contexto" sigue creando sección duplicada tras un guardado
-      // previo, aún con el dedupe en dos capas. Imprimimos el state
-      // COMPLETO al momento del click para identificar qué camino se
-      // está tomando.
-      console.log("[Nuevo-contexto+pregunta] decision", {
-        ts: Date.now(),
-        titleFromDom: title,
-        contentLen: contentRaw.length,
-        targetSectionId,
-        targetSectionTitle: data.sections.find((s) => s.id === targetSectionId)?.title ?? null,
-        targetSectionContentLen: JSON.stringify(
-          data.sections.find((s) => s.id === targetSectionId)?.content ?? null,
-        ).length,
-        sectionsCount: data.sections.length,
-        sectionTitles: data.sections.map((s) => s.title),
-      });
-      // Decidir si crear nueva o reusar/renombrar (misma lógica que
-      // overrideAction). Aquí NO usamos `contextoMatchesSection` porque
-      // el botón explícitamente pide "nuevo contexto" — la intención del
-      // docente es tener una sección distinta de la actual.
+      // SEMÁNTICA CONFIRMADA (ago 2026): "Nuevo contexto" SIEMPRE crea
+      // una sección nueva con id fresco. Esto es LO CONTRARIO de
+      // "Agregar enunciado", que reusa el contexto precargado (incluye
+      // el dedupe por título del commit e0123b3). El docente distingue
+      // los dos botones explícitamente: "nuevo" = no quiero reusar nada.
       //
-      // DEDUPE: si ya existe una sección con el mismo título (caso del
-      // bug C2-C9), reusamos en vez de crear duplicado. Si la existente
-      // está vacía, la renombramos. Si está llena, la reusamos sin más.
-      const matchingByTitle =
-        title.length > 0
-          ? data.sections.find((s) => (s.title ?? "").trim().toLowerCase() === title.toLowerCase())
-          : null;
-      // Capa 2 del dedupe: si la capa 1 falla pero el targetSectionId
-      // actual SÍ tiene ese título, reusamos targetSectionId. Cubre la
-      // race entre revalidatePath y el submit (mismo síntoma que el bug
-      // C2-C9 de Agregar enunciado: la sección recién creada existe en
-      // BD pero data.sections aún no la refleja).
-      const targetSection = data.sections.find((s) => s.id === targetSectionId);
-      const matchingByTarget =
-        !matchingByTitle &&
-        title.length > 0 &&
-        targetSection &&
-        (targetSection.title ?? "").trim().toLowerCase() === title.toLowerCase()
-          ? targetSection
-          : null;
-      const match = matchingByTitle ?? matchingByTarget;
-      console.log("[Nuevo-contexto+pregunta] match", {
-        matchingByTitle: matchingByTitle?.id ?? null,
-        matchingByTarget: matchingByTarget?.id ?? null,
-        finalMatch: match?.id ?? null,
-        willCreate: !match,
-      });
+      // Única excepción: si la evaluación tiene UNA SOLA sección vacía
+      // (caso típico del auto-crear inicial en StrictMode, donde solo
+      // quedó una sección placeholder sin título/contenido), la
+      // renombramos en vez de crear una segunda. Esto evita el bug
+      // clásico de "dos secciones iniciales vacías" sin contradecir la
+      // semántica de "nuevo contexto" (el docente no pidió una
+      // placeholder, pidió "su" primer contexto).
       let nextSectionId: string;
-      if (match) {
-        nextSectionId = match.id;
-        const isExistingEmpty = !match.title && !match.content;
-        if (isExistingEmpty) {
-          const fd = new FormData();
-          fd.append("evaluationId", data.evaluationId);
-          fd.append("sectionId", match.id);
-          fd.append("title", title);
-          if (hasContent) fd.append("content", contentRaw);
-          const renameRes = await updateSectionAction({}, fd);
-          if (renameRes.error) {
-            setFormError(renameRes.error);
-            setActionStatus("error");
-            return;
-          }
-        }
-      } else if (
+      if (
         data.sections.length === 1 &&
         data.sections[0] &&
         !data.sections[0].title &&
         !data.sections[0].content
       ) {
-        // Única sección vacía → RENOMBRAR (mismo patrón que
-        // handleAddOrRenameSection).
         const onlySection = data.sections[0];
         const fd = new FormData();
         fd.append("evaluationId", data.evaluationId);
@@ -531,7 +477,10 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         }
         nextSectionId = onlySection.id;
       } else {
-        // Crear sección nueva.
+        // Crear sección nueva SIEMPRE — sin dedupe por título. Si el
+        // docente titula esta "C2" y ya existe otra "C2", es decisión
+        // suya: el botón "Nuevo contexto" literalmente pidió un contexto
+        // nuevo, no implícitamente pidió reusar uno existente.
         const fd = new FormData();
         fd.append("evaluationId", data.evaluationId);
         fd.append("title", title);
@@ -559,21 +508,20 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         return;
       }
 
-      // Éxito: limpiamos SOLO el form de pregunta (enunciado/opciones). El
-      // bloque "Contexto" se queda precargado con el título y contenido
-      // del nuevo contexto, igual que "Agregar enunciado" deja el
-      // contexto precargado tras crear una sección. Si el docente quiere
-      // cambiar de contexto, edita el título o usa el botón explícito de
-      // otra sección; si quiere empezar de cero, pulsa "Cancelar".
+      // Éxito: a diferencia de "Agregar enunciado" (que conserva el
+      // contexto precargado para reusarlo en el siguiente ítem), aquí
+      // LIMPIAMOS el bloque "Contexto" tras crear el contexto. La
+      // semántica de "Nuevo contexto" es "el próximo empieza de cero":
+      // si dejáramos el título precargado, un segundo click accidental
+      // volvería a crear otro contexto con el mismo nombre (el
+      // orquestador ya NO deduplica por título — esa decisión la toma
+      // el docente al elegir entre los dos botones).
       //
-      // NO reseteamos `newSectionFormRef` ni los drafts: el <Input> del
-      // título es no-controlado (defaultValue) y, sin reset, mantiene el
-      // valor que el docente acaba de escribir. Lo mismo con el state.
-      // Limpiar `draftSectionContent` aquí sería inconsistente: el
-      // RichTextEditor no se vacía con reset() de form cuando su value
-      // es controlado por state interno; en cambio dejamos `setDraft`
-      // sin tocar — el form sigue mostrando el contenido hasta que el
-      // docente lo edite o cancele.
+      // Reseteamos tanto el <form> nativo (Input no-controlado) como
+      // los drafts del RichTextEditor (state del componente padre).
+      newSectionFormRef.current?.reset();
+      setDraftSectionTitle("");
+      setDraftSectionContent(null);
       setTargetSectionId(nextSectionId);
       setActionStatus("saved");
       questionForm.reset();
