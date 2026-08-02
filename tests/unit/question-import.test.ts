@@ -775,20 +775,59 @@ describe("ImportQuestions", () => {
     expect(r.value.infos.some((m) => /Se crearon 2 secci/i.test(m))).toBe(true);
   });
 
-  it("sin sectionId + sin contextos → rechaza con error claro", async () => {
+  it("sin sectionId + sin contextos → auto-crea una sección con título derivado y ancla todas las preguntas", async () => {
     const evals = new FakeEvaluations();
     evals.detail = { ...draft(), sections: [] };
     const r = await new ImportQuestions(evals, new FakeBank()).execute({
       actor: teacher,
-      questions: [valid(), valid({ sourceNumber: 2 })],
+      questions: [
+        valid({
+          sourceNumber: 1,
+          text: "En el interior del siguiente círculo se muestra un triángulo y un trapecio.",
+        }),
+        valid({
+          sourceNumber: 2,
+          text: "Para construir una cerca rectangular se tomaron medidas.",
+        }),
+      ],
       destination: { kind: "evaluation", evaluationId: "e1" },
     });
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.error.code).toBe("VALIDATION");
-    expect(r.error.message).toMatch(/contexto destino/i);
-    expect(evals.addSectionCalls).toHaveLength(0);
-    expect(evals.added).toHaveLength(0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.imported).toBe(2);
+    // Crea exactamente una sección vacía
+    expect(evals.addSectionCalls).toHaveLength(1);
+    expect(evals.addSectionCalls[0]!.content).toEqual({ type: "doc", content: [] });
+    // Título derivado de la primera línea del primer enunciado
+    expect(evals.addSectionCalls[0]!.title).toBe(
+      "En el interior del siguiente círculo se muestra un triángulo y un trapecio.",
+    );
+    // Las dos preguntas van a esa misma sección
+    const sectionIds = Object.keys(evals.addedBySection);
+    expect(sectionIds).toHaveLength(1);
+    expect(evals.addedBySection[sectionIds[0]!]).toHaveLength(2);
+    // Info explica lo que pasó
+    expect(
+      r.value.infos.some(
+        (m) => /no tra[ií]a contextos compartidos/i.test(m) && /secci[oó]n|contexto/i.test(m),
+      ),
+    ).toBe(true);
+  });
+
+  it("sin sectionId + sin contextos + enunciado largo → trunca el título a 80 chars", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const long = "A".repeat(120);
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [valid({ sourceNumber: 1, text: long })],
+      destination: { kind: "evaluation", evaluationId: "e1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const title = evals.addSectionCalls[0]!.title!;
+    expect(title.length).toBeLessThanOrEqual(80);
+    expect(title.endsWith("…")).toBe(true);
   });
 
   it("sin sectionId + algunas preguntas sin contexto → caen a la primera sección creada", async () => {
