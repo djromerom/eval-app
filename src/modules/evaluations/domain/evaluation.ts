@@ -61,6 +61,14 @@ export interface QuestionOption {
 /** Formulación con su contenido completo (bloques + preguntas). */
 export interface EvaluationDetail extends Evaluation {
   sections: EvaluationSection[];
+  /** Nombre del periodo académico (nullable: la formulación se puede crear
+   *  sin periodo, ej. evaluación diagnóstica de inicio de año). El
+   *  repositorio hidrata este campo con un include extra; los casos donde
+   *  no se necesita (solo IDs) pueden seguir usando `Evaluation.periodId`.
+   *  Es opcional para que los in-memory repos de tests no tengan que
+   *  setearlo (cuando lo omiten, las pages deben tratar `null` como
+   *  "sin periodo"). */
+  periodName?: string | null;
 }
 
 /** Fila de listado enriquecida con nombres de curso/asignatura/periodo. */

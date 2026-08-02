@@ -74,7 +74,10 @@ export default async function UnifiedEditorPage({ params }: { params: Promise<{ 
 
   return (
     <>
-      <PageHeader title={`${evaluation.title} — formulación unificada`} />
+      <PageHeader
+        title={`${evaluation.title} — ${evaluation.periodName ?? "Sin periodo"}`}
+        description="Formulación unificada"
+      />
 
       <div className="mb-4 flex items-center gap-3">
         <StatusBadge status={evaluation.status} />

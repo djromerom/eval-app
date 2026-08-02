@@ -174,10 +174,17 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
           orderBy: { order: "asc" },
           include: { questions: { orderBy: { number: "asc" }, include: { options: true } } },
         },
+        // Hidrata periodName para que EvaluationDetail exponga el rótulo
+        // legible del periodo sin un SELECT extra desde el page.tsx.
+        period: { select: { name: true } },
       },
     });
     if (!row) return null;
-    return { ...toEvaluation(row), sections: row.sections.map(toSection) };
+    return {
+      ...toEvaluation(row),
+      sections: row.sections.map(toSection),
+      periodName: row.period?.name ?? null,
+    };
   }
 
   async findByTeacher(institutionId: string, teacherId: string): Promise<EvaluationListItem[]> {
