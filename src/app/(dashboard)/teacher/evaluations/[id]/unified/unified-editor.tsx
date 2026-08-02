@@ -582,7 +582,12 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           >
             <Sparkles className="mr-1 h-3.5 w-3.5" /> Importar con IA
           </Button>
-          {editingQuestionId === null ? (
+          {/* "Agregar 1 a 1" solo aparece cuando el card de creación/edición
+            está OCULTO. Cuando el card ya está visible, ese botón sería
+            redundante (el docente ya está creando/editando) y genera la
+            sensación de que hay dos modos paralelos. Al cerrar el card
+            (guardando o cancelando) el botón reaparece. */}
+          {!showForm ? (
             <Button type="button" size="sm" variant="default" onClick={() => setShowForm(true)}>
               <Plus className="mr-1 h-3.5 w-3.5" /> Agregar 1 a 1
             </Button>
