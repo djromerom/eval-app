@@ -107,7 +107,7 @@ export function ReviewModal({
       <div className="bg-card flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border shadow-xl">
         <header className="flex items-center justify-between gap-3 border-b px-5 py-3">
           <h2 id="review-modal-title" className="font-display text-lg font-semibold">
-            Enunciado {question.number}
+            Ítem {question.number}
           </h2>
           <Button type="button" size="icon" variant="ghost" onClick={onClose} aria-label="Cerrar">
             <X className="h-4 w-4" />
