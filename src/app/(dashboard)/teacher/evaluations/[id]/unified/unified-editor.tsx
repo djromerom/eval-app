@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Info, Plus, Sparkles } from "lucide-react";
+import { Info, Plus, Sparkles, Trash2 } from "lucide-react";
 import type { EvaluationStatus } from "@/modules/evaluations/domain/evaluation-status";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { QuestionForm, type QuestionInitialValues } from "../../question-form";
 import {
   addQuestionAction,
   addSectionAction,
+  deleteQuestionAction,
   updateQuestionAction,
   updateSectionAction,
 } from "../../actions";
@@ -1109,6 +1110,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   <th className="px-4 py-3 text-center font-medium">CONTEXTO</th>
                   <th className="px-4 py-3 text-center font-medium">OPCIONES</th>
                   <th className="px-4 py-3 text-center font-medium">CLAVE</th>
+                  <th className="px-4 py-3 text-center font-medium">ACCIONES</th>
                 </tr>
               </thead>
               <tbody>
@@ -1153,6 +1155,30 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       </td>
                       <td className="px-4 py-2 text-center">{q.options?.length ?? 0}</td>
                       <td className="px-4 py-2 text-center font-semibold">{q.correctAnswer}</td>
+                      <td className="px-4 py-2 text-center">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          aria-label={`Eliminar ítem ${q.number}`}
+                          title="Eliminar ítem"
+                          // stopPropagation para que el click no abra el modal
+                          // de revisión (la fila tiene onClick → setReviewModal).
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const ok = window.confirm(
+                              `Se eliminará el ítem ${q.number} y los siguientes se renumerarán. Esta acción no se puede deshacer.`,
+                            );
+                            if (!ok) return;
+                            const fd = new FormData();
+                            fd.append("evaluationId", data.evaluationId);
+                            fd.append("questionId", q.id);
+                            void deleteQuestionAction({}, fd);
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </td>
                     </tr>
                   );
                 })}
