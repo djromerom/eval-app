@@ -582,9 +582,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           >
             <Sparkles className="mr-1 h-3.5 w-3.5" /> Importar con IA
           </Button>
-          <Button type="button" size="sm" variant="default" onClick={() => setShowForm(true)}>
-            <Plus className="mr-1 h-3.5 w-3.5" /> Agregar 1 a 1
-          </Button>
+          {editingQuestionId === null ? (
+            <Button type="button" size="sm" variant="default" onClick={() => setShowForm(true)}>
+              <Plus className="mr-1 h-3.5 w-3.5" /> Agregar 1 a 1
+            </Button>
+          ) : null}
           {items.length > 0 ? (
             <DownloadPdfButton
               evaluationId={data.evaluationId}
