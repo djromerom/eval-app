@@ -29,7 +29,7 @@ export default async function EvaluationsPage() {
 
   const csOptions = courseSubjects.map((cs) => ({
     value: cs.id,
-    label: `${cs.courseName} · ${cs.subjectName}`,
+    label: `${cs.subjectName} - ${cs.courseName}`,
   }));
   const periodOptions = periods.map((p) => ({ value: p.id, label: p.name }));
 
@@ -37,18 +37,15 @@ export default async function EvaluationsPage() {
     <>
       <PageHeader
         title="Mis formulaciones"
-        description="Crea formulaciones tipo ICFES, agrégales preguntas y envíalas a revisión."
+        description="Formule, gestione y consulte sus ítems, siguiendo la estructura de los mismos."
       />
 
       <section className="bg-card space-y-4 rounded-xl border p-6">
-        <h2 className="font-semibold">Nueva formulación</h2>
-        <p className="text-muted-foreground -mt-2 text-sm">
-          El título se genera automáticamente como{" "}
-          <span className="text-foreground font-mono text-xs">Asignatura · Curso · Año</span>.
-        </p>
+        <h2 className="font-semibold">Formular ítems</h2>
+
         <EntityForm
           action={createEvaluationAction}
-          submitLabel="Crear borrador"
+          submitLabel="Formular"
           disabledReason={
             courseSubjects.length === 0
               ? "Un administrador debe enlazar asignaturas a cursos primero."
@@ -57,12 +54,18 @@ export default async function EvaluationsPage() {
           fields={[
             {
               name: "courseSubjectId",
-              label: "Asignatura-curso",
+              label: "Asignatura",
               type: "select",
               required: true,
               options: csOptions,
             },
-            { name: "periodId", label: "Prueba", type: "select", options: periodOptions },
+            {
+              name: "periodId",
+              label: "Prueba",
+              type: "select",
+              options: periodOptions,
+              required: true,
+            },
           ]}
         />
       </section>
@@ -72,12 +75,11 @@ export default async function EvaluationsPage() {
           <thead className="bg-muted/40 text-muted-foreground border-b text-left">
             <tr>
               <th className="px-3 py-3 font-medium" aria-label="Editar" />
-              <th className="px-4 py-3 font-medium">Título</th>
-              <th className="px-4 py-3 font-medium">Asignatura-curso</th>
+              <th className="px-4 py-3 font-medium">Asignatura</th>
               <th className="px-4 py-3 font-medium">Prueba</th>
               <th className="px-4 py-3 font-medium">Estado</th>
-              <th className="px-4 py-3 font-medium">Ver.</th>
-              <th className="px-4 py-3 font-medium">Preg.</th>
+
+              <th className="px-4 py-3 font-medium">Ítems.</th>
               <th className="px-4 py-3 font-medium">Actualizada</th>
             </tr>
           </thead>
@@ -106,16 +108,12 @@ export default async function EvaluationsPage() {
                       {e.title}
                     </Link>
                   </td>
-                  <td className="text-muted-foreground px-4 py-3">
-                    {e.courseName} · {e.subjectName}
-                  </td>
-                  <td className="text-muted-foreground px-4 py-3">
-                    {e.periodName ?? <span className="text-muted-foreground/60">—</span>}
-                  </td>
+
+                  <td className="text-muted-foreground px-4 py-3">{e.periodName}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={e.status} />
                   </td>
-                  <td className="text-muted-foreground px-4 py-3">v{e.version}</td>
+
                   <td className="text-muted-foreground px-4 py-3">{e.totalQuestions}</td>
                   <td className="text-muted-foreground px-4 py-3">{df.format(e.updatedAt)}</td>
                 </tr>
