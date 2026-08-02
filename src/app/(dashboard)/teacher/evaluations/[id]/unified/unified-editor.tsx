@@ -10,9 +10,15 @@ import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { richTextToPlain } from "@/components/editor/render";
 import { DownloadPdfButton } from "../download-pdf-button";
 import { QuestionForm, type QuestionInitialValues } from "../../question-form";
-import { addSectionAction, updateSectionAction } from "../../actions";
+import {
+  addQuestionAction,
+  addSectionAction,
+  updateQuestionAction,
+  updateSectionAction,
+} from "../../actions";
 import { ReviewModal, type QuestionLite } from "./review-modal";
 import { contextLabel, type SectionLite } from "./context-label";
+import { hasUnsavedContexto } from "./save-contexto";
 
 export interface SectionWithQuestions extends SectionLite {
   order: number;
@@ -526,6 +532,69 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     maxOptions={data.maxOptions}
                     initial={editingInitial()}
                     createLabel="Agregar enunciado"
+                    // ORQUESTACIÓN CONTEXTO + PREGUNTA EN UN SOLO CLICK.
+                    // Antes el "Agregar enunciado" solo disparaba
+                    // addQuestionAction → la pregunta se guardaba en la
+                    // sección actual (vacía) y los inputs de título /
+                    // contenido del bloque Contexto se perdían. Ahora, si el
+                    // docente tiene cambios pendientes en el contexto, los
+                    // guardamos PRIMERO (renombrando la sección vacía si
+                    // aplica, o creando una nueva) y luego guardamos la
+                    // pregunta en la sección resultante.
+                    //
+                    // En modo edición (`editingQuestionId !== null`) los
+                    // inputs de contexto están disabled — no hay nada que
+                    // orquestar — y el formData trae `questionId`, así que
+                    // delegamos directo a updateQuestionAction.
+                    overrideAction={async (formData) => {
+                      if (editingQuestionId) {
+                        return updateQuestionAction({}, formData);
+                      }
+                      const unsaved = hasUnsavedContexto(draftSectionTitle, draftSectionContent);
+                      if (!unsaved) {
+                        return addQuestionAction({}, formData);
+                      }
+                      // Decide: ¿renombrar la sección vacía auto-creada, o
+                      // crear una nueva sección? Renombrar evita el caso
+                      // "queda una sección fantasma vacía al inicio". Si hay
+                      // 2+ secciones, O si la única sección ya tiene
+                      // título/contenido, creamos nueva.
+                      const onlySection = data.sections.length === 1 ? data.sections[0] : null;
+                      const isEmpty =
+                        onlySection !== null &&
+                        onlySection !== undefined &&
+                        !onlySection.title &&
+                        !onlySection.content;
+                      if (isEmpty && onlySection) {
+                        const fd = new FormData();
+                        fd.append("evaluationId", data.evaluationId);
+                        fd.append("sectionId", onlySection.id);
+                        fd.append("title", draftSectionTitle.trim());
+                        if (draftSectionContent) {
+                          fd.append("content", JSON.stringify(draftSectionContent));
+                        }
+                        const res = await updateSectionAction({}, fd);
+                        if (res.error) return res;
+                        // sectionId no cambia: la pregunta va a la misma
+                        // sección (ahora con título/contenido).
+                      } else {
+                        const fd = new FormData();
+                        fd.append("evaluationId", data.evaluationId);
+                        fd.append("title", draftSectionTitle.trim());
+                        if (draftSectionContent) {
+                          fd.append("content", JSON.stringify(draftSectionContent));
+                        }
+                        const res = await addSectionAction({}, fd);
+                        if (res.error) return res;
+                        // Redirigimos la pregunta a la sección recién creada.
+                        // addSectionAction ahora retorna `sectionId` en el
+                        // AdminFormState (ver actions.ts).
+                        if (res.sectionId) {
+                          formData.set("sectionId", res.sectionId);
+                        }
+                      }
+                      return addQuestionAction({}, formData);
+                    }}
                     // Una sola cadena de acciones a la derecha del submit:
                     // [Nuevo contexto?] [Guardar?] [Cancelar?]. Las dos últimas
                     // solo se muestran en modo edición; Nuevo contexto solo en

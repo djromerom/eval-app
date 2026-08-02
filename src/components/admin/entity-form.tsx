@@ -9,6 +9,11 @@ import { Input } from "@/components/ui/input";
 export interface AdminFormState {
   error?: string;
   success?: boolean;
+  /** Algunas acciones (ej. addSectionAction) lo devuelven para que el
+   *  cliente pueda referenciar la entidad recién creada sin un round-trip
+   *  extra (p.ej. el editor unificado lo usa para asignar la pregunta a
+   *  la sección recién creada en el mismo click). */
+  sectionId?: string;
 }
 
 export interface FieldOption {

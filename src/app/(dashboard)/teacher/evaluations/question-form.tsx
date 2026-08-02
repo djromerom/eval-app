@@ -94,6 +94,7 @@ export function QuestionForm({
   onDone,
   createLabel = "Agregar pregunta",
   extraActions,
+  overrideAction,
 }: {
   evaluationId: string;
   sectionId: string;
@@ -118,12 +119,25 @@ export function QuestionForm({
    *  fila. Lo usa el editor unificado para poner "Nuevo contexto" al lado
    *  de "Agregar enunciado". Las otras vistas lo dejan `undefined`. */
   extraActions?: React.ReactNode;
+  /** Si se pasa, REEMPLAZA el action interno del form. El editor unificado
+   *  lo usa para orquestar contexto + pregunta en una sola invocación
+   *  (p.ej. "Agregar enunciado" crea/renombra la sección Y guarda el ítem
+   *  en el mismo click). El callback recibe el FormData del form y debe
+   *  retornar el AdminFormState que se reflejará en `state`. */
+  overrideAction?: (formData: FormData) => Promise<AdminFormState>;
 }) {
   const editing = initial !== undefined;
-  const [state, formAction] = useActionState<AdminFormState, FormData>(
-    editing ? updateQuestionAction : addQuestionAction,
-    {},
-  );
+  // Si el padre pasó un overrideAction (p.ej. el editor unificado) lo
+  // invocamos en lugar del action interno (add/updateQuestionAction). Lo
+  // hacemos DENTRO del useActionState para que `state` se actualice con el
+  // resultado del override y el useEffect de abajo dispare onDone igual que
+  // en el flujo normal. La firma `(prev, fd) => Promise<state>` es la que
+  // espera useActionState; el padre recibe solo el FormData y devuelve el
+  // AdminFormState resultante.
+  const [state, formAction] = useActionState<AdminFormState, FormData>(async (prev, fd) => {
+    if (overrideAction) return overrideAction(fd);
+    return editing ? updateQuestionAction(prev, fd) : addQuestionAction(prev, fd);
+  }, {});
   const [optionCount, setOptionCount] = useState<number>(initial?.options.length ?? defaultOptions);
   const [correct, setCorrect] = useState<string>(initial?.correctAnswer ?? ANSWER_KEYS_ORDER[0]!);
   const [resetKey, setResetKey] = useState(0);

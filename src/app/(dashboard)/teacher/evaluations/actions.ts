@@ -116,7 +116,10 @@ export async function addSectionAction(
   });
   if (!result.ok) return { error: result.error.message };
   revalidatePath(`/teacher/evaluations/${evaluationId}`);
-  return { success: true };
+  // Devolvemos el id de la sección creada para que el editor unificado
+  // pueda usarlo inmediatamente (ej. al guardar contexto + pregunta en un
+  // solo click, la pregunta se asocia a esta sección recién creada).
+  return { success: true, sectionId: result.value.id };
 }
 
 export async function updateSectionAction(
