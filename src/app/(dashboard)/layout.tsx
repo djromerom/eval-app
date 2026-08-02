@@ -64,7 +64,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: "/coordinator/review", label: "Revisión", requires: "review-evaluations" },
   // Sección docente.
   { href: "/teacher", label: "Panel", requires: "create-evaluations" },
-  { href: "/teacher/evaluations", label: "Formulaciones", requires: "create-evaluations" },
+  { href: "/teacher/evaluations", label: "Mis Formulaciones", requires: "create-evaluations" },
   // Plantillas y escaneo: ocultos al TEACHER (solo COORDINATOR y superiores).
   {
     href: "/teacher/templates",

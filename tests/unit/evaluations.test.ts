@@ -8,7 +8,10 @@ import {
   UpdateQuestion,
   UpdateSection,
 } from "@/modules/evaluations/application/manage-evaluations";
-import { validateQuestionShape } from "@/modules/evaluations/domain/evaluation";
+import {
+  validateQuestionContent,
+  validateQuestionShape,
+} from "@/modules/evaluations/domain/evaluation";
 import type { EvaluationStatus } from "@/modules/evaluations/domain/evaluation-status";
 import type { AuthenticatedUser } from "@/shared/application/authenticated-user";
 import type {
@@ -329,6 +332,47 @@ describe("validateQuestionShape", () => {
       correctAnswer: "C",
     });
     expect(validateQuestionShape(bad)).not.toBeNull();
+  });
+
+  // ===== Nuevas validaciones (Fase 12 — enunciado y opciones obligatorias) =====
+  it("rechaza enunciado vacío (string)", () => {
+    expect(validateQuestionContent(question({ text: "" }))).not.toBeNull();
+  });
+  it("rechaza enunciado con solo espacios", () => {
+    expect(validateQuestionContent(question({ text: "   " }))).not.toBeNull();
+  });
+  it("rechaza enunciado TipTap con párrafo vacío", () => {
+    const emptyDoc = { type: "doc", content: [{ type: "paragraph" }] };
+    expect(
+      validateQuestionContent(question({ text: emptyDoc as unknown as string })),
+    ).not.toBeNull();
+  });
+  it("rechaza opción con texto vacío", () => {
+    const bad = question({
+      options: [
+        { key: "A", text: "" },
+        { key: "B", text: "b" },
+        { key: "C", text: "c" },
+        { key: "D", text: "d" },
+      ],
+      correctAnswer: "A",
+    });
+    expect(validateQuestionContent(bad)).not.toBeNull();
+  });
+  it("rechaza opción TipTap con solo espacios", () => {
+    const bad = question({
+      options: [
+        { key: "A", text: "a" },
+        { key: "B", text: { type: "doc", content: [{ type: "paragraph" }] } },
+        { key: "C", text: "c" },
+        { key: "D", text: "d" },
+      ] as unknown as CreateQuestionData["options"],
+      correctAnswer: "A",
+    });
+    expect(validateQuestionContent(bad)).not.toBeNull();
+  });
+  it("acepta enunciado y opciones no vacíos", () => {
+    expect(validateQuestionContent(question())).toBeNull();
   });
 });
 
