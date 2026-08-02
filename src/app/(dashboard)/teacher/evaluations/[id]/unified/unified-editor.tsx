@@ -536,13 +536,20 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
               >
                 <input type="hidden" name="evaluationId" value={data.evaluationId} />
                 <Input
+                  key={
+                    editingQuestionId
+                      ? `edit-title-${editingQuestionId}-${targetSectionId ?? "none"}`
+                      : "new-section-title"
+                  }
                   name="title"
                   placeholder="Título de contexto (opcional)"
                   defaultValue={draftSectionTitle}
                   // Mantenemos `draftSectionTitle` en sync para que el banner de
                   // edición y la validación lean el valor actual; pero el form
                   // nativo usa `name="title"` y el DOM como fuente de verdad al
-                  // enviar.
+                  // enviar. La key cambia en modo edición para forzar el
+                  // remount y que el `defaultValue` se aplique al precargar
+                  // el contexto de la pregunta editada.
                   onChange={(e) => setDraftSectionTitle(e.target.value)}
                   disabled={!data.editable}
                   className="max-w-md"
@@ -552,7 +559,18 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     Contenido del contexto (opcional)
                   </label>
                   <RichTextEditor
-                    key="new-section-content"
+                    // Key dependiente del modo: cuando entramos a editar un
+                    // ítem (startEdit), draftSectionContent pasa de null al
+                    // JSON real de la sección, pero TipTap solo lee
+                    // `defaultValue` en mount. Sin remontar el editor, el
+                    // "Contenido del contexto (opcional)" seguiría vacío al
+                    // editar. Usamos una key distinta en modo edición para
+                    // forzar el remount.
+                    key={
+                      editingQuestionId
+                        ? `edit-question-${editingQuestionId}-${targetSectionId ?? "none"}`
+                        : "new-section-content"
+                    }
                     name="content"
                     defaultValue={draftSectionContent}
                     onChange={(json) => setDraftSectionContent(json)}
