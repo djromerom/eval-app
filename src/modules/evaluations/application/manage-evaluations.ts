@@ -25,6 +25,7 @@ import {
   type UpdateQuestionData,
   type UpdateSectionData,
   validateDurationMinutes,
+  validateQuestionContent,
   validateQuestionShape,
 } from "../domain/evaluation";
 
@@ -258,6 +259,8 @@ export class AddQuestion implements UseCase<AddQuestionInput, Question> {
 
     const shapeError = validateQuestionShape(data);
     if (shapeError) return fail(new ValidationError(shapeError));
+    const contentError = validateQuestionContent(data);
+    if (contentError) return fail(new ValidationError(contentError));
 
     return ok(
       await this.evaluations.addQuestion(actor.institutionId, evaluationId, sectionId, data),
@@ -308,6 +311,17 @@ export class UpdateQuestion implements UseCase<UpdateQuestionInput, Question> {
         correctAnswer: data.correctAnswer,
       });
       if (shapeError) return fail(new ValidationError(shapeError));
+      // Validar contenido solo cuando el docente está tocando el enunciado
+      // (envía `text`). Si NO lo envía, conservamos el enunciado original
+      // (no se puede borrar por accidente) y solo validamos las opciones
+      // nuevas.
+      if (data.text !== undefined) {
+        const contentError = validateQuestionContent({
+          text: data.text,
+          options: data.options,
+        });
+        if (contentError) return fail(new ValidationError(contentError));
+      }
     }
 
     return ok(

@@ -18,6 +18,7 @@ import {
   stripContextFromQuestions,
 } from "./context-stitch";
 import { contextTextToTipTap } from "./context-to-tiptap";
+import { latexTextToTipTapNodes } from "./latex-to-tiptap";
 
 /**
  * A dónde van las preguntas importadas. Lo elige el docente en la pantalla de
@@ -290,12 +291,14 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
           new ValidationError("No se pudo determinar la sección destino para una pregunta."),
         );
       }
+      const imageUrl = q.image?.url ?? null;
       await this.evaluations.addQuestion(actor.institutionId, destination.evaluationId, sectionId, {
-        text: toRichText(q.text),
+        text: toRichText(q.text, imageUrl),
         options: q.options.map((o) => ({ key: o.key, text: o.text })),
         correctAnswer: q.correctAnswer!, // partitionParsedQuestions ya lo garantizó
         competency: q.competency,
         menComponent: null,
+        ...(imageUrl !== null ? { image: imageUrl } : {}),
       });
     }
     return ok({ imported: stripped.length, infos });
@@ -313,14 +316,11 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
 
     const infos: string[] = [];
     const withContextInlined = questions.map((q) => {
-      if (!q.contextText) return { text: toRichText(q.text) };
+      const imageUrl = q.image?.url ?? null;
+      const base = toRichText(q.text, imageUrl);
+      if (!q.contextText) return { text: base };
       return {
-        text: prependContextToBankQuestion(
-          toRichText(q.text),
-          q.contextTitle,
-          q.contextText,
-          q.contextImages,
-        ),
+        text: prependContextToBankQuestion(base, q.contextTitle, q.contextText, q.contextImages),
       };
     });
 
@@ -348,17 +348,36 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
 }
 
 /**
- * Envuelve texto plano en un documento TipTap de un párrafo.
+ * Envuelve texto plano en un documento TipTap.
  *
  * Los parsers devuelven string porque lo que se lee de un Word o un CSV no
  * trae formato aprovechable. La conversión se hace aquí, en el borde con la
  * persistencia, y no en cada parser.
+ *
+ * Si se pasa `imageUrl`, antepone un nodo `image` (block-level en TipTap)
+ * al contenido resultante, de modo que la figura recortada del PDF /
+ * incrustada del DOCX quede renderizada en el editor y en el PDF final —
+ * antes solo se guardaba en la columna `Question.image` y nunca aparecía
+ * en el doc TipTap que muestra la vista de lectura ni el editor visual.
+ * El atributo `width: 80` deja margen a la columna de opciones en el
+ * cuadernillo ICFES (igual que las figuras del contexto compartido); la
+ * docente puede ajustarlo desde el editor con la `ResizableImage`.
+ *
+ * Además de la imagen, detecta fórmulas LaTeX dentro de `text`:
+ *   - `$...$`   → nodo `inlineMath` intercalado dentro del paragraph.
+ *   - `$$...$$` → nodo `blockMath` top-level (sale al lado del paragraph;
+ *                 no se puede anidar en él — es la regla de ProseMirror).
+ * El texto sin delimitadores termina como un único `paragraph` con todo
+ * el enunciado, igual que antes; cambios retrocompatibles para preguntas
+ * que no traen fórmulas.
  */
-function toRichText(text: string): unknown {
-  return {
-    type: "doc",
-    content: [{ type: "paragraph", content: [{ type: "text", text }] }],
-  };
+function toRichText(text: string, imageUrl?: string | null): unknown {
+  const nodes: unknown[] = [];
+  if (imageUrl) {
+    nodes.push({ type: "image", attrs: { src: imageUrl, width: 80 } });
+  }
+  nodes.push(...latexTextToTipTapNodes(text));
+  return { type: "doc", content: nodes };
 }
 
 /**

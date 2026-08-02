@@ -85,7 +85,7 @@ export function YearCard({
           <div className="flex-1">
             <p className="text-foreground text-sm font-bold">Año académico {year.year}</p>
             <p className="text-muted-foreground text-xs">
-              {shortRange} · {periodCount} {periodCount === 1 ? "periodo" : "periodos"} ·{" "}
+              {shortRange} · {periodCount} {periodCount === 1 ? "prueba" : "pruebas"} ·{" "}
               {courseCount} {courseCount === 1 ? "curso" : "cursos"}
             </p>
           </div>
@@ -115,7 +115,7 @@ export function YearCard({
             </button>
 
             <div className="flex items-center gap-2">
-              <AddButton label="Agregar periodo" />
+              <AddButton label="Agregar prueba" />
               <AddButton label="Agregar curso" />
               <button
                 type="button"
@@ -131,9 +131,9 @@ export function YearCard({
           <div className="grid grid-cols-1 gap-6 p-5 lg:grid-cols-2">
             {/* Columna Periodos */}
             <div className="bg-muted/40 space-y-3 rounded-xl p-4">
-              <ColumnHeader title="Periodos" count={periods.length} />
+              <ColumnHeader title="Pruebas" count={periods.length} />
               {periods.length === 0 ? (
-                <p className="text-muted-foreground text-xs">Sin periodos configurados.</p>
+                <p className="text-muted-foreground text-xs">Sin pruebas configuradas.</p>
               ) : (
                 <ul className="space-y-2">
                   {periods.map((p) => (

@@ -36,6 +36,8 @@ export type TipTapNode = {
   text?: string;
 };
 
+import { latexTextToTipTapNodes } from "./latex-to-tiptap";
+
 // ---------- API pública ----------
 
 /**
@@ -101,15 +103,19 @@ export function contextTextToTipTap(text: string, imageMap?: Record<string, stri
 
 /** Convierte un fragmento de texto (sin bloques `[TABLA:...]`) en
  *  paragraphs intercalando nodos `image` cuando aparecen placeholders
- *  `[IMAGEN id]`. Vacío → no emite nada. */
+ *  `[IMAGEN id]` y nodos math cuando aparecen fórmulas LaTeX (`$...$`
+ *  dentro del paragraph, `$$...$$` como bloque top-level). Vacío → no
+ *  emite nada.
+ *
+ *  Estrategia: split el texto en segmentos alternados de TEXTO e
+ *  IMAGEN. Cada segmento TEXT se parte por `\n` en líneas y cada línea
+ *  se pasa por `latexTextToTipTapNodes`, que se encarga del math (e
+ *  ignora los placeholders de imagen, ya extraídos en el split previo).
+ *  Los nodos IMAGE se insertan TAL CUAL entre paragraphs (no se anidan
+ *  dentro de un `<p>` — son leaf block nodes en el schema de TipTap). */
 function pushTextBlocks(out: TipTapNode[], text: string, imageMap?: Record<string, string>): void {
   const trimmed = text.trim();
   if (trimmed.length === 0) return;
-  // Estrategia: split el texto en segmentos alternados de TEXTO e
-  // IMAGEN. Cada segmento TEXT se procesa como antes (split por `\n`,
-  // un paragraph por línea); los nodos IMAGE se insertan TAL CUAL
-  // entre paragraphs (no se anidan dentro de un <p> — son leaf block
-  // nodes en el schema de TipTap).
   const segments = splitTextByImages(trimmed, imageMap);
   for (const seg of segments) {
     if (seg.kind === "image") {
@@ -119,10 +125,8 @@ function pushTextBlocks(out: TipTapNode[], text: string, imageMap?: Record<strin
     for (const line of seg.text.split("\n")) {
       const lineTrimmed = line.trim();
       if (lineTrimmed.length === 0) continue;
-      out.push({
-        type: "paragraph",
-        content: [{ type: "text", text: lineTrimmed }],
-      });
+      const nodes = latexTextToTipTapNodes(lineTrimmed);
+      for (const node of nodes) out.push(node);
     }
   }
 }

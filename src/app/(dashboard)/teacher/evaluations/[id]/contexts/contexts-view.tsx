@@ -168,18 +168,13 @@ export function ContextsView({
         </div>
       </header>
 
-      {contexts.length === 0 ? (
-        <p className="bg-card text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">
-          Cuando importes preguntas con IA o crees el primer contexto desde abajo, lo verás listado
-          aquí con su snippet, número de preguntas y competencias.
-        </p>
-      ) : (
+      {contexts.length > 0 ? (
         <div className="space-y-3">
           {contexts.map((ctx) => (
             <ContextCard key={ctx.id} ctx={ctx} evaluationId={evaluationId} />
           ))}
         </div>
-      )}
+      ) : null}
 
       {!editable ? (
         <p className="bg-muted/30 text-muted-foreground rounded-md p-3 text-xs">

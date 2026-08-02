@@ -179,7 +179,7 @@ function Toolbar({ editor, onPickImage }: { editor: Editor; onPickImage: () => v
           // también cuando no hay alineación puesta.
           active={
             editor.isActive({ align }) ||
-            (align === "left" && !editor.getAttributes("paragraph").align)
+            (align === "justify" && !editor.getAttributes("paragraph").align)
           }
           onClick={() => editor.chain().focus().setAlign(align).run()}
         >

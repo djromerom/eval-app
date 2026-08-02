@@ -349,7 +349,7 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
 
       <p className="text-muted-foreground text-xs">
         <Link
-          href={`/teacher/evaluations/${targetEvaluationId}/contexts`}
+          href={`/teacher/evaluations/${targetEvaluationId}/unified`}
           className="hover:underline"
         >
           ← Volver a la formulación

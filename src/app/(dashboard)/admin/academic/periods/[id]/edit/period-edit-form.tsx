@@ -88,7 +88,7 @@ export function PeriodEditForm({ period, siblingNames }: PeriodEditFormProps) {
             htmlFor="name"
             className="text-muted-foreground text-xs font-semibold tracking-wide uppercase"
           >
-            Nombre del periodo
+            Nombre de la prueba
           </label>
           <input
             id="name"
@@ -102,11 +102,11 @@ export function PeriodEditForm({ period, siblingNames }: PeriodEditFormProps) {
                 ? "border-destructive focus:ring-destructive/30 w-full rounded-md border-2 bg-white px-3 py-2 text-sm focus:ring-2 focus:outline-none"
                 : "border-input focus:ring-primary/30 w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:outline-none"
             }
-            placeholder="Ej. I Periodo, II Periodo…"
+            placeholder="Ej. I Prueba, II Prueba…"
           />
           {conflictName && (
             <p className="text-destructive text-xs">
-              Ya existe un periodo llamado &ldquo;{trimmed}&rdquo; en este año académico.
+              Ya existe una prueba llamada &ldquo;{trimmed}&rdquo; en este año académico.
             </p>
           )}
         </div>

@@ -40,8 +40,12 @@ REGLAS DE EXTRACCIÓN
   \`contexts\` (con su \`title\` textual, o null si no tiene) y en cada pregunta pon SOLO
   \`contextTitle\` para referenciarlo. NO repitas el texto del contexto dentro de la pregunta.
 - Si una pregunta no depende de ningún contexto compartido, pon \`contextTitle\` = null.
-- Preserva la notación matemática de forma legible (ej.: "C(8,2) = 8! / ((8-2)! 2!)",
-  "raíz((250)^2 + (750)^2)"). No omitas fórmulas.
+- Preserva las fórmulas en LaTeX. Usa $...$ para fórmulas en línea (ej.: "$x^2$",
+  "$\frac{a}{b}$") y $$...$$ para fórmulas en bloque (ej.: "$$E = mc^2$$"). NO
+  escribas pseudo-notación castellana (no uses "raíz(...)" ni superíndices con "^").
+  Si falta la fórmula entera, escribe el delimitador con una nota dentro: "$x^?$".
+  No omitas fórmulas: cuando el enunciado dependa de una expresión matemática,
+  reemplázala por su equivalente en LaTeX delimitado.
 
 IMÁGENES
 - Numera las imágenes de forma GLOBAL y secuencial según aparecen: [IMAGEN 1], [IMAGEN 2]...

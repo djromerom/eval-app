@@ -120,7 +120,10 @@ export function validateParsedQuestion(q: ParsedQuestion): string | null {
 
   // El resto (claves consecutivas y únicas, correcta entre las opciones) ya lo
   // sabe el dominio de formulaciones.
-  return validateQuestionShape({ options: q.options, correctAnswer: q.correctAnswer });
+  return validateQuestionShape({
+    options: q.options.map((o) => ({ key: o.key as AnswerKey })),
+    correctAnswer: q.correctAnswer as AnswerKey,
+  });
 }
 
 /** Separa las preguntas listas para dar de alta de las que tienen problemas. */

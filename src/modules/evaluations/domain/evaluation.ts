@@ -1,3 +1,4 @@
+import { richTextToPlain } from "@/shared/domain/rich-text";
 import type { EvaluationStatus } from "./evaluation-status";
 
 export type AnswerKey = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
@@ -60,6 +61,14 @@ export interface QuestionOption {
 /** Formulación con su contenido completo (bloques + preguntas). */
 export interface EvaluationDetail extends Evaluation {
   sections: EvaluationSection[];
+  /** Nombre del periodo académico (nullable: la formulación se puede crear
+   *  sin periodo, ej. evaluación diagnóstica de inicio de año). El
+   *  repositorio hidrata este campo con un include extra; los casos donde
+   *  no se necesita (solo IDs) pueden seguir usando `Evaluation.periodId`.
+   *  Es opcional para que los in-memory repos de tests no tengan que
+   *  setearlo (cuando lo omiten, las pages deben tratar `null` como
+   *  "sin periodo"). */
+  periodName?: string | null;
 }
 
 /** Fila de listado enriquecida con nombres de curso/asignatura/periodo. */
@@ -314,7 +323,14 @@ export const MIN_OPTIONS = 2;
 export const MAX_OPTIONS = 8;
 
 /** Una pregunta válida: entre MIN_OPTIONS y MAX_OPTIONS opciones (A–H)
- *  con una correcta entre ellas. */
+ *  con una correcta entre ellas. El contexto (sección) es OPCIONAL: la
+ *  pregunta puede agregarse sin contexto y queda agrupada en la sección
+ *  "Sin contexto" (o en la auto-creada al abrir el editor unificado).
+ *
+ *  NOTA: la validación del contenido (enunciado + texto de cada opción) se
+ *  hace en los USE CASES (`AddQuestion`, validador de import). Esta función
+ *  mantiene la API histórica `options + correctAnswer` para que las pruebas
+ *  unitarias que validan solo la forma A–D + correcta sigan compilando. */
 export function validateQuestionShape(data: {
   options: { key: AnswerKey }[];
   correctAnswer: AnswerKey;
@@ -330,6 +346,30 @@ export function validateQuestionShape(data: {
   }
   if (!keys.includes(data.correctAnswer)) {
     return `La respuesta correcta debe estar entre las opciones definidas (${expected.join(", ")}).`;
+  }
+  return null;
+}
+
+/**
+ * Valida el CONTENIDO de una pregunta a guardar: enunciado no vacío y todas
+ * las opciones con texto no vacío. Corre en los use cases de ALTA / UPDATE
+ * (no en `validateQuestionShape`, que solo verifica la forma A–D).
+ *
+ * Devuelve `null` si está OK, o un mensaje de error para mostrar inline.
+ */
+export function validateQuestionContent(data: {
+  text: unknown;
+  options: { key: AnswerKey; text: unknown }[];
+}): string | null {
+  const textPlain = richTextToPlain(data.text).trim();
+  if (!textPlain) {
+    return "Describe el enunciado de la pregunta.";
+  }
+  for (const opt of data.options) {
+    const optPlain = richTextToPlain(opt.text).trim();
+    if (!optPlain) {
+      return `Llena la opción ${opt.key} antes de guardar.`;
+    }
   }
   return null;
 }

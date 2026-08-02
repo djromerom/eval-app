@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 import { signIn } from "@/auth";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 
 async function loginWithCredentials(formData: FormData) {
   "use server";
@@ -53,6 +54,12 @@ export function LoginForm() {
       <Button type="submit" size="lg" className="w-full">
         Iniciar sesión
       </Button>
+      <Link
+        href="/forgot-password"
+        className={buttonVariants({ variant: "link" }) + " block text-center"}
+      >
+        Recuperar contraseña
+      </Link>
       {/* TODO Fase 1: botones "Continuar con Google" / "Continuar con Microsoft" */}
     </form>
   );
