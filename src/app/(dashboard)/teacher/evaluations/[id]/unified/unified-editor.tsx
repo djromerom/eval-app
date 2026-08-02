@@ -640,7 +640,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
               <thead className="text-foreground border-b-2 border-slate-300 bg-slate-200 text-left font-bold dark:border-slate-600 dark:bg-slate-700 dark:text-white">
                 <tr>
                   <th className="px-4 py-3 font-medium">DESCRIPCIÓN</th>
-                  <th className="px-4 py-3 font-medium">CONTEXTO</th>
+                  <th className="px-4 py-3 text-center font-medium">CONTEXTO</th>
                   <th className="px-4 py-3 text-center font-medium">OPCIONES</th>
                   <th className="px-4 py-3 text-center font-medium">CLAVE</th>
                 </tr>
