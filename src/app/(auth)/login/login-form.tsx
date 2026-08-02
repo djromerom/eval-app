@@ -58,7 +58,7 @@ export function LoginForm() {
         href="/forgot-password"
         className={buttonVariants({ variant: "link" }) + " block text-center"}
       >
-        ¿Olvidaste tu contraseña?
+        Recuperar contraseña
       </Link>
       {/* TODO Fase 1: botones "Continuar con Google" / "Continuar con Microsoft" */}
     </form>
