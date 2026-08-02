@@ -165,6 +165,21 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   useEffect(() => {
     if (!targetSectionId || !data.sections.some((s) => s.id === targetSectionId)) {
       setTargetSectionId(data.sections[data.sections.length - 1]?.id ?? null);
+      return;
+    }
+    // Si la sección destino está VACÍA (sin título ni contenido) pero ya
+    // hay otras secciones con contenido detrás, saltamos a la última con
+    // contenido. Caso típico: la evaluación empezó con una sección vacía
+    // auto-creada; tras agregar "C1"→"C2"→"C3" el targetSectionId sigue
+    // apuntando a la primera sección (que ahora tiene contenido), pero si
+    // en algún momento se quedó vacía otra vez (p.ej. tras renombrar y
+    // luego el docente decide limpiar), mejor saltar a la última con
+    // contenido para no acumular secciones fantasma.
+    const target = data.sections.find((s) => s.id === targetSectionId);
+    const targetIsEmpty = target && !target.title && !target.content;
+    const lastWithContent = [...data.sections].reverse().find((s) => s.title || s.content);
+    if (targetIsEmpty && lastWithContent && lastWithContent.id !== targetSectionId) {
+      setTargetSectionId(lastWithContent.id);
     }
   }, [data.sections, targetSectionId]);
 
@@ -677,6 +692,24 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       setEditingQuestionId(null);
                       setShowEditingBanner(false);
                       setActionStatus("saved");
+                      // CRÍTICO: limpiar los drafts del contexto en modo
+                      // creación. Sin esto, `draftSectionTitle`/`draftSectionContent`
+                      // quedan "stale" con el título/contenido del primer
+                      // "Agregar enunciado", y al volver a pulsar el botón
+                      // el orquestador veía `hasUnsavedContexto=true` y
+                      // creaba una sección NUEVA cada vez. Limpiarlos
+                      // garantiza que la próxima pulsación compare un draft
+                      // vacío contra la sección destino (que ya tiene el
+                      // título/contenido persistido) → `contextoMatchesSection`
+                      // retorna true → reusa la sección.
+                      //
+                      // En modo edición NO se limpian: el padre cierra el
+                      // formulario y se sale del flujo de creación.
+                      if (!editingQuestionId) {
+                        setDraftSectionTitle("");
+                        setDraftSectionContent(null);
+                        newSectionFormRef.current?.reset();
+                      }
                       // Si el botón submitido traía data-close-on-save="true"
                       // (caso: "Guardar"), ocultamos la card de creación.
                       // Quedan visibles solo los botones superiores y la tabla.
