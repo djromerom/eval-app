@@ -66,7 +66,7 @@ export default async function AdminDashboardPage() {
           {
             href: "/admin/academic",
             title: "Estructura académica",
-            desc: "Gestiona cursos, asignaturas, grupos y periodos.",
+            desc: "Gestiona cursos, asignaturas, grupos y pruebas.",
           },
           {
             href: "/admin/students",

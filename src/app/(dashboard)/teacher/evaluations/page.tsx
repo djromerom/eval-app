@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Pencil } from "lucide-react";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { EntityForm } from "@/components/admin/entity-form";
@@ -61,7 +62,7 @@ export default async function EvaluationsPage() {
               required: true,
               options: csOptions,
             },
-            { name: "periodId", label: "Periodo", type: "select", options: periodOptions },
+            { name: "periodId", label: "Prueba", type: "select", options: periodOptions },
           ]}
         />
       </section>
@@ -70,9 +71,10 @@ export default async function EvaluationsPage() {
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-muted-foreground border-b text-left">
             <tr>
+              <th className="px-3 py-3 font-medium" aria-label="Editar" />
               <th className="px-4 py-3 font-medium">Título</th>
               <th className="px-4 py-3 font-medium">Asignatura-curso</th>
-              <th className="px-4 py-3 font-medium">Periodo</th>
+              <th className="px-4 py-3 font-medium">Prueba</th>
               <th className="px-4 py-3 font-medium">Estado</th>
               <th className="px-4 py-3 font-medium">Ver.</th>
               <th className="px-4 py-3 font-medium">Preg.</th>
@@ -82,18 +84,25 @@ export default async function EvaluationsPage() {
           <tbody>
             {evaluations.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-muted-foreground px-4 py-8 text-center">
+                <td colSpan={8} className="text-muted-foreground px-4 py-8 text-center">
                   Aún no hay formulaciones.
                 </td>
               </tr>
             ) : (
               evaluations.map((e) => (
                 <tr key={e.id} className="border-b last:border-0">
-                  <td className="px-4 py-3 font-medium">
+                  <td className="px-3 py-3">
                     <Link
-                      href={`/teacher/evaluations/${e.id}/contexts`}
-                      className="hover:underline"
+                      href={`/teacher/evaluations/${e.id}/unified`}
+                      className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors"
+                      title="Editar formulación"
+                      aria-label={`Editar ${e.title}`}
                     >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 font-medium">
+                    <Link href={`/teacher/evaluations/${e.id}/unified`} className="hover:underline">
                       {e.title}
                     </Link>
                   </td>

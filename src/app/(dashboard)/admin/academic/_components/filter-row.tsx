@@ -26,14 +26,14 @@ export function FilterRow({
         <Search className="text-muted-foreground h-4 w-4" />
         <input
           type="search"
-          placeholder="Buscar año, periodo, curso, asignatura…"
+          placeholder="Buscar año, prueba, curso, asignatura…"
           className="text-muted-foreground placeholder:text-muted-foreground w-full bg-transparent outline-none"
         />
       </div>
 
       <Tab label="Todos" active />
       <Tab label={`Años (${yearsCount})`} />
-      <Tab label={`Periodos (${periodsCount})`} />
+      <Tab label={`Pruebas (${periodsCount})`} />
       <Tab label={`Cursos (${coursesCount})`} />
       <Tab label={`Asignaturas (${subjectsCount})`} />
 

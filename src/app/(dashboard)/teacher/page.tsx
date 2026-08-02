@@ -107,7 +107,7 @@ export default async function TeacherDashboardPage() {
             {evaluations.slice(0, 10).map((e) => (
               <Link
                 key={e.id}
-                href={`/teacher/evaluations/${e.id}/contexts`}
+                href={`/teacher/evaluations/${e.id}/unified`}
                 className="hover:bg-accent/60 flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors"
               >
                 <StatusBadge status={e.status} />

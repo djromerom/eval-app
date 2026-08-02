@@ -27,7 +27,7 @@ export function KpiStrip({
       />
       <KpiCard
         icon={<ListChecks className="text-muted-foreground h-4 w-4" />}
-        label="Periodos activos"
+        label="Pruebas activas"
         value={activePeriods}
         hint={activePeriods === 0 ? "Ninguno en curso" : "En curso ahora mismo"}
       />

@@ -116,7 +116,7 @@ export default async function AcademicPage() {
     <>
       <PageHeader
         title="Estructura académica"
-        description="Años, periodos, cursos, asignaturas y grupos de tu institución (ADMIN)."
+        description="Años, pruebas, cursos, asignaturas y grupos de tu institución (ADMIN)."
       />
 
       {/* ===== Pencil: Setup banner cuando no hay nada configurado ===== */}
@@ -192,7 +192,7 @@ export default async function AcademicPage() {
         </summary>
         <p className="text-muted-foreground mb-4 text-xs">
           Formularios directos para crear cada entidad. Como alternativa, puedes usar las acciones
-          &ldquo;Agregar periodo&rdquo; / &ldquo;Agregar curso&rdquo; dentro de cada año arriba.
+          &ldquo;Agregar prueba&rdquo; / &ldquo;Agregar curso&rdquo; dentro de cada año arriba.
         </p>
 
         <div className="space-y-6">
@@ -226,10 +226,10 @@ export default async function AcademicPage() {
             )}
           </CrudSection>
 
-          <CrudSection title="Periodos">
+          <CrudSection title="Pruebas">
             <EntityForm
               action={createPeriodAction}
-              submitLabel="Agregar periodo"
+              submitLabel="Agregar prueba"
               disabledReason={years.length === 0 ? "Crea primero un año académico." : undefined}
               fields={[
                 {
@@ -244,7 +244,7 @@ export default async function AcademicPage() {
                   label: "Nombre",
                   type: "text",
                   required: true,
-                  placeholder: "I Periodo",
+                  placeholder: "I Prueba",
                 },
                 { name: "order", label: "Orden", type: "number", required: true, placeholder: "1" },
                 { name: "startDate", label: "Inicio", type: "date", required: true },

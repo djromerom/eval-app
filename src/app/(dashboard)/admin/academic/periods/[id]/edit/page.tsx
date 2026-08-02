@@ -10,7 +10,7 @@ import {
 } from "@/modules/academic/infrastructure/container";
 import { PeriodEditForm } from "./period-edit-form";
 
-export const metadata: Metadata = { title: "Editar periodo" };
+export const metadata: Metadata = { title: "Editar prueba" };
 
 const dateFmt = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
 
@@ -51,7 +51,7 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
 
   return (
     <>
-      <PageHeader title="Estructura académica" description="Editando un periodo académico." />
+      <PageHeader title="Estructura académica" description="Editando una prueba." />
 
       {/* Backdrop con link al overview (UX de drawer). */}
       <Link
@@ -62,7 +62,7 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
 
       {/* Drawer anclado a la derecha. */}
       <aside
-        aria-label="Editar periodo"
+        aria-label="Editar prueba"
         className="bg-background fixed inset-y-0 right-0 z-50 flex w-full max-w-[480px] flex-col border-l shadow-xl"
       >
         <header className="bg-muted/30 flex items-center justify-between gap-2 border-b p-5">
@@ -71,9 +71,9 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
               <span className="bg-primary/10 text-primary inline-flex h-5 w-5 items-center justify-center rounded">
                 {yearLabel}
               </span>
-              Periodo · Año {yearLabel}
+              Prueba · Año {yearLabel}
             </p>
-            <h1 className="font-display text-xl font-bold">Editar periodo</h1>
+            <h1 className="font-display text-xl font-bold">Editar prueba</h1>
           </div>
           <Link
             href="/admin/academic"
