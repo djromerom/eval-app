@@ -18,7 +18,7 @@ import {
 } from "../../actions";
 import { ReviewModal, type QuestionLite } from "./review-modal";
 import { contextLabel, type SectionLite } from "./context-label";
-import { hasUnsavedContexto } from "./save-contexto";
+import { contextoMatchesSection, hasUnsavedContexto } from "./save-contexto";
 
 export interface SectionWithQuestions extends SectionLite {
   order: number;
@@ -551,7 +551,21 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         return updateQuestionAction({}, formData);
                       }
                       const unsaved = hasUnsavedContexto(draftSectionTitle, draftSectionContent);
-                      if (!unsaved) {
+                      // BUG FIX: si el draft ya coincide con la sección
+                      // destino (caso típico tras un "Agregar enunciado"
+                      // anterior que dejó el contexto precargado), NO crear
+                      // sección nueva — la pregunta va a la sección destino
+                      // tal cual. Sin esto, la 2ª pregunta con el mismo
+                      // contexto creaba una sección duplicada vacía.
+                      const targetSection = data.sections.find((s) => s.id === targetSectionId);
+                      if (
+                        !unsaved ||
+                        contextoMatchesSection(
+                          draftSectionTitle,
+                          draftSectionContent,
+                          targetSection,
+                        )
+                      ) {
                         return addQuestionAction({}, formData);
                       }
                       // Decide: ¿renombrar la sección vacía auto-creada, o

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { hasUnsavedContexto } from "@/app/(dashboard)/teacher/evaluations/[id]/unified/save-contexto";
+import {
+  contextoMatchesSection,
+  hasUnsavedContexto,
+} from "@/app/(dashboard)/teacher/evaluations/[id]/unified/save-contexto";
 
 describe("hasUnsavedContexto", () => {
   it("title con texto → unsaved", () => {
@@ -68,5 +71,49 @@ describe("hasUnsavedContexto", () => {
         content: [{ type: "paragraph", content: [{ type: "text", text: "Cuerpo" }] }],
       }),
     ).toBe(true);
+  });
+});
+
+describe("contextoMatchesSection", () => {
+  it("sección null/undefined → no coincide (no hay nada que reusar)", () => {
+    expect(contextoMatchesSection("", null, null)).toBe(false);
+    expect(contextoMatchesSection("", null, undefined)).toBe(false);
+  });
+
+  it("ambos vacíos (sección vacía + draft vacío) → coincide", () => {
+    expect(contextoMatchesSection("", null, { title: null, content: null })).toBe(true);
+    expect(
+      contextoMatchesSection(
+        "",
+        { type: "doc", content: [{ type: "paragraph" }] },
+        {
+          title: null,
+          content: null,
+        },
+      ),
+    ).toBe(true);
+  });
+
+  it("título idéntico → coincide (caso del bug actual: 2ª pregunta con draft stale)", () => {
+    expect(contextoMatchesSection("Contexto A", null, { title: "Contexto A", content: null })).toBe(
+      true,
+    );
+    expect(
+      contextoMatchesSection("  Contexto A  ", null, { title: "Contexto A", content: null }),
+    ).toBe(true);
+  });
+
+  it("títulos distintos → NO coincide (hay que crear sección nueva)", () => {
+    expect(contextoMatchesSection("Contexto B", null, { title: "Contexto A", content: null })).toBe(
+      false,
+    );
+  });
+
+  it("sección vacía + draft con texto → NO coincide (renombrar la vacía)", () => {
+    expect(contextoMatchesSection("Contexto A", null, { title: null, content: null })).toBe(false);
+  });
+
+  it("sección con texto + draft vacío → NO coincide (no debería pasar en UI)", () => {
+    expect(contextoMatchesSection("", null, { title: "Contexto A", content: null })).toBe(false);
   });
 });
