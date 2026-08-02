@@ -198,11 +198,18 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   // y el docente puede luego renombrarla o reagrupar preguntas en otra.
   useEffect(() => {
     if (data.sections.length === 0 && data.editable && !autoCreatedRef.current) {
+      console.log("[AUTO-CREATE]", {
+        ts: Date.now(),
+        reason: "sections.length===0 && !autoCreatedRef.current",
+        sectionsLen: data.sections.length,
+        autoCreatedRef: autoCreatedRef.current,
+      });
       autoCreatedRef.current = true;
       const fd = new FormData();
       fd.append("evaluationId", data.evaluationId);
       // title y content intencionalmente omitidos → backend almacena null.
       void addSectionAction({}, fd).then((res) => {
+        console.log("[AUTO-CREATE result]", { ts: Date.now(), res });
         if (!res.success) {
           // Si falló (permisos, sin conexión, etc.), habilitamos reintento.
           autoCreatedRef.current = false;
@@ -251,6 +258,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
    * fuente de verdad al submit.
    */
   async function handleAddOrRenameSection(formData: FormData) {
+    console.log("[Nuevo-contexto] entry", {
+      ts: Date.now(),
+      title: formData.get("title"),
+      submitting: submittingRef.current,
+      sectionsLen: data.sections.length,
+      sectionTitles: data.sections.map((s) => s.title),
+    });
     // LOCKOUT ANTI-DOBLE-SUBMIT (ver overrideAction para la explicación
     // completa). El botón "Nuevo contexto" comparte el riesgo: si el
     // docente lo pulsa dos veces rápido, ambos submits ven el mismo
@@ -586,6 +600,15 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       if (editingQuestionId) {
                         return updateQuestionAction({}, formData);
                       }
+                      console.log("[Agregar-enunciado] entry", {
+                        ts: Date.now(),
+                        submitting: submittingRef.current,
+                        draftTitle: draftSectionTitle,
+                        targetSectionId,
+                        sectionsLen: data.sections.length,
+                        sectionTitles: data.sections.map((s) => s.title),
+                        formSectionId: formData.get("sectionId"),
+                      });
                       // LOCKOUT ANTI-DOBLE-SUBMIT. Si ya hay un submit en
                       // curso, retornamos un estado "neutro" (sin success ni
                       // error) para que el `onDone` del QuestionForm no
