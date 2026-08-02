@@ -112,6 +112,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   // revalidatePath aún no llegó) y ambos crean su propia sección → duplicado.
   // El ref es persistente durante todo el ciclo de vida del componente.
   const submittingRef = useRef(false);
+  // Debounce temporal para el segundo submit: aunque el flag booleano esté
+  // bien sincronizado, si React invoca el formAction DOS veces en el mismo
+  // tick (p.ej. por el Enter-keyup que también dispara click en algunos
+  // browsers), el segundo pasa el guard antes de que el primero haya
+  // marcado el ref. Para esos casos, además del flag miramos si el submit
+  // anterior fue hace menos de 800ms y el actual va a crear sección nueva.
+  const lastSubmitTsRef = useRef(0);
 
   // Estado de los popovers de info (botones (i) junto a los títulos).
   const [isContextInfoOpen, setIsContextInfoOpen] = useState(false);
@@ -273,6 +280,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       console.warn("[Nuevo-contexto] BLOQUEADO por doble-submit");
       return;
     }
+    const newCtxNowTs = Date.now();
+    const newCtxSinceLast = newCtxNowTs - lastSubmitTsRef.current;
+    if (newCtxSinceLast < 800 && lastSubmitTsRef.current > 0) {
+      console.warn("[Nuevo-contexto] BLOQUEADO por debounce", { sinceLast: newCtxSinceLast });
+      return;
+    }
+    lastSubmitTsRef.current = newCtxNowTs;
     submittingRef.current = true;
     try {
       const title = String(formData.get("title") ?? "").trim();
@@ -600,27 +614,50 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       if (editingQuestionId) {
                         return updateQuestionAction({}, formData);
                       }
+                      const nowTs = Date.now();
                       console.log("[Agregar-enunciado] entry", {
-                        ts: Date.now(),
+                        ts: nowTs,
                         submitting: submittingRef.current,
+                        lastSubmitTs: lastSubmitTsRef.current,
                         draftTitle: draftSectionTitle,
                         targetSectionId,
                         sectionsLen: data.sections.length,
                         sectionTitles: data.sections.map((s) => s.title),
                         formSectionId: formData.get("sectionId"),
                       });
-                      // LOCKOUT ANTI-DOBLE-SUBMIT. Si ya hay un submit en
-                      // curso, retornamos un estado "neutro" (sin success ni
-                      // error) para que el `onDone` del QuestionForm no
-                      // dispare efectos colaterales. Sin esto, un doble-click
-                      // o Enter+Click puede lanzar DOS submits concurrentes;
-                      // ambos ven el mismo `data.sections` viejo (porque el
-                      // primer revalidatePath aún no llegó) y ambos crean su
-                      // propia sección → duplicado en la BD.
+                      // LOCKOUT ANTI-DOBLE-SUBMIT con DEBOUNCE por timestamp.
+                      // El flag booleano solo no alcanza: React puede invocar
+                      // el formAction dos veces en el mismo tick antes de que
+                      // el `try` haya seteado `submittingRef.current = true`.
+                      // Si los dos submits ven el mismo `data.sections` viejo
+                      // (porque el primer revalidatePath aún no llegó), ambos
+                      // crean su propia sección → duplicado. La capa extra es
+                      // temporal: si entre el submit anterior y este pasaron
+                      // menos de 800ms Y el orquestador va a crear una sección
+                      // nueva, lo bloqueamos. Si es una edición/reuso no
+                      // afecta.
                       if (submittingRef.current) {
                         console.warn("[Agregar-enunciado] BLOQUEADO por doble-submit");
                         return {};
                       }
+                      const debounceWindow = 800;
+                      const sinceLast = nowTs - lastSubmitTsRef.current;
+                      const willCreate =
+                        hasUnsavedContexto(draftSectionTitle, draftSectionContent) &&
+                        !contextoMatchesSection(
+                          draftSectionTitle,
+                          draftSectionContent,
+                          data.sections.find((s) => s.id === targetSectionId),
+                        );
+                      if (sinceLast < debounceWindow && willCreate && lastSubmitTsRef.current > 0) {
+                        console.warn("[Agregar-enunciado] BLOQUEADO por debounce", {
+                          sinceLast,
+                          willCreate,
+                          debounceWindow,
+                        });
+                        return {};
+                      }
+                      lastSubmitTsRef.current = nowTs;
                       submittingRef.current = true;
                       try {
                         const unsaved = hasUnsavedContexto(draftSectionTitle, draftSectionContent);
