@@ -620,6 +620,19 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         // AdminFormState (ver actions.ts).
                         if (res.sectionId) {
                           formData.set("sectionId", res.sectionId);
+                          // CRÍTICO: actualizar targetSectionId también. Sin
+                          // esto, el orquestador del PRÓXIMO "Agregar
+                          // enunciado" compararía el draft contra la sección
+                          // VIEJA y, como el título ya coincidiría (los
+                          // drafts quedan precargados con el nuevo título),
+                          // contextoMatchesSection retornaría true y la
+                          // pregunta iría a la sección vieja — o peor,
+                          // compararía títulos distintos y crearía OTRA
+                          // sección nueva. Mantener targetSectionId
+                          // sincronizado con la sección recién creada es lo
+                          // que permite que el próximo click reutilice la
+                          // sección correcta sin crear duplicados.
+                          setTargetSectionId(res.sectionId);
                         }
                       }
                       return addQuestionAction({}, formData);
@@ -692,24 +705,25 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       setEditingQuestionId(null);
                       setShowEditingBanner(false);
                       setActionStatus("saved");
-                      // CRÍTICO: limpiar los drafts del contexto en modo
-                      // creación. Sin esto, `draftSectionTitle`/`draftSectionContent`
-                      // quedan "stale" con el título/contenido del primer
-                      // "Agregar enunciado", y al volver a pulsar el botón
-                      // el orquestador veía `hasUnsavedContexto=true` y
-                      // creaba una sección NUEVA cada vez. Limpiarlos
-                      // garantiza que la próxima pulsación compare un draft
-                      // vacío contra la sección destino (que ya tiene el
-                      // título/contenido persistido) → `contextoMatchesSection`
-                      // retorna true → reusa la sección.
+                      // IMPORTANTE: NO limpiamos draftSectionTitle ni
+                      // draftSectionContent tras un "Agregar enunciado"
+                      // exitoso. El docente espera ver el contexto
+                      // PRECARGADO arriba para que el próximo click guarde
+                      // la pregunta con el mismo contexto (reusando la
+                      // sección destino) sin crear una sección nueva.
                       //
-                      // En modo edición NO se limpian: el padre cierra el
-                      // formulario y se sale del flujo de creación.
-                      if (!editingQuestionId) {
-                        setDraftSectionTitle("");
-                        setDraftSectionContent(null);
-                        newSectionFormRef.current?.reset();
-                      }
+                      // El orquestador del overrideAction compara el draft
+                      // contra la sección destino vía contextoMatchesSection:
+                      //  - si el docente NO cambió nada (mismo título),
+                      //    coincide → reusa.
+                      //  - si cambió el título, no coincide → crea nueva.
+                      //
+                      // El QuestionForm.reset() interno limpia enunciado,
+                      // opciones y clave (inputs del form de pregunta, NO
+                      // los inputs del contexto).
+                      //
+                      // En modo edición NO tocamos nada: el padre cierra
+                      // el formulario y se sale del flujo de creación.
                       // Si el botón submitido traía data-close-on-save="true"
                       // (caso: "Guardar"), ocultamos la card de creación.
                       // Quedan visibles solo los botones superiores y la tabla.
