@@ -455,14 +455,28 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         title.length > 0
           ? data.sections.find((s) => (s.title ?? "").trim().toLowerCase() === title.toLowerCase())
           : null;
+      // Capa 2 del dedupe: si la capa 1 falla pero el targetSectionId
+      // actual SÍ tiene ese título, reusamos targetSectionId. Cubre la
+      // race entre revalidatePath y el submit (mismo síntoma que el bug
+      // C2-C9 de Agregar enunciado: la sección recién creada existe en
+      // BD pero data.sections aún no la refleja).
+      const targetSection = data.sections.find((s) => s.id === targetSectionId);
+      const matchingByTarget =
+        !matchingByTitle &&
+        title.length > 0 &&
+        targetSection &&
+        (targetSection.title ?? "").trim().toLowerCase() === title.toLowerCase()
+          ? targetSection
+          : null;
+      const match = matchingByTitle ?? matchingByTarget;
       let nextSectionId: string;
-      if (matchingByTitle) {
-        nextSectionId = matchingByTitle.id;
-        const isExistingEmpty = !matchingByTitle.title && !matchingByTitle.content;
+      if (match) {
+        nextSectionId = match.id;
+        const isExistingEmpty = !match.title && !match.content;
         if (isExistingEmpty) {
           const fd = new FormData();
           fd.append("evaluationId", data.evaluationId);
-          fd.append("sectionId", matchingByTitle.id);
+          fd.append("sectionId", match.id);
           fd.append("title", title);
           if (hasContent) fd.append("content", contentRaw);
           const renameRes = await updateSectionAction({}, fd);
