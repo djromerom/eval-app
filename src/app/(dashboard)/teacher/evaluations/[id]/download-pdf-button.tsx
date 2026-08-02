@@ -29,7 +29,7 @@ export function DownloadPdfButton({
   evaluationId: string;
   kind?: "booklet" | "answer-sheets" | "answer-key";
   label?: string;
-  variant?: "link" | "button";
+  variant?: "link" | "button" | "default";
   size?: ButtonSize;
 }) {
   const [loading, setLoading] = useState(false);
@@ -59,7 +59,11 @@ export function DownloadPdfButton({
   }
 
   const buttonClass =
-    variant === "button" ? buttonVariants({ variant: "outline", size }) : undefined;
+    variant === "button"
+      ? buttonVariants({ variant: "outline", size })
+      : variant === "default"
+        ? buttonVariants({ variant: "default", size })
+        : undefined;
 
   return (
     <span className="inline-flex flex-col items-start">

@@ -172,7 +172,7 @@ export function ImportReviewForm({
         ) : null}
         <div className="flex gap-3">
           <Link
-            href={`/teacher/evaluations/${targetEvaluationId}/contexts`}
+            href={`/teacher/evaluations/${targetEvaluationId}/unified`}
             className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 rounded-md px-4 text-sm font-medium"
           >
             Volver a la formulación

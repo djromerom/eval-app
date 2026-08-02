@@ -46,7 +46,7 @@ export default async function ImportQuestionsPage({ params }: { params: Promise<
       />
 
       <p className="text-muted-foreground mb-6 text-sm">
-        <Link href={`/teacher/evaluations/${target.id}/contexts`} className="hover:underline">
+        <Link href={`/teacher/evaluations/${target.id}/unified`} className="hover:underline">
           ← Volver a la formulación
         </Link>
       </p>

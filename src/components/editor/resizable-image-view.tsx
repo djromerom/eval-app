@@ -7,6 +7,28 @@ import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 const MIN_PCT = 10;
 const MAX_PCT = 100;
 
+/** Posiciones de los 4 tiradores en las esquinas. */
+type HandlePosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
+/**
+ * Cursor + posición de cada esquina. `nwse-resize` para ↖↘ y `nesw-resize`
+ * para ↗↙ (convención CSS estándar; así se ve en Word / Google Docs / Figma).
+ */
+const HANDLE_POSITIONS: Record<HandlePosition, { cursor: string; className: string }> = {
+  "top-left": { cursor: "nwse-resize", className: "-top-1 -left-1" },
+  "top-right": { cursor: "nesw-resize", className: "-top-1 -right-1" },
+  "bottom-left": { cursor: "nesw-resize", className: "-bottom-1 -left-1" },
+  "bottom-right": { cursor: "nwse-resize", className: "-bottom-1 -right-1" },
+};
+
+/** Mapa de esquina a "anchor" del resize (qué lado estamos arrastrando). */
+const ANCHOR_FROM_HANDLE: Record<HandlePosition, "left" | "right"> = {
+  "top-left": "left",
+  "top-right": "right",
+  "bottom-left": "left",
+  "bottom-right": "right",
+};
+
 /** Márgenes que colocan el bloque según la alineación guardada. */
 function alignMargins(align: string | null): React.CSSProperties {
   switch (align) {
@@ -22,16 +44,22 @@ function alignMargins(align: string | null): React.CSSProperties {
 }
 
 /**
- * Vista de una imagen dentro del editor con tiradores para redimensionarla,
- * como en Word: se arrastra una esquina y el ancho cambia en vivo.
+ * Vista de una imagen dentro del editor con tiradores en las 4 ESQUINAS
+ * para redimensionarla, como en Word / Google Docs.
  *
- * El ancho se guarda en PORCENTAJE del ancho disponible (ver `ResizableImage`
- * en extensions.ts): el editor y la hoja impresa tienen anchos distintos, y
- * un valor en píxeles se vería de un tamaño en pantalla y de otro en papel.
- *
- * Durante el arrastre solo se toca el estado local; el documento se actualiza
- * al soltar. Escribir en cada `mousemove` dispararía un `onUpdate` de TipTap
- * por evento, con su serialización del documento entera cada vez.
+ * Comportamiento:
+ *  - 4 tiradores (↖ ↗ ↘ ↙), no en los lados.
+ *  - Aspect ratio SIEMPRE se preserva: solo cambia el ancho, el alto se
+ *    ajusta vía `h-auto`. Mover una esquina agranda/achica el bloque
+ *    completo manteniendo proporciones.
+ *  - El ancho se guarda en PORCENTAJE del ancho disponible (ver
+ *    `ResizableImage` en extensions.ts): el editor y la hoja impresa tienen
+ *    anchos distintos, y un valor en píxeles se vería de un tamaño en
+ *    pantalla y de otro en papel.
+ *  - Durante el arrastre solo se toca el estado local; el documento se
+ *    actualiza al soltar. Escribir en cada `mousemove` dispararía un
+ *    `onUpdate` de TipTap por evento, con su serialización del documento
+ *    entera cada vez.
  */
 export function ResizableImageView({ node, updateAttributes, selected }: NodeViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -42,7 +70,7 @@ export function ResizableImageView({ node, updateAttributes, selected }: NodeVie
   const shown = preview ?? width;
 
   const startResize = useCallback(
-    (event: React.MouseEvent, anchor: "left" | "right") => {
+    (event: React.MouseEvent, handle: HandlePosition) => {
       event.preventDefault();
       event.stopPropagation();
 
@@ -55,11 +83,15 @@ export function ResizableImageView({ node, updateAttributes, selected }: NodeVie
       const startX = event.clientX;
       const startPct =
         width ?? ((containerRef.current?.getBoundingClientRect().width ?? 0) / available) * 100;
+      const anchor = ANCHOR_FROM_HANDLE[handle];
 
       setDragging(true);
 
       const onMove = (e: MouseEvent) => {
-        // Arrastrando el tirador izquierdo, mover a la izquierda agranda.
+        // Mover hacia afuera agranda, hacia adentro achica. En la esquina
+        // inferior-derecha, el ancla es "right" y arrastrar a la derecha
+        // aumenta el ancho. Mismo razonamiento para las otras 3 esquinas:
+        // siempre es "delta hacia afuera = agranda".
         const delta = anchor === "right" ? e.clientX - startX : startX - e.clientX;
         const next = startPct + (delta / available) * 100;
         setPreview(Math.round(Math.min(MAX_PCT, Math.max(MIN_PCT, next))));
@@ -80,6 +112,8 @@ export function ResizableImageView({ node, updateAttributes, selected }: NodeVie
     },
     [width, updateAttributes],
   );
+
+  const showHandles = selected || dragging;
 
   return (
     <NodeViewWrapper
@@ -106,12 +140,15 @@ export function ResizableImageView({ node, updateAttributes, selected }: NodeVie
         draggable={false}
       />
 
-      {/* Los tiradores solo aparecen con la imagen seleccionada, para no
-          ensuciar la lectura del contexto mientras se escribe. */}
-      {selected || dragging ? (
+      {/* 4 tiradores en las esquinas. Solo aparecen con la imagen
+          seleccionada, para no ensuciar la lectura del contexto mientras
+          se escribe. */}
+      {showHandles ? (
         <>
-          <Handle position="left" onMouseDown={(e) => startResize(e, "left")} />
-          <Handle position="right" onMouseDown={(e) => startResize(e, "right")} />
+          <Handle position="top-left" onMouseDown={(e) => startResize(e, "top-left")} />
+          <Handle position="top-right" onMouseDown={(e) => startResize(e, "top-right")} />
+          <Handle position="bottom-left" onMouseDown={(e) => startResize(e, "bottom-left")} />
+          <Handle position="bottom-right" onMouseDown={(e) => startResize(e, "bottom-right")} />
           <span className="bg-foreground/75 text-background pointer-events-none absolute right-1 bottom-1 rounded px-1.5 py-0.5 text-[10px] font-medium">
             {shown ?? 100}%
           </span>
@@ -125,16 +162,16 @@ function Handle({
   position,
   onMouseDown,
 }: {
-  position: "left" | "right";
+  position: HandlePosition;
   onMouseDown: (e: React.MouseEvent) => void;
 }) {
+  const { cursor, className } = HANDLE_POSITIONS[position];
   return (
     <span
       role="presentation"
       onMouseDown={onMouseDown}
-      className={`bg-primary absolute top-1/2 h-6 w-2 -translate-y-1/2 cursor-ew-resize rounded-full ${
-        position === "left" ? "-left-1" : "-right-1"
-      }`}
+      style={{ cursor }}
+      className={`bg-primary absolute h-2.5 w-2.5 rounded-full ${className}`}
     />
   );
 }
