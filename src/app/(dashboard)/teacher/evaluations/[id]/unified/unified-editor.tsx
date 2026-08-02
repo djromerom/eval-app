@@ -7,6 +7,7 @@ import type { AdminFormState } from "@/components/admin/entity-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
+import { isTipTapEmpty } from "@/components/editor/rich-text-empty";
 import { richTextToPlain } from "@/components/editor/render";
 import { DownloadPdfButton } from "../download-pdf-button";
 import { QuestionForm, type QuestionInitialValues } from "../../question-form";
@@ -101,6 +102,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   // asociarlo al form de arriba, conservando el submit del QuestionForm
   // intacto.
   const newSectionFormRef = useRef<HTMLFormElement>(null);
+  // Ref al <form> interno del QuestionForm. Lo usa el botón "Nuevo
+  // contexto" (que vive DENTRO del QuestionForm, en `extraActions`) para
+  // disparar `requestSubmit()` programáticamente y reusar el orquestador
+  // `overrideAction` (el mismo de "Agregar enunciado"). Sin esto, el
+  // botón tenía que vivir en su propio <form> y NO podía enviar el
+  // enunciado + opciones del docente junto con el nuevo contexto.
+  const questionFormRef = useRef<HTMLFormElement>(null);
   // Marca cuando ya disparamos la auto-creación de la sección inicial. Evita
   // loops si el addSectionAction regresa error y necesitamos reintentar.
   const autoCreatedRef = useRef(false);
@@ -375,6 +383,163 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     }
   }
 
+  /**
+   * Disparado por el botón "Nuevo contexto" del `extraActions` del
+   * QuestionForm. A diferencia del form de contexto, este botón SÍ
+   * persiste la pregunta actual: crea/renombra la sección destino con
+   * los datos del bloque "Contexto" arriba, y luego guarda el ítem del
+   * QuestionForm asociado a esa sección recién creada en una sola
+   * acción de UI.
+   *
+   * Recolecta los FormData de AMBOS forms directamente del DOM (no del
+   * state React), porque si el docente tipea rápido el último keystroke
+   * puede no haber llegado al state aún. La validación de "enunciado no
+   * vacío" la hace el `onSubmit` nativo del QuestionForm; acá validamos
+   * solo que el contexto tenga título o contenido.
+   */
+  async function handleNewContextWithQuestion() {
+    if (editingQuestionId) return; // solo modo creación
+    if (submittingRef.current) {
+      console.warn("[Nuevo-contexto+pregunta] BLOQUEADO por doble-submit");
+      return;
+    }
+    const questionForm = questionFormRef.current;
+    const sectionForm = newSectionFormRef.current;
+    if (!questionForm || !sectionForm) return;
+
+    // Reunimos inputs del QuestionForm (enunciado, opciones, clave, etc.)
+    // y del form de contexto (título, contenido) en un único FormData
+    // que pasaremos al orquestador. Empezamos por el del QuestionForm
+    // porque es el que viajará al `addQuestionAction` final; los del
+    // contexto se usan solo para decidir crear vs reusar.
+    const formData = new FormData(questionForm);
+    const sectionFd = new FormData(sectionForm);
+    const title = String(sectionFd.get("title") ?? "").trim();
+    const contentRaw = String(sectionFd.get("content") ?? "");
+    const hasTitle = title.length > 0;
+    const hasContent = contentRaw.length > 0;
+
+    if (!hasTitle && !hasContent) {
+      setFormError("Define al menos el título o el contenido del contexto antes de crearlo.");
+      return;
+    }
+    // Validamos también el enunciado (mismo check que hace el onSubmit
+    // nativo del QuestionForm cuando el docente usa "Agregar enunciado"
+    // o "Guardar"). Sin esto, podríamos persistir una pregunta vacía
+    // invocando addQuestionAction directamente.
+    const textRaw = String(formData.get("text") ?? "");
+    let parsed: unknown = textRaw;
+    try {
+      parsed = JSON.parse(textRaw);
+    } catch {
+      parsed = textRaw;
+    }
+    if (isTipTapEmpty(parsed)) {
+      setFormError("Escribe el enunciado de la pregunta antes de guardar.");
+      return;
+    }
+    setFormError(null);
+    setActionStatus("saving");
+    submittingRef.current = true;
+    lastSubmitTsRef.current = Date.now();
+    try {
+      // Decidir si crear nueva o reusar/renombrar (misma lógica que
+      // overrideAction). Aquí NO usamos `contextoMatchesSection` porque
+      // el botón explícitamente pide "nuevo contexto" — la intención del
+      // docente es tener una sección distinta de la actual.
+      //
+      // DEDUPE: si ya existe una sección con el mismo título (caso del
+      // bug C2-C9), reusamos en vez de crear duplicado. Si la existente
+      // está vacía, la renombramos. Si está llena, la reusamos sin más.
+      const matchingByTitle =
+        title.length > 0
+          ? data.sections.find((s) => (s.title ?? "").trim().toLowerCase() === title.toLowerCase())
+          : null;
+      let nextSectionId: string;
+      if (matchingByTitle) {
+        nextSectionId = matchingByTitle.id;
+        const isExistingEmpty = !matchingByTitle.title && !matchingByTitle.content;
+        if (isExistingEmpty) {
+          const fd = new FormData();
+          fd.append("evaluationId", data.evaluationId);
+          fd.append("sectionId", matchingByTitle.id);
+          fd.append("title", title);
+          if (hasContent) fd.append("content", contentRaw);
+          const renameRes = await updateSectionAction({}, fd);
+          if (renameRes.error) {
+            setFormError(renameRes.error);
+            setActionStatus("error");
+            return;
+          }
+        }
+      } else if (
+        data.sections.length === 1 &&
+        data.sections[0] &&
+        !data.sections[0].title &&
+        !data.sections[0].content
+      ) {
+        // Única sección vacía → RENOMBRAR (mismo patrón que
+        // handleAddOrRenameSection).
+        const onlySection = data.sections[0];
+        const fd = new FormData();
+        fd.append("evaluationId", data.evaluationId);
+        fd.append("sectionId", onlySection.id);
+        fd.append("title", title);
+        if (hasContent) fd.append("content", contentRaw);
+        const renameRes = await updateSectionAction({}, fd);
+        if (renameRes.error) {
+          setFormError(renameRes.error);
+          setActionStatus("error");
+          return;
+        }
+        nextSectionId = onlySection.id;
+      } else {
+        // Crear sección nueva.
+        const fd = new FormData();
+        fd.append("evaluationId", data.evaluationId);
+        fd.append("title", title);
+        if (hasContent) fd.append("content", contentRaw);
+        const res = await addSectionAction({}, fd);
+        if (res.error) {
+          setFormError(res.error);
+          setActionStatus("error");
+          return;
+        }
+        if (!res.sectionId) {
+          setFormError("No se pudo crear el nuevo contexto.");
+          setActionStatus("error");
+          return;
+        }
+        nextSectionId = res.sectionId;
+      }
+
+      // Apuntar el formData de la pregunta a la sección recién creada.
+      formData.set("sectionId", nextSectionId);
+      const qRes = await addQuestionAction({}, formData);
+      if (qRes.error) {
+        setFormError(qRes.error);
+        setActionStatus("error");
+        return;
+      }
+
+      // Éxito: limpiar borradores (contexto) y resetear el form de
+      // pregunta (enunciado/opciones). Mantenemos `nextSectionId` como
+      // nueva targetSectionId para que la próxima pregunta siga cayendo
+      // en la misma sección, hasta que el docente decida cambiar.
+      setDraftSectionTitle("");
+      setDraftSectionContent(null);
+      setTargetSectionId(nextSectionId);
+      setActionStatus("saved");
+      questionForm.reset();
+      newSectionFormRef.current?.reset();
+      setTimeout(() => {
+        setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
+      }, 2500);
+    } finally {
+      submittingRef.current = false;
+    }
+  }
+
   // Construye el `initial` para QuestionForm en modo edición.
   function editingInitial(): QuestionInitialValues | undefined {
     if (!editingQuestionId) return undefined;
@@ -635,6 +800,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     sectionId={targetSectionId}
                     defaultOptions={data.defaultOptions}
                     maxOptions={data.maxOptions}
+                    formRef={questionFormRef}
                     initial={editingInitial()}
                     createLabel="Agregar enunciado"
                     // ORQUESTACIÓN CONTEXTO + PREGUNTA EN UN SOLO CLICK.
@@ -823,12 +989,14 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       <>
                         {editingQuestionId ? null : (
                           <Button
-                            type="submit"
+                            type="button"
                             size="sm"
                             variant="default"
-                            form="new-section-form"
                             disabled={!data.editable || actionStatus === "saving"}
-                            title="Crea el nuevo contexto con los datos de arriba; conserva el enunciado que estés escribiendo"
+                            title="Crea un nuevo contexto y guarda aquí el enunciado + opciones que estés escribiendo"
+                            onClick={() => {
+                              void handleNewContextWithQuestion();
+                            }}
                           >
                             Nuevo contexto
                           </Button>

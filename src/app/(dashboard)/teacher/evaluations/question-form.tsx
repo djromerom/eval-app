@@ -1,5 +1,6 @@
 "use client";
 
+import type { RefObject } from "react";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Info } from "lucide-react";
@@ -95,6 +96,7 @@ export function QuestionForm({
   createLabel = "Agregar pregunta",
   extraActions,
   overrideAction,
+  formRef,
 }: {
   evaluationId: string;
   sectionId: string;
@@ -125,6 +127,12 @@ export function QuestionForm({
    *  en el mismo click). El callback recibe el FormData del form y debe
    *  retornar el AdminFormState que se reflejará en `state`. */
   overrideAction?: (formData: FormData) => Promise<AdminFormState>;
+  /** Ref externo al <form>. Si viene, el padre puede disparar
+   *  `formRef.current?.requestSubmit()` programáticamente (p.ej. el botón
+   *  "Nuevo contexto" del editor unificado, que está en otro <form> y
+   *  necesita reutilizar el submit de este). Si no viene, se usa el ref
+   *  interno (que ya usaba `formRef.current?.reset()` en `onDone`). */
+  formRef?: RefObject<HTMLFormElement | null>;
 }) {
   const editing = initial !== undefined;
   // Si el padre pasó un overrideAction (p.ej. el editor unificado) lo
@@ -150,7 +158,13 @@ export function QuestionForm({
   // `useEffect` al detectar `state.success`. Usamos ref (no state) para que
   // el reset post-guardado no dependa del cambio de estado.
   const closeOnSaveRef = useRef(false);
-  const formRef = useRef<HTMLFormElement>(null);
+  // Ref interno al <form>. Lo usamos solo si el padre NO pasa uno externo
+  // (`formRef` prop); si lo pasa, ese es el que recibe la asignación en el
+  // JSX. Existe para mantener el comportamiento de las llamadas internas
+  // (`liveFormRef.current?.reset()`, `requestSubmit` desde el padre, etc.).
+  const internalFormRef = useRef<HTMLFormElement>(null);
+  // Ref que el form usa: el externo si el padre lo pasó, si no el interno.
+  const liveFormRef = formRef ?? internalFormRef;
 
   // Popover (i) junto a "Opciones de respuesta".
   const optionsInfoRef = useRef<HTMLSpanElement>(null);
@@ -197,7 +211,7 @@ export function QuestionForm({
       return;
     }
     onDone?.();
-    formRef.current?.reset();
+    liveFormRef.current?.reset();
     setOptionCount(defaultOptions);
     setCorrect(ANSWER_KEYS_ORDER[0]!);
     setResetKey((k) => k + 1); // remonta el editor para limpiarlo
@@ -220,7 +234,7 @@ export function QuestionForm({
 
   return (
     <form
-      ref={formRef}
+      ref={formRef ?? internalFormRef}
       action={formAction}
       lang="es"
       // Validación de cliente ANTES del submit: si el enunciado está vacío
