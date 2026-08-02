@@ -100,7 +100,7 @@ export async function createEvaluationAction(
     },
   });
   if (!result.ok) return { error: result.error.message };
-  redirect(`/teacher/evaluations/${result.value.id}/contexts`);
+  redirect(`/teacher/evaluations/${result.value.id}/unified`);
 }
 
 export async function addSectionAction(

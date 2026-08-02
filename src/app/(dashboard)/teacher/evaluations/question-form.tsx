@@ -2,10 +2,12 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { Info } from "lucide-react";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
+import { isTipTapEmpty } from "@/components/editor/rich-text-empty";
 import { addQuestionAction, updateQuestionAction } from "./actions";
 import {
   MAX_OPTIONS,
@@ -23,9 +25,9 @@ const SOLO_OPTIONS = [
 
 const DEFAULT_COUNT = MAX_OPTIONS; // 4 por defecto
 
-function SubmitButton({ editing }: { editing: boolean }) {
+function SubmitButton({ editing, createLabel }: { editing: boolean; createLabel: string }) {
   const { pending } = useFormStatus();
-  const label = editing ? "Guardar cambios" : "Agregar pregunta";
+  const label = editing ? "Guardar cambios" : createLabel;
   return (
     <Button type="submit" size="sm" disabled={pending}>
       {pending ? "Guardando…" : label}
@@ -90,6 +92,8 @@ export function QuestionForm({
   maxOptions = MAX_OPTIONS,
   initial,
   onDone,
+  createLabel = "Agregar pregunta",
+  extraActions,
 }: {
   evaluationId: string;
   sectionId: string;
@@ -97,8 +101,23 @@ export function QuestionForm({
   maxOptions?: number;
   /** Si viene, el formulario edita esa pregunta en vez de crear una nueva. */
   initial?: QuestionInitialValues;
-  /** Se invoca tras guardar con éxito (la vista de edición se cierra). */
-  onDone?: () => void;
+  /** Se invoca tras guardar con éxito.
+   *
+   * Recibe `info?.close === true` cuando el submitter del form fue un botón
+   * con `data-close-on-save="true"` (p.ej. "Guardar y cerrar" en el editor
+   * unificado). En ese caso, además, NO reseteamos los inputs — el padre
+   * cerrará el card y los inputs se desmontan. Si la vista solo quiere
+   * ignorar el flag, el callback sigue siendo válido como `() => void`.
+   */
+  onDone?: (info?: { close?: boolean }) => void;
+  /** Etiqueta del botón de submit en modo creación. Default: "Agregar pregunta".
+   *  Las vistas que quieran otro wording (p.ej. "Agregar enunciado" en el
+   *  editor unificado) lo pasan por aquí sin tocar a las demás. */
+  createLabel?: string;
+  /** Acciones extra que se renderizan a la IZQUIERDA del submit, en la misma
+   *  fila. Lo usa el editor unificado para poner "Nuevo contexto" al lado
+   *  de "Agregar enunciado". Las otras vistas lo dejan `undefined`. */
+  extraActions?: React.ReactNode;
 }) {
   const editing = initial !== undefined;
   const [state, formAction] = useActionState<AdminFormState, FormData>(
@@ -108,16 +127,62 @@ export function QuestionForm({
   const [optionCount, setOptionCount] = useState<number>(initial?.options.length ?? defaultOptions);
   const [correct, setCorrect] = useState<string>(initial?.correctAnswer ?? ANSWER_KEYS_ORDER[0]!);
   const [resetKey, setResetKey] = useState(0);
+  // Errores de validación del cliente (no del servidor). El servidor igual
+  // revalida pero queremos feedback inmediato sin round-trip. Se prioriza
+  // sobre `state.error` (server) cuando está presente.
+  const [clientError, setClientError] = useState<string | null>(null);
+  // Flag de cierre tras guardar: lo setea `onSubmit` leyendo `event.submitter`
+  // (botón con `data-close-on-save="true"` → close=true) y lo consume
+  // `useEffect` al detectar `state.success`. Usamos ref (no state) para que
+  // el reset post-guardado no dependa del cambio de estado.
+  const closeOnSaveRef = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
+
+  // Popover (i) junto a "Opciones de respuesta".
+  const optionsInfoRef = useRef<HTMLSpanElement>(null);
+  const [isOptionsInfoOpen, setIsOptionsInfoOpen] = useState(false);
+
+  // Click fuera o Esc → cerrar popover.
+  useEffect(() => {
+    if (!isOptionsInfoOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      const t = e.target as Node;
+      if (optionsInfoRef.current && !optionsInfoRef.current.contains(t)) {
+        setIsOptionsInfoOpen(false);
+      }
+    }
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") setIsOptionsInfoOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [isOptionsInfoOpen]);
 
   useEffect(() => {
     if (!state.success) return;
+    // Tras un guardado exitoso limpiamos cualquier error de validación que
+    // quedara pegado (no debería, pero por si el state.success llega tarde).
+    setClientError(null);
+    const closeOnSave = closeOnSaveRef.current;
+    // Reset del flag para el próximo submit (Enter, "Agregar enunciado", etc.)
+    closeOnSaveRef.current = false;
     if (editing) {
       // Al editar NO se limpia: el padre cierra el formulario y vuelve a la
       // vista de lectura, ya revalidada por el server action.
-      onDone?.();
+      onDone?.({ close: closeOnSave });
       return;
     }
+    // closeOnSave=true → el padre va a desmontar el card. Saltamos el reset
+    // (los inputs se desmontan igual) y notificamos para que cierre.
+    if (closeOnSave) {
+      onDone?.({ close: true });
+      return;
+    }
+    onDone?.();
     formRef.current?.reset();
     setOptionCount(defaultOptions);
     setCorrect(ANSWER_KEYS_ORDER[0]!);
@@ -143,7 +208,57 @@ export function QuestionForm({
     <form
       ref={formRef}
       action={formAction}
-      className="space-y-3 rounded-lg border border-dashed p-4"
+      lang="es"
+      // Validación de cliente ANTES del submit: si el enunciado está vacío
+      // bloqueamos y mostramos un mensaje claro. Sin esto, las opciones
+      // tienen `required` pero el texto del RichTextEditor no, así que el
+      // docente podía crear ítems con `Texto = (vacío)` si solo llenaba
+      // opciones. El navegador no valida contenido JSON en hidden inputs,
+      // por eso lo hacemos a mano.
+      onSubmit={(e) => {
+        // Capturamos QUÉ botón disparó el submit antes de cualquier otra
+        // lógica. `event.submitter` es HTML5 estándar: si el form se envió
+        // presionando Enter, es el primer botón submit del form (el
+        // SubmitButton principal); si fue click explícito, es ese botón.
+        const submitter = (e.nativeEvent as SubmitEvent).submitter;
+        closeOnSaveRef.current =
+          submitter instanceof HTMLButtonElement && submitter.dataset.closeOnSave === "true";
+
+        const fd = new FormData(e.currentTarget);
+        const textRaw = String(fd.get("text") ?? "");
+        let parsed: unknown = textRaw;
+        try {
+          parsed = JSON.parse(textRaw);
+        } catch {
+          // Si no es JSON válido, lo tratamos como texto plano; isTipTapEmpty
+          // también sabe manejar strings.
+          parsed = textRaw;
+        }
+        if (isTipTapEmpty(parsed)) {
+          e.preventDefault();
+          setClientError("Escribe el enunciado de la pregunta antes de guardar.");
+          return;
+        }
+        setClientError(null);
+      }}
+      // Traducimos los mensajes por defecto de validación HTML5 (los inputs
+      // con `required` muestran "Please fill out this field" en algunos
+      // navegadores). `onInvalid` se dispara cuando el browser bloquea el
+      // submit por campo vacío; reescribimos el mensaje a español y lo
+      // limpiamos en `onInput` cuando el usuario empieza a escribir.
+      onInvalid={(e) => {
+        const t = e.target as HTMLInputElement;
+        if (t.validity.valueMissing) {
+          t.setCustomValidity("Llena este campo antes de guardar.");
+        }
+      }}
+      onInput={(e) => {
+        const t = e.target as HTMLInputElement;
+        t.setCustomValidity("");
+        // También limpiamos errores del cliente al primer keystroke.
+        if (clientError) setClientError(null);
+      }}
+      className="space-y-3 rounded-lg border border-dashed"
     >
       <input type="hidden" name="evaluationId" value={evaluationId} />
       <input type="hidden" name="sectionId" value={sectionId} />
@@ -151,7 +266,6 @@ export function QuestionForm({
       {editing ? <input type="hidden" name="questionId" value={initial.id} /> : null}
 
       <div className="space-y-1">
-        <label className="text-muted-foreground text-xs font-medium">Enunciado</label>
         <RichTextEditor
           key={resetKey}
           name="text"
@@ -161,6 +275,36 @@ export function QuestionForm({
       </div>
 
       <div className="space-y-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-destructive" aria-hidden="true">
+            *
+          </span>
+          <label className="text-foreground text-sm font-semibold">Opciones de respuesta</label>
+          <span ref={optionsInfoRef} className="relative inline-block">
+            <button
+              type="button"
+              onClick={() => setIsOptionsInfoOpen((o) => !o)}
+              className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-5 w-5 items-center justify-center rounded-full transition-colors"
+              aria-label="Más información sobre las opciones de respuesta"
+              aria-expanded={isOptionsInfoOpen}
+            >
+              <Info className="h-3.5 w-3.5" />
+            </button>
+            {isOptionsInfoOpen ? (
+              <div
+                role="tooltip"
+                className="bg-popover text-popover-foreground absolute top-full left-0 z-20 mt-2 w-72 rounded-md border p-3 text-xs leading-relaxed shadow-md"
+              >
+                <p>
+                  Cada pregunta debe tener entre {MIN_OPTIONS} y {maxOptions} opciones de respuesta.
+                  Marca con el círculo la opción <strong>correcta</strong>: se imprime en la columna{" "}
+                  <em>CLAVE</em> de la tabla resumen y alimenta la calificación automática. La
+                  institución puede subir o bajar el tope máximo en <em>EVAL_MAX_OPTIONS</em>.
+                </p>
+              </div>
+            ) : null}
+          </span>
+        </div>
         {visibleKeys.map((k) => (
           <div key={k} className="flex items-center gap-2">
             <label className="flex items-center gap-1.5 text-sm font-medium">
@@ -280,8 +424,15 @@ export function QuestionForm({
         )}
       </div>
 
-      {state.error ? <p className="text-destructive text-sm">{state.error}</p> : null}
-      <SubmitButton editing={editing} />
+      {(clientError ?? state.error) ? (
+        <p className="text-destructive text-sm" role="alert">
+          {clientError ?? state.error}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <SubmitButton editing={editing} createLabel={createLabel} />
+        {extraActions}
+      </div>
     </form>
   );
 }
