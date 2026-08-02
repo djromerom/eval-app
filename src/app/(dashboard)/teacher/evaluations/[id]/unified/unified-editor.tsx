@@ -105,6 +105,14 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   // loops si el addSectionAction regresa error y necesitamos reintentar.
   const autoCreatedRef = useRef(false);
 
+  // LOCKOUT ANTI-DOBLE-SUBMIT: el `useFormStatus().pending` del SubmitButton
+  // tarda un frame en reflejarse, así que un doble-click muy rápido puede
+  // disparar DOS submits antes de que el botón se deshabilite. Sin lockout,
+  // ambos submits ven el mismo `data.sections` (porque el primer
+  // revalidatePath aún no llegó) y ambos crean su propia sección → duplicado.
+  // El ref es persistente durante todo el ciclo de vida del componente.
+  const submittingRef = useRef(false);
+
   // Estado de los popovers de info (botones (i) junto a los títulos).
   const [isContextInfoOpen, setIsContextInfoOpen] = useState(false);
   const [isEnunciadoInfoOpen, setIsEnunciadoInfoOpen] = useState(false);
@@ -243,64 +251,77 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
    * fuente de verdad al submit.
    */
   async function handleAddOrRenameSection(formData: FormData) {
-    const title = String(formData.get("title") ?? "").trim();
-    const contentRaw = String(formData.get("content") ?? "");
-    const hasTitle = title.length > 0;
-    const hasContent = contentRaw.length > 0;
-
-    // Validación local: title O content deben estar presentes. Si falta
-    // ambos, mostramos el error y evitamos el viaje al servidor (no se
-    // llama preventDefault porque la función `action` se ejecuta igual;
-    // cortamos acá antes del await).
-    if (!hasTitle && !hasContent) {
-      setFormError("Define al menos el título o el contenido del contexto antes de crearlo.");
+    // LOCKOUT ANTI-DOBLE-SUBMIT (ver overrideAction para la explicación
+    // completa). El botón "Nuevo contexto" comparte el riesgo: si el
+    // docente lo pulsa dos veces rápido, ambos submits ven el mismo
+    // `data.sections` viejo y crean secciones duplicadas.
+    if (submittingRef.current) {
+      console.warn("[Nuevo-contexto] BLOQUEADO por doble-submit");
       return;
     }
-    setFormError(null);
-    setActionStatus("saving");
+    submittingRef.current = true;
+    try {
+      const title = String(formData.get("title") ?? "").trim();
+      const contentRaw = String(formData.get("content") ?? "");
+      const hasTitle = title.length > 0;
+      const hasContent = contentRaw.length > 0;
 
-    // Decisión: ¿hay exactamente 1 sección vacía? Si sí, RENOMBRAR.
-    // Si no, CREAR nueva.
-    const onlySection = data.sections.length === 1 ? data.sections[0] : null;
-    const isEmpty =
-      onlySection !== null &&
-      onlySection !== undefined &&
-      !onlySection.title &&
-      !onlySection.content;
+      // Validación local: title O content deben estar presentes. Si falta
+      // ambos, mostramos el error y evitamos el viaje al servidor (no se
+      // llama preventDefault porque la función `action` se ejecuta igual;
+      // cortamos acá antes del await).
+      if (!hasTitle && !hasContent) {
+        setFormError("Define al menos el título o el contenido del contexto antes de crearlo.");
+        return;
+      }
+      setFormError(null);
+      setActionStatus("saving");
 
-    let res: AdminFormState;
-    if (isEmpty && onlySection) {
-      // RENOMBRAR: construimos un FormData con sectionId para
-      // updateSectionAction.
-      const fd = new FormData();
-      fd.append("evaluationId", data.evaluationId);
-      fd.append("sectionId", onlySection.id);
-      fd.append("title", title);
-      if (hasContent) fd.append("content", contentRaw);
-      res = await updateSectionAction({}, fd);
-    } else {
-      // CREAR nueva sección.
-      res = await addSectionAction({}, formData);
+      // Decisión: ¿hay exactamente 1 sección vacía? Si sí, RENOMBRAR.
+      // Si no, CREAR nueva.
+      const onlySection = data.sections.length === 1 ? data.sections[0] : null;
+      const isEmpty =
+        onlySection !== null &&
+        onlySection !== undefined &&
+        !onlySection.title &&
+        !onlySection.content;
+
+      let res: AdminFormState;
+      if (isEmpty && onlySection) {
+        // RENOMBRAR: construimos un FormData con sectionId para
+        // updateSectionAction.
+        const fd = new FormData();
+        fd.append("evaluationId", data.evaluationId);
+        fd.append("sectionId", onlySection.id);
+        fd.append("title", title);
+        if (hasContent) fd.append("content", contentRaw);
+        res = await updateSectionAction({}, fd);
+      } else {
+        // CREAR nueva sección.
+        res = await addSectionAction({}, formData);
+      }
+
+      if (res?.error) {
+        setFormError(res.error);
+        setActionStatus("error");
+        return;
+      }
+
+      // Éxito: limpiar borradores + reset del form nativo (importante para
+      // que el `name="title"` y el hidden `name="content"` del RichTextEditor
+      // queden limpios). El `revalidatePath` de los server actions refresca
+      // automáticamente `data.sections`, así que el badge de CONTEXTO de la
+      // tabla se actualiza sin más.
+      setDraftSectionTitle("");
+      setDraftSectionContent(null);
+      setActionStatus("saved");
+      newSectionFormRef.current?.reset();
+      setTimeout(() => {
+        setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
+      }, 2500);
+    } finally {
+      submittingRef.current = false;
     }
-
-    if (res?.error) {
-      setFormError(res.error);
-      setActionStatus("error");
-      return;
-    }
-
-    // Éxito: limpiar borradores + reset del form nativo (importante para
-    // que el `name="title"` y el hidden `name="content"` del RichTextEditor
-    // queden limpios). El `revalidatePath` de los server actions refresca
-    // automáticamente `data.sections`, así que el badge de CONTEXTO de la
-    // tabla se actualiza sin más.
-    setDraftSectionTitle("");
-    setDraftSectionContent(null);
-    setActionStatus("saved");
-    newSectionFormRef.current?.reset();
-    setTimeout(() => {
-      setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
-    }, 2500);
   }
 
   // Construye el `initial` para QuestionForm en modo edición.
@@ -565,77 +586,94 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       if (editingQuestionId) {
                         return updateQuestionAction({}, formData);
                       }
-                      const unsaved = hasUnsavedContexto(draftSectionTitle, draftSectionContent);
-                      // BUG FIX: si el draft ya coincide con la sección
-                      // destino (caso típico tras un "Agregar enunciado"
-                      // anterior que dejó el contexto precargado), NO crear
-                      // sección nueva — la pregunta va a la sección destino
-                      // tal cual. Sin esto, la 2ª pregunta con el mismo
-                      // contexto creaba una sección duplicada vacía.
-                      const targetSection = data.sections.find((s) => s.id === targetSectionId);
-                      if (
-                        !unsaved ||
-                        contextoMatchesSection(
-                          draftSectionTitle,
-                          draftSectionContent,
-                          targetSection,
-                        )
-                      ) {
+                      // LOCKOUT ANTI-DOBLE-SUBMIT. Si ya hay un submit en
+                      // curso, retornamos un estado "neutro" (sin success ni
+                      // error) para que el `onDone` del QuestionForm no
+                      // dispare efectos colaterales. Sin esto, un doble-click
+                      // o Enter+Click puede lanzar DOS submits concurrentes;
+                      // ambos ven el mismo `data.sections` viejo (porque el
+                      // primer revalidatePath aún no llegó) y ambos crean su
+                      // propia sección → duplicado en la BD.
+                      if (submittingRef.current) {
+                        console.warn("[Agregar-enunciado] BLOQUEADO por doble-submit");
+                        return {};
+                      }
+                      submittingRef.current = true;
+                      try {
+                        const unsaved = hasUnsavedContexto(draftSectionTitle, draftSectionContent);
+                        // BUG FIX: si el draft ya coincide con la sección
+                        // destino (caso típico tras un "Agregar enunciado"
+                        // anterior que dejó el contexto precargado), NO crear
+                        // sección nueva — la pregunta va a la sección destino
+                        // tal cual. Sin esto, la 2ª pregunta con el mismo
+                        // contexto creaba una sección duplicada vacía.
+                        const targetSection = data.sections.find((s) => s.id === targetSectionId);
+                        if (
+                          !unsaved ||
+                          contextoMatchesSection(
+                            draftSectionTitle,
+                            draftSectionContent,
+                            targetSection,
+                          )
+                        ) {
+                          return addQuestionAction({}, formData);
+                        }
+                        // Decide: ¿renombrar la sección vacía auto-creada, o
+                        // crear una nueva sección? Renombrar evita el caso
+                        // "queda una sección fantasma vacía al inicio". Si hay
+                        // 2+ secciones, O si la única sección ya tiene
+                        // título/contenido, creamos nueva.
+                        const onlySection = data.sections.length === 1 ? data.sections[0] : null;
+                        const isEmpty =
+                          onlySection !== null &&
+                          onlySection !== undefined &&
+                          !onlySection.title &&
+                          !onlySection.content;
+                        if (isEmpty && onlySection) {
+                          const fd = new FormData();
+                          fd.append("evaluationId", data.evaluationId);
+                          fd.append("sectionId", onlySection.id);
+                          fd.append("title", draftSectionTitle.trim());
+                          if (draftSectionContent) {
+                            fd.append("content", JSON.stringify(draftSectionContent));
+                          }
+                          const res = await updateSectionAction({}, fd);
+                          if (res.error) return res;
+                          // sectionId no cambia: la pregunta va a la misma
+                          // sección (ahora con título/contenido).
+                        } else {
+                          const fd = new FormData();
+                          fd.append("evaluationId", data.evaluationId);
+                          fd.append("title", draftSectionTitle.trim());
+                          if (draftSectionContent) {
+                            fd.append("content", JSON.stringify(draftSectionContent));
+                          }
+                          const res = await addSectionAction({}, fd);
+                          if (res.error) return res;
+                          // Redirigimos la pregunta a la sección recién creada.
+                          // addSectionAction ahora retorna `sectionId` en el
+                          // AdminFormState (ver actions.ts).
+                          if (res.sectionId) {
+                            formData.set("sectionId", res.sectionId);
+                            // CRÍTICO: actualizar targetSectionId también. Sin
+                            // esto, el orquestador del PRÓXIMO "Agregar
+                            // enunciado" compararía el draft contra la sección
+                            // VIEJA y, como el título ya coincidiría (los
+                            // drafts quedan precargados con el nuevo título),
+                            // contextoMatchesSection retornaría true y la
+                            // pregunta iría a la sección vieja — o peor,
+                            // compararía títulos distintos y crearía OTRA
+                            // sección nueva. Mantener targetSectionId
+                            // sincronizado con la sección recién creada es lo
+                            // que permite que el próximo click reutilice la
+                            // sección correcta sin crear duplicados.
+                            setTargetSectionId(res.sectionId);
+                          }
+                        }
                         return addQuestionAction({}, formData);
+                      } finally {
+                        submittingRef.current = false;
                       }
-                      // Decide: ¿renombrar la sección vacía auto-creada, o
-                      // crear una nueva sección? Renombrar evita el caso
-                      // "queda una sección fantasma vacía al inicio". Si hay
-                      // 2+ secciones, O si la única sección ya tiene
-                      // título/contenido, creamos nueva.
-                      const onlySection = data.sections.length === 1 ? data.sections[0] : null;
-                      const isEmpty =
-                        onlySection !== null &&
-                        onlySection !== undefined &&
-                        !onlySection.title &&
-                        !onlySection.content;
-                      if (isEmpty && onlySection) {
-                        const fd = new FormData();
-                        fd.append("evaluationId", data.evaluationId);
-                        fd.append("sectionId", onlySection.id);
-                        fd.append("title", draftSectionTitle.trim());
-                        if (draftSectionContent) {
-                          fd.append("content", JSON.stringify(draftSectionContent));
-                        }
-                        const res = await updateSectionAction({}, fd);
-                        if (res.error) return res;
-                        // sectionId no cambia: la pregunta va a la misma
-                        // sección (ahora con título/contenido).
-                      } else {
-                        const fd = new FormData();
-                        fd.append("evaluationId", data.evaluationId);
-                        fd.append("title", draftSectionTitle.trim());
-                        if (draftSectionContent) {
-                          fd.append("content", JSON.stringify(draftSectionContent));
-                        }
-                        const res = await addSectionAction({}, fd);
-                        if (res.error) return res;
-                        // Redirigimos la pregunta a la sección recién creada.
-                        // addSectionAction ahora retorna `sectionId` en el
-                        // AdminFormState (ver actions.ts).
-                        if (res.sectionId) {
-                          formData.set("sectionId", res.sectionId);
-                          // CRÍTICO: actualizar targetSectionId también. Sin
-                          // esto, el orquestador del PRÓXIMO "Agregar
-                          // enunciado" compararía el draft contra la sección
-                          // VIEJA y, como el título ya coincidiría (los
-                          // drafts quedan precargados con el nuevo título),
-                          // contextoMatchesSection retornaría true y la
-                          // pregunta iría a la sección vieja — o peor,
-                          // compararía títulos distintos y crearía OTRA
-                          // sección nueva. Mantener targetSectionId
-                          // sincronizado con la sección recién creada es lo
-                          // que permite que el próximo click reutilice la
-                          // sección correcta sin crear duplicados.
-                          setTargetSectionId(res.sectionId);
-                        }
-                      }
-                      return addQuestionAction({}, formData);
                     }}
                     // Una sola cadena de acciones a la derecha del submit:
                     // [Nuevo contexto?] [Guardar?] [Cancelar?]. Las dos últimas
