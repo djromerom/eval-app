@@ -16,6 +16,12 @@ export interface QuestionLite {
   correctAnswer: string;
 }
 
+/** Contexto asociado a la pregunta. `null` cuando la pregunta no tiene contexto. */
+export interface ContextLite {
+  title: string | null;
+  content: unknown;
+}
+
 /**
  * Modal de revisión del ítem. Renderizada como overlay posicionado
  * (`fixed inset-0`), NO como `<dialog>` HTML nativo.
@@ -34,12 +40,16 @@ export interface QuestionLite {
  */
 export function ReviewModal({
   question,
+  context,
   evaluationId,
   editable,
   onClose,
   onEdit,
 }: {
   question: QuestionLite;
+  /** Contexto al que pertenece la pregunta. Si es `null` o no tiene datos,
+   *  el bloque "Contexto" no se renderiza (la pregunta está suelta). */
+  context: ContextLite | null;
   evaluationId: string;
   editable: boolean;
   onClose: () => void;
@@ -105,6 +115,35 @@ export function ReviewModal({
         </header>
 
         <div className="space-y-4 overflow-y-auto px-5 py-4">
+          {(() => {
+            // Renderiza el bloque "Contexto" SOLO si hay algo real que mostrar:
+            // título con texto, o contenido TipTap con texto extraíble. Si la
+            // sección existe pero está completamente vacía (caso raro: pregunta
+            // huérfana de un contexto recién creado sin datos), no mostramos
+            // la caja vacía — el docente la entendería como bug visual.
+            if (!context) return null;
+            const title = context.title?.trim() ?? "";
+            let body: string | null = null;
+            if (context.content) {
+              try {
+                const plain = richTextToPlain(context.content);
+                if (plain.trim().length > 0) body = plain;
+              } catch {
+                body = null;
+              }
+            }
+            if (!title && !body) return null;
+            return (
+              <div>
+                <p className="text-muted-foreground mb-1 text-xs font-medium">Contexto</p>
+                <div className="bg-primary/5 border-primary/20 rounded-md border p-3 text-sm leading-snug">
+                  {title ? <p className="mb-1 font-semibold">{title}</p> : null}
+                  {body ? <div className="text-muted-foreground">{body}</div> : null}
+                </div>
+              </div>
+            );
+          })()}
+
           <div>
             <p className="text-muted-foreground mb-1 text-xs font-medium">Enunciado</p>
             <div className="bg-muted/30 rounded-md p-3 text-sm leading-snug">

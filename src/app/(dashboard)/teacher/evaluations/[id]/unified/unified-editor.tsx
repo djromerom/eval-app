@@ -997,15 +997,25 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       )}
 
       {/* MODAL DE REVISIÓN */}
-      {reviewModal ? (
-        <ReviewModal
-          question={reviewModal}
-          evaluationId={data.evaluationId}
-          editable={data.editable}
-          onClose={() => setReviewModal(null)}
-          onEdit={() => startEdit(reviewModal)}
-        />
-      ) : null}
+      {reviewModal
+        ? (() => {
+            const modalSection = data.sections.find((s) => s.id === reviewModal.sectionId);
+            return (
+              <ReviewModal
+                question={reviewModal}
+                context={
+                  modalSection
+                    ? { title: modalSection.title ?? null, content: modalSection.content ?? null }
+                    : null
+                }
+                evaluationId={data.evaluationId}
+                editable={data.editable}
+                onClose={() => setReviewModal(null)}
+                onEdit={() => startEdit(reviewModal)}
+              />
+            );
+          })()
+        : null}
     </div>
   );
 }
