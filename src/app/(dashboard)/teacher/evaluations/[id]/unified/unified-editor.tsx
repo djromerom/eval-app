@@ -443,6 +443,23 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     submittingRef.current = true;
     lastSubmitTsRef.current = Date.now();
     try {
+      // DIAGNÓSTICO (jul-ago 2026): el docente reporta que "Nuevo
+      // contexto" sigue creando sección duplicada tras un guardado
+      // previo, aún con el dedupe en dos capas. Imprimimos el state
+      // COMPLETO al momento del click para identificar qué camino se
+      // está tomando.
+      console.log("[Nuevo-contexto+pregunta] decision", {
+        ts: Date.now(),
+        titleFromDom: title,
+        contentLen: contentRaw.length,
+        targetSectionId,
+        targetSectionTitle: data.sections.find((s) => s.id === targetSectionId)?.title ?? null,
+        targetSectionContentLen: JSON.stringify(
+          data.sections.find((s) => s.id === targetSectionId)?.content ?? null,
+        ).length,
+        sectionsCount: data.sections.length,
+        sectionTitles: data.sections.map((s) => s.title),
+      });
       // Decidir si crear nueva o reusar/renombrar (misma lógica que
       // overrideAction). Aquí NO usamos `contextoMatchesSection` porque
       // el botón explícitamente pide "nuevo contexto" — la intención del
@@ -469,6 +486,12 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           ? targetSection
           : null;
       const match = matchingByTitle ?? matchingByTarget;
+      console.log("[Nuevo-contexto+pregunta] match", {
+        matchingByTitle: matchingByTitle?.id ?? null,
+        matchingByTarget: matchingByTarget?.id ?? null,
+        finalMatch: match?.id ?? null,
+        willCreate: !match,
+      });
       let nextSectionId: string;
       if (match) {
         nextSectionId = match.id;
