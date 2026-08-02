@@ -305,6 +305,43 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       setFormError(null);
       setActionStatus("saving");
 
+      // DEFENSIVE DEDUPE (jul-ago 2026): si ya existe una sección con el
+      // mismo título (trim case-insensitive) que el draft, NO creamos otra —
+      // el backend (AddSection) no deduplica por título, así que esta es la
+      // única barrera. Si la sección existente está VACÍA, la renombramos.
+      // Si tiene contenido, reusamos sin más (limpiamos drafts).
+      const matchingByTitle =
+        title.length > 0
+          ? data.sections.find((s) => (s.title ?? "").trim().toLowerCase() === title.toLowerCase())
+          : null;
+
+      if (matchingByTitle) {
+        const isExistingEmpty = !matchingByTitle.title && !matchingByTitle.content;
+        if (isExistingEmpty) {
+          const fd = new FormData();
+          fd.append("evaluationId", data.evaluationId);
+          fd.append("sectionId", matchingByTitle.id);
+          fd.append("title", title);
+          if (hasContent) fd.append("content", contentRaw);
+          const renameRes = await updateSectionAction({}, fd);
+          if (renameRes.error) {
+            setFormError(renameRes.error);
+            setActionStatus("error");
+            return;
+          }
+        }
+        // Sección ya tiene el título (o lo acabamos de poner): nada que
+        // crear. Limpiamos drafts como en el camino exitoso normal.
+        setDraftSectionTitle("");
+        setDraftSectionContent(null);
+        setActionStatus("saved");
+        newSectionFormRef.current?.reset();
+        setTimeout(() => {
+          setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
+        }, 2500);
+        return;
+      }
+
       // Decisión: ¿hay exactamente 1 sección vacía? Si sí, RENOMBRAR.
       // Si no, CREAR nueva.
       const onlySection = data.sections.length === 1 ? data.sections[0] : null;
@@ -683,6 +720,47 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         // "queda una sección fantasma vacía al inicio". Si hay
                         // 2+ secciones, O si la única sección ya tiene
                         // título/contenido, creamos nueva.
+                        //
+                        // DEFENSIVE DEDUPE: si ya existe una sección con el
+                        // mismo título (trim case-insensitive) que el draft,
+                        // reusamos esa sección en vez de crear una nueva. El
+                        // backend (AddSection) NO deduplica por título — cada
+                        // llamada crea una fila nueva — así que esta
+                        // comprobación client-side es la ÚNICA defensa contra
+                        // duplicados por título. Cubre tres escenarios
+                        // observados en bug reports (jul-ago 2026):
+                        //   1. Click 1 crea C9; click 2 con draft="C9" cae en
+                        //      `reuse` pero por race condition entre
+                        //      revalidatePath y el segundo submit, el
+                        //      orquestador evalúa contra `data.sections`
+                        //      STALE (sin C9) y crea OTRA sección C9.
+                        //   2. StrictMode de React dispara el useEffect de
+                        //      auto-creación dos veces (en dev) y produce dos
+                        //      secciones vacías iniciales; el orquestador ve
+                        //      `data.sections.length === 2` y entra en
+                        //      create-new en vez de rename-empty.
+                        //   3. El docente pulsa "Agregar enunciado" dos
+                        //      veces, pero el segundo submit llega antes del
+                        //      revalidate → `data.sections` aún no incluye
+                        //      C9 → crea C9 duplicado.
+                        const trimmedDraftTitle = draftSectionTitle.trim();
+                        const matchingByTitle =
+                          trimmedDraftTitle.length > 0
+                            ? data.sections.find(
+                                (s) =>
+                                  (s.title ?? "").trim().toLowerCase() ===
+                                  trimmedDraftTitle.toLowerCase(),
+                              )
+                            : null;
+                        if (matchingByTitle) {
+                          console.log(
+                            "[Agregar-enunciado] reusando sección existente por título (dédup)",
+                            { sectionId: matchingByTitle.id, title: matchingByTitle.title },
+                          );
+                          formData.set("sectionId", matchingByTitle.id);
+                          setTargetSectionId(matchingByTitle.id);
+                          return addQuestionAction({}, formData);
+                        }
                         const onlySection = data.sections.length === 1 ? data.sections[0] : null;
                         const isEmpty =
                           onlySection !== null &&
