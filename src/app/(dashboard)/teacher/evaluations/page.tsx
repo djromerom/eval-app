@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Pencil } from "lucide-react";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { EntityForm } from "@/components/admin/entity-form";
@@ -70,11 +69,11 @@ export default async function EvaluationsPage() {
         />
       </section>
 
-      <div className="mt-8 overflow-x-auto rounded-xl border">
+      <div className="mt-8 overflow-x-auto rounded-xl border-2 border-black dark:border-white">
         <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-muted-foreground border-b text-left">
+          <thead className="text-foreground border-b-2 border-slate-300 bg-slate-200 text-left font-bold dark:border-slate-600 dark:bg-slate-700 dark:text-white">
             <tr>
-              <th className="px-3 py-3 font-medium" aria-label="Editar" />
+
               <th className="px-4 py-3 font-medium">Asignatura</th>
               <th className="px-4 py-3 font-medium">Prueba</th>
               <th className="px-4 py-3 font-medium">Estado</th>
@@ -92,17 +91,11 @@ export default async function EvaluationsPage() {
               </tr>
             ) : (
               evaluations.map((e) => (
-                <tr key={e.id} className="border-b last:border-0">
-                  <td className="px-3 py-3">
-                    <Link
-                      href={`/teacher/evaluations/${e.id}/unified?from=list`}
-                      className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-                      title="Editar formulación"
-                      aria-label={`Editar ${e.title}`}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Link>
-                  </td>
+                <tr
+                  key={e.id}
+                  className="hover:bg-muted/30 even:bg-muted/30 border-b last:border-0 odd:bg-white"
+                >
+
                   <td className="px-4 py-3 font-medium">
                     <Link
                       href={`/teacher/evaluations/${e.id}/unified?from=list`}
