@@ -375,8 +375,7 @@ export function QuestionForm({
         </div>
         {!correct && (
           <p className="text-xs text-amber-700" role="status">
-            Ninguna opción está marcada como CLAVE. Usa el botón ⊘ Desmarcar para dejarla vacía, o
-            marca una opción antes de guardar.
+            Ninguna opción está marcada como CLAVE, marca una opción antes de guardar.
           </p>
         )}
         {visibleKeys.map((k) => (
@@ -430,16 +429,6 @@ export function QuestionForm({
           title={optionCount <= MIN_OPTIONS ? `Mínimo ${MIN_OPTIONS} opciones` : "Quitar última"}
         >
           − Opción
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => setCorrect("")}
-          disabled={!correct}
-          title="Quitar la clave seleccionada"
-        >
-          ⊘ Desmarcar
         </Button>
         <span className="text-muted-foreground text-xs">
           {optionCount} de {maxOptions} opciones
