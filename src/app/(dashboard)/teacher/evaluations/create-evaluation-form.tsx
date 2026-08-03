@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 
@@ -157,7 +156,21 @@ export function CreateEvaluationForm({
   }
 
   return (
-    <form ref={formRef} action={formAction} className="flex flex-wrap items-end gap-3">
+    <form
+      ref={formRef}
+      action={formAction}
+      className="flex flex-wrap items-end gap-3"
+      onSubmit={(e) => {
+        // Si ya existe una formulación para la combinación seleccionada,
+        // el botón "Formular" redirige directamente al editor unificado de
+        // la existente en lugar de disparar el submit (que caería en 409).
+        // Una sola CTA para ambas intenciones (crear nueva / abrir existente).
+        if (existing) {
+          e.preventDefault();
+          window.location.href = `/teacher/evaluations/${existing.id}/unified?from=list`;
+        }
+      }}
+    >
       <FieldBlock label={csField.label} required={csField.required}>
         <select
           id={csField.name}
@@ -221,23 +234,6 @@ export function CreateEvaluationForm({
 
       <div className="flex items-center gap-2">
         <SubmitButton label={submitLabel} />
-        {existing && (
-          // Link complementario al lado del botón "Formular" cuando ya existe
-          // una formulación para esta combinación (ago 2026). El docente puede
-          // entrar directamente a la existente o, si quiere, forzar la creación
-          // (que caerá en 409). El `?from=list` le indica al editor unificado
-          // cerrar la card al guardar.
-          <Link
-            href={`/teacher/evaluations/${existing.id}/unified?from=list`}
-            className="border-input bg-background hover:bg-muted text-foreground inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium shadow-sm"
-            aria-label={`Abrir formulación existente "${existing.title}"`}
-          >
-            <span aria-hidden className="mr-1.5">
-              ↗
-            </span>
-            Ir a &ldquo;{existing.title}&rdquo;
-          </Link>
-        )}
       </div>
       {state.error ? (
         <p className="text-destructive w-full text-sm" role="alert">
