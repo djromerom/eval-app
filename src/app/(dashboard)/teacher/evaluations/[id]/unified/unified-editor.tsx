@@ -487,6 +487,12 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
    * pregunta. El docente NO tiene que volver a escribir el enunciado
    * que ya tenía — pero tampoco queda "pegado" a la nueva sección.
    *
+   * Excepción (ago 2026): si el docente hace click en "Nuevo contexto"
+   * pero NO escribió enunciado, interpretamos que se arrepintió y
+   * descartamos todo en silencio — sin error, sin persistir sección
+   * ni pregunta. Limpiamos enunciado/opciones y el bloque de contexto
+   * (título + contenido) para que pueda recomenzar sin ruido.
+   *
    * Recolecta los FormData de AMBOS forms directamente del DOM (no del
    * state React), porque si el docente tipea rápido el último keystroke
    * puede no haber llegado al state aún. La validación de "enunciado no
@@ -514,14 +520,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     const hasTitle = title.length > 0;
     const hasContent = contentRaw.length > 0;
 
-    if (!hasTitle && !hasContent) {
-      setFormError("Define al menos el título o el contenido del contexto antes de crearlo.");
-      return;
-    }
-    // Validamos también el enunciado (mismo check que hace el onSubmit
-    // nativo del QuestionForm cuando el docente usa "Agregar enunciado"
-    // o "Guardar"). Sin esto, podríamos persistir una pregunta vacía
-    // invocando addQuestionAction directamente.
+    // Validamos primero el enunciado. Si está vacío, interpretamos que
+    // el docente se arrepintió y descartamos TODO en silencio — no
+    // guardamos pregunta, no creamos contexto nuevo. Limpiamos los
+    // forms y los drafts para que pueda empezar de nuevo sin error
+    // visible. (ago 2026: antes mostraba un error inline, lo cual
+    // resultaba ruidoso para un botón cuyo nombre sugiere "empezar
+    // de nuevo".)
     const textRaw = String(formData.get("text") ?? "");
     let parsed: unknown = textRaw;
     try {
@@ -530,7 +535,17 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       parsed = textRaw;
     }
     if (isTipTapEmpty(parsed)) {
-      setFormError("Escribe el enunciado de la pregunta antes de guardar.");
+      setFormError(null);
+      setDraftSectionTitle("");
+      setDraftSectionContent(null);
+      setNewSectionRenderKey((k) => k + 1);
+      questionForm.reset();
+      sectionForm.reset();
+      return;
+    }
+
+    if (!hasTitle && !hasContent) {
+      setFormError("Define al menos el título o el contenido del contexto antes de crearlo.");
       return;
     }
     setFormError(null);
