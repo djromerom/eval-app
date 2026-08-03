@@ -42,6 +42,7 @@ model Institution {
   templates     EvaluationTemplate[]
   scanBatches   ScanBatch[]
   bundles       EvaluationBundle[]
+  bookletTypes  BookletType[]
 }
 
 // ========== AUTH & USERS ==========
@@ -249,7 +250,8 @@ model Period {
   order          Int // 1, 2, 3, 4
   createdAt      DateTime     @default(now())
 
-  evaluations Evaluation[]
+  evaluations  Evaluation[]
+  bookletTypes BookletType[]
 
   @@unique([institutionId, academicYearId, name])
   @@index([institutionId, academicYearId])
@@ -310,6 +312,8 @@ model Evaluation {
   teacher         User                @relation(fields: [teacherId], references: [id])
   status          DraftStatus         @default(DRAFT)
   bookletNumber   Int? // null = único; 1, 2, 3… para múltiples cuadernillos
+  bookletTypeId   String?             @db.Uuid // tipo de cuadernillo (Estándar / Especial / Recuperación). Configurado por Prueba en /admin/academic.
+  bookletType     BookletType?        @relation(fields: [bookletTypeId], references: [id])
   totalQuestions  Int                 @default(0)
   // Duración estimada de la evaluación en minutos. Nullable: si es null, la
   // portada del compendio cae al cálculo heurístico (totalQuestions *
@@ -338,6 +342,36 @@ model Evaluation {
   @@index([courseSubjectId, academicYearId])
   @@index([institutionId, status])
   @@index([teacherId])
+}
+
+/**
+ * Tipos de cuadernillo configurados POR PRUEBA (ago 2026).
+ *
+ * El docente pidió poder diferenciar el cuadernillo "Estándar" (que se
+ * imprime para todos los estudiantes) del "Especial" (solo para NEE, con
+ * contenido distinto). Esto es ORTOGONAL a `Evaluation.bookletNumber`,
+ * que es una variante para evitar copia (cuadernillo 1, 2, 3...).
+ *
+ * Catálogo por Prueba, no global. El nombre es único dentro de la Prueba
+ * (cada Prueba decide qué tipos aplica). La creación de una evaluación
+ * permite asignar un BookletType de la Prueba seleccionada, o ninguno
+ * (nullable — diagnósticos y pre-existentes siguen funcionando).
+ */
+model BookletType {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  name          String
+  description   String?
+  periodId      String      @db.Uuid
+  period        Period      @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  institutionId String      @db.Uuid
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  order         Int         @default(0)
+  createdAt     DateTime    @default(now())
+
+  evaluations Evaluation[]
+
+  @@unique([institutionId, periodId, name])
+  @@index([institutionId, periodId])
 }
 
 enum DraftStatus {
