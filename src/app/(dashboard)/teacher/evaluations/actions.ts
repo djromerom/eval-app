@@ -325,3 +325,26 @@ export async function submitForReviewAction(formData: FormData): Promise<void> {
   revalidatePath(`/teacher/evaluations/${evaluationId}`);
   revalidatePath("/teacher/evaluations");
 }
+
+/**
+ * Publica una formulación en DRAFT directamente a PUBLISHED (atajo del
+ * editor unificado, ago 2026). El flujo canónico sigue siendo
+ * DRAFT → IN_REVIEW → APPROVED → PUBLISHED; este server action es solo
+ * para el botón "Publicar" del unified. Mismas validaciones de dominio
+ * (ownership + roles) que cualquier otra transición. Tras publicar,
+ * revalida todas las rutas donde la formulación aparece como estado.
+ */
+export async function publishEvaluationAction(formData: FormData): Promise<void> {
+  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const evaluationId = str(formData, "evaluationId");
+  const result = await makeChangeEvaluationStatus().execute({
+    actor,
+    evaluationId,
+    to: "PUBLISHED",
+  });
+  if (!result.ok) throw new Error(result.error.message);
+  revalidatePath(`/teacher/evaluations/${evaluationId}`);
+  revalidatePath(`/teacher/evaluations/${evaluationId}/unified`);
+  revalidatePath(`/teacher/evaluations/${evaluationId}/contexts`);
+  revalidatePath("/teacher/evaluations");
+}

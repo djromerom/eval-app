@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Info, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Info, Plus, Send, Sparkles, Trash2 } from "lucide-react";
 import type { EvaluationStatus } from "@/modules/evaluations/domain/evaluation-status";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
   addQuestionAction,
   addSectionAction,
   deleteQuestionAction,
+  publishEvaluationAction,
   updateQuestionAction,
   updateSectionAction,
 } from "../../actions";
@@ -137,6 +138,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   // marcado el ref. Para esos casos, además del flag miramos si el submit
   // anterior fue hace menos de 800ms y el actual va a crear sección nueva.
   const lastSubmitTsRef = useRef(0);
+  // Lockout específico para "Publicar formulación". El servidor publica
+  // (revalidatePath + UPDATE) puede tardar ~1s, durante el cual el botón
+  // debe quedar deshabilitado. Si el usuario hace doble-click muy rápido,
+  // el segundo submit llega antes del revalidate y ve status="DRAFT" —
+  // intenta publicar otra vez. El flag se libera tras la respuesta (en
+  // el try/finally) o cuando el status pasa a PUBLISHED (en el effect).
+  const publishingRef = useRef(false);
 
   // Estado de los popovers de info (botones (i) junto a los títulos).
   const [isContextInfoOpen, setIsContextInfoOpen] = useState(false);
@@ -223,6 +231,15 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     }
   }, [data.sections, targetSectionId]);
 
+  // Cuando el status pasa a PUBLISHED, liberamos el flag de publicación por
+  // si quedó enganchado (p.ej. la promesa tiró excepción justo cuando llegó
+  // el revalidate, y nunca se ejecutó el finally del publishHandler).
+  useEffect(() => {
+    if (data.evaluationStatus === "PUBLISHED") {
+      publishingRef.current = false;
+    }
+  }, [data.evaluationStatus]);
+
   // Auto-crea una sección inicial VACÍA cuando la evaluación no tiene ningún
   // contexto. La idea: el docente debería poder escribir preguntas (con su
   // bloque de opciones de respuesta) sin tener que crear primero un contexto
@@ -265,6 +282,47 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     setEditingQuestionId(null);
     setShowEditingBanner(false);
     setFormError(null);
+  }
+
+  /**
+   * Publica la formulación. El docente debe confirmar explícitamente porque
+   * PUBLISHED es la versión final (mismo flujo de "doble-click accidental"
+   * que tiene PUBLISHED → DRAFT como salida). Tras publicar:
+   *  - el lockout anti-doble-submit evita otro publish en ventana corta;
+   *  - el server action revalida la página, lo que refresca el status
+   *    y oculta automáticamente este botón (visible solo si DRAFT);
+   *  - en el caso de error del server, el finally libera el lockout
+   *    y mostramos el mensaje en formError.
+   */
+  async function handlePublish() {
+    if (publishingRef.current) return;
+    if (data.evaluationStatus !== "DRAFT") return; // guard local: el botón no debería renderizarse, pero por si acaso.
+    if (!window.confirm(
+      "¿Publicar la formulación? Una vez publicada se considera la versión final y solo podrá editarse enviándola primero de regreso a Borrador.",
+    )) {
+      return;
+    }
+    publishingRef.current = true;
+    setFormError(null);
+    setActionStatus("saving");
+    try {
+      const fd = new FormData();
+      fd.append("evaluationId", data.evaluationId);
+      await publishEvaluationAction(fd);
+      setActionStatus("saved");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "No se pudo publicar la formulación.";
+      setFormError(msg);
+      setActionStatus("error");
+    } finally {
+      // Liberamos el lockout. Si el publish tuvo éxito, el revalidate ya
+      // refrescó `data.evaluationStatus` y el botón desapareció; el effect
+      // también libera el flag como red de seguridad.
+      publishingRef.current = false;
+      setTimeout(() => {
+        setActionStatus((cur) => (cur === "saved" || cur === "error" ? "idle" : cur));
+      }, 2500);
+    }
   }
 
   /**
@@ -608,6 +666,31 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
               variant="default"
               size="sm"
             />
+          ) : null}
+          {/* "Publicar formulación" — atajo DRAFT → PUBLISHED del editor
+            unificado (ago 2026). Solo visible cuando:
+              - hay al menos un ítem (no se puede publicar una formulación vacía)
+              - status === "DRAFT" (las transiciones IN_REVIEW/APPROVED siguen
+                su flujo canónico por la maquina de estados; PUBLISHED ya
+                publicada muestra el CTA como el botón "Publicar formulación"
+                pero NO está en DRAFT, así que este botón se oculta).
+            Llama al server action publishEvaluationAction; handlePublish
+            confirma con window.confirm + lockout anti-doble-submit. */}
+          {data.editable &&
+          items.length > 0 &&
+          data.evaluationStatus === "DRAFT" ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="default"
+              onClick={() => {
+                void handlePublish();
+              }}
+              disabled={publishingRef.current}
+              title="Publicar la formulación como versión final"
+            >
+              <Send className="mr-1 h-3.5 w-3.5" /> Publicar formulación
+            </Button>
           ) : null}
         </div>
       </div>
@@ -1203,6 +1286,36 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           </div>
         </section>
       )}
+
+      {/* BOTÓN STICKY AL FINAL — mismo CTA que el header, anclado abajo para
+          que el docente no tenga que scrollear hacia arriba cuando la tabla
+          tiene muchos ítems. Mismas condiciones de visibilidad (DRAFT +
+          editable + items > 0). El card usa position: sticky + bottom-4
+          para que flote sobre el contenido al hacer scroll hasta el final.
+          El z-20 garantiza que no quede tapado por otros sticky del repo. */}
+      {data.editable &&
+      items.length > 0 &&
+      data.evaluationStatus === "DRAFT" ? (
+        <div className="sticky bottom-4 z-20 flex justify-end">
+          <div className="bg-card flex items-center gap-3 rounded-xl border-2 border-black p-3 shadow-lg dark:border-white">
+            <p className="text-muted-foreground text-xs">
+              Cuando termines de editar, publícala como versión final.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="default"
+              onClick={() => {
+                void handlePublish();
+              }}
+              disabled={publishingRef.current}
+              title="Publicar la formulación como versión final"
+            >
+              <Send className="mr-1 h-3.5 w-3.5" /> Publicar formulación
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {/* MODAL DE REVISIÓN */}
       {reviewModal
