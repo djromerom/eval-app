@@ -13,6 +13,13 @@ interface BookletTypeRow {
   periodId: string;
 }
 
+interface PeriodRow {
+  id: string;
+  name: string;
+  academicYearId: string;
+  isCurrent: boolean;
+}
+
 type Action = (state: AdminFormState, formData: FormData) => Promise<AdminFormState>;
 
 /**
@@ -30,6 +37,11 @@ type Action = (state: AdminFormState, formData: FormData) => Promise<AdminFormSt
  * Renderizamos un <form action={formAction}> propio (no usamos
  * EntityForm) porque necesitamos manejar el estado de los dos selects
  * dependientes entre sí.
+ *
+ * Desde ago 2026 también maneja la preselección/bloqueo del select de
+ * Prueba cuando hay una Prueba marcada como "actual" en el año académico
+ * del courseSubject elegido: si existe, se selecciona automáticamente y
+ * el select queda disabled (el docente no puede cambiarla).
  */
 export function CreateEvaluationForm({
   action,
@@ -37,12 +49,18 @@ export function CreateEvaluationForm({
   submitLabel,
   disabledReason,
   bookletTypes,
+  csYearMap,
+  periods,
 }: {
   action: Action;
   fields: Field[];
   submitLabel: string;
   disabledReason?: string;
   bookletTypes: BookletTypeRow[];
+  /** courseSubjectId → academicYearId (server precomputa el cruce). */
+  csYearMap: Record<string, string>;
+  /** Periodos con `isCurrent` y `academicYearId`. */
+  periods: PeriodRow[];
 }) {
   const [state, formAction] = useActionState<AdminFormState, FormData>(action, {});
   const formRef = useRef<HTMLFormElement>(null);
@@ -50,25 +68,51 @@ export function CreateEvaluationForm({
   // Mantenemos el estado de los dos selects que dependen entre sí.
   const [periodId, setPeriodId] = useState("");
   const [bookletTypeId, setBookletTypeId] = useState("");
+  const [courseSubjectId, setCourseSubjectId] = useState("");
 
   // Filtramos los BookletTypes disponibles para la Prueba seleccionada.
-  // Si no hay Prueba, no mostramos nada.
   const filteredTypes = useMemo(
     () => (periodId ? bookletTypes.filter((bt) => bt.periodId === periodId) : []),
     [periodId, bookletTypes],
   );
 
-  // Cuando cambia el periodo, limpiamos el bookletTypeId (no debe quedar
-  // un id que ya no está disponible).
+  // Cuando cambia el periodo, limpiamos el bookletTypeId.
   const handlePeriodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setPeriodId(e.target.value);
     setBookletTypeId("");
+  };
+
+  // Cuando cambia la asignatura, intentamos preseleccionar la Prueba
+  // "actual" del año académico del curso asociado. Si existe, marcamos
+  // `periodLocked = true` para bloquear el select. Si no hay Prueba
+  // actual para ese año, dejamos el select libre.
+  const periodLocked = useMemo(() => {
+    if (!courseSubjectId) return false;
+    const ay = csYearMap[courseSubjectId];
+    if (!ay) return false;
+    return periods.some((p) => p.academicYearId === ay && p.isCurrent);
+  }, [courseSubjectId, csYearMap, periods]);
+
+  // Cuando cambia la asignatura, preseleccionamos la Prueba actual.
+  const handleCourseSubjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextCsId = e.target.value;
+    setCourseSubjectId(nextCsId);
+    setBookletTypeId("");
+
+    const ay = csYearMap[nextCsId];
+    if (ay) {
+      const current = periods.find((p) => p.academicYearId === ay && p.isCurrent);
+      setPeriodId(current ? current.id : "");
+    } else {
+      setPeriodId("");
+    }
   };
 
   // Reseteo del form tras éxito (mismo patrón que EntityForm).
   useEffect(() => {
     if (state.success) {
       formRef.current?.reset();
+      setCourseSubjectId("");
       setPeriodId("");
       setBookletTypeId("");
     }
@@ -82,8 +126,6 @@ export function CreateEvaluationForm({
   const csField = fields.find((f) => f.name === "courseSubjectId");
 
   if (!periodField || !csField) {
-    // Fallback: si por error no encontramos los campos esperados, no
-    // renderizamos nada (la página padre controla el flow).
     return null;
   }
 
@@ -95,6 +137,8 @@ export function CreateEvaluationForm({
           name={csField.name}
           required={csField.required}
           className={selectClass}
+          value={courseSubjectId}
+          onChange={handleCourseSubjectChange}
         >
           <option value="">—</option>
           {csField.options?.map((opt) => (
@@ -113,6 +157,7 @@ export function CreateEvaluationForm({
           className={selectClass}
           value={periodId}
           onChange={handlePeriodChange}
+          disabled={periodLocked}
         >
           <option value="">—</option>
           {periodField.options?.map((opt) => (
@@ -121,6 +166,11 @@ export function CreateEvaluationForm({
             </option>
           ))}
         </select>
+        {periodLocked && (
+          <p className="text-muted-foreground text-xs">
+            Prueba fijada por la marcación de prueba actual.
+          </p>
+        )}
       </FieldBlock>
 
       <FieldBlock label="Tipo de cuadernillo">

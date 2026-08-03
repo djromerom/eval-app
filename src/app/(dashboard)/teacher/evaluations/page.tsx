@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/evaluations/status-badge";
 import { makeListEvaluations } from "@/modules/evaluations/infrastructure/container";
 import {
   makeListCourseSubjects,
+  makeListCourses,
   makeListPeriods,
 } from "@/modules/academic/infrastructure/container";
 import { makeListBookletTypesByInstitution } from "@/modules/booklet-types/infrastructure/container";
@@ -18,7 +19,7 @@ const df = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
 
 export default async function EvaluationsPage() {
   const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
-  const [listRes, csRes, periodsRes, bookletTypesRes] = await Promise.all([
+  const [listRes, csRes, periodsRes, bookletTypesRes, coursesRes] = await Promise.all([
     makeListEvaluations().execute({ actor }),
     makeListCourseSubjects().execute({ actor }),
     makeListPeriods().execute({ actor }),
@@ -26,11 +27,25 @@ export default async function EvaluationsPage() {
     // el cliente lo filtra por periodId. Tabla chica — no justifica un
     // endpoint específico.
     makeListBookletTypesByInstitution().execute({ actor }),
+    // Necesitamos los cursos para mapear courseSubjectId → academicYearId
+    // y así preseleccionar la Prueba actual del año académico del docente.
+    makeListCourses().execute({ actor }),
   ]);
   const evaluations = listRes.ok ? listRes.value : [];
   const courseSubjects = csRes.ok ? csRes.value : [];
   const periods = periodsRes.ok ? periodsRes.value : [];
   const bookletTypes = bookletTypesRes.ok ? bookletTypesRes.value : [];
+  const courses = coursesRes.ok ? coursesRes.value : [];
+
+  // Mapa courseId → academicYearId (necesario para resolver la Prueba
+  // "actual" del año académico del courseSubject que el docente eligió).
+  const courseYearMap = new Map(courses.map((c) => [c.id, c.academicYearId]));
+  // Mapa directo courseSubjectId → academicYearId (lo consume el wrapper).
+  const csYearMap: Record<string, string> = {};
+  for (const cs of courseSubjects) {
+    const ay = courseYearMap.get(cs.courseId);
+    if (ay) csYearMap[cs.id] = ay;
+  }
 
   const csOptions = courseSubjects.map((cs) => ({
     value: cs.id,
@@ -76,6 +91,19 @@ export default async function EvaluationsPage() {
             id: bt.id,
             name: bt.name,
             periodId: bt.periodId,
+          }))}
+          /** Mapeo courseSubjectId → academicYearId para preseleccionar y
+           *  bloquear el select de Prueba cuando hay una Prueba marcada
+           *  como "actual" en el año académico del curso del docente (ago
+           *  2026). */
+          csYearMap={csYearMap}
+          /** Periodos con `isCurrent` y `academicYearId` para preseleccionar y
+           *  bloquear el select cuando hay Prueba actual marcada. */
+          periods={periods.map((p) => ({
+            id: p.id,
+            name: p.name,
+            academicYearId: p.academicYearId,
+            isCurrent: p.isCurrent,
           }))}
         />
       </section>
