@@ -1088,43 +1088,62 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                           // sectionId no cambia: la pregunta va a la misma
                           // sección (ahora con título/contenido).
                         } else {
-                          // FIX ago 2026: en lugar de CREAR una sección nueva,
-                          // ACTUALIZAMOS la sección destino con el draft del
-                          // docente. La semántica de "Agregar enunciado" es
-                          // persistir la pregunta EN la sección actual;
-                          // cualquier cambio al contexto de esa sección
-                          // (título o contenido) debe aplicarse sobre la misma
-                          // sección, no crear una nueva. La creación
-                          // explícita de secciones nuevas la hace el botón
-                          // "Nuevo contexto".
+                          // FIX ago 2026 (revertido/recuperado ago 2026):
+                          // el draft del docente, cuando NO coincide con la
+                          // sección destino Y NO matchea por título con
+                          // ninguna existente, representa un contexto
+                          // NUEVO que el docente está construyendo desde el
+                          // form. Lo creamos como sección nueva en vez de
+                          // pisar la sección destino.
                           //
-                          // Caso típico del bug que arreglamos:
-                          //   1. La evaluación tiene 2+ secciones, una de
-                          //      ellas con contenido.
-                          //   2. El docente edita el título/contenido de la
-                          //      sección destino (la última con contenido).
+                          // Caso típico (bug reportado ago 2026):
+                          //   1. El docente pulsa "Nuevo contexto" (que crea
+                          //      la sección B y deja targetSectionId=null;
+                          //      el effect de fallback lo termina
+                          //      reasignando a B).
+                          //   2. El docente tipa un nuevo título/contenido
+                          //      en el form (otro contexto distinto a B).
                           //   3. Pulsa "Agregar enunciado".
-                          //   4. (antes) Se creaba una sección fantasma con
-                          //      el mismo título y la pregunta iba a ella →
-                          //      la evaluación terminaba con dos secciones
-                          //      idénticas (la vieja y la recién creada vacía).
-                          //   5. (ahora) La sección destino se actualiza con
-                          //      el nuevo draft y el enunciado se agrega a esa
-                          //      misma sección.
+                          //   4. (antes de este fix) updateSectionAction
+                          //      actualizaba B con el nuevo draft → la
+                          //      sección recién creada se sobrescribía con
+                          //      un contexto que el docente nunca pidió
+                          //      para ella, y el contexto "anterior"
+                          //      quedaba perdido.
+                          //   5. (ahora) addSectionAction crea una
+                          //      sección C con el draft nuevo, y la
+                          //      pregunta va a C. La sección B queda
+                          //      intacta con su contexto original.
+                          //
+                          // Nota: el commit f4a6e28 había invertido esta
+                          // rama a updateSectionAction argumentando que
+                          // "Agregar enunciado" siempre debe actualizar
+                          // la sección destino. En retrospectiva eso solo
+                          // es cierto cuando el draft ES una edición
+                          // menor de la sección destino (típico: el
+                          // docente refina el título) — pero el form no
+                          // distingue "edición menor" de "contexto
+                          // nuevo", y cuando el docente viene de "Nuevo
+                          // contexto" la sección destino es justamente
+                          // la que él NO quiere tocar. Recuperamos la
+                          // rama de creación como comportamiento por
+                          // defecto; si en el futuro se necesita
+                          // "editar contexto de la sección actual"
+                          // tendremos que añadir una acción explícita
+                          // (botón "Editar contexto" o similar) que no
+                          // se confunda con la creación de ítems.
                           const fd = new FormData();
                           fd.append("evaluationId", data.evaluationId);
-                          fd.append("sectionId", targetSectionId);
                           fd.append("title", draftSectionTitle.trim());
                           if (draftSectionContent) {
                             fd.append("content", JSON.stringify(draftSectionContent));
                           }
-                          const res = await updateSectionAction({}, fd);
+                          const res = await addSectionAction({}, fd);
                           if (res.error) return res;
-                          // formData ya trae sectionId = targetSectionId
-                          // (viene del hidden input del QuestionForm), no hace
-                          // falta reasignar. Tampoco movemos targetSectionId:
-                          // sigue apuntando a la misma sección que el docente
-                          // estaba editando.
+                          if (res.sectionId) {
+                            formData.set("sectionId", res.sectionId);
+                            setTargetSectionId(res.sectionId);
+                          }
                         }
                         return addQuestionAction({}, formData);
                       } finally {
