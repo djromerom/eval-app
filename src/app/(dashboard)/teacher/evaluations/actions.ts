@@ -61,9 +61,11 @@ export async function createEvaluationAction(
   const courseSubjectId = str(formData, "courseSubjectId");
   const periodId = str(formData, "periodId") || undefined;
 
-  // Auto-generamos el título como `${Asignatura} - ${Curso} - ${Año}`. Año
+  // Auto-generamos el título como `${Asignatura} ${Curso} - ${Año}`. Año
   // viene del año académico del periodo seleccionado; si no hay periodo,
-  // usamos el año actual del calendario.
+  // usamos el año actual del calendario. Sin guion entre asignatura y
+  // curso (ago 2026): el docente pidió solo el guion antes del año, no
+  // después del nombre de la asignatura.
   const [csRes, periodsRes, yearsRes] = await Promise.all([
     makeListCourseSubjects().execute({ actor }),
     makeListPeriods().execute({ actor }),
@@ -87,7 +89,7 @@ export async function createEvaluationAction(
     }
   }
 
-  const title = `${cs.subjectName} - ${cs.courseName} - ${year}`;
+  const title = `${cs.subjectName} ${cs.courseName} - ${year}`;
 
   const result = await makeCreateEvaluation().execute({
     actor,
