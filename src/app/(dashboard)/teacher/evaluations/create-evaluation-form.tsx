@@ -219,24 +219,26 @@ export function CreateEvaluationForm({
         )}
       </FieldBlock>
 
-      {existing ? (
-        // Combinación duplicada → link directo a la formulación existente en
-        // lugar del submit. UX: ahorra el ciclo de submit + error 409 que
-        // terminaría pidiendo ir a la misma URL de todos modos. El `?from=list`
-        // le indica al editor unificado que cierre la tarjeta al guardar.
-        <Link
-          href={`/teacher/evaluations/${existing.id}/unified?from=list`}
-          className="border-input bg-background hover:bg-muted text-foreground inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium shadow-sm"
-          aria-label={`Abrir formulación existente "${existing.title}"`}
-        >
-          <span aria-hidden className="mr-1.5">
-            ↗
-          </span>
-          Ir a &ldquo;{existing.title}&rdquo;
-        </Link>
-      ) : (
+      <div className="flex items-center gap-2">
         <SubmitButton label={submitLabel} />
-      )}
+        {existing && (
+          // Link complementario al lado del botón "Formular" cuando ya existe
+          // una formulación para esta combinación (ago 2026). El docente puede
+          // entrar directamente a la existente o, si quiere, forzar la creación
+          // (que caerá en 409). El `?from=list` le indica al editor unificado
+          // cerrar la card al guardar.
+          <Link
+            href={`/teacher/evaluations/${existing.id}/unified?from=list`}
+            className="border-input bg-background hover:bg-muted text-foreground inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium shadow-sm"
+            aria-label={`Abrir formulación existente "${existing.title}"`}
+          >
+            <span aria-hidden className="mr-1.5">
+              ↗
+            </span>
+            Ir a &ldquo;{existing.title}&rdquo;
+          </Link>
+        )}
+      </div>
       {state.error ? (
         <p className="text-destructive w-full text-sm" role="alert">
           {state.error}
