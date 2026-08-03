@@ -384,7 +384,8 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       // mismo título (trim case-insensitive) que el draft, NO creamos otra —
       // el backend (AddSection) no deduplica por título, así que esta es la
       // única barrera. Si la sección existente está VACÍA, la renombramos.
-      // Si tiene contenido, reusamos sin más (limpiamos drafts).
+      // Si tiene contenido, reusamos sin más (sincronizamos drafts con la
+      // sección destino).
       const matchingByTitle =
         title.length > 0
           ? data.sections.find((s) => (s.title ?? "").trim().toLowerCase() === title.toLowerCase())
@@ -406,9 +407,23 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           }
         }
         // Sección ya tiene el título (o lo acabamos de poner): nada que
-        // crear. Limpiamos drafts como en el camino exitoso normal.
-        setDraftSectionTitle("");
-        setDraftSectionContent(null);
+        // crear. Apuntamos `targetSectionId` a la sección existente y
+        // sincronizamos drafts con sus valores. Mismo principio que en
+        // el camino de creación nuevo (ago 2026): drafts == sección →
+        // sin diff → botones "Actualizar/Cancelar" quedan ocultos hasta
+        // que el docente EDITE el contexto.
+        setTargetSectionId(matchingByTitle.id);
+        setDraftSectionTitle(title);
+        if (hasContent) {
+          try {
+            setDraftSectionContent(JSON.parse(contentRaw));
+          } catch {
+            setDraftSectionContent(null);
+          }
+        } else {
+          setDraftSectionContent(null);
+        }
+        setNewSectionRenderKey((k) => k + 1);
         setActionStatus("saved");
         newSectionFormRef.current?.reset();
         setTimeout(() => {
@@ -427,9 +442,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         !onlySection.content;
 
       let res: AdminFormState;
+      let newSectionId: string | null = null;
       if (isEmpty && onlySection) {
         // RENOMBRAR: construimos un FormData con sectionId para
         // updateSectionAction.
+        newSectionId = onlySection.id;
         const fd = new FormData();
         fd.append("evaluationId", data.evaluationId);
         fd.append("sectionId", onlySection.id);
@@ -438,7 +455,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         res = await updateSectionAction({}, fd);
       } else {
         // CREAR nueva sección.
-        res = await addSectionAction({}, formData);
+        const fd = new FormData();
+        fd.append("evaluationId", data.evaluationId);
+        fd.append("title", title);
+        if (hasContent) fd.append("content", contentRaw);
+        const createRes = await addSectionAction({}, fd);
+        if (createRes.sectionId) newSectionId = createRes.sectionId;
+        res = createRes;
       }
 
       if (res?.error) {
@@ -447,13 +470,36 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         return;
       }
 
-      // Éxito: limpiar borradores + reset del form nativo (importante para
-      // que el `name="title"` y el hidden `name="content"` del RichTextEditor
-      // queden limpios). El `revalidatePath` de los server actions refresca
-      // automáticamente `data.sections`, así que el badge de CONTEXTO de la
-      // tabla se actualiza sin más.
-      setDraftSectionTitle("");
-      setDraftSectionContent(null);
+      // Éxito: sincronizamos drafts con la sección recién creada (o
+      // renombrada) en vez de limpiarlos. Si los drafts quedaran en ""
+      // y la sección tuviera título="C2", el comparador del botón
+      // "Actualizar contexto" vería un diff falso y los botones
+      // aparecerían innecesariamente — el docente acaba de CREAR ese
+      // contexto, no de editarlo. Manteniendo drafts == sección, el
+      // botón queda oculto hasta que el docente EDITE algo. (ago 2026)
+      //
+      // Además: apuntamos `targetSectionId` directamente a la nueva
+      // sección, en lugar de dejarlo en null. El effect de "sección
+      // objetivo inválida" lo re-asignaría al mismo id de todos modos
+      // (es la última sección), pero hacerlo explícito evita el ciclo.
+      // Replica también el comportamiento post-"Agregar enunciado"
+      // (drafts pre-cargados con el contexto recién persistido): la
+      // próxima pregunta del docente reutilizará esta sección vía
+      // `contextoMatchesSection` en el overrideAction.
+      if (newSectionId) {
+        setTargetSectionId(newSectionId);
+        setDraftSectionTitle(title);
+        if (hasContent) {
+          try {
+            setDraftSectionContent(JSON.parse(contentRaw));
+          } catch {
+            setDraftSectionContent(null);
+          }
+        } else {
+          setDraftSectionContent(null);
+        }
+      }
+      setNewSectionRenderKey((k) => k + 1);
       setActionStatus("saved");
       newSectionFormRef.current?.reset();
       setTimeout(() => {
