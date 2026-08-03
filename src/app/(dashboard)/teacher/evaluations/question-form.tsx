@@ -147,7 +147,11 @@ export function QuestionForm({
     return editing ? updateQuestionAction(prev, fd) : addQuestionAction(prev, fd);
   }, {});
   const [optionCount, setOptionCount] = useState<number>(initial?.options.length ?? defaultOptions);
-  const [correct, setCorrect] = useState<string>(initial?.correctAnswer ?? ANSWER_KEYS_ORDER[0]!);
+  // "" = ninguna opción marcada todavía. Para creación partimos sin clave
+  // para forzar al docente a elegir una (ago 2026); para edición respetamos
+  // la clave existente. Si arranca vacía, el submit queda bloqueado con un
+  // mensaje claro hasta que se marque alguna.
+  const [correct, setCorrect] = useState<string>(initial?.correctAnswer ?? "");
   const [resetKey, setResetKey] = useState(0);
   // Errores de validación del cliente (no del servidor). El servidor igual
   // revalida pero queremos feedback inmediato sin round-trip. Se prioriza
@@ -251,6 +255,18 @@ export function QuestionForm({
         const submitter = (e.nativeEvent as SubmitEvent).submitter;
         closeOnSaveRef.current =
           submitter instanceof HTMLButtonElement && submitter.dataset.closeOnSave === "true";
+
+        // Bloqueamos si no hay clave/CLAVE seleccionada (ago 2026). El
+        // backend exige correctAnswer no vacío; lo validamos en cliente para
+        // feedback inmediato sin round-trip y para respetar la regla de
+        // negocio "toda pregunta debe tener clave".
+        if (!correct) {
+          e.preventDefault();
+          setClientError(
+            "Antes de continuar debe seleccionar la CLAVE u Opción de respuesta correcta.",
+          );
+          return;
+        }
 
         const fd = new FormData(e.currentTarget);
         const textRaw = String(fd.get("text") ?? "");
@@ -357,6 +373,12 @@ export function QuestionForm({
             ) : null}
           </span>
         </div>
+        {!correct && (
+          <p className="text-xs text-amber-700" role="status">
+            Ninguna opción está marcada como CLAVE. Usa el botón ⊘ Desmarcar para dejarla vacía, o
+            marca una opción antes de guardar.
+          </p>
+        )}
         {visibleKeys.map((k) => (
           <div key={k} className="flex items-center gap-2">
             <label className="flex items-center gap-1.5 text-sm font-medium">
@@ -408,6 +430,16 @@ export function QuestionForm({
           title={optionCount <= MIN_OPTIONS ? `Mínimo ${MIN_OPTIONS} opciones` : "Quitar última"}
         >
           − Opción
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => setCorrect("")}
+          disabled={!correct}
+          title="Quitar la clave seleccionada"
+        >
+          ⊘ Desmarcar
         </Button>
         <span className="text-muted-foreground text-xs">
           {optionCount} de {maxOptions} opciones
