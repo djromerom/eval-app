@@ -235,6 +235,46 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     }
   }, [data.sections, targetSectionId]);
 
+  // SINCRONIZACIÓN DE DRAFTS CON EL TARGET SECTION (ago 2026).
+  //
+  // Por qué este effect: en el mount inicial del editor, `draftSectionTitle`
+  // y `draftSectionContent` están vacíos ("" y null). Si la evaluación YA
+  // tiene secciones con contenido (caso típico: abrir una formulación
+  // existente), `targetSectionId` apunta a la última sección (con título y
+  // contenido). El comparador del botón "Actualizar contexto" vería un
+  // diff falso (drafts="" vs sección poblada) y los botones aparecerían
+  // innecesariamente apenas el docente abre la card con "Agregar 1 a 1".
+  //
+  // La solución: cuando `targetSectionId` CAMBIA (o en el mount inicial),
+  // sincronizamos los drafts con el contenido real de la sección destino.
+  // Así drafts == sección → sin diff → botones ocultos. El docente ve el
+  // contexto actual pre-cargado y solo aparecen los botones cuando él
+  // efectivamente EDITA algo (cambia el título o el contenido del TipTap).
+  //
+  // Por qué NO usar `data.sections` como dep: los drafts deben sincronizar
+  // solo cuando cambia la sección destino (transición de id), no en cada
+  // revalidate de data.sections. Si syncronizáramos en cada revalidate,
+  // pisaríamos lo que el docente está tipeando. El ref rastrea el id
+  // anterior y solo actuamos en transición.
+  //
+  // Excluimos el modo edición (`editingQuestionId !== null`): `startEdit`
+  // ya sincroniza los drafts con la sección de la pregunta que se está
+  // editando, y pisar eso interrumpiría el flujo de edición.
+  const prevTargetSectionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (editingQuestionId) return;
+    if (!targetSectionId) {
+      prevTargetSectionIdRef.current = null;
+      return;
+    }
+    if (prevTargetSectionIdRef.current === targetSectionId) return;
+    prevTargetSectionIdRef.current = targetSectionId;
+    const target = data.sections.find((s) => s.id === targetSectionId);
+    if (!target) return;
+    setDraftSectionTitle(target.title ?? "");
+    setDraftSectionContent(target.content ?? null);
+  }, [targetSectionId, data.sections, editingQuestionId]);
+
   // Cuando el status pasa a PUBLISHED, liberamos el flag de publicación por
   // si quedó enganchado (p.ej. la promesa tiró excepción justo cuando llegó
   // el revalidate, y nunca se ejecutó el finally del publishHandler).
