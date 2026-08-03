@@ -465,6 +465,83 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   }
 
   /**
+   * Disparado por el botón "Actualizar contexto" del bloque Contexto (ago
+   * 2026). PERSISTE SOLO el contexto destino (título + contenido) — NO
+   * toca ninguna pregunta. Complementa al orquestador de "Agregar
+   * enunciado", que solo guarda contexto cuando va a crear/renombrar
+   * sección como parte de la creación de un ítem.
+   *
+   * Caso de uso típico: el docente quiere afinar la descripción de un
+   * contexto existente SIN agregar una pregunta todavía. Antes de este
+   * botón, el único camino era pulsar "Agregar enunciado" (que crea
+   * también una pregunta). Ahora puede pulsar "Actualizar contexto" y
+   * los cambios se persisten inmediatamente sin pregunta adicional.
+   *
+   * Validaciones:
+   *  - solo permitido si `editable` y NO estamos editando una pregunta
+   *    (en modo edición los inputs del contexto van disabled).
+   *  - necesita `targetSectionId` (hay una sección destino que actualizar).
+   *  - necesita un diff real (`!contextoMatchesSection`) — el botón no se
+   *    muestra en este caso, así que acá es una red de seguridad.
+   *
+   * Persistencia: `updateSectionAction` con `evaluationId`, `sectionId =
+   * targetSectionId`, `title` y `content` (serializado a JSON). El
+   * `revalidatePath` refresca `data.sections` así que el siguiente render
+   * ve el diff ya salvado y el botón desaparece.
+   */
+  async function handleUpdateContext() {
+    if (editingQuestionId) return; // modo creación/edición puntual
+    if (submittingRef.current) {
+      console.warn("[Actualizar-contexto] BLOQUEADO por doble-submit");
+      return;
+    }
+    const sectionId = targetSectionId;
+    if (!sectionId) return;
+
+    const targetSection = data.sections.find((s) => s.id === sectionId);
+    if (!targetSection) return;
+
+    const title = draftSectionTitle.trim();
+    const hasContent = hasUnsavedContexto(null, draftSectionContent);
+    if (!title && !hasContent) {
+      // Red de seguridad: el botón no se muestra en este caso (ver
+      // `showUpdateContextButton`), pero si llegamos acá sin diff, fallamos
+      // silenciosamente (no hay nada que guardar).
+      return;
+    }
+
+    setFormError(null);
+    setActionStatus("saving");
+    submittingRef.current = true;
+    lastSubmitTsRef.current = Date.now();
+    try {
+      const fd = new FormData();
+      fd.append("evaluationId", data.evaluationId);
+      fd.append("sectionId", sectionId);
+      // Título vacío → null en el backend (la sección queda "Sin título");
+      // consistencia con el comportamiento de la edición inline del
+      // `ContextEditor` standalone.
+      fd.append("title", title);
+      if (draftSectionContent) {
+        fd.append("content", JSON.stringify(draftSectionContent));
+      }
+      const res = await updateSectionAction({}, fd);
+      if (res.error) {
+        setFormError(res.error);
+        setActionStatus("error");
+        return;
+      }
+      setActionStatus("saved");
+      setTimeout(() => {
+        setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
+      }, 2500);
+    } finally {
+      submittingRef.current = false;
+      lastSubmitTsRef.current = 0;
+    }
+  }
+
+  /**
    * Disparado por el botón "Nuevo contexto" del `extraActions` del
    * QuestionForm.
    *
@@ -884,6 +961,92 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     minHeightClass="min-h-12"
                   />
                 </div>
+                {/* "Actualizar contexto" (ago 2026): aparece cuando el
+                  docente EDITA el título o el contenido del contexto
+                  destino — es decir, cuando hay un diff real entre los
+                  drafts y el estado actual de la sección. Permite guardar
+                  SOLO el contexto sin agregar una pregunta (camino que antes
+                  no existía: o se aceptaba el diff implícitamente al crear
+                  una pregunta, o había que abrir el ContextEditor standalone).
+                  Condiciones:
+                   - editable (sino los inputs están disabled)
+                   - !editingQuestionId (en edición los inputs están
+                     deshabilitados por la lógica del orquestador)
+                   - targetSectionId (hay una sección destino que actualizar)
+                   - !contextoMatchesSection (hay diff real: o título
+                     distinto, o contenido nuevo/eliminado) */}
+                {(() => {
+                  const targetSection =
+                    targetSectionId === null
+                      ? null
+                      : (data.sections.find((s) => s.id === targetSectionId) ?? null);
+
+                  // Comparamos drafts contra el estado guardado de la
+                  // sección destino (ago 2026). El botón debe aparecer
+                  // cuando hay un diff real, ya sea en el título o en el
+                  // contenido (TipTap).
+                  //
+                  // Importante: `contextoMatchesSection` NO sirve acá
+                  // porque solo compara títulos (asume ref-identidad del
+                  // contenido del RichTextEditor, que se rompe apenas el
+                  // docente edita el TipTap). Por eso usamos texto plano
+                  // (`richTextToPlain`) para comparar ambos campos.
+                  //
+                  // Comparamos por texto plano (richTextToPlain) para no
+                  // entrar en ruido de diferencias estructurales del JSON
+                  // TipTap (p.ej. marcas de posición del cursor).
+                  const draftTitleTrimmed = draftSectionTitle.trim();
+                  const sectionTitleTrimmed = (targetSection?.title ?? "").trim();
+                  const titleChanged = draftTitleTrimmed !== sectionTitleTrimmed;
+                  const draftContentPlain = richTextToPlain(draftSectionContent).trim();
+                  const sectionContentPlain = richTextToPlain(targetSection?.content).trim();
+                  const contentChanged = draftContentPlain !== sectionContentPlain;
+
+                  const showUpdateContextButton =
+                    data.editable &&
+                    !editingQuestionId &&
+                    targetSection !== null &&
+                    (titleChanged || contentChanged);
+                  if (!showUpdateContextButton) return null;
+
+                  // Detectamos QUÉ cambió (ago 2026) para armar el mensaje
+                  // de confirmación específico. El docente que solo tocó el
+                  // título no debería ver "se actualizará el contenido" (y
+                  // viceversa) — es ruido que merma confianza en la UI.
+                  let whatChanges: string;
+                  if (titleChanged && contentChanged) {
+                    whatChanges = "el título y el contenido";
+                  } else if (titleChanged) {
+                    whatChanges = "el título";
+                  } else {
+                    // Solo contenido (o defensa por si ambos resultasen
+                    // false, que en práctica no debería pasar porque el
+                    // botón no se muestra sin diff).
+                    whatChanges = "el contenido";
+                  }
+
+                  return (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="default"
+                        disabled={actionStatus === "saving"}
+                        title="Guardar los cambios del contexto sin agregar una pregunta"
+                        onClick={() => {
+                          const ok = window.confirm(
+                            `¿Está seguro que desea actualizar ${whatChanges} del contexto?`,
+                          );
+                          if (!ok) return;
+                          void handleUpdateContext();
+                        }}
+                      >
+                        Actualizar contexto
+                      </Button>
+
+                    </div>
+                  );
+                })()}
                 {!targetSectionId && data.editable ? (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <Button
