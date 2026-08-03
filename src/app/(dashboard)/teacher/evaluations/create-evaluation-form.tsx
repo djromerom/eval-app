@@ -190,14 +190,25 @@ export function CreateEvaluationForm({
       </FieldBlock>
 
       <FieldBlock label={periodField.label} required={periodField.required}>
+        {/* Importante: cuando la Prueba viene preseleccionada por ser la
+          "actual" del año académico del courseSubject, el <select> queda
+          `disabled`. **Los form controls disabled NO se serializan en
+          FormData** (especificación HTML), así que si solo dejamos el
+          select disabled el periodId nunca llega al server action y la
+          nueva evaluación queda con periodId=null. Para evitarlo, en modo
+          bloqueado renderizamos un <input type="hidden"> gemelo que
+          siempre viaja con el submit, y le quitamos el `name` al select
+          (solo es decorativo en ese modo). En modo editable el select
+          conserva su `name` y el hidden input no se renderiza. */}
         <select
           id={periodField.name}
-          name={periodField.name}
-          required={periodField.required}
+          name={periodLocked ? undefined : periodField.name}
+          required={periodField.required && !periodLocked}
           className={selectClass}
           value={periodId}
           onChange={handlePeriodChange}
           disabled={periodLocked}
+          aria-readonly={periodLocked ? true : undefined}
         >
           <option value="">—</option>
           {periodField.options?.map((opt) => (
@@ -206,7 +217,7 @@ export function CreateEvaluationForm({
             </option>
           ))}
         </select>
-        {periodLocked}
+        {periodLocked && <input type="hidden" name={periodField.name} value={periodId} />}
       </FieldBlock>
 
       <FieldBlock label="Tipo de cuadernillo">
