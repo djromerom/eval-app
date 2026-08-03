@@ -36,6 +36,15 @@ export interface UnifiedEditorData {
   bankQuestions: { id: string; text: string }[];
   defaultOptions: number;
   maxOptions: number;
+  /**
+   * Oculta la card de creación/edición al montar. Se usa cuando el docente
+   * llega al editor desde el listado "Mis formulaciones" (?from=list): el
+   * listado es un índice y el docente suele entrar a editar UN ítem puntual,
+   * no a llenar el formulario. La card sigue siendo abrible con el botón
+   * "Agregar 1 a 1" del switcher de modo. Default: false (comportamiento
+   * legacy).
+   */
+  initialHideForm?: boolean;
 }
 
 /**
@@ -141,7 +150,14 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   // `items` se calcula más abajo, así que la inicialización lazy evita
   // referenciar algo todavía no definido.
   const itemsCount = data.sections.reduce((acc, s) => acc + s.questions.length, 0);
-  const [showForm, setShowForm] = useState<boolean>(itemsCount > 0);
+  // Default: si hay ítems la card abre (legacy). Excepción: el docente llega
+  // desde el listado "Mis formulaciones" (?from=list) — ahí abre cerrada
+  // aunque haya ítems, porque el listado es un índice y el docente entra a
+  // editar uno puntual, no a llenar el formulario. El docente siempre puede
+  // abrirla con "Agregar 1 a 1".
+  const [showForm, setShowForm] = useState<boolean>(
+    data.initialHideForm ? false : itemsCount > 0,
+  );
 
   // Click fuera o Esc → cerrar popovers.
   useEffect(() => {
@@ -1090,7 +1106,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           hay ítems, mostramos el placeholder invitando a crear el primero. */}
       {items.length === 0 ? (
         <p className="bg-card text-muted-foreground rounded-lg border border-dashed p-6 text-sm">
-          Aún no hay ítems. Crea un contexto arriba y luego agrega una pregunta.
+         Aún no hay ítems registrados. Para crear uno, selecciona una de las opciones anteriores.
         </p>
       ) : (
         <section className="space-y-2">

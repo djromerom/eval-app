@@ -95,7 +95,7 @@ export default async function EvaluationsPage() {
                 <tr key={e.id} className="border-b last:border-0">
                   <td className="px-3 py-3">
                     <Link
-                      href={`/teacher/evaluations/${e.id}/unified`}
+                      href={`/teacher/evaluations/${e.id}/unified?from=list`}
                       className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors"
                       title="Editar formulación"
                       aria-label={`Editar ${e.title}`}
@@ -104,7 +104,10 @@ export default async function EvaluationsPage() {
                     </Link>
                   </td>
                   <td className="px-4 py-3 font-medium">
-                    <Link href={`/teacher/evaluations/${e.id}/unified`} className="hover:underline">
+                    <Link
+                      href={`/teacher/evaluations/${e.id}/unified?from=list`}
+                      className="hover:underline"
+                    >
                       {e.title}
                     </Link>
                   </td>

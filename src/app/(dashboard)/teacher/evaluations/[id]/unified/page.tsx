@@ -21,8 +21,15 @@ export const metadata: Metadata = { title: "Formulación unificada" };
  * Persiste contra el mismo modelo Prisma (Evaluation + Section + Question),
  * así que los cambios aquí se reflejan en las otras vistas.
  */
-export default async function UnifiedEditorPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function UnifiedEditorPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
+}) {
   const { id } = await params;
+  const { from } = await searchParams;
   const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
   const result = await makeGetEvaluation().execute({ actor, id });
   if (!result.ok) notFound();
@@ -30,6 +37,13 @@ export default async function UnifiedEditorPage({ params }: { params: Promise<{ 
 
   const isOwner = evaluation.teacherId === actor.userId;
   const editable = isOwner && evaluation.status === "DRAFT";
+  // Cuando el docente llega desde el listado "Mis formulaciones" (?from=list),
+  // la card de creación/edición arranca OCULTA. El listado es un índice: el
+  // docente hace click para entrar a editar UN ítem puntual, no a llenar el
+  // formulario gigante. Mantener la card abierta por default ahí era ruido.
+  // El docente la abre cuando quiera con "Agregar 1 a 1" (el botón sigue
+  // visible arriba en el switcher de modo).
+  const initialHideForm = from === "list";
 
   // Mismo truco que las otras vistas: resolver subjectId para filtrar banco.
   const csRes = await makeListCourseSubjects().execute({ actor });
@@ -49,6 +63,7 @@ export default async function UnifiedEditorPage({ params }: { params: Promise<{ 
     evaluationId: evaluation.id,
     evaluationTitle: evaluation.title,
     evaluationStatus: evaluation.status,
+    initialHideForm,
     sections: evaluation.sections.map((s) => ({
       id: s.id,
       order: s.order,
@@ -76,7 +91,7 @@ export default async function UnifiedEditorPage({ params }: { params: Promise<{ 
     <>
       <PageHeader
         title={`${evaluation.title} — ${evaluation.periodName ?? "Sin periodo"}`}
-        description="Formulación unificada"
+       
       />
 
       <div className="mb-4 flex items-center gap-3">
