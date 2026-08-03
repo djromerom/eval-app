@@ -591,15 +591,27 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
    *      el contexto al que pertenece semánticamente.
    *   2. Crea (o renombra, si es la única sección vacía) un NUEVO
    *      contexto con el título/contenido del bloque "Contexto" arriba.
-   *      Este nuevo contexto queda asignado a `targetSectionId` para que
-   *      la PRÓXIMA pregunta (todavía no creada) sea la que se guarde
-   *      allí.
+   *      `targetSectionId` pasa a apuntar a esa nueva sección, y los
+   *      drafts del bloque "Contexto" se sincronizan con su contenido
+   *      (en vez de quedar vacíos) — ver PASO 3 abajo.
    *
    * Consecuencia: después de un "Nuevo contexto" exitoso, en la tabla
    * resumen aparece el ítem recién guardado en la sección anterior, y
-   * un nuevo bloque de contexto vacío queda listo para la siguiente
-   * pregunta. El docente NO tiene que volver a escribir el enunciado
-   * que ya tenía — pero tampoco queda "pegado" a la nueva sección.
+   * los inputs del bloque "Contexto" quedan pre-cargados con el
+   * título/contenido de la sección recién creada. El docente ve lo que
+   * acaba de guardar y puede reusarlo para la siguiente pregunta sin
+   * tener que re-tipear nada (vía `contextoMatchesSection` en el
+   * overrideAction de "Agregar enunciado"). Esto replica el
+   * comportamiento post-"Agregar enunciado" (consistencia UX).
+   *
+   * Por qué sincronizar drafts en vez de dejarlos vacíos (ago 2026): el
+   * botón "Actualizar contexto" compara los drafts contra la sección
+   * destino. Si drafts="" y la sección recién creada tiene
+   * título="C2", ve un diff falso y aparece el botón innecesariamente.
+   * Sincronizando los drafts con la sección, drafts == sección → no hay
+   * diff → el botón queda oculto. Además muestra al docente el contenido
+   * recién persistido, en vez de dejarlo con la impresión de que "se
+   * perdió" lo que tipeó.
    *
    * Excepción (ago 2026): si el docente hace click en "Nuevo contexto"
    * pero NO escribió enunciado, interpretamos que se arrepintió y
@@ -700,7 +712,9 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         onlySection !== undefined &&
         !onlySection.title &&
         !onlySection.content;
+      let newSectionId: string | null = null;
       if (isEmpty && onlySection) {
+        newSectionId = onlySection.id;
         const fd = new FormData();
         fd.append("evaluationId", data.evaluationId);
         fd.append("sectionId", onlySection.id);
@@ -732,36 +746,55 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           setActionStatus("error");
           return;
         }
+        newSectionId = res.sectionId;
       }
 
-      // PASO 3: dejar `targetSectionId` en null para que la próxima
-      // pregunta del docente NO quede auto-asociada a un contexto
-      // existente (ni al anterior ni al recién creado). El form de
-      // pregunta queda oculto hasta que el docente seleccione una
-      // sección desde la tabla resumen (o decida que esa pregunta
-      // vivirá en un contexto nuevo sin poblar). Limpiamos los drafts
-      // de contexto/enunciado/opciones para que la siguiente iteración
-      // arranque visualmente vacía.
+      // PASO 3: apuntar `targetSectionId` a la sección recién creada y
+      // sincronizar los drafts con su contenido (ago 2026).
       //
-      // Implementación del reset:
-      //  - draftSectionTitle/Content: se limpian del state React.
-      //  - Input/RichTextEditor del bloque "Contexto": como usan
-      //    `defaultValue` (no son controlados), sus `defaultValue` solo
-      //    se aplican al montar. Por eso bumpeamos newSectionRenderKey:
-      //    cambia la `key` y fuerza el remount → los `defaultValue=""`
-      //    y `defaultValue={null}` vuelven a aplicarse, dejando el
-      //    bloque visualmente vacío.
-      //  - questionForm.reset(): limpia el form interno del QuestionForm
-      //    (enunciado + opciones). El botón principal del QuestionForm
-      //    también tiene `useEffect` propio que limpia `correct`,
-      //    `optionCount` y remonta el RichTextEditor del enunciado
-      //    (controlado por la prop `clearCorrectAfterSave` que pasamos
-      //    desde acá: como NO estamos en editing mode, queremos dejar
-      //    la CLAVE sin seleccionar para obligar al docente a elegir
-      //    una en la próxima pregunta).
-      setTargetSectionId(null);
-      setDraftSectionTitle("");
-      setDraftSectionContent(null);
+      // Por qué NO seteamos `targetSectionId = null`: el `useEffect` de
+      // "sección objetivo inválida" lo re-asignaría automáticamente a la
+      // última sección (= la recién creada) en el siguiente render, así
+      // que el null era inútil y rompía el modelo mental del orquestador.
+      // Asignamos el id directamente y evitamos el ciclo.
+      //
+      // Por qué NO limpiamos los drafts: el botón "Actualizar contexto"
+      // compara drafts contra la sección destino. Si drafts="" y la
+      // sección tiene título="C2", ve un diff falso y aparece el botón
+      // innecesariamente. Manteniendo los drafts sincronizados con la
+      // sección recién creada, drafts == sección → no hay diff → el
+      // botón queda oculto. Esto además replica el comportamiento de
+      // "Agregar enunciado" (drafts pre-cargados) y muestra al docente
+      // exactamente lo que acaba de guardar — UX más coherente.
+      //
+      // Implementación:
+      //  - setTargetSectionId(newSectionId): apunta a la nueva sección.
+      //  - setDraftSectionTitle/Content: mantienen el título y el JSON
+      //    parseado del contenido (no string crudo) para que el Input y
+      //    el RichTextEditor del bloque "Contexto" sigan mostrando lo
+      //    recién persistido.
+      //  - setNewSectionRenderKey: bumpea la key para forzar el remount
+      //    del Input/RichTextEditor (no controlados; sus `defaultValue`
+      //    solo aplican al montar). Tras el remount, los inputs se ven
+      //    con el título y contenido de la sección recién guardada.
+      //  - questionForm.reset(): limpia enunciado + opciones del
+      //    QuestionForm (siguiente pregunta arranca en blanco). El form
+      //    del QuestionForm también limpia `correct`, `optionCount` y
+      //    remonta el RichTextEditor del enunciado vía
+      //    `clearCorrectAfterSave`.
+      if (newSectionId) {
+        setTargetSectionId(newSectionId);
+        setDraftSectionTitle(title);
+        if (hasContent) {
+          try {
+            setDraftSectionContent(JSON.parse(contentRaw));
+          } catch {
+            setDraftSectionContent(null);
+          }
+        } else {
+          setDraftSectionContent(null);
+        }
+      }
       setNewSectionRenderKey((k) => k + 1);
       // Reseteamos el debounce del orquestador de "Agregar enunciado".
       // Si el docente encadena otro submit inmediatamente (caso típico:
