@@ -10,6 +10,7 @@ import type {
   CourseSubjectRepository,
   PeriodRepository,
 } from "@/modules/academic/domain/types";
+import type { BookletTypeRepository } from "@/modules/booklet-types/domain/booklet-type";
 import type { EvaluationStatus } from "../domain/evaluation-status";
 import {
   type CreateEvaluationData,
@@ -49,6 +50,7 @@ export class CreateEvaluation implements UseCase<CreateEvaluationInput, Evaluati
     private readonly courseSubjects: CourseSubjectRepository,
     private readonly periods: PeriodRepository,
     private readonly courses: CourseRepository,
+    private readonly bookletTypes: BookletTypeRepository,
   ) {}
 
   async execute({ actor, data }: CreateEvaluationInput): Promise<Result<Evaluation>> {
@@ -76,6 +78,22 @@ export class CreateEvaluation implements UseCase<CreateEvaluationInput, Evaluati
     if (data.periodId) {
       const period = await this.periods.findById(actor.institutionId, data.periodId);
       if (!period) return fail(new ValidationError("El periodo no existe en tu institución."));
+    }
+
+    // Validación del tipo de cuadernillo (ago 2026): si se envió, debe
+    // existir, pertenecer a la misma institución y al mismo `periodId`
+    // de la formulación. Esto cierra el caso "docente pega un id de tipo
+    // de otra Prueba".
+    if (data.bookletTypeId) {
+      const bt = await this.bookletTypes.findById(actor.institutionId, data.bookletTypeId);
+      if (!bt) {
+        return fail(new ValidationError("El tipo de cuadernillo no existe en tu institución."));
+      }
+      if (data.periodId && bt.periodId !== data.periodId) {
+        return fail(
+          new ValidationError("El tipo de cuadernillo no pertenece a la prueba seleccionada."),
+        );
+      }
     }
 
     // Unicidad: bloquea dos formulaciones con misma (asignatura-curso, periodo, año).

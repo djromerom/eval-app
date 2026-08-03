@@ -18,6 +18,10 @@ export interface Evaluation {
   periodId: string | null;
   teacherId: string;
   bookletNumber: number | null;
+  /** Tipo de cuadernillo configurado por el admin en la Prueba.
+   *  Null = formulación sin tipo asignado (evaluaciones previas a
+   *  ago 2026 o formulaciones "sin cuadernillo" como diagnósticas). */
+  bookletTypeId: string | null;
   totalQuestions: number;
   /**
    * Duración estimada en minutos, capturada por el docente en el panel
@@ -69,6 +73,9 @@ export interface EvaluationDetail extends Evaluation {
    *  setearlo (cuando lo omiten, las pages deben tratar `null` como
    *  "sin periodo"). */
   periodName?: string | null;
+  /** Nombre del tipo de cuadernillo (nullable). El repo hidrata este
+   *  campo con `include: { bookletType: { select: { name: true } } }`. */
+  bookletTypeName?: string | null;
 }
 
 /** Fila de listado enriquecida con nombres de curso/asignatura/periodo. */
@@ -88,6 +95,9 @@ export interface EvaluationListItem {
    *  periodo, ej. evaluación diagnóstica de inicio de año). */
   periodId: string | null;
   periodName: string | null;
+  /** Tipo de cuadernillo (nullable). */
+  bookletTypeId: string | null;
+  bookletTypeName: string | null;
   updatedAt: Date;
 }
 
@@ -99,6 +109,10 @@ export interface CreateEvaluationData {
   periodId?: string;
   bookletNumber?: number;
   description?: string;
+  /** Tipo de cuadernillo seleccionado. Si se omite, la formulación queda
+   *  sin tipo asignado. Si se envía, el use case valida que pertenezca al
+   *  mismo `periodId` de la formulación y a la misma institución. */
+  bookletTypeId?: string;
   /** Duración estimada en minutos. Si es `null` o se omite, cae al cálculo
    *  heurístico `totalQuestions * DEFAULT_MINUTES_PER_QUESTION`. Mismas
    *  reglas de validación que `UpdateEvaluationSettingsData`. Sprint 7. */

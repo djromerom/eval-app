@@ -31,6 +31,7 @@ type EvaluationRow = {
   periodId: string | null;
   teacherId: string;
   bookletNumber: number | null;
+  bookletTypeId: string | null;
   totalQuestions: number;
   durationMinutes: number | null;
   theme: Prisma.JsonValue;
@@ -49,6 +50,7 @@ function toEvaluation(r: EvaluationRow): Evaluation {
     periodId: r.periodId,
     teacherId: r.teacherId,
     bookletNumber: r.bookletNumber,
+    bookletTypeId: r.bookletTypeId,
     totalQuestions: r.totalQuestions,
     durationMinutes: r.durationMinutes,
     theme: r.theme,
@@ -146,6 +148,9 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         title: data.title,
         description: data.description ?? null,
         bookletNumber: data.bookletNumber ?? null,
+        // Tipo de cuadernillo seleccionado por el docente (ago 2026). Si
+        // no se envía, queda null (compatible con formulaciones previas).
+        bookletTypeId: data.bookletTypeId ?? null,
         // Sprint 7: si no se envió, queda null → heurístico en la portada.
         durationMinutes: data.durationMinutes ?? null,
         // Default de maquetación: 2 columnas estilo ICFES (el PDF de
@@ -177,6 +182,8 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         // Hidrata periodName para que EvaluationDetail exponga el rótulo
         // legible del periodo sin un SELECT extra desde el page.tsx.
         period: { select: { name: true } },
+        // Hidrata bookletTypeName (ago 2026).
+        bookletType: { select: { name: true } },
       },
     });
     if (!row) return null;
@@ -184,6 +191,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
       ...toEvaluation(row),
       sections: row.sections.map(toSection),
       periodName: row.period?.name ?? null,
+      bookletTypeName: row.bookletType?.name ?? null,
     };
   }
 
@@ -211,6 +219,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
           include: { course: { select: { name: true } }, subject: { select: { name: true } } },
         },
         period: { select: { id: true, name: true } },
+        bookletType: { select: { id: true, name: true } },
       },
     });
     return rows.map((r) => ({
@@ -225,6 +234,8 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
       subjectName: r.courseSubject.subject.name,
       periodId: r.periodId,
       periodName: r.period?.name ?? null,
+      bookletTypeId: r.bookletTypeId,
+      bookletTypeName: r.bookletType?.name ?? null,
       updatedAt: r.updatedAt,
     }));
   }
