@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { deletePeriodAction, updatePeriodAction } from "../../../actions";
+import { setCurrentPeriodAction } from "./actions";
 
 export interface PeriodEditFormProps {
   period: {
@@ -13,6 +14,9 @@ export interface PeriodEditFormProps {
     endDate: string;
     academicYearId: string;
     academicYearLabel: string;
+    /** Si la prueba ya está marcada como "actual" en su año académico
+     *  (ago 2026). El toggle del drawer parte de aquí. */
+    isCurrent: boolean;
   };
   /** Nombres de los demás periodos del mismo año — para detectar conflictos
    *  de uniqueness y mostrar el banner amarillo. */
@@ -31,6 +35,7 @@ const dateToInput = (s: string): string => {
 export function PeriodEditForm({ period, siblingNames }: PeriodEditFormProps) {
   const [updateState, updateFormAction] = useActionState(updatePeriodAction, {});
   const [deleteState, deleteFormAction] = useActionState(deletePeriodAction, {});
+  const [setCurrentState, setCurrentFormAction] = useActionState(setCurrentPeriodAction, {});
 
   const [name, setName] = useState(period.name);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -62,7 +67,7 @@ export function PeriodEditForm({ period, siblingNames }: PeriodEditFormProps) {
         </div>
       )}
 
-      <form action={updateFormAction} className="space-y-5">
+      <form action={updateFormAction} className="space-y-5" id="period-edit-form">
         <input type="hidden" name="periodId" value={period.id} />
 
         {/* Año académico — read-only en el drawer. El periodo no se mueve
@@ -218,6 +223,70 @@ export function PeriodEditForm({ period, siblingNames }: PeriodEditFormProps) {
           </div>
         </div>
       </form>
+
+      {/* Bloque Prueba actual (ago 2026) — form HERMANO del form principal,
+          NO anidado. HTML no permite <form> dentro de <form>: el submit
+          burbujea y React 19 aborta con "A React form was unexpectedly
+          submitted". El action setCurrentPeriodAction tiene su propio
+          useActionState, así que no comparte ciclo de vida con el form
+          de update. */}
+      <div
+        className={
+          period.isCurrent
+            ? "border-primary/30 bg-primary/5 rounded-lg border-2 p-3"
+            : "bg-muted/30 rounded-lg border p-3"
+        }
+      >
+        <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
+          {period.isCurrent ? (
+            <>
+              <span
+                aria-hidden
+                className="bg-primary text-primary-foreground inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold"
+              >
+                ✓
+              </span>
+              Prueba actual
+            </>
+          ) : (
+            "Prueba actual"
+          )}
+        </p>
+        {period.isCurrent ? (
+          <>
+            <p className="mt-1 text-sm">
+              Esta prueba está marcada como <strong>actual</strong> en su año académico. Al crear
+              formulaciones, los docentes la verán preseleccionada y no podrán cambiarla.
+            </p>
+            <form action={setCurrentFormAction} className="mt-2">
+              <input type="hidden" name="periodId" value={period.id} />
+              <input type="hidden" name="isCurrent" value="false" />
+              <Button type="submit" variant="outline" size="sm">
+                Quitar marcación
+              </Button>
+            </form>
+          </>
+        ) : (
+          <>
+            <p className="mt-1 text-sm">
+              Al marcarla como <strong>actual</strong>, esta prueba se preselecciona al crear
+              formulaciones y bloquea la elección de otras pruebas del mismo año académico.
+            </p>
+            <form action={setCurrentFormAction} className="mt-2">
+              <input type="hidden" name="periodId" value={period.id} />
+              <input type="hidden" name="isCurrent" value="true" />
+              <Button type="submit" size="sm">
+                Marcar como actual
+              </Button>
+            </form>
+          </>
+        )}
+        {setCurrentState.error && (
+          <p className="text-destructive mt-2 text-xs" role="alert">
+            {setCurrentState.error}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import {
   PrismaCourseSubjectRepository,
   PrismaPeriodRepository,
 } from "@/modules/academic/infrastructure/prisma-academic-repositories";
+import { PrismaBookletTypeRepository } from "@/modules/booklet-types/infrastructure/prisma-booklet-type-repository";
 import { notificationSender } from "@/modules/notifications/infrastructure/container";
 import { PrismaUserRepository } from "@/modules/users/infrastructure/prisma-user-repository";
 import { ChangeEvaluationStatus, type CoordinatorDirectory } from "../application/change-status";
@@ -36,6 +37,7 @@ const templates = new PrismaTemplateRepository();
 const courseSubjects = new PrismaCourseSubjectRepository();
 const courses = new PrismaCourseRepository();
 const periods = new PrismaPeriodRepository();
+const bookletTypes = new PrismaBookletTypeRepository();
 const users = new PrismaUserRepository();
 
 const coordinatorDirectory: CoordinatorDirectory = {
@@ -43,7 +45,7 @@ const coordinatorDirectory: CoordinatorDirectory = {
 };
 
 export const makeCreateEvaluation = () =>
-  new CreateEvaluation(evaluations, courseSubjects, periods, courses);
+  new CreateEvaluation(evaluations, courseSubjects, periods, courses, bookletTypes);
 export const makeListEvaluations = () => new ListEvaluations(evaluations);
 export const makeGetEvaluation = () => new GetEvaluation(evaluations);
 export const makeAddSection = () => new AddSection(evaluations);

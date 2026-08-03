@@ -174,6 +174,7 @@ const draft: Evaluation = {
   periodId: null,
   teacherId: "t1",
   bookletNumber: null,
+  bookletTypeId: null,
   totalQuestions: 0,
   durationMinutes: null,
   theme: null,

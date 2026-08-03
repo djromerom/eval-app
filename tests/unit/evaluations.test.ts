@@ -34,6 +34,7 @@ import type {
   Period,
   PeriodRepository,
 } from "@/modules/academic/domain/types";
+import type { BookletTypeRepository } from "@/modules/booklet-types/domain/booklet-type";
 import type {
   NotificationMessage,
   NotificationSender,
@@ -54,6 +55,7 @@ class FakeEvaluations implements EvaluationRepository {
       academicYearId: "ay1",
       periodId: data.periodId ?? null,
       bookletNumber: data.bookletNumber ?? null,
+      bookletTypeId: data.bookletTypeId ?? null,
       totalQuestions: 0,
       durationMinutes: data.durationMinutes ?? null,
       // Espejo del Prisma repo: al crear, el default de maquetación es 2
@@ -194,6 +196,32 @@ const noPeriods: PeriodRepository = {
     return null;
   },
   async create(): Promise<Period> {
+    throw new Error("no usado");
+  },
+  async update() {
+    return null;
+  },
+  async delete() {
+    // no-op
+  },
+  async setCurrent() {
+    // no-op — los tests de CreateEvaluation no ejercitan el flip
+  },
+};
+
+/** Repo de BookletTypes en memoria para los tests de CreateEvaluation.
+ *  Solo los tests que cubren validación de bookletTypeId lo enriquecen. */
+const noBookletTypes: BookletTypeRepository = {
+  async findById() {
+    return null;
+  },
+  async listByPeriod() {
+    return [];
+  },
+  async listByInstitution() {
+    return [];
+  },
+  async create() {
     throw new Error("no usado");
   },
   async update() {
@@ -380,7 +408,7 @@ describe("CreateEvaluation", () => {
   it("crea BORRADOR cuando la asignatura-curso existe", async () => {
     const repo = new FakeEvaluations();
     const cs = new FakeCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
-    const uc = new CreateEvaluation(repo, cs, noPeriods, fakeCourses());
+    const uc = new CreateEvaluation(repo, cs, noPeriods, fakeCourses(), noBookletTypes);
     const r = await uc.execute({ actor: teacher, data: { title: "P1", courseSubjectId: "cs1" } });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value.status).toBe("DRAFT");
@@ -391,6 +419,7 @@ describe("CreateEvaluation", () => {
       new FakeCourseSubjects([]),
       noPeriods,
       fakeCourses(),
+      noBookletTypes,
     );
     const r = await uc.execute({ actor: teacher, data: { title: "P1", courseSubjectId: "nope" } });
     expect(r.ok).toBe(false);
@@ -401,7 +430,7 @@ describe("CreateEvaluation", () => {
   it("persiste durationMinutes cuando se envía al crear", async () => {
     const repo = new FakeEvaluations();
     const cs = new FakeCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
-    const uc = new CreateEvaluation(repo, cs, noPeriods, fakeCourses());
+    const uc = new CreateEvaluation(repo, cs, noPeriods, fakeCourses(), noBookletTypes);
     const r = await uc.execute({
       actor: teacher,
       data: { title: "P1", courseSubjectId: "cs1", durationMinutes: 90 },
@@ -416,7 +445,7 @@ describe("CreateEvaluation", () => {
   it("omite durationMinutes cuando no se envía (queda null → heurístico)", async () => {
     const repo = new FakeEvaluations();
     const cs = new FakeCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
-    const uc = new CreateEvaluation(repo, cs, noPeriods, fakeCourses());
+    const uc = new CreateEvaluation(repo, cs, noPeriods, fakeCourses(), noBookletTypes);
     const r = await uc.execute({ actor: teacher, data: { title: "P1", courseSubjectId: "cs1" } });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value.durationMinutes).toBeNull();
@@ -424,7 +453,7 @@ describe("CreateEvaluation", () => {
   it("acepta durationMinutes explícitamente null al crear", async () => {
     const repo = new FakeEvaluations();
     const cs = new FakeCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
-    const uc = new CreateEvaluation(repo, cs, noPeriods, fakeCourses());
+    const uc = new CreateEvaluation(repo, cs, noPeriods, fakeCourses(), noBookletTypes);
     const r = await uc.execute({
       actor: teacher,
       data: { title: "P1", courseSubjectId: "cs1", durationMinutes: null },
@@ -435,7 +464,7 @@ describe("CreateEvaluation", () => {
   it("rechaza durationMinutes fuera de rango al crear (VALIDATION)", async () => {
     const repo = new FakeEvaluations();
     const cs = new FakeCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
-    const uc = new CreateEvaluation(repo, cs, noPeriods, fakeCourses());
+    const uc = new CreateEvaluation(repo, cs, noPeriods, fakeCourses(), noBookletTypes);
     const r = await uc.execute({
       actor: teacher,
       data: { title: "P1", courseSubjectId: "cs1", durationMinutes: 0 },
@@ -446,7 +475,7 @@ describe("CreateEvaluation", () => {
   it("rechaza durationMinutes no-entero al crear", async () => {
     const repo = new FakeEvaluations();
     const cs = new FakeCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
-    const uc = new CreateEvaluation(repo, cs, noPeriods, fakeCourses());
+    const uc = new CreateEvaluation(repo, cs, noPeriods, fakeCourses(), noBookletTypes);
     const r = await uc.execute({
       actor: teacher,
       data: { title: "P1", courseSubjectId: "cs1", durationMinutes: 45.5 },
@@ -477,7 +506,7 @@ describe("CreateEvaluation — unicidad (asignatura-curso + periodo + año)", ()
         return null;
       },
     };
-    const uc = new CreateEvaluation(repo, cs, periods, fakeCourses());
+    const uc = new CreateEvaluation(repo, cs, periods, fakeCourses(), noBookletTypes);
     return { repo, uc };
   };
 
@@ -560,7 +589,7 @@ describe("CreateEvaluation — unicidad (asignatura-curso + periodo + año)", ()
         return { id, institutionId: "i1", academicYearId: "ayX" } as Period;
       },
     };
-    const uc = new CreateEvaluation(repo, cs, periods, coursesRepo);
+    const uc = new CreateEvaluation(repo, cs, periods, coursesRepo, noBookletTypes);
     const first = await uc.execute({
       actor: teacher,
       data: { title: "P1", courseSubjectId: "cs1", periodId: "p1" },

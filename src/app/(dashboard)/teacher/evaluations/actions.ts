@@ -60,10 +60,16 @@ export async function createEvaluationAction(
 
   const courseSubjectId = str(formData, "courseSubjectId");
   const periodId = str(formData, "periodId") || undefined;
+  // ago 2026: tipo de cuadernillo opcional seleccionado por el docente.
+  // "" → undefined (la formulación queda sin tipo). El use case valida
+  // que el id pertenezca al mismo `periodId` de la formulación.
+  const bookletTypeId = str(formData, "bookletTypeId") || undefined;
 
-  // Auto-generamos el título como `${Asignatura} - ${Curso} - ${Año}`. Año
+  // Auto-generamos el título como `${Asignatura} ${Curso} - ${Año}`. Año
   // viene del año académico del periodo seleccionado; si no hay periodo,
-  // usamos el año actual del calendario.
+  // usamos el año actual del calendario. Sin guion entre asignatura y
+  // curso (ago 2026): el docente pidió solo el guion antes del año, no
+  // después del nombre de la asignatura.
   const [csRes, periodsRes, yearsRes] = await Promise.all([
     makeListCourseSubjects().execute({ actor }),
     makeListPeriods().execute({ actor }),
@@ -87,7 +93,7 @@ export async function createEvaluationAction(
     }
   }
 
-  const title = `${cs.subjectName} - ${cs.courseName} - ${year}`;
+  const title = `${cs.subjectName} ${cs.courseName} - ${year}`;
 
   const result = await makeCreateEvaluation().execute({
     actor,
@@ -96,6 +102,7 @@ export async function createEvaluationAction(
       courseSubjectId,
       periodId,
       bookletNumber: bookletRaw ? Number(bookletRaw) : undefined,
+      bookletTypeId,
       durationMinutes,
     },
   });
@@ -321,5 +328,28 @@ export async function submitForReviewAction(formData: FormData): Promise<void> {
   });
   if (!result.ok) throw new Error(result.error.message);
   revalidatePath(`/teacher/evaluations/${evaluationId}`);
+  revalidatePath("/teacher/evaluations");
+}
+
+/**
+ * Publica una formulación en DRAFT directamente a PUBLISHED (atajo del
+ * editor unificado, ago 2026). El flujo canónico sigue siendo
+ * DRAFT → IN_REVIEW → APPROVED → PUBLISHED; este server action es solo
+ * para el botón "Publicar" del unified. Mismas validaciones de dominio
+ * (ownership + roles) que cualquier otra transición. Tras publicar,
+ * revalida todas las rutas donde la formulación aparece como estado.
+ */
+export async function publishEvaluationAction(formData: FormData): Promise<void> {
+  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const evaluationId = str(formData, "evaluationId");
+  const result = await makeChangeEvaluationStatus().execute({
+    actor,
+    evaluationId,
+    to: "PUBLISHED",
+  });
+  if (!result.ok) throw new Error(result.error.message);
+  revalidatePath(`/teacher/evaluations/${evaluationId}`);
+  revalidatePath(`/teacher/evaluations/${evaluationId}/unified`);
+  revalidatePath(`/teacher/evaluations/${evaluationId}/contexts`);
   revalidatePath("/teacher/evaluations");
 }

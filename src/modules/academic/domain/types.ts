@@ -40,6 +40,10 @@ export interface Period {
   order: number;
   startDate: Date;
   endDate: Date;
+  /** Marca la Prueba "en curso" dentro de su año académico. Una sola Prueba
+   *  por año académico puede tener `isCurrent=true` (constraint enforced en
+   *  el use case, no en BD). */
+  isCurrent: boolean;
 }
 
 /** Enlace asignatura ↔ curso (un curso tiene N asignaturas). §3.2 */
@@ -132,6 +136,16 @@ export interface PeriodRepository {
   create(institutionId: string, data: CreatePeriodData): Promise<Period>;
   update(institutionId: string, id: string, data: UpdatePeriodData): Promise<Period | null>;
   delete(institutionId: string, id: string): Promise<void>;
+  /** Marca una Prueba como "actual" dentro de su año académico y desmarca
+   *  las demás del mismo año. Atómico: `prisma.$transaction` para evitar
+   *  que dos pruebas terminen marcadas. `isCurrent=false` solo desmarca
+   *  la indicada sin tocar las demás. */
+  setCurrent(
+    institutionId: string,
+    academicYearId: string,
+    periodId: string,
+    isCurrent: boolean,
+  ): Promise<void>;
 }
 
 export interface UpdatePeriodData {

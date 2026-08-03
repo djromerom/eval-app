@@ -45,9 +45,25 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
     if (!transition || !transition.allowedRoles.some((r) => actor.roles.includes(r))) {
       return fail(new ValidationError(`Transición no permitida: ${evaluation.status} → ${to}.`));
     }
-    // El autor no puede enviar a revisión formulaciones ajenas.
-    if (to === "IN_REVIEW" && evaluation.teacherId !== actor.userId) {
-      return fail(new ValidationError("Solo el autor puede enviar la formulación a revisión."));
+    // Ownership: solo el autor puede enviar a revisión o publicar
+    // directamente. COORDINATOR puede hacerlo porque tiene una regla
+    // transversal: en este dominio, un COORDINATOR que no es el autor
+    // todavía puede operar sobre formulaciones ajenas (ej. aprobarlas).
+    // Aquí limitamos explícitamente el caso del TEACHER: si su rol es
+    // TEACHER pero NO es el autor, falla. COORDINATOR pasa siempre.
+    if (
+      (to === "IN_REVIEW" || to === "PUBLISHED") &&
+      actor.roles.includes("TEACHER") &&
+      !actor.roles.includes("COORDINATOR") &&
+      evaluation.teacherId !== actor.userId
+    ) {
+      return fail(
+        new ValidationError(
+          to === "IN_REVIEW"
+            ? "Solo el autor puede enviar la formulación a revisión."
+            : "Solo el autor puede publicar la formulación.",
+        ),
+      );
     }
     if (transition.requiresComment && !comment?.trim()) {
       return fail(new ValidationError("El rechazo requiere un comentario."));
@@ -91,6 +107,21 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
         type: "EVALUATION_APPROVED",
         title: "Formulación aprobada",
         body: `"${evaluation.title}" fue aprobada.`,
+        link: teacherLink,
+      });
+      return;
+    }
+    // PUBLICADA — cubre dos caminos:
+    //  - APPROVED → PUBLISHED (canónico)
+    //  - DRAFT → PUBLISHED (atajo desde el editor unificado, ago 2026)
+    // En ambos casos notificamos al autor para que tenga feedback de que
+    // la formulación pasó a versión final.
+    if (to === "PUBLISHED") {
+      await this.notifications.send({
+        userId: evaluation.teacherId,
+        type: "EVALUATION_PUBLISHED",
+        title: "Formulación publicada",
+        body: `"${evaluation.title}" fue publicada.`,
         link: teacherLink,
       });
       return;

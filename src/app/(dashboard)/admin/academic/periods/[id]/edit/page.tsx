@@ -8,6 +8,8 @@ import {
   makeListAcademicYears,
   makeListPeriods,
 } from "@/modules/academic/infrastructure/container";
+import { makeListBookletTypesByPeriod } from "@/modules/booklet-types/infrastructure/container";
+import { BookletTypesManager } from "./booklet-types-manager";
 import { PeriodEditForm } from "./period-edit-form";
 
 export const metadata: Metadata = { title: "Editar prueba" };
@@ -24,15 +26,20 @@ const dateFmt = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
  *
  * La página se monta encima del overview via CSS `fixed inset-0` para que
  * coincida con el mock de Pencil sin necesidad de duplicar el listado.
+ *
+ * Desde ago 2026 el drawer también aloja el `BookletTypesManager` (gestión
+ * del catálogo de tipos de cuadernillo por Prueba). El ancho se amplía a
+ * 640px para que el form de periodos y la lista de tipos respiren.
  */
 export default async function EditPeriodPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const actor = await requireAuthenticatedUser("ECU_MASTER");
 
-  const [periodRes, yearsRes, allPeriodsRes] = await Promise.all([
+  const [periodRes, yearsRes, allPeriodsRes, bookletTypesRes] = await Promise.all([
     makeGetPeriod().execute({ actor, periodId: id }),
     makeListAcademicYears().execute({ actor }),
     makeListPeriods().execute({ actor }),
+    makeListBookletTypesByPeriod().execute({ actor, periodId: id }),
   ]);
 
   if (!periodRes.ok) notFound();
@@ -49,6 +56,14 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
         .map((p) => p.name)
     : [];
 
+  const bookletTypes = bookletTypesRes.ok
+    ? bookletTypesRes.value.map((t) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+      }))
+    : [];
+
   return (
     <>
       <PageHeader title="Estructura académica" description="Editando una prueba." />
@@ -60,10 +75,11 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
         className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm"
       />
 
-      {/* Drawer anclado a la derecha. */}
+      {/* Drawer anclado a la derecha. Ancho 640px desde ago 2026 para
+          alojar también el BookletTypesManager. */}
       <aside
         aria-label="Editar prueba"
-        className="bg-background fixed inset-y-0 right-0 z-50 flex w-full max-w-[480px] flex-col border-l shadow-xl"
+        className="bg-background fixed inset-y-0 right-0 z-50 flex w-full max-w-[640px] flex-col border-l shadow-xl"
       >
         <header className="bg-muted/30 flex items-center justify-between gap-2 border-b p-5">
           <div className="space-y-1">
@@ -72,8 +88,13 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
                 {yearLabel}
               </span>
               Prueba · Año {yearLabel}
+              {period.isCurrent && (
+                <span className="bg-primary/15 text-primary inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase">
+                  Actual
+                </span>
+              )}
             </p>
-            <h1 className="font-display text-xl font-bold">Editar prueba</h1>
+            <h1 className="font-display text-xl font-bold">{period.name}</h1>
           </div>
           <Link
             href="/admin/academic"
@@ -94,9 +115,11 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
               endDate: dateFmt.format(period.endDate),
               academicYearId: period.academicYearId,
               academicYearLabel: yearLabel,
+              isCurrent: period.isCurrent,
             }}
             siblingNames={siblingNames}
           />
+          <BookletTypesManager periodId={period.id} initialTypes={bookletTypes} />
         </div>
       </aside>
     </>

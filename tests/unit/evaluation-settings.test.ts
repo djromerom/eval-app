@@ -34,6 +34,7 @@ class FakeEvaluations implements EvaluationRepository {
       academicYearId: "ay1",
       periodId: data.periodId ?? null,
       bookletNumber: data.bookletNumber ?? null,
+      bookletTypeId: data.bookletTypeId ?? null,
       totalQuestions: 0,
       durationMinutes: null,
       theme: null,
