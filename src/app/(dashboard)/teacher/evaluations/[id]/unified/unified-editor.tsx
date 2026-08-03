@@ -565,7 +565,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       // mueve (la siguiente pregunta iría a la misma sección, lo cual
       // es coherente: el docente aún no tiene dos contextos distintos
       // separados).
-      let nextSectionId: string;
       const onlySection = data.sections.length === 1 ? data.sections[0] : null;
       const isEmpty =
         onlySection !== null &&
@@ -584,7 +583,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           setActionStatus("error");
           return;
         }
-        nextSectionId = onlySection.id;
       } else {
         // Crear sección nueva SIEMPRE — sin dedupe por título. Si el
         // docente titula esta "C2" y ya existe otra "C2", es decisión
@@ -605,13 +603,16 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           setActionStatus("error");
           return;
         }
-        nextSectionId = res.sectionId;
       }
 
-      // PASO 3: apuntar `targetSectionId` a la nueva sección para que
-      // la próxima pregunta del docente aterrice ahí. Limpiamos los
-      // drafts de contexto/enunciado/opciones para que la siguiente
-      // iteración arranque con un contexto fresco.
+      // PASO 3: dejar `targetSectionId` en null para que la próxima
+      // pregunta del docente NO quede auto-asociada a un contexto
+      // existente (ni al anterior ni al recién creado). El form de
+      // pregunta queda oculto hasta que el docente seleccione una
+      // sección desde la tabla resumen (o decida que esa pregunta
+      // vivirá en un contexto nuevo sin poblar). Limpiamos los drafts
+      // de contexto/enunciado/opciones para que la siguiente iteración
+      // arranque visualmente vacía.
       //
       // Implementación del reset:
       //  - draftSectionTitle/Content: se limpian del state React.
@@ -629,7 +630,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       //    desde acá: como NO estamos en editing mode, queremos dejar
       //    la CLAVE sin seleccionar para obligar al docente a elegir
       //    una en la próxima pregunta).
-      setTargetSectionId(nextSectionId);
+      setTargetSectionId(null);
       setDraftSectionTitle("");
       setDraftSectionContent(null);
       setNewSectionRenderKey((k) => k + 1);
