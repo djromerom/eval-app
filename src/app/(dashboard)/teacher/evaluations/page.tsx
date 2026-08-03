@@ -90,18 +90,18 @@ export default async function EvaluationsPage() {
           }
           fields={[
             {
-              name: "courseSubjectId",
-              label: "Asignatura",
-              type: "select",
-              required: true,
-              options: csOptions,
-            },
-            {
               name: "periodId",
               label: "Prueba",
               type: "select",
               options: periodOptions,
               required: true,
+            },
+            {
+              name: "courseSubjectId",
+              label: "Asignatura",
+              type: "select",
+              required: true,
+              options: csOptions,
             },
           ]}
           bookletTypes={bookletTypes.map((bt) => ({

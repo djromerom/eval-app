@@ -79,6 +79,12 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   // Estado del contexto a crear.
   const [draftSectionTitle, setDraftSectionTitle] = useState("");
   const [draftSectionContent, setDraftSectionContent] = useState<unknown>(null);
+  // Contador de iteraciones de "Nuevo contexto": se incrementa tras cada
+  // guardado exitoso para forzar el remount del Input/RichTextEditor del
+  // bloque Contexto (sus `defaultValue` solo aplican al montar). Sin esto,
+  // tras "Nuevo contexto" el input del título y el editor rico conservarían
+  // el texto viejo visualmente aunque el state React ya esté limpio.
+  const [newSectionRenderKey, setNewSectionRenderKey] = useState(0);
 
   // Si estamos editando un ítem existente: el QuestionForm se renderiza con
   // `initial` y al guardar `onDone` lo limpia.
@@ -583,21 +589,41 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         return;
       }
 
-      // Éxito: NO limpiamos el bloque "Contexto" tras "Nuevo contexto".
-      // El docente decide explícitamente cuándo cambiar el contexto (lo
-      // edita encima o pulsa "Cancelar"). Si el siguiente ítem lo quiere
-      // seguir, lo deja; si quiere otro, lo sobreescribe. Mantener el
-      // estado precargado es lo que el docente pidió.
+      // Éxito: limpiamos TODOS los campos (CONTEXTO + ENUNCIADO + OPCIONES)
+      // para que la próxima iteración arranque con un contexto fresco. El
+      // docente decidió explícitamente "Nuevo contexto" (no "Agregar
+      // enunciado"), así que la intención clara es empezar uno nuevo — no
+      // queremos que el siguiente ítem quede atado al draft anterior.
       //
-      // Sí limpiamos el form de pregunta (enunciado/opciones) para que
-      // el siguiente ítem arranque vacío. Y —NOTA IMPORTANTE— el
-      // orquestador de "Nuevo contexto" SIEMPRE crea sección nueva
-      // (ver bloque más arriba): si el docente repite el mismo título,
-      // obtiene una segunda sección con el mismo rótulo por decisión
-      // suya, no por bug.
+      // Implementación:
+      //  - draftSectionTitle/Content: se limpian del state React.
+      //  - Input/RichTextEditor: como usan `defaultValue` (no son
+      //    controlados), sus `defaultValue` solo se aplican al montar.
+      //    Por eso bumpeamos newSectionRenderKey: cambia la `key` y
+      //    fuerza el remount → los `defaultValue=""` y `defaultValue={null}`
+      //    vuelven a aplicarse, dejando el bloque visualmente vacío.
+      //  - questionForm.reset(): limpia el form interno del QuestionForm
+      //    (enunciado + opciones). El botón principal del QuestionForm
+      //    también tiene `useEffect` propio que limpia `correct`, `optionCount`
+      //    y remonta el RichTextEditor del enunciado.
+      //
+      // —NOTA IMPORTANTE— el orquestador de "Nuevo contexto" SIEMPRE crea
+      // sección nueva (ver bloque más arriba): si el docente repite el
+      // mismo título en la próxima iteración, obtiene una segunda sección
+      // con el mismo rótulo por decisión suya, no por bug.
       setTargetSectionId(nextSectionId);
+      setDraftSectionTitle("");
+      setDraftSectionContent(null);
+      setNewSectionRenderKey((k) => k + 1);
+      // Reseteamos el debounce del orquestador de "Agregar enunciado". Si el
+      // docente encadena otro submit inmediatamente (caso típico: tras
+      // "Nuevo contexto" sigue escribiendo el siguiente contexto y le da
+      // click), el debounce de 800ms no debe bloquear esa intención legítima.
+      // El flag submittingRef ya se libera en el finally de abajo.
+      lastSubmitTsRef.current = 0;
       setActionStatus("saved");
       questionForm.reset();
+      newSectionFormRef.current?.reset();
       setTimeout(() => {
         setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
       }, 2500);
@@ -786,7 +812,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   key={
                     editingQuestionId
                       ? `edit-title-${editingQuestionId}-${targetSectionId ?? "none"}`
-                      : "new-section-title"
+                      : `new-section-title-${newSectionRenderKey}`
                   }
                   name="title"
                   placeholder="Título de contexto (opcional)"
@@ -816,7 +842,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     key={
                       editingQuestionId
                         ? `edit-question-${editingQuestionId}-${targetSectionId ?? "none"}`
-                        : "new-section-content"
+                        : `new-section-content-${newSectionRenderKey}`
                     }
                     name="content"
                     defaultValue={draftSectionContent}
