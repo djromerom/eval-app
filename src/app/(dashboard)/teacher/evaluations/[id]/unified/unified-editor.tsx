@@ -542,6 +542,43 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   }
 
   /**
+   * Disparado por el botón "Cancelar cambios" del bloque Contexto (ago
+   * 2026). REVierte los drafts locales al estado guardado de la sección
+   * destino — útil cuando el docente empezó a editar el título/contenido
+   * pero decide que prefiere la versión anterior sin persistir nada.
+   *
+   * Implementación: copiamos los valores originales desde `data.sections`
+   * al state React, limpiamos errores y bumpeamos `newSectionRenderKey`
+   * para forzar el remount del Input/RichTextEditor del bloque (sus
+   * `defaultValue` solo aplican al montar, así que setear el state solo
+   * NO se refleja visualmente — necesitamos la key nueva para que el
+   * próximo render monte los inputs con el `defaultValue` original).
+   *
+   * NO toca el servidor: es 100% client-side. El backend ni se entera.
+   */
+  function handleCancelContextEdit() {
+    if (editingQuestionId) return; // no aplica en modo edición
+    const sectionId = targetSectionId;
+    if (!sectionId) return;
+    const targetSection = data.sections.find((s) => s.id === sectionId);
+    if (!targetSection) return;
+
+    // Revertimos los drafts al estado original de la sección.
+    setDraftSectionTitle(targetSection.title ?? "");
+    setDraftSectionContent(targetSection.content ?? null);
+    // Bumpeamos la key para remontar los inputs no-controlados del bloque
+    // Contexto (Input del título y RichTextEditor del contenido). Sin esto,
+    // los `defaultValue` viejos seguirían visibles aunque el state React
+    // ya esté limpio. Mismo patrón que el reset post-"Nuevo contexto".
+    setNewSectionRenderKey((k) => k + 1);
+    setFormError(null);
+    setActionStatus("idle");
+    // El form nativo también: por si el docente tocó algo que no
+    // levantamos al state (no debería pasar, pero defensivo).
+    newSectionFormRef.current?.reset();
+  }
+
+  /**
    * Disparado por el botón "Nuevo contexto" del `extraActions` del
    * QuestionForm.
    *
@@ -1043,7 +1080,30 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       >
                         Actualizar contexto
                       </Button>
-
+                      {/* "Cancelar cambios" (ago 2026): revierte los drafts
+                        del bloque Contexto al estado guardado de la
+                        sección destino. Botón rojo (destructive) para que
+                        se lea como "acción destructiva local" — pero ojo,
+                        NO toca la BD, solo los inputs. Útil cuando el
+                        docente empezó a editar y prefiere la versión
+                        original sin persistir nada. Sin confirmación:
+                        es reversible (el docente puede volver a editar)
+                        y 100% client-side. */}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        disabled={actionStatus === "saving"}
+                        title="Revertir los cambios no guardados al estado original"
+                        onClick={() => {
+                          handleCancelContextEdit();
+                        }}
+                      >
+                        Cancelar cambios
+                      </Button>
+                      <span className="text-muted-foreground text-xs">
+                        Guarda los cambios solo en el contexto (no crea ni edita preguntas).
+                      </span>
                     </div>
                   );
                 })()}
