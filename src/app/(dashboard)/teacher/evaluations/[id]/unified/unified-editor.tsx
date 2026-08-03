@@ -163,9 +163,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   // aunque haya ítems, porque el listado es un índice y el docente entra a
   // editar uno puntual, no a llenar el formulario. El docente siempre puede
   // abrirla con "Agregar 1 a 1".
-  const [showForm, setShowForm] = useState<boolean>(
-    data.initialHideForm ? false : itemsCount > 0,
-  );
+  const [showForm, setShowForm] = useState<boolean>(data.initialHideForm ? false : itemsCount > 0);
 
   // Click fuera o Esc → cerrar popovers.
   useEffect(() => {
@@ -297,9 +295,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   async function handlePublish() {
     if (publishingRef.current) return;
     if (data.evaluationStatus !== "DRAFT") return; // guard local: el botón no debería renderizarse, pero por si acaso.
-    if (!window.confirm(
-      "¿Publicar la formulación? Una vez publicada se considera la versión final y solo podrá editarse enviándola primero de regreso a Borrador.",
-    )) {
+    if (
+      !window.confirm(
+        "¿Publicar la formulación? Una vez publicada se considera la versión final y solo podrá editarse enviándola primero de regreso a Borrador.",
+      )
+    ) {
       return;
     }
     publishingRef.current = true;
@@ -676,9 +676,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                 pero NO está en DRAFT, así que este botón se oculta).
             Llama al server action publishEvaluationAction; handlePublish
             confirma con window.confirm + lockout anti-doble-submit. */}
-          {data.editable &&
-          items.length > 0 &&
-          data.evaluationStatus === "DRAFT" ? (
+          {data.editable && items.length > 0 && data.evaluationStatus === "DRAFT" ? (
             <Button
               type="button"
               size="sm"
@@ -1038,33 +1036,43 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                           // sectionId no cambia: la pregunta va a la misma
                           // sección (ahora con título/contenido).
                         } else {
+                          // FIX ago 2026: en lugar de CREAR una sección nueva,
+                          // ACTUALIZAMOS la sección destino con el draft del
+                          // docente. La semántica de "Agregar enunciado" es
+                          // persistir la pregunta EN la sección actual;
+                          // cualquier cambio al contexto de esa sección
+                          // (título o contenido) debe aplicarse sobre la misma
+                          // sección, no crear una nueva. La creación
+                          // explícita de secciones nuevas la hace el botón
+                          // "Nuevo contexto".
+                          //
+                          // Caso típico del bug que arreglamos:
+                          //   1. La evaluación tiene 2+ secciones, una de
+                          //      ellas con contenido.
+                          //   2. El docente edita el título/contenido de la
+                          //      sección destino (la última con contenido).
+                          //   3. Pulsa "Agregar enunciado".
+                          //   4. (antes) Se creaba una sección fantasma con
+                          //      el mismo título y la pregunta iba a ella →
+                          //      la evaluación terminaba con dos secciones
+                          //      idénticas (la vieja y la recién creada vacía).
+                          //   5. (ahora) La sección destino se actualiza con
+                          //      el nuevo draft y el enunciado se agrega a esa
+                          //      misma sección.
                           const fd = new FormData();
                           fd.append("evaluationId", data.evaluationId);
+                          fd.append("sectionId", targetSectionId);
                           fd.append("title", draftSectionTitle.trim());
                           if (draftSectionContent) {
                             fd.append("content", JSON.stringify(draftSectionContent));
                           }
-                          const res = await addSectionAction({}, fd);
+                          const res = await updateSectionAction({}, fd);
                           if (res.error) return res;
-                          // Redirigimos la pregunta a la sección recién creada.
-                          // addSectionAction ahora retorna `sectionId` en el
-                          // AdminFormState (ver actions.ts).
-                          if (res.sectionId) {
-                            formData.set("sectionId", res.sectionId);
-                            // CRÍTICO: actualizar targetSectionId también. Sin
-                            // esto, el orquestador del PRÓXIMO "Agregar
-                            // enunciado" compararía el draft contra la sección
-                            // VIEJA y, como el título ya coincidiría (los
-                            // drafts quedan precargados con el nuevo título),
-                            // contextoMatchesSection retornaría true y la
-                            // pregunta iría a la sección vieja — o peor,
-                            // compararía títulos distintos y crearía OTRA
-                            // sección nueva. Mantener targetSectionId
-                            // sincronizado con la sección recién creada es lo
-                            // que permite que el próximo click reutilice la
-                            // sección correcta sin crear duplicados.
-                            setTargetSectionId(res.sectionId);
-                          }
+                          // formData ya trae sectionId = targetSectionId
+                          // (viene del hidden input del QuestionForm), no hace
+                          // falta reasignar. Tampoco movemos targetSectionId:
+                          // sigue apuntando a la misma sección que el docente
+                          // estaba editando.
                         }
                         return addQuestionAction({}, formData);
                       } finally {
@@ -1189,7 +1197,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           hay ítems, mostramos el placeholder invitando a crear el primero. */}
       {items.length === 0 ? (
         <p className="bg-card text-muted-foreground rounded-lg border border-dashed p-6 text-sm">
-         Aún no hay ítems registrados. Para crear uno, selecciona una de las opciones anteriores.
+          Aún no hay ítems registrados. Para crear uno, selecciona una de las opciones anteriores.
         </p>
       ) : (
         <section className="space-y-2">
@@ -1293,9 +1301,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           editable + items > 0). El card usa position: sticky + bottom-4
           para que flote sobre el contenido al hacer scroll hasta el final.
           El z-20 garantiza que no quede tapado por otros sticky del repo. */}
-      {data.editable &&
-      items.length > 0 &&
-      data.evaluationStatus === "DRAFT" ? (
+      {data.editable && items.length > 0 && data.evaluationStatus === "DRAFT" ? (
         <div className="sticky bottom-4 z-20 flex justify-end">
           <div className="bg-card flex items-center gap-3 rounded-xl border-2 border-black p-3 shadow-lg dark:border-white">
             <p className="text-muted-foreground text-xs">
