@@ -466,17 +466,32 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
 
   /**
    * Disparado por el botón "Nuevo contexto" del `extraActions` del
-   * QuestionForm. A diferencia del form de contexto, este botón SÍ
-   * persiste la pregunta actual: crea/renombra la sección destino con
-   * los datos del bloque "Contexto" arriba, y luego guarda el ítem del
-   * QuestionForm asociado a esa sección recién creada en una sola
-   * acción de UI.
+   * QuestionForm.
+   *
+   * Semántica confirmada (ago 2026): este botón hace DOS cosas distintas
+   * en un solo click:
+   *   1. Persiste el enunciado+opciones del QuestionForm en la sección
+   *      ACTUAL (la que tiene el `targetSectionId` actual), exactamente
+   *      igual que "Agregar enunciado". El draft NO se descarta: el
+   *      docente invirtió tiempo escribiéndolo y debe quedar guardado en
+   *      el contexto al que pertenece semánticamente.
+   *   2. Crea (o renombra, si es la única sección vacía) un NUEVO
+   *      contexto con el título/contenido del bloque "Contexto" arriba.
+   *      Este nuevo contexto queda asignado a `targetSectionId` para que
+   *      la PRÓXIMA pregunta (todavía no creada) sea la que se guarde
+   *      allí.
+   *
+   * Consecuencia: después de un "Nuevo contexto" exitoso, en la tabla
+   * resumen aparece el ítem recién guardado en la sección anterior, y
+   * un nuevo bloque de contexto vacío queda listo para la siguiente
+   * pregunta. El docente NO tiene que volver a escribir el enunciado
+   * que ya tenía — pero tampoco queda "pegado" a la nueva sección.
    *
    * Recolecta los FormData de AMBOS forms directamente del DOM (no del
    * state React), porque si el docente tipea rápido el último keystroke
    * puede no haber llegado al state aún. La validación de "enunciado no
-   * vacío" la hace el `onSubmit` nativo del QuestionForm; acá validamos
-   * solo que el contexto tenga título o contenido.
+   * vacío" la hacemos acá mismo (no delegamos al onSubmit del
+   * QuestionForm, porque este botón no pasa por él).
    */
   async function handleNewContextWithQuestion() {
     if (editingQuestionId) return; // solo modo creación
@@ -488,11 +503,10 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     const sectionForm = newSectionFormRef.current;
     if (!questionForm || !sectionForm) return;
 
-    // Reunimos inputs del QuestionForm (enunciado, opciones, clave, etc.)
-    // y del form de contexto (título, contenido) en un único FormData
-    // que pasaremos al orquestador. Empezamos por el del QuestionForm
-    // porque es el que viajará al `addQuestionAction` final; los del
-    // contexto se usan solo para decidir crear vs reusar.
+    // FormData del QuestionForm: ya trae `sectionId` = targetSectionId
+    // actual desde el <input type="hidden">. La pregunta se guarda en
+    // esa sección — la del contexto al que el docente la estaba
+    // escribiendo semánticamente —, NO en la sección recién creada.
     const formData = new FormData(questionForm);
     const sectionFd = new FormData(sectionForm);
     const title = String(sectionFd.get("title") ?? "").trim();
@@ -524,27 +538,41 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     submittingRef.current = true;
     lastSubmitTsRef.current = Date.now();
     try {
-      // SEMÁNTICA CONFIRMADA (ago 2026): "Nuevo contexto" SIEMPRE crea
-      // una sección nueva con id fresco. Esto es LO CONTRARIO de
-      // "Agregar enunciado", que reusa el contexto precargado (incluye
-      // el dedupe por título del commit e0123b3). El docente distingue
-      // los dos botones explícitamente: "nuevo" = no quiero reusar nada.
+      // PASO 1: persistir la pregunta ACTUAL en la sección ACTUAL
+      // (targetSectionId). El formData del QuestionForm ya trae ese
+      // sectionId desde el <input type="hidden">, así que NO lo
+      // sobreescribimos. Esto replica la semántica de "Agregar
+      // enunciado" pero invocada desde el botón "Nuevo contexto" — el
+      // docente preserva el trabajo que ya tenía escrito.
+      const qRes = await addQuestionAction({}, formData);
+      if (qRes.error) {
+        setFormError(qRes.error);
+        setActionStatus("error");
+        return;
+      }
+
+      // PASO 2: crear la nueva sección (o renombrar la vacía inicial)
+      // con el título/contenido del bloque "Contexto" arriba. Esta
+      // sección es la que recibirá la PRÓXIMA pregunta, no la que
+      // acabamos de guardar.
       //
       // Única excepción: si la evaluación tiene UNA SOLA sección vacía
-      // (caso típico del auto-crear inicial en StrictMode, donde solo
-      // quedó una sección placeholder sin título/contenido), la
-      // renombramos en vez de crear una segunda. Esto evita el bug
-      // clásico de "dos secciones iniciales vacías" sin contradecir la
-      // semántica de "nuevo contexto" (el docente no pidió una
-      // placeholder, pidió "su" primer contexto).
+      // (caso típico del auto-crear inicial en StrictMode), la
+      // renombramos en vez de crear una segunda — para evitar el bug
+      // clásico de "dos secciones iniciales vacías". En ese caso la
+      // sección actual (que ya tiene la pregunta recién guardada) es
+      // la que recibe el título/contenido, y `targetSectionId` no se
+      // mueve (la siguiente pregunta iría a la misma sección, lo cual
+      // es coherente: el docente aún no tiene dos contextos distintos
+      // separados).
       let nextSectionId: string;
-      if (
-        data.sections.length === 1 &&
-        data.sections[0] &&
-        !data.sections[0].title &&
-        !data.sections[0].content
-      ) {
-        const onlySection = data.sections[0];
+      const onlySection = data.sections.length === 1 ? data.sections[0] : null;
+      const isEmpty =
+        onlySection !== null &&
+        onlySection !== undefined &&
+        !onlySection.title &&
+        !onlySection.content;
+      if (isEmpty && onlySection) {
         const fd = new FormData();
         fd.append("evaluationId", data.evaluationId);
         fd.append("sectionId", onlySection.id);
@@ -580,45 +608,35 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         nextSectionId = res.sectionId;
       }
 
-      // Apuntar el formData de la pregunta a la sección recién creada.
-      formData.set("sectionId", nextSectionId);
-      const qRes = await addQuestionAction({}, formData);
-      if (qRes.error) {
-        setFormError(qRes.error);
-        setActionStatus("error");
-        return;
-      }
-
-      // Éxito: limpiamos TODOS los campos (CONTEXTO + ENUNCIADO + OPCIONES)
-      // para que la próxima iteración arranque con un contexto fresco. El
-      // docente decidió explícitamente "Nuevo contexto" (no "Agregar
-      // enunciado"), así que la intención clara es empezar uno nuevo — no
-      // queremos que el siguiente ítem quede atado al draft anterior.
+      // PASO 3: apuntar `targetSectionId` a la nueva sección para que
+      // la próxima pregunta del docente aterrice ahí. Limpiamos los
+      // drafts de contexto/enunciado/opciones para que la siguiente
+      // iteración arranque con un contexto fresco.
       //
-      // Implementación:
+      // Implementación del reset:
       //  - draftSectionTitle/Content: se limpian del state React.
-      //  - Input/RichTextEditor: como usan `defaultValue` (no son
-      //    controlados), sus `defaultValue` solo se aplican al montar.
-      //    Por eso bumpeamos newSectionRenderKey: cambia la `key` y
-      //    fuerza el remount → los `defaultValue=""` y `defaultValue={null}`
-      //    vuelven a aplicarse, dejando el bloque visualmente vacío.
+      //  - Input/RichTextEditor del bloque "Contexto": como usan
+      //    `defaultValue` (no son controlados), sus `defaultValue` solo
+      //    se aplican al montar. Por eso bumpeamos newSectionRenderKey:
+      //    cambia la `key` y fuerza el remount → los `defaultValue=""`
+      //    y `defaultValue={null}` vuelven a aplicarse, dejando el
+      //    bloque visualmente vacío.
       //  - questionForm.reset(): limpia el form interno del QuestionForm
       //    (enunciado + opciones). El botón principal del QuestionForm
-      //    también tiene `useEffect` propio que limpia `correct`, `optionCount`
-      //    y remonta el RichTextEditor del enunciado.
-      //
-      // —NOTA IMPORTANTE— el orquestador de "Nuevo contexto" SIEMPRE crea
-      // sección nueva (ver bloque más arriba): si el docente repite el
-      // mismo título en la próxima iteración, obtiene una segunda sección
-      // con el mismo rótulo por decisión suya, no por bug.
+      //    también tiene `useEffect` propio que limpia `correct`,
+      //    `optionCount` y remonta el RichTextEditor del enunciado
+      //    (controlado por la prop `clearCorrectAfterSave` que pasamos
+      //    desde acá: como NO estamos en editing mode, queremos dejar
+      //    la CLAVE sin seleccionar para obligar al docente a elegir
+      //    una en la próxima pregunta).
       setTargetSectionId(nextSectionId);
       setDraftSectionTitle("");
       setDraftSectionContent(null);
       setNewSectionRenderKey((k) => k + 1);
-      // Reseteamos el debounce del orquestador de "Agregar enunciado". Si el
-      // docente encadena otro submit inmediatamente (caso típico: tras
-      // "Nuevo contexto" sigue escribiendo el siguiente contexto y le da
-      // click), el debounce de 800ms no debe bloquear esa intención legítima.
+      // Reseteamos el debounce del orquestador de "Agregar enunciado".
+      // Si el docente encadena otro submit inmediatamente (caso típico:
+      // tras "Nuevo contexto" sigue escribiendo la siguiente pregunta),
+      // el debounce de 800ms no debe bloquear esa intención legítima.
       // El flag submittingRef ya se libera en el finally de abajo.
       lastSubmitTsRef.current = 0;
       setActionStatus("saved");
