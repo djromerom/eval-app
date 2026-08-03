@@ -110,6 +110,7 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
               endDate: dateFmt.format(period.endDate),
               academicYearId: period.academicYearId,
               academicYearLabel: yearLabel,
+              isCurrent: period.isCurrent,
             }}
             siblingNames={siblingNames}
           />

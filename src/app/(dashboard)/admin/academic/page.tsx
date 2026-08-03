@@ -159,6 +159,7 @@ export default async function AcademicPage() {
                 name: p.name,
                 order: p.order,
                 formattedRange: `${df.format(p.startDate)} – ${df.format(p.endDate)}`,
+                isCurrent: p.isCurrent,
               }))}
               courses={yearCourses.map((c) => {
                 const linked = linkedSubjectsByCourse.get(c.id) ?? new Set();

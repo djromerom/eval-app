@@ -11,6 +11,9 @@ export interface PeriodRow {
   name: string;
   order: number;
   formattedRange: string;
+  /** Si esta prueba es la "actual" de su año académico (ago 2026).
+   *  Renderiza un badge discreto al lado del nombre. */
+  isCurrent: boolean;
 }
 
 export interface CourseRow {
@@ -145,7 +148,14 @@ export function YearCard({
                         {p.order}
                       </span>
                       <div className="flex-1">
-                        <p className="text-sm font-semibold">{p.name}</p>
+                        <p className="flex items-center gap-2 text-sm font-semibold">
+                          {p.name}
+                          {p.isCurrent && (
+                            <span className="bg-primary/15 text-primary inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase">
+                              Actual
+                            </span>
+                          )}
+                        </p>
                         <p className="text-muted-foreground text-xs">{p.formattedRange}</p>
                       </div>
                       <Link

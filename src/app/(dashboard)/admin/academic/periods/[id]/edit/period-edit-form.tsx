@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { deletePeriodAction, updatePeriodAction } from "../../../actions";
+import { setCurrentPeriodAction } from "./actions";
 
 export interface PeriodEditFormProps {
   period: {
@@ -13,6 +14,9 @@ export interface PeriodEditFormProps {
     endDate: string;
     academicYearId: string;
     academicYearLabel: string;
+    /** Si la prueba ya está marcada como "actual" en su año académico
+     *  (ago 2026). El toggle del drawer parte de aquí. */
+    isCurrent: boolean;
   };
   /** Nombres de los demás periodos del mismo año — para detectar conflictos
    *  de uniqueness y mostrar el banner amarillo. */
@@ -31,6 +35,7 @@ const dateToInput = (s: string): string => {
 export function PeriodEditForm({ period, siblingNames }: PeriodEditFormProps) {
   const [updateState, updateFormAction] = useActionState(updatePeriodAction, {});
   const [deleteState, deleteFormAction] = useActionState(deletePeriodAction, {});
+  const [setCurrentState, setCurrentFormAction] = useActionState(setCurrentPeriodAction, {});
 
   const [name, setName] = useState(period.name);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -168,6 +173,47 @@ export function PeriodEditForm({ period, siblingNames }: PeriodEditFormProps) {
               className="border-input focus:ring-primary/30 w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:outline-none"
             />
           </div>
+        </div>
+
+        {/* Marcación como prueba actual (ago 2026). */}
+        <div className="bg-muted/30 rounded-lg border p-3">
+          <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+            Prueba actual
+          </p>
+          {period.isCurrent ? (
+            <>
+              <p className="mt-1 text-sm">
+                Esta prueba está marcada como <strong>actual</strong> en su año académico. Al crear
+                formulaciones, los docentes la verán preseleccionada y no podrán cambiarla.
+              </p>
+              <form action={setCurrentFormAction} className="mt-2">
+                <input type="hidden" name="periodId" value={period.id} />
+                <input type="hidden" name="isCurrent" value="false" />
+                <Button type="submit" variant="outline" size="sm">
+                  Quitar marcación
+                </Button>
+              </form>
+            </>
+          ) : (
+            <>
+              <p className="mt-1 text-sm">
+                Al marcarla como <strong>actual</strong>, esta prueba se preselecciona al crear
+                formulaciones y bloquea la elección de otras pruebas del mismo año académico.
+              </p>
+              <form action={setCurrentFormAction} className="mt-2">
+                <input type="hidden" name="periodId" value={period.id} />
+                <input type="hidden" name="isCurrent" value="true" />
+                <Button type="submit" size="sm">
+                  Marcar como actual
+                </Button>
+              </form>
+            </>
+          )}
+          {setCurrentState.error && (
+            <p className="text-destructive mt-2 text-xs" role="alert">
+              {setCurrentState.error}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">

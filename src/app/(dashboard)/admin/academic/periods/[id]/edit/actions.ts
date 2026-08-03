@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireAuthenticatedUser } from "@/lib/session";
+import { makeSetCurrentPeriod } from "@/modules/academic/infrastructure/container";
 import {
   makeCreateBookletType,
   makeDeleteBookletType,
@@ -24,7 +25,7 @@ import {
  */
 
 interface ActionResult {
-  ok: boolean;
+  ok?: boolean;
   error?: string;
   field?: string;
 }
@@ -80,6 +81,42 @@ export async function deleteBookletTypeAction(
   });
 
   if (r.ok) {
+    revalidatePath(`/admin/academic/periods/${periodId}/edit`);
+    return { ok: true };
+  }
+
+  const e = r.error;
+  if (e instanceof DomainNotFoundError) {
+    return mapError("NOT_FOUND", e.message);
+  }
+  if (e instanceof DomainForbiddenError) {
+    return mapError("FORBIDDEN", e.message);
+  }
+  return mapError("UNKNOWN", e.message);
+}
+
+/**
+ * Marca (o desmarca) una Prueba como "actual" dentro de su año académico.
+ * Firma `(prevState, formData)` para encajar con `useActionState` de
+ * React 19 (mismo patrón que `updatePeriodAction` / `deletePeriodAction`
+ * ya existentes).
+ */
+export async function setCurrentPeriodAction(
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  const periodId = (formData.get("periodId") as string | null)?.trim() ?? "";
+  const isCurrentRaw = (formData.get("isCurrent") as string | null) ?? "false";
+  const isCurrent = isCurrentRaw === "true";
+
+  if (!periodId) {
+    return mapError("VALIDATION", "Falta el identificador de la prueba.");
+  }
+
+  const r = await makeSetCurrentPeriod().execute({ actor, periodId, isCurrent });
+  if (r.ok) {
+    revalidatePath("/admin/academic");
     revalidatePath(`/admin/academic/periods/${periodId}/edit`);
     return { ok: true };
   }
