@@ -91,6 +91,10 @@ export interface EvaluationListItem {
   courseId: string;
   courseName: string;
   subjectName: string;
+  /** courseSubject al que pertenece. Ago 2026: el form de creación lo
+   *  usa para detectar duplicados (mismo courseSubjectId + periodId) y
+   *  redirigir al docente a la formulación existente en lugar de fallar. */
+  courseSubjectId: string;
   /** Periodo académico (nullable: la formulación se puede crear sin
    *  periodo, ej. evaluación diagnóstica de inicio de año). */
   periodId: string | null;

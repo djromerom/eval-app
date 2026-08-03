@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 
@@ -20,6 +21,11 @@ interface PeriodRow {
   isCurrent: boolean;
 }
 
+interface ExistingEntry {
+  id: string;
+  title: string;
+}
+
 type Action = (state: AdminFormState, formData: FormData) => Promise<AdminFormState>;
 
 /**
@@ -38,10 +44,12 @@ type Action = (state: AdminFormState, formData: FormData) => Promise<AdminFormSt
  * EntityForm) porque necesitamos manejar el estado de los dos selects
  * dependientes entre sí.
  *
- * Desde ago 2026 también maneja la preselección/bloqueo del select de
- * Prueba cuando hay una Prueba marcada como "actual" en el año académico
- * del courseSubject elegido: si existe, se selecciona automáticamente y
- * el select queda disabled (el docente no puede cambiarla).
+ * Desde ago 2026 también maneja:
+ * - Preselección/bloqueo del select de Prueba cuando hay una Prueba marcada
+ *   como "actual" en el año académico del courseSubject elegido.
+ * - Detección client-side de duplicados (mismo courseSubjectId + periodId)
+ *   para redirigir al docente a la formulación existente en lugar de fallar
+ *   con el error 409 "Ya existe una formulación…".
  */
 export function CreateEvaluationForm({
   action,
@@ -51,6 +59,7 @@ export function CreateEvaluationForm({
   bookletTypes,
   csYearMap,
   periods,
+  existingMap,
 }: {
   action: Action;
   fields: Field[];
@@ -61,6 +70,12 @@ export function CreateEvaluationForm({
   csYearMap: Record<string, string>;
   /** Periodos con `isCurrent` y `academicYearId`. */
   periods: PeriodRow[];
+  /** Mapa (courseSubjectId|periodId) → { id, title } de formulaciones ya
+   *  existentes para el docente. Si la combinación seleccionada tiene match,
+   *  se renderiza un link directo a esa formulación en lugar del botón
+   *  "Formular" (ago 2026). Clave compuesta: `courseSubjectId|periodId` con
+   *  `""` como sentinel de "sin periodo". */
+  existingMap: Record<string, ExistingEntry>;
 }) {
   const [state, formAction] = useActionState<AdminFormState, FormData>(action, {});
   const formRef = useRef<HTMLFormElement>(null);
@@ -92,6 +107,18 @@ export function CreateEvaluationForm({
     if (!ay) return false;
     return periods.some((p) => p.academicYearId === ay && p.isCurrent);
   }, [courseSubjectId, csYearMap, periods]);
+
+  // Detección client-side de duplicados (ago 2026). Cuando el docente
+  // selecciona una combinación (courseSubjectId, periodId) para la que ya
+  // existe una formulación, en lugar de mostrar el botón "Formular"
+  // enseñamos un link directo a la existente para que el docente entre
+  // directamente. La clave compuesta usa "" como sentinel de "sin periodo"
+  // (mismo shape que en el repo: `periodId ?? null`).
+  const existing = useMemo<ExistingEntry | null>(() => {
+    if (!courseSubjectId) return null;
+    const key = `${courseSubjectId}|${periodId || ""}`;
+    return existingMap[key] ?? null;
+  }, [courseSubjectId, periodId, existingMap]);
 
   // Cuando cambia la asignatura, preseleccionamos la Prueba actual.
   const handleCourseSubjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -166,11 +193,7 @@ export function CreateEvaluationForm({
             </option>
           ))}
         </select>
-        {periodLocked && (
-          <p className="text-muted-foreground text-xs">
-            Prueba fijada por la marcación de prueba actual.
-          </p>
-        )}
+        {periodLocked}
       </FieldBlock>
 
       <FieldBlock label="Tipo de cuadernillo">
@@ -196,7 +219,24 @@ export function CreateEvaluationForm({
         )}
       </FieldBlock>
 
-      <SubmitButton label={submitLabel} />
+      {existing ? (
+        // Combinación duplicada → link directo a la formulación existente en
+        // lugar del submit. UX: ahorra el ciclo de submit + error 409 que
+        // terminaría pidiendo ir a la misma URL de todos modos. El `?from=list`
+        // le indica al editor unificado que cierre la tarjeta al guardar.
+        <Link
+          href={`/teacher/evaluations/${existing.id}/unified?from=list`}
+          className="border-input bg-background hover:bg-muted text-foreground inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium shadow-sm"
+          aria-label={`Abrir formulación existente "${existing.title}"`}
+        >
+          <span aria-hidden className="mr-1.5">
+            ↗
+          </span>
+          Ir a &ldquo;{existing.title}&rdquo;
+        </Link>
+      ) : (
+        <SubmitButton label={submitLabel} />
+      )}
       {state.error ? (
         <p className="text-destructive w-full text-sm" role="alert">
           {state.error}

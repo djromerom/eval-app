@@ -53,6 +53,23 @@ export default async function EvaluationsPage() {
   }));
   const periodOptions = periods.map((p) => ({ value: p.id, label: p.name }));
 
+  // Mapa de duplicados (courseSubjectId|periodId → evaluación existente) —
+  // se consume en el wrapper client para que el form de creación, en vez de
+  // fallar con "Ya existe una formulación…", muestre un link directo a la
+  // formulación que ya está en el sistema. La clave compuesta usa el string
+  // vacío como sentinel de "sin periodo" para mantener 1:1 con la regla del
+  // repo (`periodId === null` ⇒ formulaciones sin periodo).
+  const existingMap: Record<string, { id: string; title: string }> = {};
+  for (const e of evaluations) {
+    const key = `${e.courseSubjectId}|${e.periodId ?? ""}`;
+    // Si hay múltiples evaluaciones con la misma combinación (no debería
+    // gracias al constraint del use case, pero defensivo), gana la más
+    // reciente porque la query ya viene ordenada por updatedAt desc.
+    if (!existingMap[key]) {
+      existingMap[key] = { id: e.id, title: e.title };
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -105,6 +122,10 @@ export default async function EvaluationsPage() {
             academicYearId: p.academicYearId,
             isCurrent: p.isCurrent,
           }))}
+          /** Mapa (courseSubjectId|periodId) → { id, title } para detectar
+           *  duplicados client-side y redirigir al docente a la formulación
+           *  existente en lugar de fallar con un error 409 (ago 2026). */
+          existingMap={existingMap}
         />
       </section>
 
