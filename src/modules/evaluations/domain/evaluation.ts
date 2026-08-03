@@ -102,6 +102,11 @@ export interface EvaluationListItem {
   /** Tipo de cuadernillo (nullable). */
   bookletTypeId: string | null;
   bookletTypeName: string | null;
+  /** Año académico al que pertenece la formulación. Ago 2026: el listado
+   *  'Mis formulaciones' lo muestra como columna propia para que el docente
+   *  distinga formulaciones del año actual vs. años anteriores sin tener que
+   *  entrar a cada una. */
+  academicYearYear: number;
   updatedAt: Date;
 }
 

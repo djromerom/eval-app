@@ -134,7 +134,9 @@ export default async function EvaluationsPage() {
           <thead className="text-foreground border-b-2 border-slate-300 bg-slate-200 text-left font-bold dark:border-slate-600 dark:bg-slate-700 dark:text-white">
             <tr>
               <th className="px-4 py-3 font-medium">Asignatura</th>
+              <th className="px-4 py-3 font-medium">Año</th>
               <th className="px-4 py-3 font-medium">Prueba</th>
+              <th className="px-4 py-3 font-medium">Tipo de cuadernillo</th>
               <th className="px-4 py-3 font-medium">Estado</th>
 
               <th className="px-4 py-3 font-medium">Ítems.</th>
@@ -144,7 +146,7 @@ export default async function EvaluationsPage() {
           <tbody>
             {evaluations.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-muted-foreground px-4 py-8 text-center">
+                <td colSpan={7} className="text-muted-foreground px-4 py-8 text-center">
                   Aún no hay formulaciones.
                 </td>
               </tr>
@@ -154,16 +156,23 @@ export default async function EvaluationsPage() {
                   key={e.id}
                   className="hover:bg-muted/30 even:bg-muted/30 border-b last:border-0 odd:bg-white"
                 >
+                  {/* Asignatura + grado concatenados (ago 2026): el docente
+                      pidió ver '<subjectName> <courseName>' (courseName es el
+                      grado, p.ej. '10-1') en lugar del título propio de la
+                      formulación. El link al editor sigue siendo la fila, solo
+                      cambia lo que se muestra. */}
                   <td className="px-4 py-3 font-medium">
                     <Link
                       href={`/teacher/evaluations/${e.id}/unified?from=list`}
                       className="hover:underline"
                     >
-                      {e.title}
+                      {e.subjectName} {e.courseName}
                     </Link>
                   </td>
 
-                  <td className="text-muted-foreground px-4 py-3">{e.periodName}</td>
+                  <td className="text-muted-foreground px-4 py-3">{e.academicYearYear}</td>
+                  <td className="text-muted-foreground px-4 py-3">{e.periodName ?? "—"}</td>
+                  <td className="text-muted-foreground px-4 py-3">{e.bookletTypeName ?? "—"}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={e.status} />
                   </td>

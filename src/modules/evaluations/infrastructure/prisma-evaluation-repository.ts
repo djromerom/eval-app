@@ -220,6 +220,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         },
         period: { select: { id: true, name: true } },
         bookletType: { select: { id: true, name: true } },
+        academicYear: { select: { year: true } },
       },
     });
     return rows.map((r) => ({
@@ -237,6 +238,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
       periodName: r.period?.name ?? null,
       bookletTypeId: r.bookletTypeId,
       bookletTypeName: r.bookletType?.name ?? null,
+      academicYearYear: r.academicYear.year,
       updatedAt: r.updatedAt,
     }));
   }
