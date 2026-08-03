@@ -925,6 +925,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     formRef={questionFormRef}
                     initial={editingInitial()}
                     createLabel="Agregar enunciado"
+                    // Tras "Agregar enunciado" (y "Nuevo contexto", que
+                    // reutiliza el mismo submit vía overrideAction) el
+                    // docente debe re-elegir la CLAVE en la siguiente
+                    // pregunta — no queremos heredar la del ítem recién
+                    // guardado. Solo aplica en modo creación: en edición
+                    // el form no se resetea tras guardar.
+                    clearCorrectAfterSave={!editingQuestionId}
                     // ORQUESTACIÓN CONTEXTO + PREGUNTA EN UN SOLO CLICK.
                     // Antes el "Agregar enunciado" solo disparaba
                     // addQuestionAction → la pregunta se guardaba en la

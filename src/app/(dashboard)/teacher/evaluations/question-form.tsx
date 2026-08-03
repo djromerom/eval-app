@@ -97,6 +97,7 @@ export function QuestionForm({
   extraActions,
   overrideAction,
   formRef,
+  clearCorrectAfterSave = false,
 }: {
   evaluationId: string;
   sectionId: string;
@@ -133,6 +134,15 @@ export function QuestionForm({
    *  necesita reutilizar el submit de este). Si no viene, se usa el ref
    *  interno (que ya usaba `formRef.current?.reset()` en `onDone`). */
   formRef?: RefObject<HTMLFormElement | null>;
+  /** Tras un guardado exitoso en modo creación, en vez de auto-marcar la
+   *  primera opción visible como CLAVE (comportamiento por defecto), deja
+   *  la CLAVE sin seleccionar para forzar al docente a elegir una en la
+   *  próxima iteración (ago 2026). El editor unificado lo pasa `true` para
+   *  los flujos "Agregar enunciado" y "Nuevo contexto" — la semántica de
+   *  ambos es "ya guardé un ítem, quiero que la siguiente pregunta me
+   *  obligue a pensar la CLAVE de nuevo". En edición no aplica (el form
+   *  no se resetea tras guardar). */
+  clearCorrectAfterSave?: boolean;
 }) {
   const editing = initial !== undefined;
   // Si el padre pasó un overrideAction (p.ej. el editor unificado) lo
@@ -217,9 +227,16 @@ export function QuestionForm({
     onDone?.();
     liveFormRef.current?.reset();
     setOptionCount(defaultOptions);
-    setCorrect(ANSWER_KEYS_ORDER[0]!);
+    // Si el padre pidió `clearCorrectAfterSave`, dejamos la CLAVE sin
+    // seleccionar (correct = "") para que la próxima iteración arranque
+    // sin clave heredada. Caso típico: el editor unificado tras "Agregar
+    // enunciado" o "Nuevo contexto" — la semántica es obligar al docente
+    // a re-elegir la CLAVE en cada pregunta. Sin la prop, mantenemos el
+    // comportamiento histórico: auto-marcar la primera opción visible
+    // (respuesta más cómoda para el alta "rápida" desde Mis formulaciones).
+    setCorrect(clearCorrectAfterSave ? "" : (ANSWER_KEYS_ORDER[0] ?? ""));
     setResetKey((k) => k + 1); // remonta el editor para limpiarlo
-  }, [state.success, defaultOptions, editing, onDone]);
+  }, [state.success, defaultOptions, editing, onDone, clearCorrectAfterSave]);
 
   const visibleKeys = ANSWER_KEYS_ORDER.slice(0, optionCount);
 
