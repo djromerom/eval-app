@@ -202,11 +202,20 @@ export function RichTextEditor({
   name,
   defaultValue,
   minHeightClass = "min-h-24",
+  disabled = false,
   onChange,
 }: {
   name: string;
   defaultValue?: unknown;
   minHeightClass?: string;
+  /**
+   * Si `true`, el editor pasa a modo lectura: no responde a teclado, no
+   * permite pegar imágenes desde portapapeles, oculta Toolbar y controles
+   * de tabla. Se sigue emitiendo el `<input type="hidden">` con el JSON
+   * para que el form nativo mantenga el valor. Mapea directo a la opción
+   * `editable: !disabled` de TipTap (ago 2026).
+   */
+  disabled?: boolean;
   /**
    * Callback opcional con el JSON parseado en cada edición. Útil cuando el
    * padre necesita el documento (por ejemplo para reflejarlo en una preview
@@ -250,6 +259,10 @@ export function RichTextEditor({
   const editor = useEditor({
     extensions: editorExtensions,
     content: initialContent(defaultValue),
+    // `editable: !disabled` controla toda la interactividad del editor —
+    // teclado, pegar, arrastrar, comandos. Cuando es `false`, TipTap
+    // ignora cualquier intento de mutación del documento. (ago 2026)
+    editable: !disabled,
     immediatelyRender: false,
     editorProps: {
       attributes: {
@@ -285,20 +298,21 @@ export function RichTextEditor({
 
   return (
     <div className="border-input bg-background rounded-md border shadow-sm">
-      {editor ? (
+      {editor && !disabled ? (
         <>
           <Toolbar editor={editor} onPickImage={() => fileInputRef.current?.click()} />
           {/* Segunda fila contextual: solo aparece con el cursor en una tabla. */}
           <TableControls editor={editor} />
         </>
       ) : null}
-      <EditorContent editor={editor} />
+      <EditorContent editor={editor} className={disabled ? "cursor-default" : undefined} />
       <input
         ref={fileInputRef}
         type="file"
         accept="image/png,image/jpeg,image/webp"
         multiple
         className="hidden"
+        disabled={disabled}
         onChange={(e) => {
           void insertImages(Array.from(e.target.files ?? []));
           // Permite volver a elegir el mismo archivo si hizo falta reintentar.
