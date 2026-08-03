@@ -60,6 +60,10 @@ export async function createEvaluationAction(
 
   const courseSubjectId = str(formData, "courseSubjectId");
   const periodId = str(formData, "periodId") || undefined;
+  // ago 2026: tipo de cuadernillo opcional seleccionado por el docente.
+  // "" → undefined (la formulación queda sin tipo). El use case valida
+  // que el id pertenezca al mismo `periodId` de la formulación.
+  const bookletTypeId = str(formData, "bookletTypeId") || undefined;
 
   // Auto-generamos el título como `${Asignatura} ${Curso} - ${Año}`. Año
   // viene del año académico del periodo seleccionado; si no hay periodo,
@@ -98,6 +102,7 @@ export async function createEvaluationAction(
       courseSubjectId,
       periodId,
       bookletNumber: bookletRaw ? Number(bookletRaw) : undefined,
+      bookletTypeId,
       durationMinutes,
     },
   });

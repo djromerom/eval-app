@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
-import { EntityForm } from "@/components/admin/entity-form";
 import { StatusBadge } from "@/components/evaluations/status-badge";
 import { makeListEvaluations } from "@/modules/evaluations/infrastructure/container";
 import {
   makeListCourseSubjects,
   makeListPeriods,
 } from "@/modules/academic/infrastructure/container";
+import { makeListBookletTypesByInstitution } from "@/modules/booklet-types/infrastructure/container";
+import { CreateEvaluationForm } from "./create-evaluation-form";
 import { createEvaluationAction } from "./actions";
 
 export const metadata: Metadata = { title: "Formulaciones" };
@@ -17,14 +18,19 @@ const df = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
 
 export default async function EvaluationsPage() {
   const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
-  const [listRes, csRes, periodsRes] = await Promise.all([
+  const [listRes, csRes, periodsRes, bookletTypesRes] = await Promise.all([
     makeListEvaluations().execute({ actor }),
     makeListCourseSubjects().execute({ actor }),
     makeListPeriods().execute({ actor }),
+    // Cargamos TODO el catálogo de la institución (decenas de filas) y
+    // el cliente lo filtra por periodId. Tabla chica — no justifica un
+    // endpoint específico.
+    makeListBookletTypesByInstitution().execute({ actor }),
   ]);
   const evaluations = listRes.ok ? listRes.value : [];
   const courseSubjects = csRes.ok ? csRes.value : [];
   const periods = periodsRes.ok ? periodsRes.value : [];
+  const bookletTypes = bookletTypesRes.ok ? bookletTypesRes.value : [];
 
   const csOptions = courseSubjects.map((cs) => ({
     value: cs.id,
@@ -42,7 +48,7 @@ export default async function EvaluationsPage() {
       <section className="bg-card space-y-4 rounded-xl border p-6">
         <h2 className="font-semibold">Formular ítems</h2>
 
-        <EntityForm
+        <CreateEvaluationForm
           action={createEvaluationAction}
           submitLabel="Formular"
           disabledReason={
@@ -66,6 +72,11 @@ export default async function EvaluationsPage() {
               required: true,
             },
           ]}
+          bookletTypes={bookletTypes.map((bt) => ({
+            id: bt.id,
+            name: bt.name,
+            periodId: bt.periodId,
+          }))}
         />
       </section>
 
@@ -73,7 +84,6 @@ export default async function EvaluationsPage() {
         <table className="w-full text-sm">
           <thead className="text-foreground border-b-2 border-slate-300 bg-slate-200 text-left font-bold dark:border-slate-600 dark:bg-slate-700 dark:text-white">
             <tr>
-
               <th className="px-4 py-3 font-medium">Asignatura</th>
               <th className="px-4 py-3 font-medium">Prueba</th>
               <th className="px-4 py-3 font-medium">Estado</th>
@@ -95,7 +105,6 @@ export default async function EvaluationsPage() {
                   key={e.id}
                   className="hover:bg-muted/30 even:bg-muted/30 border-b last:border-0 odd:bg-white"
                 >
-
                   <td className="px-4 py-3 font-medium">
                     <Link
                       href={`/teacher/evaluations/${e.id}/unified?from=list`}
