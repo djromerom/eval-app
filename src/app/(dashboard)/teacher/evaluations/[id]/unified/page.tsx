@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
+import { Breadcrumb } from "@/components/breadcrumb";
 import { StatusBadge } from "@/components/evaluations/status-badge";
 import { richTextToPlain } from "@/components/editor/render";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
@@ -89,9 +90,20 @@ export default async function UnifiedEditorPage({
 
   return (
     <>
+      {/* Migas de pan: Mis formulaciones / Formular ítem. Reusa el
+          componente <Breadcrumb> compartido (src/components/breadcrumb.tsx).
+          El link a "Mis formulaciones" no lleva ?from=list porque el destino
+          de la migas es el LISTADO, no el editor; el listado es el que
+          pone ?from=list en los enlaces HACIA el editor. */}
+      <Breadcrumb
+        items={[
+          { label: "Mis formulaciones", href: "/teacher/evaluations" },
+          { label: "Formular ítem" },
+        ]}
+      />
       <PageHeader
         title={`${evaluation.title} — ${evaluation.periodName ?? "Sin periodo"}`}
-       
+
       />
 
       <div className="mb-4 flex items-center gap-3">
