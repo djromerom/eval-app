@@ -7,6 +7,7 @@ import {
   CreatePeriod,
   DeletePeriod,
   GetPeriod,
+  SetCurrentPeriod,
   UpdatePeriod,
 } from "@/modules/academic/application/periods";
 import { CreateSubject } from "@/modules/academic/application/subjects";
@@ -268,7 +269,12 @@ class InMemoryPeriods implements PeriodRepository {
       err.code = "P2002";
       throw err;
     }
-    const p: Period = { id: `p-${this.items.length + 1}`, institutionId, ...data };
+    const p: Period = {
+      id: `p-${this.items.length + 1}`,
+      institutionId,
+      ...data,
+      isCurrent: false,
+    };
     this.items.push(p);
     return p;
   }
@@ -308,6 +314,30 @@ class InMemoryPeriods implements PeriodRepository {
       throw err;
     }
     this.items.splice(idx, 1);
+  }
+  async setCurrent(
+    institutionId: string,
+    academicYearId: string,
+    periodId: string,
+    isCurrent: boolean,
+  ) {
+    if (isCurrent) {
+      // Flip atómico (mismo algoritmo que PrismaPeriodRepository).
+      for (const p of this.items) {
+        if (
+          p.institutionId === institutionId &&
+          p.academicYearId === academicYearId &&
+          p.id !== periodId
+        ) {
+          p.isCurrent = false;
+        }
+      }
+      const target = this.items.find((p) => p.institutionId === institutionId && p.id === periodId);
+      if (target) target.isCurrent = true;
+      return;
+    }
+    const target = this.items.find((p) => p.institutionId === institutionId && p.id === periodId);
+    if (target) target.isCurrent = false;
   }
 }
 
@@ -728,6 +758,162 @@ describe("DeleteCourseSubject", () => {
 
   it("rechaza a un no-ECU_MASTER", async () => {
     const r = await uc.execute({ actor: teacher, courseSubjectId: "cualquiera" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("FORBIDDEN");
+  });
+});
+
+describe("SetCurrentPeriod", () => {
+  let years: InMemoryYears;
+  let periods: InMemoryPeriods;
+  let uc: SetCurrentPeriod;
+  beforeEach(() => {
+    years = new InMemoryYears();
+    periods = new InMemoryPeriods();
+    uc = new SetCurrentPeriod(periods);
+  });
+
+  /**
+   * Siembra: año académico + 3 periodos (I, II, III) del mismo año.
+   * Devuelve sus IDs.
+   */
+  const seedYearAnd3Periods = async () => {
+    const y = await new CreateAcademicYear(years).execute({
+      actor: admin,
+      data: {
+        year: 2026,
+        startDate: new Date("2026-01-15"),
+        endDate: new Date("2026-11-30"),
+      },
+    });
+    if (!y.ok) throw new Error("seed año falló");
+    const make = async (name: string, order: number): Promise<string> => {
+      const p = await new CreatePeriod(periods, years).execute({
+        actor: admin,
+        data: {
+          academicYearId: y.value.id,
+          name,
+          order,
+          startDate: new Date("2026-01-15"),
+          endDate: new Date("2026-11-30"),
+        },
+      });
+      if (!p.ok) throw new Error("seed periodo falló");
+      return p.value.id;
+    };
+    return {
+      yearId: y.value.id,
+      p1: await make("I Periodo", 1),
+      p2: await make("II Periodo", 2),
+      p3: await make("III Periodo", 3),
+    };
+  };
+
+  it("marca una Prueba como actual", async () => {
+    const { p2 } = await seedYearAnd3Periods();
+    const r = await uc.execute({ actor: admin, periodId: p2, isCurrent: true });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.isCurrent).toBe(true);
+    const stored = await periods.findById("i1", p2);
+    expect(stored?.isCurrent).toBe(true);
+  });
+
+  it("desmarca las demás pruebas del mismo año académico", async () => {
+    const { p1, p2, p3 } = await seedYearAnd3Periods();
+    await uc.execute({ actor: admin, periodId: p2, isCurrent: true });
+    expect((await periods.findById("i1", p1))?.isCurrent).toBe(false);
+    expect((await periods.findById("i1", p2))?.isCurrent).toBe(true);
+    expect((await periods.findById("i1", p3))?.isCurrent).toBe(false);
+  });
+
+  it("re-marca otra Prueba del mismo año: solo una queda como actual", async () => {
+    const { p1, p2, p3 } = await seedYearAnd3Periods();
+    await uc.execute({ actor: admin, periodId: p1, isCurrent: true });
+    await uc.execute({ actor: admin, periodId: p3, isCurrent: true });
+    expect((await periods.findById("i1", p1))?.isCurrent).toBe(false);
+    expect((await periods.findById("i1", p2))?.isCurrent).toBe(false);
+    expect((await periods.findById("i1", p3))?.isCurrent).toBe(true);
+  });
+
+  it("solo afecta el año académico indicado (aisla entre años)", async () => {
+    // Sembramos dos años con sus respectivas pruebas y las marcamos.
+    const y1 = await new CreateAcademicYear(years).execute({
+      actor: admin,
+      data: {
+        year: 2026,
+        startDate: new Date("2026-01-15"),
+        endDate: new Date("2026-11-30"),
+      },
+    });
+    if (!y1.ok) throw new Error("seed y1 falló");
+    const y2 = await new CreateAcademicYear(years).execute({
+      actor: admin,
+      data: {
+        year: 2027,
+        startDate: new Date("2027-01-15"),
+        endDate: new Date("2027-11-30"),
+      },
+    });
+    if (!y2.ok) throw new Error("seed y2 falló");
+    const p1 = await new CreatePeriod(periods, years).execute({
+      actor: admin,
+      data: {
+        academicYearId: y1.value.id,
+        name: "I Periodo",
+        order: 1,
+        startDate: new Date("2026-01-15"),
+        endDate: new Date("2026-11-30"),
+      },
+    });
+    if (!p1.ok) throw new Error("seed p1 falló");
+    const p2 = await new CreatePeriod(periods, years).execute({
+      actor: admin,
+      data: {
+        academicYearId: y2.value.id,
+        name: "I Periodo",
+        order: 1,
+        startDate: new Date("2027-01-15"),
+        endDate: new Date("2027-11-30"),
+      },
+    });
+    if (!p2.ok) throw new Error("seed p2 falló");
+
+    await uc.execute({ actor: admin, periodId: p1.value.id, isCurrent: true });
+    await uc.execute({ actor: admin, periodId: p2.value.id, isCurrent: true });
+
+    expect((await periods.findById("i1", p1.value.id))?.isCurrent).toBe(true);
+    expect((await periods.findById("i1", p2.value.id))?.isCurrent).toBe(true);
+  });
+
+  it("desmarcar (isCurrent=false) no toca las demás", async () => {
+    const { p1, p2, p3 } = await seedYearAnd3Periods();
+    await uc.execute({ actor: admin, periodId: p1, isCurrent: true });
+    await uc.execute({ actor: admin, periodId: p2, isCurrent: true });
+    // p2 ahora es la actual (p1 fue desmarcada en el flip).
+    const r = await uc.execute({ actor: admin, periodId: p2, isCurrent: false });
+    expect(r.ok).toBe(true);
+    expect((await periods.findById("i1", p1))?.isCurrent).toBe(false);
+    expect((await periods.findById("i1", p2))?.isCurrent).toBe(false);
+    expect((await periods.findById("i1", p3))?.isCurrent).toBe(false);
+  });
+
+  it("no-op si ya está en el estado deseado", async () => {
+    const { p2 } = await seedYearAnd3Periods();
+    await uc.execute({ actor: admin, periodId: p2, isCurrent: true });
+    const r = await uc.execute({ actor: admin, periodId: p2, isCurrent: true });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.isCurrent).toBe(true);
+  });
+
+  it("rechaza si el periodo no existe", async () => {
+    const r = await uc.execute({ actor: admin, periodId: "fantasma", isCurrent: true });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("NOT_FOUND");
+  });
+
+  it("rechaza a un no-ECU_MASTER", async () => {
+    const { p2 } = await seedYearAnd3Periods();
+    const r = await uc.execute({ actor: teacher, periodId: p2, isCurrent: true });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe("FORBIDDEN");
   });

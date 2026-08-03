@@ -151,7 +151,12 @@ class InMemoryPeriods implements PeriodRepository {
     return this.items.find((p) => p.institutionId === institutionId && p.id === id) ?? null;
   }
   async create(institutionId: string, data: CreatePeriodData) {
-    const p: Period = { id: `p-${this.items.length + 1}`, institutionId, ...data };
+    const p: Period = {
+      id: `p-${this.items.length + 1}`,
+      institutionId,
+      ...data,
+      isCurrent: false,
+    };
     this.items.push(p);
     return p;
   }
@@ -160,6 +165,14 @@ class InMemoryPeriods implements PeriodRepository {
   }
   async delete() {
     /* noop */
+  }
+  async setCurrent(
+    _institutionId: string,
+    _academicYearId: string,
+    _periodId: string,
+    _isCurrent: boolean,
+  ) {
+    /* noop — los tests de booklet-types no ejercitan el flip de isCurrent */
   }
 }
 
@@ -184,6 +197,7 @@ describe("CreateBookletType", () => {
       order: 1,
       startDate: new Date(),
       endDate: new Date(),
+      isCurrent: false,
     });
     uc = new CreateBookletType(bookletTypes, periods);
   });

@@ -234,3 +234,49 @@ export class DeletePeriod implements UseCase<DeletePeriodInput, void> {
     return ok(undefined);
   }
 }
+
+// ===== SetCurrent (Prueba actual por año académico — ago 2026) =====
+
+export interface SetCurrentPeriodInput {
+  actor: AuthenticatedUser;
+  periodId: string;
+  isCurrent: boolean;
+}
+
+/**
+ * Marca (o desmarca) una Prueba como "actual" dentro de su año académico.
+ * Solo `ECU_MASTER`.
+ *
+ * Invariante: **una sola Prueba por año académico** puede tener
+ * `isCurrent=true`. El use case se apoya en `PeriodRepository.setCurrent`,
+ * que ejecuta el flip en una transacción Prisma (UPDATE otras = false,
+ * UPDATE esta = true) para que dos requests concurrentes no terminen
+ * dejando dos pruebas marcadas.
+ *
+ * Si `isCurrent=false`, solo se desmarca la indicada — no tocamos las
+ * demás (puede quedar otra Prueba marcada en el mismo año, o ninguna).
+ *
+ * La UI consume esto desde el drawer de edición de Periodo y desde el form
+ * de creación de formulación (para preseleccionar y bloquear el select).
+ */
+export class SetCurrentPeriod implements UseCase<SetCurrentPeriodInput, Period> {
+  constructor(private readonly periods: PeriodRepository) {}
+
+  async execute({ actor, periodId, isCurrent }: SetCurrentPeriodInput): Promise<Result<Period>> {
+    const authorized = requireRole(actor, "ECU_MASTER");
+    if (!authorized.ok) return authorized;
+
+    const current = await this.periods.findById(actor.institutionId, periodId);
+    if (!current) return fail(new NotFoundError("Periodo", periodId));
+
+    // No-op si ya está en el estado deseado: ahorra la transacción y evita
+    // reordenar accidentalmente si la marca ya coincide.
+    if (current.isCurrent === isCurrent) {
+      return ok(current);
+    }
+
+    await this.periods.setCurrent(actor.institutionId, current.academicYearId, periodId, isCurrent);
+
+    return ok({ ...current, isCurrent });
+  }
+}

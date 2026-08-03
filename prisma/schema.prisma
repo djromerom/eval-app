@@ -248,6 +248,12 @@ model Period {
   startDate      DateTime
   endDate        DateTime
   order          Int // 1, 2, 3, 4
+  /** Marca la Prueba "en curso" dentro de su año académico (ago 2026).
+   *  Una sola Prueba por año académico puede tener `isCurrent=true`.
+   *  Se enforce desde el use case (transacción); el constraint único en
+   *  la BD se delega a la capa de aplicación porque Prisma no soporta
+   *  partial unique indexes con condiciones arbitrarias sin SQL crudo. */
+  isCurrent      Boolean      @default(false)
   createdAt      DateTime     @default(now())
 
   evaluations  Evaluation[]

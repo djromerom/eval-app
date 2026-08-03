@@ -11,6 +11,7 @@ import {
   DeletePeriod,
   GetPeriod,
   ListPeriods,
+  SetCurrentPeriod,
   UpdatePeriod,
 } from "../application/periods";
 import { CreateSubject, ListSubjects } from "../application/subjects";
@@ -51,6 +52,7 @@ export const makeListPeriods = () => new ListPeriods(periods);
 export const makeGetPeriod = () => new GetPeriod(periods);
 export const makeUpdatePeriod = () => new UpdatePeriod(periods, years);
 export const makeDeletePeriod = () => new DeletePeriod(periods);
+export const makeSetCurrentPeriod = () => new SetCurrentPeriod(periods);
 
 export const makeCreateCourseSubject = () =>
   new CreateCourseSubject(courseSubjects, courses, subjects);
