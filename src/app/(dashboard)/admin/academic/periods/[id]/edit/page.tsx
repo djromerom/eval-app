@@ -88,8 +88,13 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
                 {yearLabel}
               </span>
               Prueba · Año {yearLabel}
+              {period.isCurrent && (
+                <span className="bg-primary/15 text-primary inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase">
+                  Actual
+                </span>
+              )}
             </p>
-            <h1 className="font-display text-xl font-bold">Editar prueba</h1>
+            <h1 className="font-display text-xl font-bold">{period.name}</h1>
           </div>
           <Link
             href="/admin/academic"

@@ -176,9 +176,27 @@ export function PeriodEditForm({ period, siblingNames }: PeriodEditFormProps) {
         </div>
 
         {/* Marcación como prueba actual (ago 2026). */}
-        <div className="bg-muted/30 rounded-lg border p-3">
-          <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-            Prueba actual
+        <div
+          className={
+            period.isCurrent
+              ? "border-primary/30 bg-primary/5 rounded-lg border-2 p-3"
+              : "bg-muted/30 rounded-lg border p-3"
+          }
+        >
+          <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
+            {period.isCurrent ? (
+              <>
+                <span
+                  aria-hidden
+                  className="bg-primary text-primary-foreground inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold"
+                >
+                  ✓
+                </span>
+                Prueba actual
+              </>
+            ) : (
+              "Prueba actual"
+            )}
           </p>
           {period.isCurrent ? (
             <>
