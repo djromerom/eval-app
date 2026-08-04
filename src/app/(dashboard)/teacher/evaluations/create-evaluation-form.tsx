@@ -220,7 +220,7 @@ export function CreateEvaluationForm({
           disabled={periodLocked}
           aria-readonly={periodLocked ? true : undefined}
         >
-          <option value="">—</option>
+          <option value="">Seleccione</option>
           {periodField.options?.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
@@ -239,7 +239,7 @@ export function CreateEvaluationForm({
           value={courseSubjectId}
           onChange={handleCourseSubjectChange}
         >
-          <option value="">—</option>
+          <option value="">Seleccione</option>
           {filteredCsOptions.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
@@ -257,7 +257,7 @@ export function CreateEvaluationForm({
           onChange={(e) => setBookletTypeId(e.target.value)}
           disabled={!periodId || filteredTypes.length === 0}
         >
-          <option value="">—</option>
+          <option value="">Seleccione</option>
           {filteredTypes.map((bt) => (
             <option key={bt.id} value={bt.id}>
               {bt.name}
