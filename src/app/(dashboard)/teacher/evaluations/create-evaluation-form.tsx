@@ -214,7 +214,7 @@ export function CreateEvaluationForm({
           id={periodField.name}
           name={periodLocked ? undefined : periodField.name}
           required={periodField.required && !periodLocked}
-          className={selectClass}
+          className={`${selectClass} mb-0`}
           value={periodId}
           onChange={handlePeriodChange}
           disabled={periodLocked}

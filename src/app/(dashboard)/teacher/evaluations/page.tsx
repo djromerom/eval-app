@@ -94,7 +94,7 @@ export default async function EvaluationsPage() {
               label: "Prueba",
               type: "select",
               options: periodOptions,
-              required: true,
+             
             },
             {
               name: "courseSubjectId",
