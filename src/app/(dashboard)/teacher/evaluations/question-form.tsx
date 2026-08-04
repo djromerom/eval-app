@@ -381,10 +381,10 @@ export function QuestionForm({
                 className="bg-popover text-popover-foreground absolute top-full left-0 z-20 mt-2 w-72 rounded-md border p-3 text-xs leading-relaxed shadow-md"
               >
                 <p>
-                  Cada pregunta debe tener entre {MIN_OPTIONS} y {maxOptions} opciones de respuesta.
-                  Marca con el círculo la opción <strong>correcta</strong>: se imprime en la columna{" "}
-                  <em>CLAVE</em> de la tabla resumen y alimenta la calificación automática. La
-                  institución puede subir o bajar el tope máximo en <em>EVAL_MAX_OPTIONS</em>.
+                  Defina aquí las posibilidades que se le ofrece al evaluado para resolver el reto planteado en el enunciado. 
+                  Incluyen tanto la opción que resuelve plenamente la tarea planteada bajo los criterios teóricos prefijados como las incorrectas (distractores) pero <strong>plausibles</strong>. 
+                  No se construyen al azar; en la metodología ICFES, los distractores representan sesgos de razonamiento, concepciones erróneas comunes o fallas frecuentes en la ejecución del procedimiento. 
+                  Es obligatorio indicar la respuesta correcta o clave.
                 </p>
               </div>
             ) : null}

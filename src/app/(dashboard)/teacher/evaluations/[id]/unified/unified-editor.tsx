@@ -326,6 +326,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     setReviewModal(null);
     setShowEditingBanner(true);
     setFormError(null);
+    // Si la card de creación/edición está cerrada (caso típico: el docente
+    // llegó desde "Mis formulaciones" con initialHideForm=true, o había
+    // pulsado "Cerrar" tras crear un ítem), el modal "Editar" debe abrirla
+    // para que el QuestionForm con el initial precargado sea visible. Sin
+    // esto, cerrar el modal deja al docente sin saber dónde quedó el ítem
+    // en edición. (ago 2026)
+    setShowForm(true);
     // Los drafts se sincronizaron con la sección persistida → no hay edición
     // pendiente. Los botones "Actualizar/Cancelar" deben quedar ocultos.
     setContextoDirty(false);
@@ -1109,10 +1116,9 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       className="bg-popover text-popover-foreground absolute top-full left-0 z-20 mt-2 w-72 rounded-md border p-3 text-xs leading-relaxed shadow-md"
                     >
                       <p>
-                        Un contexto agrupa varias preguntas bajo un mismo enunciado o tema (p.ej.
-                        una lectura + sus preguntas). Es <strong>opcional</strong>: si lo dejas
-                        vacío, la pregunta se guarda en una sección sin contexto y aparece como{" "}
-                        <em>“Sin contexto”</em> en la tabla.
+                        Este campo es opcional, siempre y cuando no haya diligenciado el campo anterior de título. 
+                        Ingrese aquí un texto, gráfica, tabla, formula y/o diagrama, en caso que se requiera de esta información previa para enmarcar la evaluación del ítem. 
+                        Este componente garantiza que el ítem evalúe el saber-hacer en contexto y no la simple memorización.
                       </p>
                     </div>
                   ) : null}
@@ -1427,7 +1433,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                 <span className="text-destructive" aria-hidden="true">
                   *
                 </span>
-                {editingQuestionId ? "Editar" : "Enunciado"}
+                {"Enunciado"}
                 <span ref={enunciadoInfoRef} className="relative inline-block">
                   <button
                     type="button"
@@ -1444,10 +1450,9 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       className="bg-popover text-popover-foreground absolute top-full left-0 z-20 mt-2 w-72 rounded-md border p-3 text-xs leading-relaxed shadow-md"
                     >
                       <p>
-                        Un <strong>enunciado</strong> es la pregunta que verá el estudiante, junto
-                        con sus opciones de respuesta. Cada enunciado pertenece a un
-                        <em> contexto</em> (o a ninguno, si lo dejas vacío). Al guardar, se numera
-                        globalmente para coincidir con la hoja de respuestas.
+                        Este campo es obligatorio. 
+                        Redacte aquí la pregunta o instrucción explícita que plantea el reto cognitivo. 
+                        Debe contener toda la información indispensable para que el estudiante comprenda lo que se le solicita de forma inequívoca.
                       </p>
                     </div>
                   ) : null}
