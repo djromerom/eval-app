@@ -248,10 +248,11 @@ export function CreateEvaluationForm({
         </select>
       </FieldBlock>
 
-      <FieldBlock label="Tipo de cuadernillo">
+      <FieldBlock label="Tipo de cuadernillo" required>
         <select
           id="bookletTypeId"
           name="bookletTypeId"
+          required
           className={selectClass}
           value={bookletTypeId}
           onChange={(e) => setBookletTypeId(e.target.value)}
