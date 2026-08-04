@@ -17,12 +17,12 @@ function SubmitButton({ count }: { count: number }) {
   );
 }
 
-/** Objetivo del escaneo: evaluación individual o compendio. */
+/** Objetivo del escaneo: formulación individual o cuadernillo. */
 export type ScanTarget =
   { kind: "evaluation"; id: string; title: string } | { kind: "bundle"; id: string; title: string };
 
 interface UploadZoneProps {
-  /** Lista mixta de evaluaciones + compendios a mostrar en el selector. */
+  /** Lista mixta de formulaciones + cuadernillos a mostrar en el selector. */
   targets: ScanTarget[];
 }
 
@@ -32,7 +32,7 @@ export function UploadZone({ targets }: UploadZoneProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // `selected` = `${kind}:${id}` para que un bundle y una evaluación con
+  // `selected` = `${kind}:${id}` para que un bundle y una formulación con
   // el mismo id nunca colisionen en el <select>.
   const grouped = useMemo(() => {
     const evaluations = targets.filter(
@@ -72,7 +72,7 @@ export function UploadZone({ targets }: UploadZoneProps) {
     const form = e.currentTarget;
     const sel = readSelection(form);
     if (!sel) {
-      setMessage({ ok: false, text: "Selecciona una evaluación o un compendio." });
+      setMessage({ ok: false, text: "Selecciona una formulación o un cuadernillo." });
       return;
     }
     // Inyectamos kind + id como campos hidden antes de serializar.
@@ -113,10 +113,10 @@ export function UploadZone({ targets }: UploadZoneProps) {
           className="border-input bg-background mt-1 block w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-black focus:outline-none"
         >
           <option value="" disabled>
-            Seleccionar evaluación o compendio…
+            Seleccionar formulación o cuadernillo…
           </option>
           {grouped.evaluations.length > 0 && (
-            <optgroup label="Evaluaciones">
+            <optgroup label="Formulaciones">
               {grouped.evaluations.map((t) => (
                 <option key={`evaluation:${t.id}`} value={`evaluation:${t.id}`}>
                   {t.title}
@@ -125,7 +125,7 @@ export function UploadZone({ targets }: UploadZoneProps) {
             </optgroup>
           )}
           {grouped.bundles.length > 0 && (
-            <optgroup label="Compendios">
+            <optgroup label="Cuadernillos">
               {grouped.bundles.map((t) => (
                 <option key={`bundle:${t.id}`} value={`bundle:${t.id}`}>
                   {t.title}

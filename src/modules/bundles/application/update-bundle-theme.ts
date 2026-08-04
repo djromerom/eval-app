@@ -27,11 +27,11 @@ export class UpdateBundleTheme implements UseCase<UpdateBundleThemeInput, Bundle
     if (!authorized.ok) return authorized;
 
     const existing = await this.bundles.findById(actor.institutionId, bundleId);
-    if (!existing) return fail(new NotFoundError("Compendio", bundleId));
+    if (!existing) return fail(new NotFoundError("Cuadernillo", bundleId));
     if (isLocked(existing.status)) {
       return fail(
         new ValidationError(
-          "El compendio está sellado (READY). Desmárcate primero para cambiar el tema.",
+          "El cuadernillo está sellado (READY). Desmárcate primero para cambiar el tema.",
         ),
       );
     }

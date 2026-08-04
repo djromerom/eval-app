@@ -59,7 +59,7 @@ function buildInvitationEmail(target: InvitationTarget, inviteUrl: string): Emai
         <tr><td style="padding:32px 24px">
           <p style="margin:0 0 16px;font-size:16px;color:#18181b">Hola <strong>${target.name}</strong>,</p>
           <p style="margin:0 0 16px;font-size:14px;color:#52525b;line-height:1.6">
-            Has sido invitado a la plataforma <strong>ecognIA</strong> de
+            Le damos la bienvenida a <strong>ecognIA</strong> la plataforma tecnológica de apoyo a la Estrategia de Calidad Unificada – ECU, de la 
             <strong>${target.institutionName}</strong>.
             Haz clic en el siguiente botón para establecer tu contraseña y acceder:
           </p>
@@ -75,7 +75,7 @@ function buildInvitationEmail(target: InvitationTarget, inviteUrl: string): Emai
             Este enlace expira en 48 horas.
           </p>
         </td></tr>
-        <tr><td style="background:#f4f4f5;padding:16px 24px;text-align:center;font-size:12px;color:#a1a1aa">ecognIA — Plataforma de evaluaciones tipo ICFES</td></tr>
+        <tr><td style="background:#f4f4f5;padding:16px 24px;text-align:center;font-size:12px;color:#a1a1aa">ecognIA — Plataforma de formulaciones tipo ICFES</td></tr>
       </table>
     </td></tr>
   </table>

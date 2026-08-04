@@ -1,7 +1,7 @@
 /**
  * Formato intermedio de la importación de preguntas.
  *
- * Los tres orígenes —documento del docente, plantilla CSV y otra evaluación
+ * Los tres orígenes —documento del docente, plantilla CSV y otra formulación
  * del sistema— convierten a esta forma, y de aquí sale una única pantalla de
  * revisión y un único camino de alta. Añadir un origen nuevo es escribir un
  * parser que devuelva `ParseResult`; nada más del flujo cambia.
@@ -29,6 +29,17 @@ export interface ParsedQuestionImage {
   url: string;
 }
 
+/**
+ * Confianza de la respuesta correcta reportada por la fuente IA. Solo está
+ * presente cuando el origen sabe juzgarla (saber-extractor). En CSV y DOCX
+ * el campo no existe; el docente la marca a mano.
+ *
+ * - `alta`  → badge verde, se incluye sin forzar revisión.
+ * - `media` → badge ámbar, el docente la ve pero no se obliga a corregir.
+ * - `baja`  → badge rojo, la UI la destilda por defecto y exige corrección.
+ */
+export type AnswerConfidence = "alta" | "media" | "baja";
+
 /** Pregunta leída de una fuente externa, antes de validar y confirmar. */
 export interface ParsedQuestion {
   /**
@@ -45,10 +56,27 @@ export interface ParsedQuestion {
   /** Contexto al que pertenecía, si la fuente agrupaba preguntas. */
   contextTitle: string | null;
   contextText: string | null;
+  /**
+   * Mapa id globalizado de figura ("p04-fig1") → URL del upload
+   * institucional, SOLO para las figuras referenciadas dentro de
+   * `contextText` (placeholders del tipo `[IMAGEN p04-fig1]`). Las
+   * imágenes de la pregunta viven en `image` (campo aparte). Si el
+   * contexto no tiene figuras, queda como `{}` (no `null`), para que
+   * `Object.entries(q.contextImages)` sea seguro sin optional chaining.
+   *
+   * El parser lo hidrata desde el `figIdToUrl` global del extractor —
+   * ver `saber-extractor-parser.ts:mapAuditedQuestion`. DOCX/CSV no
+   * referencian figuras del contexto; ahí siempre es `{}`.
+   */
+  contextImages: Record<string, string>;
   /** Imagen inline adjunta (DOCX principalmente). */
   image: ParsedQuestionImage | null;
   /** Lo que el parser no pudo resolver; se pinta en la revisión. */
   warnings: string[];
+  /** Confianza de la respuesta correcta reportada por la fuente IA. */
+  answerConfidence?: AnswerConfidence;
+  /** Justificación breve de la respuesta correcta (tooltip en la UI). */
+  answerRationale?: string;
 }
 
 export interface ParseResult {
@@ -91,8 +119,11 @@ export function validateParsedQuestion(q: ParsedQuestion): string | null {
   }
 
   // El resto (claves consecutivas y únicas, correcta entre las opciones) ya lo
-  // sabe el dominio de evaluaciones.
-  return validateQuestionShape({ options: q.options, correctAnswer: q.correctAnswer });
+  // sabe el dominio de formulaciones.
+  return validateQuestionShape({
+    options: q.options.map((o) => ({ key: o.key as AnswerKey })),
+    correctAnswer: q.correctAnswer as AnswerKey,
+  });
 }
 
 /** Separa las preguntas listas para dar de alta de las que tienen problemas. */

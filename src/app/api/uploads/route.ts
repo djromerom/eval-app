@@ -6,7 +6,7 @@ import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import { MAX_UPLOAD_BYTES, UPLOAD_MIME, uploadRelativePath } from "@/modules/uploads/domain/upload";
 
 /**
- * POST /api/uploads — sube una imagen para el contenido de una evaluación
+ * POST /api/uploads — sube una imagen para el contenido de una formulación
  * (contextos y enunciados) y devuelve la URL con la que referenciarla.
  *
  * La imagen se normaliza con sharp antes de guardarla: las fotos de celular

@@ -6,7 +6,7 @@ import { requireAuthenticatedUser } from "@/lib/session";
 import { makeListBundles } from "@/modules/bundles/infrastructure/container";
 import { cn } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Compendios" };
+export const metadata: Metadata = { title: "Cuadernillos" };
 
 const dateFmt = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
 
@@ -23,13 +23,13 @@ export default async function BundlesListPage() {
   return (
     <>
       <PageHeader
-        title="Compendios"
-        description="Agrupa varias evaluaciones aprobadas en un único cuadernillo para imprimir (compendios multi-asignatura)."
+        title="Cuadernillos"
+        description="Agrupa varias formulaciones aprobadas en un único cuadernillo para imprimir (cuadernillos multi-asignatura)."
       />
 
       <div className="mb-4 flex justify-end">
         <Link href="/admin/bundles/new" className={cn(buttonVariants())}>
-          Nuevo compendio
+          Nuevo cuadernillo
         </Link>
       </div>
 
@@ -49,7 +49,7 @@ export default async function BundlesListPage() {
             {bundles.length === 0 ? (
               <tr>
                 <td colSpan={6} className="text-muted-foreground px-4 py-8 text-center">
-                  Aún no hay compendios. Crea uno para empezar.
+                  Aún no hay cuadernillos. Crea uno para empezar.
                 </td>
               </tr>
             ) : (

@@ -19,7 +19,7 @@ export interface ItemsFormState {
 // instanciar PrismaBundleRepository es trivial (no abre conexiones nuevas).
 const repo = new PrismaBundleRepository();
 
-/** Añade una evaluation al compendio (POST desde el form de la página detalle). */
+/** Añade una evaluation al cuadernillo (POST desde el form de la página detalle). */
 export async function addItemAction(
   _prev: ItemsFormState,
   formData: FormData,

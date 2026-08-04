@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
@@ -10,7 +9,6 @@ import { richTextToPlain } from "@/components/editor/render";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
 import { makeListCourseSubjects } from "@/modules/academic/infrastructure/container";
 import { makeSearchBankQuestions } from "@/modules/question-bank/infrastructure/container";
-import { DownloadPdfButton } from "./download-pdf-button";
 import { QuestionForm } from "../question-form";
 import { QuestionEditor } from "../question-editor";
 import { SectionForm } from "../section-form";
@@ -22,7 +20,7 @@ import { env } from "@/config/env";
 const controlClass =
   "h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none";
 
-export const metadata: Metadata = { title: "Evaluación" };
+export const metadata: Metadata = { title: "Formulación" };
 
 export default async function EvaluationDetailPage({
   params,
@@ -38,7 +36,7 @@ export default async function EvaluationDetailPage({
   const isOwner = evaluation.teacherId === actor.userId;
   const editable = isOwner && evaluation.status === "DRAFT";
 
-  // Resuelve la asignatura de la evaluación para importar/exportar del banco.
+  // Resuelve la asignatura de la formulación para importar/exportar del banco.
   const csRes = await makeListCourseSubjects().execute({ actor });
   const subjectId =
     (csRes.ok ? csRes.value.find((c) => c.id === evaluation.courseSubjectId) : undefined)
@@ -60,63 +58,6 @@ export default async function EvaluationDetailPage({
         <span className="text-muted-foreground text-sm">
           {evaluation.totalQuestions} pregunta(s)
         </span>
-        <Link
-          href={`/teacher/evaluations/${evaluation.id}/generate-sheets`}
-          className="text-muted-foreground ml-auto text-sm hover:underline"
-        >
-          Generar hojas →
-        </Link>
-        <Link
-          href={`/teacher/evaluations/${evaluation.id}/designer`}
-          className="text-muted-foreground text-sm hover:underline"
-        >
-          Diseñador →
-        </Link>
-        <Link
-          href={`/teacher/evaluations/${evaluation.id}/settings`}
-          className="text-muted-foreground text-sm hover:underline"
-        >
-          Configuración →
-        </Link>
-        <Link
-          href={`/teacher/evaluations/${evaluation.id}/results`}
-          className="text-muted-foreground text-sm hover:underline"
-        >
-          Resultados →
-        </Link>
-        {editable ? (
-          <Link
-            href={`/teacher/evaluations/${evaluation.id}/import`}
-            className="text-muted-foreground text-sm hover:underline"
-          >
-            Importar preguntas →
-          </Link>
-        ) : null}
-        <Link
-          href={`/print/evaluation/${evaluation.id}`}
-          target="_blank"
-          className="text-muted-foreground text-sm hover:underline"
-        >
-          Cartilla ↗
-        </Link>
-        <DownloadPdfButton evaluationId={evaluation.id} />
-        <Link
-          href={`/print/answer-sheet/${evaluation.id}`}
-          target="_blank"
-          className="text-muted-foreground text-sm hover:underline"
-        >
-          Hoja respuestas ↗
-        </Link>
-        <Link
-          href={`/print/answer-key/${evaluation.id}`}
-          target="_blank"
-          className="text-muted-foreground text-sm hover:underline"
-        >
-          Clave ↗
-        </Link>
-        <Link href="/teacher/evaluations" className="text-muted-foreground text-sm hover:underline">
-          ← Volver
-        </Link>
       </div>
 
       {editable ? (
@@ -137,7 +78,7 @@ export default async function EvaluationDetailPage({
         <p className="text-muted-foreground text-sm">
           {editable
             ? "Aún no hay contextos. Agrega uno para empezar a añadir preguntas."
-            : "Esta evaluación no tiene contenido."}
+            : "Esta formulación no tiene contenido."}
         </p>
       ) : (
         <div className="space-y-8">
@@ -213,6 +154,11 @@ export default async function EvaluationDetailPage({
                       questionNumber={q.number}
                       defaultOptions={env.EVAL_DEFAULT_OPTIONS}
                       maxOptions={env.EVAL_MAX_OPTIONS}
+                      header={{
+                        id: q.id,
+                        number: q.number,
+                        competency: q.competency,
+                      }}
                       initial={{
                         id: q.id,
                         text: q.text,

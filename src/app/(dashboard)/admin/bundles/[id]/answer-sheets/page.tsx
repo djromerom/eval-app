@@ -8,14 +8,14 @@ import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import { cn } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Hojas de respuesta del compendio" };
+export const metadata: Metadata = { title: "Hojas de respuesta del cuadernillo" };
 
 export const dynamic = "force-dynamic";
 
 /**
  * Página para que el SUPER_ADMIN (o quien tenga permiso) elija los
  * estudiantes a los que se les imprimirá la hoja de respuestas unificada
- * del compendio. Tras seleccionar + click en "Imprimir", se redirige a
+ * del cuadernillo. Tras seleccionar + click en "Imprimir", se redirige a
  * `/print/answer-sheets/bundle/[id]?students=<csv>` que es la ruta que el
  * navegador (o el worker) usa para generar el PDF.
  */
@@ -40,10 +40,10 @@ export default async function BundleAnswerSheetsPage({
     return (
       <>
         <PageHeader
-          title="Hojas de respuesta del compendio"
+          title="Hojas de respuesta del cuadernillo"
           description={
             <>
-              El compendio <strong>{bundle.name}</strong> aún está en borrador. Márcalo como{" "}
+              El cuadernillo <strong>{bundle.name}</strong> aún está en borrador. Márcalo como{" "}
               <strong>listo</strong> para poder generar hojas de respuesta.
             </>
           }
@@ -52,7 +52,7 @@ export default async function BundleAnswerSheetsPage({
           href={`/admin/bundles/${bundle.id}`}
           className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
         >
-          Volver al compendio
+          Volver al cuadernillo
         </Link>
       </>
     );
@@ -78,8 +78,8 @@ export default async function BundleAnswerSheetsPage({
         description={
           <>
             Selecciona los estudiantes a los que se les imprimirá la hoja de respuestas unificada
-            del compendio. Cada hoja incluye un QR firmado con el id del compendio (no de la
-            evaluación).
+            del cuadernillo. Cada hoja incluye un QR firmado con el id del cuadernillo (no de la
+            formulación).
           </>
         }
       />
@@ -124,7 +124,7 @@ export default async function BundleAnswerSheetsPage({
             href={`/admin/bundles/${bundle.id}`}
             className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
           >
-            ← Volver al compendio
+            ← Volver al cuadernillo
           </Link>
           <button
             type="submit"
@@ -139,7 +139,7 @@ export default async function BundleAnswerSheetsPage({
       <div className="text-muted-foreground mt-4 text-xs">
         <strong>Nota:</strong> esta previsualización abre la página <code>/print/...</code>
         en el navegador. Para generar el PDF impositionado (saddle-stitch) usa el botón
-        &quot;Descargar cuadernillo&quot; del compendio — el worker PDF se encarga.
+        &quot;Descargar cuadernillo&quot; del cuadernillo — el worker PDF se encarga.
       </div>
     </>
   );

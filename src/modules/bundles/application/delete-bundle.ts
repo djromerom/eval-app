@@ -26,7 +26,7 @@ export class DeleteBundle implements UseCase<DeleteBundleInput, void> {
     if (!authorized.ok) return authorized;
 
     const existing = await this.bundles.findById(actor.institutionId, bundleId);
-    if (!existing) return fail(new NotFoundError("Compendio", bundleId));
+    if (!existing) return fail(new NotFoundError("Cuadernillo", bundleId));
 
     await this.bundles.delete(actor.institutionId, bundleId);
     return ok(undefined);

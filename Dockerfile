@@ -80,6 +80,15 @@ RUN pnpm next build
 RUN pnpm tsc -p tsconfig.worker.json \
  && pnpm tsc-alias -p tsconfig.worker.json
 
+# Empaqueta el script Python del detector de layout en el bundle de workers.
+# `tsc` solo emite `.js` (no `.py`), así que sin este COPY el worker
+# `question-extract` registra "layout no disponible" en cada extracción.
+# El shim `src/lib/saber-extractor/layout.ts > scriptPath()` busca
+# `<packageRoot>/python/detect_layout.py`; en el contenedor `packageRoot()`
+# resuelve a `dist-workers/src/lib/`, así que la ruta final es
+# `dist-workers/src/lib/python/detect_layout.py`. Coincide con este COPY.
+COPY src/lib/python/ dist-workers/src/lib/python/
+
 # Limpia devDependencies. Puppeteer y Chromium descargado se quedan (puppeteer
 # es prodDep; el cache vive en .puppeteer-cache/ y lo copiamos al runtime).
 # --ignore-scripts: salta el `postinstall: prisma generate` (prisma es devDep
@@ -99,12 +108,15 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # Libs de Chromium para Puppeteer + utilidades mínimas (tini para señales,
 # wget para healthcheck, curl para debug, ca-certificates para TLS).
+# `poppler-utils` es dependencia del worker `question-extract` (pdfinfo +
+# pdftoppm/pdftocairo) — vive embebido en `src/lib/saber-extractor/`.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         ca-certificates \
         tini \
         wget \
         curl \
+        poppler-utils \
         libnss3 \
         libnspr4 \
         libatk1.0-0 \
@@ -115,6 +127,7 @@ RUN apt-get update \
         libxkbcommon0 \
         libxcomposite1 \
         libxdamage1 \
+        libxfixes3 \
         libxrandr2 \
         libgbm1 \
         libpango-1.0-0 \
@@ -124,6 +137,28 @@ RUN apt-get update \
         libx11-xcb1 \
         libxshmfence1 \
         libglib2.0-0 \
+ && rm -rf /var/lib/apt/lists/*
+
+# Python venv con deps para el layout detector (DocLayout-YOLO via onnxruntime)
+# que usa el worker `question-extract` cuando `saber-extractor-parser` activa
+# el modo `images: { layout: true }` (auto-on por defecto desde #0e382aa).
+# Las deps son pesadas (~100 MB: opencv + onnxruntime) pero ya pagamos el
+# costo de puppeteer+chromium en la misma capa, así que es marginal.
+#
+# Ubicación `/opt/saber-venv`: el shim `src/lib/saber-extractor/layout.ts`
+# busca el venv en `SABER_PYTHON` (env var) → store pnpm → source pnpm
+# (`file:` decoded) → legacy. Ninguno matchea dentro del container porque
+# (a) el store no trae `.venv` y (b) el path del `file:` apunta a la
+# máquina del dev. Por eso seteamos SABER_PYTHON en docker-compose.prod.yml
+# — el helper cae al `python3` del sistema que NO tiene cv2/onnxruntime.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        python3-venv \
+ && python3 -m venv /opt/saber-venv \
+ && /opt/saber-venv/bin/pip install --no-cache-dir \
+        opencv-python-headless \
+        numpy \
+        onnxruntime \
  && rm -rf /var/lib/apt/lists/*
 
 # pnpm + prisma CLI globales: el contenedor `migrate` (profile init) corre

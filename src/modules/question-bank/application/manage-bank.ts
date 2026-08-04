@@ -57,8 +57,8 @@ export interface ImportBankQuestionInput {
 }
 
 /**
- * Importa una pregunta del banco a una evaluación creando una **copia
- * independiente** (editar el banco no afecta la evaluación). §3.3
+ * Importa una pregunta del banco a una formulación creando una **copia
+ * independiente** (editar el banco no afecta la formulación). §3.3
  */
 export class ImportBankQuestion implements UseCase<ImportBankQuestionInput, Question> {
   constructor(
@@ -76,12 +76,12 @@ export class ImportBankQuestion implements UseCase<ImportBankQuestionInput, Ques
     if (!authorized.ok) return authorized;
 
     const evaluation = await this.evaluations.findById(actor.institutionId, evaluationId);
-    if (!evaluation) return fail(new NotFoundError("Evaluación", evaluationId));
+    if (!evaluation) return fail(new NotFoundError("Formulación", evaluationId));
     if (evaluation.teacherId !== actor.userId) {
-      return fail(new ValidationError("Solo el autor puede editar la evaluación."));
+      return fail(new ValidationError("Solo el autor puede editar la formulación."));
     }
     if (evaluation.status !== "DRAFT") {
-      return fail(new ValidationError("Solo se puede editar una evaluación en BORRADOR."));
+      return fail(new ValidationError("Solo se puede editar una formulación en BORRADOR."));
     }
 
     const source = await this.bank.findVisible(actor.institutionId, actor.userId, bankQuestionId);
@@ -116,7 +116,7 @@ export interface ExportQuestionToBankInput {
   difficulty?: CreateBankQuestionData["difficulty"];
 }
 
-/** Exporta una pregunta de una evaluación al banco (copia independiente). §3.3 */
+/** Exporta una pregunta de una formulación al banco (copia independiente). §3.3 */
 export class ExportQuestionToBank implements UseCase<ExportQuestionToBankInput, BankQuestion> {
   constructor(
     private readonly bank: BankQuestionRepository,
@@ -129,7 +129,7 @@ export class ExportQuestionToBank implements UseCase<ExportQuestionToBankInput, 
     if (!authorized.ok) return authorized;
 
     const detail = await this.evaluations.getDetail(actor.institutionId, evaluationId);
-    if (!detail) return fail(new NotFoundError("Evaluación", evaluationId));
+    if (!detail) return fail(new NotFoundError("Formulación", evaluationId));
 
     const question = detail.sections.flatMap((s) => s.questions).find((q) => q.id === questionId);
     if (!question) return fail(new NotFoundError("Pregunta", questionId));

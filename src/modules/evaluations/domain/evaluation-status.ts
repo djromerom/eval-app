@@ -23,6 +23,17 @@ const TRANSITIONS: StatusTransition[] = [
     allowedRoles: ["TEACHER", "COORDINATOR"],
     requiresComment: false,
   },
+  // ATAJO de "Publicar con un click" desde el editor unificado (ago 2026).
+  // El flujo canónico sigue siendo DRAFT → IN_REVIEW → APPROVED → PUBLISHED,
+  // pero para esta versión se permite saltar directamente a PUBLISHED.
+  // Mismos roles permitidos que la transición por APPROVED (COORDINATOR +
+  // TEACHER dueño — el check de "dueño" lo agrega el use case).
+  {
+    from: "DRAFT",
+    to: "PUBLISHED",
+    allowedRoles: ["TEACHER", "COORDINATOR"],
+    requiresComment: false,
+  },
   { from: "IN_REVIEW", to: "APPROVED", allowedRoles: ["COORDINATOR"], requiresComment: false },
   { from: "IN_REVIEW", to: "DRAFT", allowedRoles: ["COORDINATOR"], requiresComment: true },
   {
@@ -31,7 +42,7 @@ const TRANSITIONS: StatusTransition[] = [
     allowedRoles: ["COORDINATOR", "TEACHER"],
     requiresComment: false,
   },
-  // Editar una evaluación publicada la regresa a borrador y notifica al coordinador
+  // Editar una formulación publicada la regresa a borrador y notifica al coordinador
   { from: "PUBLISHED", to: "DRAFT", allowedRoles: ["TEACHER"], requiresComment: false },
 ];
 
@@ -52,7 +63,7 @@ export function canTransition(
   return transition.allowedRoles.some((r) => roles.includes(r));
 }
 
-/** Solo las evaluaciones publicadas se pueden imprimir. */
+/** Solo las formulaciones publicadas se pueden imprimir. */
 export function isPrintable(status: EvaluationStatus): boolean {
   return status === "PUBLISHED";
 }

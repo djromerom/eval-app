@@ -5,9 +5,11 @@ import { LoginForm } from "./login-form";
 export const metadata: Metadata = { title: "Iniciar sesión" };
 
 const FEATURES = [
-  { title: "Banco de preguntas", caption: "Reutiliza y versiona contenido" },
-  { title: "QR por estudiante", caption: "Identificación segura por hoja" },
-  { title: "Escaneo automático", caption: "Calificación OMR + IA" },
+  { title: "Banco de ítems propio", caption: "" },
+  { title: "QR por estudiante", caption: "" },
+  { title: "Calificación por escáner", caption: "" },
+  { title: "Fortalecimiento Docente", caption: "" },
+  { title: "Informes inmediatos", caption: "" },
 ] as const;
 
 export default async function LoginPage(props: {
@@ -31,13 +33,13 @@ export default async function LoginPage(props: {
             EVALUACIONES INTELIGENTES
           </p>
           <h1 className="text-primary font-display mt-4 text-5xl leading-[1.05] font-extrabold">
-            Crea. Imprime.
+            Crea, Evalúa y Fortalece con
             <br />
-            Califica con IA.
+            el poder de la IA
           </h1>
           <p className="text-muted-foreground mt-5 text-lg leading-relaxed">
-            Diseña evaluaciones tipo ICFES con la identidad de tu colegio, imprímelas listas para
-            tus estudiantes y obtén resultados al instante gracias al reconocimiento OMR + IA.
+            Diseñe pruebas con la identidad de su institución, obtenga resultados e informes
+            inmediatos y eleve las competencias de su equipo docente en una sola plataforma.
           </p>
 
           <ul className="mt-10 flex flex-wrap gap-x-8 gap-y-4">
@@ -51,7 +53,7 @@ export default async function LoginPage(props: {
         </div>
 
         <p className="text-muted-foreground text-xs">
-          © 2026 ecognIA — Plataforma para instituciones educativas 🇨🇴
+          © 2026 ecognIA — Plataforma inteligente de evaluación
         </p>
       </section>
 
@@ -64,12 +66,17 @@ export default async function LoginPage(props: {
 
           <h2 className="text-foreground font-display text-3xl font-bold">Bienvenido a ecognIA</h2>
           <p className="text-muted-foreground mt-2 text-sm">
-            Ingresa con tu cuenta institucional para continuar.
+            Para continuar ingrese con su cuenta institucional.
           </p>
 
           {success === "invitacion-aceptada" && (
             <p className="mt-6 rounded-lg bg-green-50 px-3.5 py-2.5 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
               Contraseña establecida correctamente. Ahora puedes iniciar sesión.
+            </p>
+          )}
+          {success === "password-reset" && (
+            <p className="mt-6 rounded-lg bg-green-50 px-3.5 py-2.5 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
+              Contraseña actualizada. Ahora puedes iniciar sesión.
             </p>
           )}
           {error === "credenciales" && (
@@ -81,7 +88,7 @@ export default async function LoginPage(props: {
           <LoginForm />
 
           <p className="text-muted-foreground mt-8 text-center text-xs">
-            ¿No tienes cuenta? Tu institución debe invitarte — contacta a coordinación.
+            ¿No tiene cuenta? Su institución debe invitarle. Contacte al ECU Master.
           </p>
         </div>
       </section>

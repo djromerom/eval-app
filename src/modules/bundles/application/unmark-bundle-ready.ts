@@ -25,12 +25,12 @@ export class UnmarkBundleReady implements UseCase<UnmarkBundleReadyInput, Bundle
     if (!authorized.ok) return authorized;
 
     const bundle = await this.bundles.findById(actor.institutionId, bundleId);
-    if (!bundle) return fail(new NotFoundError("Compendio", bundleId));
+    if (!bundle) return fail(new NotFoundError("Cuadernillo", bundleId));
 
     if (!canTransition(bundle.status, "DRAFT")) {
       return fail(
         new ValidationError(
-          `El compendio está en estado ${bundle.status}; solo se puede desmarcar desde READY.`,
+          `El cuadernillo está en estado ${bundle.status}; solo se puede desmarcar desde READY.`,
         ),
       );
     }

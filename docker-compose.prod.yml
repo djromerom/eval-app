@@ -270,6 +270,52 @@ services:
     networks:
       - eval-net
 
+  # ---------------------------------------------------------------------------
+  # Worker Question-Extract — extracción IA de preguntas desde PDF con
+  # `saber-extractor`. Concurrencia 2. Necesita poppler-utils (incluido en
+  # el stage runtime del Dockerfile) para recortar figuras con `pdfimages`.
+  # Lee PDFs de `imports/{institutionId}/...` (mismo storage que web) y
+  # escribe las figuras en `evaluations/{institutionId}/...` vía la misma
+  # pipeline que el parser DOCX.
+  # ---------------------------------------------------------------------------
+  worker-question-extract:
+    image: ${EVAL_APP_IMAGE:-eval-app:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    user: "1001:1001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    env_file:
+      - ${ENV_FILE:-.env.prod}
+    environment:
+      NODE_ENV: production
+      WORKER_NAME: question-extract
+      # Provider IA: si .env.prod trae ANTHROPIC_API_KEY usa Claude (Sonnet
+      # para extract, Opus con thinking para solve); si no, cae a MINIMAX_*.
+      # Misma lógica que el parser legacy. No requiere flag — el worker
+      # inspecciona process.env en cada job.
+      # Layout detector (DocLayout-YOLO via onnxruntime): ruta al venv
+      # creado en el Dockerfile runtime stage. Sin esto, el shim cae al
+      # `python3` del sistema que NO tiene cv2/onnxruntime.
+      SABER_PYTHON: /opt/saber-venv/bin/python
+      # Cache del modelo (~75 MB) en el volumen persistente. La primera
+      # ejecución lo baja de Hugging Face y queda disponible para jobs
+      # siguientes, incluso tras restart del container.
+      SABER_MODEL_DIR: /var/eval/storage/saber-models
+    volumes:
+      - storage:/var/eval/storage
+    entrypoint: ["/usr/bin/tini", "--"]
+    command: ["/entrypoint/entrypoint-worker.sh"]
+    networks:
+      - eval-net
+
 networks:
   eval-net:
     driver: bridge

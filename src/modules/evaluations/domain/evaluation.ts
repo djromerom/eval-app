@@ -1,3 +1,4 @@
+import { richTextToPlain } from "@/shared/domain/rich-text";
 import type { EvaluationStatus } from "./evaluation-status";
 
 export type AnswerKey = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
@@ -17,15 +18,19 @@ export interface Evaluation {
   periodId: string | null;
   teacherId: string;
   bookletNumber: number | null;
+  /** Tipo de cuadernillo configurado por el admin en la Prueba.
+   *  Null = formulación sin tipo asignado (evaluaciones previas a
+   *  ago 2026 o formulaciones "sin cuadernillo" como diagnósticas). */
+  bookletTypeId: string | null;
   totalQuestions: number;
   /**
    * Duración estimada en minutos, capturada por el docente en el panel
-   * Settings. Nullable: si es null, la portada del compendio cae al cálculo
+   * Settings. Nullable: si es null, la portada del cuadernillo cae al cálculo
    * heurístico (`totalQuestions * DEFAULT_MINUTES_PER_QUESTION`). Editable
    * mientras la evaluation esté en DRAFT; inmutable desde APPROVED.
    */
   durationMinutes: number | null;
-  /** Override visual por evaluación (modo Diseñador). JSON crudo de la BD. */
+  /** Override visual por formulación (modo Diseñador). JSON crudo de la BD. */
   theme: unknown;
 }
 
@@ -57,12 +62,32 @@ export interface QuestionOption {
   text: unknown; // TipTap JSON
 }
 
-/** Evaluación con su contenido completo (bloques + preguntas). */
+/** Formulación con su contenido completo (bloques + preguntas). */
 export interface EvaluationDetail extends Evaluation {
   sections: EvaluationSection[];
+  /** Nombre del periodo académico (nullable: la formulación se puede crear
+   *  sin periodo, ej. evaluación diagnóstica de inicio de año). El
+   *  repositorio hidrata este campo con un include extra; los casos donde
+   *  no se necesita (solo IDs) pueden seguir usando `Evaluation.periodId`.
+   *  Es opcional para que los in-memory repos de tests no tengan que
+   *  setearlo (cuando lo omiten, las pages deben tratar `null` como
+   *  "sin periodo"). */
+  periodName?: string | null;
+  /** Nombre del tipo de cuadernillo (nullable). El repo hidrata este
+   *  campo con `include: { bookletType: { select: { name: true } } }`. */
+  bookletTypeName?: string | null;
+  /** Nombre de la asignatura (nullable defensivo). El repo hidrata este
+   *  campo con `include: { courseSubject: { subject: { name } } }`. Lo
+   *  consume el editor unificado para componer el header
+   *  `${periodName} ${subjectName} ${courseName} ${bookletTypeName}`
+   *  (ago 2026). */
+  subjectName?: string | null;
+  /** Nombre del curso / grado (nullable defensivo). El repo hidrata este
+   *  campo con `include: { courseSubject: { course: { name } } }`. */
+  courseName?: string | null;
 }
 
-/** Fila de listado enriquecida con nombres de curso/asignatura. */
+/** Fila de listado enriquecida con nombres de curso/asignatura/periodo. */
 export interface EvaluationListItem {
   id: string;
   title: string;
@@ -71,10 +96,26 @@ export interface EvaluationListItem {
   bookletNumber: number | null;
   totalQuestions: number;
   /** Curso al que pertenece (vía courseSubject). Sprint 9: el wizard de
-   *  compendios filtra los candidatos por este campo. */
+   *  cuadernillos filtra los candidatos por este campo. */
   courseId: string;
   courseName: string;
   subjectName: string;
+  /** courseSubject al que pertenece. Ago 2026: el form de creación lo
+   *  usa para detectar duplicados (mismo courseSubjectId + periodId) y
+   *  redirigir al docente a la formulación existente en lugar de fallar. */
+  courseSubjectId: string;
+  /** Periodo académico (nullable: la formulación se puede crear sin
+   *  periodo, ej. evaluación diagnóstica de inicio de año). */
+  periodId: string | null;
+  periodName: string | null;
+  /** Tipo de cuadernillo (nullable). */
+  bookletTypeId: string | null;
+  bookletTypeName: string | null;
+  /** Año académico al que pertenece la formulación. Ago 2026: el listado
+   *  'Mis formulaciones' lo muestra como columna propia para que el docente
+   *  distinga formulaciones del año actual vs. años anteriores sin tener que
+   *  entrar a cada una. */
+  academicYearYear: number;
   updatedAt: Date;
 }
 
@@ -86,6 +127,10 @@ export interface CreateEvaluationData {
   periodId?: string;
   bookletNumber?: number;
   description?: string;
+  /** Tipo de cuadernillo seleccionado. Si se omite, la formulación queda
+   *  sin tipo asignado. Si se envía, el use case valida que pertenezca al
+   *  mismo `periodId` de la formulación y a la misma institución. */
+  bookletTypeId?: string;
   /** Duración estimada en minutos. Si es `null` o se omite, cae al cálculo
    *  heurístico `totalQuestions * DEFAULT_MINUTES_PER_QUESTION`. Mismas
    *  reglas de validación que `UpdateEvaluationSettingsData`. Sprint 7. */
@@ -170,11 +215,11 @@ export interface EvaluationRepository {
 
   /**
    * Elimina el contexto y, en cascada, sus preguntas. Renumera las preguntas
-   * restantes de la evaluación y recalcula `totalQuestions`.
+   * restantes de la formulación y recalcula `totalQuestions`.
    */
   deleteSection(institutionId: string, evaluationId: string, sectionId: string): Promise<void>;
 
-  /** Crea la pregunta y recalcula totalQuestions de la evaluación. */
+  /** Crea la pregunta y recalcula totalQuestions de la formulación. */
   addQuestion(
     institutionId: string,
     evaluationId: string,
@@ -194,6 +239,29 @@ export interface EvaluationRepository {
    * siendo continua (la hoja OMR la asume así) y recalcula `totalQuestions`.
    */
   deleteQuestion(institutionId: string, evaluationId: string, questionId: string): Promise<void>;
+
+  /**
+   * Duplica la pregunta: clona enunciado, opciones, correctAnswer, peso y
+   * metadatos (justificación, competencia, etc.) en una pregunta nueva al
+   * final de la formulación. La copia queda con `bankOriginId = null` (ya no
+   * es del banco, es una instancia propia editable con independencia total).
+   * Incrementa `totalQuestions` en 1.
+   */
+  duplicateQuestion(institutionId: string, evaluationId: string, questionId: string): Promise<void>;
+
+  /**
+   * Reordena las preguntas de una sección según el orden de
+   * `orderedQuestionIds`. Renumera `number` 1..N consecutivamente en el
+   * evaluation (la hoja OMR asume numeración continua) y recalcula
+   * `totalQuestions`. Las IDs deben pertenecer a la sección de la
+   * evaluation dada — cualquier ID ajena lanza `ValidationError`.
+   */
+  reorderQuestions(
+    institutionId: string,
+    evaluationId: string,
+    sectionId: string,
+    orderedQuestionIds: string[],
+  ): Promise<void>;
   updateStatus(institutionId: string, id: string, status: EvaluationStatus): Promise<void>;
   /**
    * Actualiza los campos de metadata editables desde el panel Settings
@@ -207,6 +275,19 @@ export interface EvaluationRepository {
   ): Promise<Evaluation>;
   /** Cada aprobación crea una copia inmutable con version + 1 (§3.3). */
   createNewVersion(institutionId: string, id: string): Promise<Evaluation>;
+  /**
+   * Indica si ya existe una formulación (no borrada) en la institución con
+   * la misma combinación `courseSubjectId + periodId + academicYearId`. La
+   * validación la usa `CreateEvaluation` para impedir duplicados. Si
+   * `periodId` es `null`, se compara solo con formulaciones sin periodo
+   * asignado en ese año académico y asignatura-curso.
+   */
+  existsByCourseSubjectPeriodYear(
+    institutionId: string,
+    courseSubjectId: string,
+    periodId: string | null,
+    academicYearId: string,
+  ): Promise<boolean>;
 }
 
 /** Cota inferior y superior para `durationMinutes` (Sprint 7).
@@ -245,12 +326,12 @@ export const ANSWER_KEYS_ORDER: readonly AnswerKey[] = ANSWER_KEYS;
  *    blanco. Esto simplifica la impresión (grilla uniforme) y el OMR
  *    (siempre escanea 8 columnas por pregunta). */
 /**
- * Numeración continua 1..N de las preguntas de una evaluación, en el orden en
+ * Numeración continua 1..N de las preguntas de una formulación, en el orden en
  * que se imprimen: contextos por `order`, preguntas por `number` dentro de
  * cada uno. El llamador debe pasar `sections` ya ordenada.
  *
  * Se usa tras borrar una pregunta o un contexto. El cuadernillo numera de
- * corrido en toda la evaluación y la hoja OMR asume esa correspondencia, así
+ * corrido en toda la formulación y la hoja OMR asume esa correspondencia, así
  * que un hueco desalinearía las burbujas respecto de las respuestas.
  *
  * Devuelve **solo las preguntas cuyo número cambia**, para no escribir filas
@@ -274,7 +355,14 @@ export const MIN_OPTIONS = 2;
 export const MAX_OPTIONS = 8;
 
 /** Una pregunta válida: entre MIN_OPTIONS y MAX_OPTIONS opciones (A–H)
- *  con una correcta entre ellas. */
+ *  con una correcta entre ellas. El contexto (sección) es OPCIONAL: la
+ *  pregunta puede agregarse sin contexto y queda agrupada en la sección
+ *  "Sin contexto" (o en la auto-creada al abrir el editor unificado).
+ *
+ *  NOTA: la validación del contenido (enunciado + texto de cada opción) se
+ *  hace en los USE CASES (`AddQuestion`, validador de import). Esta función
+ *  mantiene la API histórica `options + correctAnswer` para que las pruebas
+ *  unitarias que validan solo la forma A–D + correcta sigan compilando. */
 export function validateQuestionShape(data: {
   options: { key: AnswerKey }[];
   correctAnswer: AnswerKey;
@@ -290,6 +378,30 @@ export function validateQuestionShape(data: {
   }
   if (!keys.includes(data.correctAnswer)) {
     return `La respuesta correcta debe estar entre las opciones definidas (${expected.join(", ")}).`;
+  }
+  return null;
+}
+
+/**
+ * Valida el CONTENIDO de una pregunta a guardar: enunciado no vacío y todas
+ * las opciones con texto no vacío. Corre en los use cases de ALTA / UPDATE
+ * (no en `validateQuestionShape`, que solo verifica la forma A–D).
+ *
+ * Devuelve `null` si está OK, o un mensaje de error para mostrar inline.
+ */
+export function validateQuestionContent(data: {
+  text: unknown;
+  options: { key: AnswerKey; text: unknown }[];
+}): string | null {
+  const textPlain = richTextToPlain(data.text).trim();
+  if (!textPlain) {
+    return "Describe el enunciado de la pregunta.";
+  }
+  for (const opt of data.options) {
+    const optPlain = richTextToPlain(opt.text).trim();
+    if (!optPlain) {
+      return `Llena la opción ${opt.key} antes de guardar.`;
+    }
   }
   return null;
 }

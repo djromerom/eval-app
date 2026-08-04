@@ -60,7 +60,7 @@ export class PrismaScanningRepository implements ScanningRepository {
 
   async getAnswerSheet(institutionId: string, sheetId: string): Promise<AnswerSheet | null> {
     // Hojas legacy: institutionId se valida via evaluation. Hojas de bundle:
-    // institutionId se valida via bundle. Las hojas de bundle con evaluación
+    // institutionId se valida via bundle. Las hojas de bundle con formulación
     // se procesan en Sprint 2 (aún no hay path de código activo).
     const row = await prisma.answerSheet.findFirst({
       where: {
@@ -182,7 +182,7 @@ export class PrismaScanningRepository implements ScanningRepository {
         data: answers.map((a) => ({
           answerSheetId: sheetId,
           questionId: a.questionId,
-          // Sprint 4 del módulo compendios: bundleItemId poblado en hojas
+          // Sprint 4 del módulo cuadernillos: bundleItemId poblado en hojas
           // de bundle, null en legacy. Habilita drill-down del reporte
           // comparativo por (student × item).
           bundleItemId: a.bundleItemId,

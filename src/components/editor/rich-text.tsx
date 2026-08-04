@@ -3,7 +3,7 @@ import { renderRichText, unwrapSingleParagraph } from "./render";
 
 /**
  * Muestra contenido rico (TipTap JSON o string) ya renderizado con KaTeX.
- * Componente de servidor: se usa en el detalle de evaluación y en la impresión.
+ * Componente de servidor: se usa en el detalle de formulación y en la impresión.
  * La clase `prose-eval` (globals.css) da estilos básicos de tipografía.
  */
 export function RichText({ value, className }: { value: unknown; className?: string }) {

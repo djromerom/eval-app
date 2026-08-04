@@ -39,14 +39,14 @@ export default async function ReviewPage() {
   return (
     <>
       <PageHeader
-        title="Revisión de evaluaciones"
-        description="Aprueba o rechaza (con comentario) las evaluaciones enviadas por los docentes."
+        title="Revisión de formulaciones"
+        description="Aprueba o rechaza (con comentario) las formulaciones enviadas por los docentes."
       />
 
       <section className="space-y-3">
         <h2 className="font-semibold">Pendientes de revisión ({inReview.length})</h2>
         {inReview.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No hay evaluaciones en revisión.</p>
+          <p className="text-muted-foreground text-sm">No hay formulaciones en revisión.</p>
         ) : (
           inReview.map((e) => (
             <Row key={e.id} e={e}>
@@ -65,7 +65,7 @@ export default async function ReviewPage() {
       <section className="mt-8 space-y-3">
         <h2 className="font-semibold">Aprobadas — listas para publicar ({approved.length})</h2>
         {approved.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No hay evaluaciones aprobadas.</p>
+          <p className="text-muted-foreground text-sm">No hay formulaciones aprobadas.</p>
         ) : (
           approved.map((e) => (
             <Row key={e.id} e={e}>

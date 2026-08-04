@@ -47,8 +47,8 @@ export function EvaluationSettingsForm({
       <div>
         <h2 className="font-semibold">Duración estimada</h2>
         <p className="text-muted-foreground text-xs">
-          Tiempo total en minutos para esta evaluación. Aparece en la portada del compendio. Déjalo
-          vacío para usar el cálculo por defecto ({totalQuestions} × {minutesPerQuestion} ={" "}
+          Tiempo total en minutos para esta formulación. Aparece en la portada del cuadernillo.
+          Déjalo vacío para usar el cálculo por defecto ({totalQuestions} × {minutesPerQuestion} ={" "}
           {fallbackMinutes} min).
         </p>
       </div>
@@ -68,13 +68,13 @@ export function EvaluationSettingsForm({
           />
         </label>
         <p id="duration-help" className="text-muted-foreground text-xs">
-          Entre 1 y 600 minutos (10 horas). Editable solo mientras la evaluación esté en BORRADOR.
+          Entre 1 y 600 minutos (10 horas). Editable solo mientras la formulación esté en BORRADOR.
         </p>
       </fieldset>
 
       {!editable ? (
         <p className="text-muted-foreground text-xs">
-          La evaluación no está en BORRADOR. Para cambiar la duración, crea una nueva versión desde
+          La formulación no está en BORRADOR. Para cambiar la duración, crea una nueva versión desde
           el flujo de revisión.
         </p>
       ) : null}
@@ -82,7 +82,7 @@ export function EvaluationSettingsForm({
       {state.error ? <p className="text-destructive text-sm">{state.error}</p> : null}
       {state.success ? (
         <p className="text-success text-sm">
-          Duración guardada. La portada del compendio usará este valor.
+          Duración guardada. La portada del cuadernillo usará este valor.
         </p>
       ) : null}
 

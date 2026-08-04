@@ -31,12 +31,12 @@ export class MarkBundleReady implements UseCase<MarkBundleReadyInput, Bundle> {
     if (!authorized.ok) return authorized;
 
     const bundle = await this.bundles.findById(actor.institutionId, bundleId);
-    if (!bundle) return fail(new NotFoundError("Compendio", bundleId));
+    if (!bundle) return fail(new NotFoundError("Cuadernillo", bundleId));
 
     if (!canTransition(bundle.status, "READY")) {
       return fail(
         new ValidationError(
-          `El compendio está en estado ${bundle.status}; no se puede marcar como READY.`,
+          `El cuadernillo está en estado ${bundle.status}; no se puede marcar como READY.`,
         ),
       );
     }
@@ -45,7 +45,7 @@ export class MarkBundleReady implements UseCase<MarkBundleReadyInput, Bundle> {
     if (items.length < MIN_ITEMS_FOR_READY) {
       return fail(
         new ValidationError(
-          `El compendio debe tener al menos ${MIN_ITEMS_FOR_READY} evaluación para marcarse como READY.`,
+          `El cuadernillo debe tener al menos ${MIN_ITEMS_FOR_READY} formulación para marcarse como READY.`,
         ),
       );
     }
@@ -58,14 +58,14 @@ export class MarkBundleReady implements UseCase<MarkBundleReadyInput, Bundle> {
       if (!isPrintableEvaluationStatus(ev.status)) {
         return fail(
           new ValidationError(
-            `La evaluación "${ev.title}" ya no está aprobada o publicada (ahora: ${ev.status}). Quítala del compendio antes de marcar como READY.`,
+            `La formulación "${ev.title}" ya no está aprobada o publicada (ahora: ${ev.status}). Quítala del cuadernillo antes de marcar como READY.`,
           ),
         );
       }
       if (ev.totalQuestions === 0) {
         return fail(
           new ValidationError(
-            `La evaluación "${ev.title}" no tiene preguntas. Añade al menos una antes de marcar como READY.`,
+            `La formulación "${ev.title}" no tiene preguntas. Añade al menos una antes de marcar como READY.`,
           ),
         );
       }

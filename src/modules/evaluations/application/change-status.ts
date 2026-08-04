@@ -39,15 +39,31 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
     if (!authorized.ok) return authorized;
 
     const evaluation = await this.evaluations.findById(actor.institutionId, evaluationId);
-    if (!evaluation) return fail(new NotFoundError("Evaluación", evaluationId));
+    if (!evaluation) return fail(new NotFoundError("Formulación", evaluationId));
 
     const transition = findTransition(evaluation.status, to);
     if (!transition || !transition.allowedRoles.some((r) => actor.roles.includes(r))) {
       return fail(new ValidationError(`Transición no permitida: ${evaluation.status} → ${to}.`));
     }
-    // El autor no puede enviar a revisión evaluaciones ajenas.
-    if (to === "IN_REVIEW" && evaluation.teacherId !== actor.userId) {
-      return fail(new ValidationError("Solo el autor puede enviar la evaluación a revisión."));
+    // Ownership: solo el autor puede enviar a revisión o publicar
+    // directamente. COORDINATOR puede hacerlo porque tiene una regla
+    // transversal: en este dominio, un COORDINATOR que no es el autor
+    // todavía puede operar sobre formulaciones ajenas (ej. aprobarlas).
+    // Aquí limitamos explícitamente el caso del TEACHER: si su rol es
+    // TEACHER pero NO es el autor, falla. COORDINATOR pasa siempre.
+    if (
+      (to === "IN_REVIEW" || to === "PUBLISHED") &&
+      actor.roles.includes("TEACHER") &&
+      !actor.roles.includes("COORDINATOR") &&
+      evaluation.teacherId !== actor.userId
+    ) {
+      return fail(
+        new ValidationError(
+          to === "IN_REVIEW"
+            ? "Solo el autor puede enviar la formulación a revisión."
+            : "Solo el autor puede publicar la formulación.",
+        ),
+      );
     }
     if (transition.requiresComment && !comment?.trim()) {
       return fail(new ValidationError("El rechazo requiere un comentario."));
@@ -67,7 +83,7 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
     to: EvaluationStatus,
     comment?: string,
   ): Promise<void> {
-    const teacherLink = `/teacher/evaluations/${evaluation.id}`;
+    const teacherLink = `/teacher/evaluations/${evaluation.id}/contexts`;
     const reviewLink = `/coordinator/review`;
 
     if (to === "IN_REVIEW") {
@@ -77,7 +93,7 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
           this.notifications.send({
             userId,
             type: "EVALUATION_PENDING_REVIEW",
-            title: "Evaluación pendiente de revisión",
+            title: "Formulación pendiente de revisión",
             body: `"${evaluation.title}" fue enviada a revisión.`,
             link: reviewLink,
           }),
@@ -89,8 +105,23 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
       await this.notifications.send({
         userId: evaluation.teacherId,
         type: "EVALUATION_APPROVED",
-        title: "Evaluación aprobada",
+        title: "Formulación aprobada",
         body: `"${evaluation.title}" fue aprobada.`,
+        link: teacherLink,
+      });
+      return;
+    }
+    // PUBLICADA — cubre dos caminos:
+    //  - APPROVED → PUBLISHED (canónico)
+    //  - DRAFT → PUBLISHED (atajo desde el editor unificado, ago 2026)
+    // En ambos casos notificamos al autor para que tenga feedback de que
+    // la formulación pasó a versión final.
+    if (to === "PUBLISHED") {
+      await this.notifications.send({
+        userId: evaluation.teacherId,
+        type: "EVALUATION_PUBLISHED",
+        title: "Formulación publicada",
+        body: `"${evaluation.title}" fue publicada.`,
         link: teacherLink,
       });
       return;
@@ -100,7 +131,7 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
       await this.notifications.send({
         userId: evaluation.teacherId,
         type: "EVALUATION_REJECTED",
-        title: "Evaluación rechazada",
+        title: "Formulación rechazada",
         body: comment ?? "Sin comentario.",
         link: teacherLink,
       });

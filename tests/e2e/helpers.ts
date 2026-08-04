@@ -20,7 +20,10 @@ export const DEMO_ADMIN = {
  */
 export async function loginAsDemoAdmin(page: Page): Promise<void> {
   await page.goto("/login");
-  await page.getByLabel("Correo electrónico").fill(DEMO_ADMIN.email);
+  // El label literal en login-form.tsx es "Correo institucional" (no
+  // "Correo electrónico"); un mismatch rompía los tests en login.spec.ts
+  // y en cualquier spec que use este helper.
+  await page.getByLabel("Correo institucional").fill(DEMO_ADMIN.email);
   await page.getByLabel("Contraseña").fill(DEMO_ADMIN.password);
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
 

@@ -40,6 +40,10 @@ export interface Period {
   order: number;
   startDate: Date;
   endDate: Date;
+  /** Marca la Prueba "en curso" dentro de su año académico. Una sola Prueba
+   *  por año académico puede tener `isCurrent=true` (constraint enforced en
+   *  el use case, no en BD). */
+  isCurrent: boolean;
 }
 
 /** Enlace asignatura ↔ curso (un curso tiene N asignaturas). §3.2 */
@@ -123,12 +127,32 @@ export interface GroupRepository {
   findAll(institutionId: string, courseId?: string): Promise<Group[]>;
   findById(institutionId: string, id: string): Promise<Group | null>;
   create(institutionId: string, data: CreateGroupData): Promise<Group>;
+  delete(institutionId: string, id: string): Promise<void>;
 }
 
 export interface PeriodRepository {
   findAll(institutionId: string, academicYearId?: string): Promise<Period[]>;
   findById(institutionId: string, id: string): Promise<Period | null>;
   create(institutionId: string, data: CreatePeriodData): Promise<Period>;
+  update(institutionId: string, id: string, data: UpdatePeriodData): Promise<Period | null>;
+  delete(institutionId: string, id: string): Promise<void>;
+  /** Marca una Prueba como "actual" dentro de su año académico y desmarca
+   *  las demás del mismo año. Atómico: `prisma.$transaction` para evitar
+   *  que dos pruebas terminen marcadas. `isCurrent=false` solo desmarca
+   *  la indicada sin tocar las demás. */
+  setCurrent(
+    institutionId: string,
+    academicYearId: string,
+    periodId: string,
+    isCurrent: boolean,
+  ): Promise<void>;
+}
+
+export interface UpdatePeriodData {
+  name?: string;
+  order?: number;
+  startDate?: Date;
+  endDate?: Date;
 }
 
 export interface CourseSubjectRepository {
@@ -137,6 +161,7 @@ export interface CourseSubjectRepository {
   findById(institutionId: string, id: string): Promise<CourseSubject | null>;
   exists(courseId: string, subjectId: string): Promise<boolean>;
   create(data: CreateCourseSubjectData): Promise<CourseSubject>;
+  delete(courseId: string, subjectId: string): Promise<void>;
 }
 
 // ===== Validación de dominio =====

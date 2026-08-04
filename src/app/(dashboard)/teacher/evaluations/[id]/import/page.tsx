@@ -14,7 +14,7 @@ export default async function ImportQuestionsPage({ params }: { params: Promise<
   const { id: targetId } = await params;
   const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
 
-  // La evaluación destino tiene que existir y estar en BORRADOR (el use case
+  // La formulación destino tiene que existir y estar en BORRADOR (el use case
   // también lo comprueba, pero así evitamos mostrar el wizard si no va a
   // poder terminar).
   const targetRes = await makeGetEvaluation().execute({ actor, id: targetId });
@@ -22,7 +22,7 @@ export default async function ImportQuestionsPage({ params }: { params: Promise<
   const target = targetRes.value;
   const editable = target.teacherId === actor.userId && target.status === "DRAFT";
 
-  // Lista de evaluaciones origen: las del propio docente, distintas del
+  // Lista de formulaciones origen: las del propio docente, distintas del
   // target, y con al menos una pregunta.
   const allRes = await makeListEvaluations().execute({ actor });
   const sources = (allRes.ok ? allRes.value : [])
@@ -46,14 +46,14 @@ export default async function ImportQuestionsPage({ params }: { params: Promise<
       />
 
       <p className="text-muted-foreground mb-6 text-sm">
-        <Link href={`/teacher/evaluations/${target.id}`} className="hover:underline">
-          ← Volver a la evaluación
+        <Link href={`/teacher/evaluations/${target.id}/unified`} className="hover:underline">
+          ← Volver a la formulación
         </Link>
       </p>
 
       {!editable ? (
         <p className="text-muted-foreground rounded-lg border border-dashed p-6 text-sm">
-          Solo el docente autor puede importar preguntas en una evaluación en BORRADOR.
+          Solo el docente autor puede importar preguntas en una formulación en BORRADOR.
         </p>
       ) : (
         <ImportWizard

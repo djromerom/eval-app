@@ -6,12 +6,12 @@ import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import { getOmrScanQueue } from "@/shared/infrastructure/queue/queues";
 import { requireAuthenticatedUser } from "@/lib/session";
 
-/** Tipo discriminado del "objetivo" del escaneo: o una evaluación
- *  individual (legacy) o un compendio. La invariante XOR vive aquí. */
+/** Tipo discriminado del "objetivo" del escaneo: o una formulación
+ *  individual (legacy) o un cuadernillo. La invariante XOR vive aquí. */
 export type ScanTargetKind = "evaluation" | "bundle";
 
 export async function createScanBatchAction(formData: FormData) {
-  const actor = await requireAuthenticatedUser("TEACHER");
+  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
 
   const kind = formData.get("kind") as ScanTargetKind | null;
   const targetId = formData.get("id") as string | null;
@@ -20,7 +20,7 @@ export async function createScanBatchAction(formData: FormData) {
   if (!kind || !targetId || files.length === 0) {
     return {
       ok: false as const,
-      error: "Selecciona un objetivo (evaluación o compendio) y al menos un archivo.",
+      error: "Selecciona un objetivo (formulación o cuadernillo) y al menos un archivo.",
     };
   }
 
@@ -51,7 +51,7 @@ async function createEvaluationScanBatch(
     },
   });
   if (!evaluation) {
-    return { ok: false as const, error: "Evaluación no encontrada." };
+    return { ok: false as const, error: "Formulación no encontrada." };
   }
 
   const batch = await prisma.scanBatch.create({
@@ -88,14 +88,14 @@ async function createBundleScanBatch(
     select: { id: true, status: true, name: true },
   });
   if (!bundle) {
-    return { ok: false as const, error: "Compendio no encontrado." };
+    return { ok: false as const, error: "Cuadernillo no encontrado." };
   }
-  // Solo compendios READY tienen clave unificada generada y admiten
+  // Solo cuadernillos READY tienen clave unificada generada y admiten
   // calificación. Mismo chequeo que el reportador comparativo.
   if (bundle.status !== "READY") {
     return {
       ok: false as const,
-      error: `El compendio debe estar en estado LISTO para escanear (actual: ${bundle.status}).`,
+      error: `El cuadernillo debe estar en estado LISTO para escanear (actual: ${bundle.status}).`,
     };
   }
 
@@ -117,8 +117,8 @@ async function createBundleScanBatch(
 }
 
 /** Crea AnswerSheet + encola job omr-scan. `targetKind` discrimina si la
- *  hoja es de evaluación o bundle, y `targetId` se guarda en AnswerSheet
- *  para que el reporte comparativo del compendio pueda drill-dowmear
+ *  hoja es de formulación o bundle, y `targetId` se guarda en AnswerSheet
+ *  para que el reporte comparativo del cuadernillo pueda drill-dowmear
  *  (student/hoja × item). */
 async function enqueueSheets(
   actor: Awaited<ReturnType<typeof requireAuthenticatedUser>>,
@@ -162,14 +162,14 @@ async function enqueueSheets(
 
 export interface BatchWithSheets {
   id: string;
-  /** "evaluation" si el batch es de una evaluación, "bundle" si es de un
-   *  compendio, "unknown" si la FK quedó null por datos legacy. */
+  /** "evaluation" si el batch es de una formulación, "bundle" si es de un
+   *  cuadernillo, "unknown" si la FK quedó null por datos legacy. */
   kind: ScanTargetKind | "unknown";
   status: string;
   totalSheets: number;
   processedSheets: number;
   createdAt: Date;
-  /** Nombre del objetivo (evaluación o compendio). null si no se pudo
+  /** Nombre del objetivo (formulación o cuadernillo). null si no se pudo
    *  resolver (huérfanos o datos legacy). */
   title: string | null;
   sheets: {
@@ -186,12 +186,12 @@ export interface BatchWithSheets {
 }
 
 export async function getBatchesAction(): Promise<BatchWithSheets[]> {
-  const actor = await requireAuthenticatedUser("TEACHER");
+  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
 
   // Filtro multi-target: el batch pertenece a la institución y:
-  //   - es de una evaluación del docente actual, o
-  //   - es de un compendio de la institución (cualquier docente del
-  //     colegio puede escanear, los compendios son institucionales).
+  //   - es de una formulación del docente actual, o
+  //   - es de un cuadernillo de la institución (cualquier docente del
+  //     colegio puede escanear, los cuadernillos son institucionales).
   const rows = await prisma.scanBatch.findMany({
     where: {
       institutionId: actor.institutionId,

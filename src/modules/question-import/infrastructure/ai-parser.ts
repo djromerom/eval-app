@@ -39,15 +39,63 @@ export function parseQuestionsWithAi(documentText: string, aiJson: string): Pars
   const warnings: string[] = [];
 
   let parsed: AiResponse;
+  let cleaned: string;
   try {
-    const clean = extractJson(aiJson);
-    parsed = JSON.parse(clean) as AiResponse;
+    cleaned = extractJson(aiJson);
   } catch {
-    return { questions: [], warnings: ["La respuesta de la IA no es JSON válido."] };
+    cleaned = "";
   }
 
-  if (!Array.isArray(parsed.questions) || parsed.questions.length === 0) {
-    return { questions: [], warnings: ["La IA no encontró preguntas en el documento."] };
+  if (!cleaned) {
+    // Caso típico: el modelo respondió sólo con un bloque de razonamiento
+    // (``…``) y no llegó a emitir JSON — casi siempre porque el doc no
+    // tenía texto extraíble (ya cortado en actions.ts) o por un modo del
+    // modelo mal configurado.
+    const hadThink = /<\/?think>/i.test(aiJson);
+    return {
+      questions: [],
+      warnings: [
+        hadThink
+          ? "La IA devolvió solo su razonamiento interno (``) sin JSON — el documento probablemente no tenía texto extraíble."
+          : "La respuesta de la IA está vacía — el modelo no devolvió contenido JSON.",
+      ],
+    };
+  }
+
+  try {
+    parsed = JSON.parse(cleaned) as AiResponse;
+  } catch {
+    const head = cleaned.slice(0, 120).replace(/\s+/g, " ");
+    return {
+      questions: [],
+      warnings: [
+        "La respuesta de la IA no es JSON válido.",
+        `Inicio del JSON extraído: "${head}…"`,
+      ],
+    };
+  }
+
+  if (parsed.questions === undefined) {
+    return {
+      questions: [],
+      warnings: [
+        "La IA devolvió JSON sin la clave `questions`. Revisa el prompt o el modo del modelo.",
+      ],
+    };
+  }
+  if (!Array.isArray(parsed.questions)) {
+    return {
+      questions: [],
+      warnings: [`La IA devolvió \`questions\` con tipo inesperado (${typeof parsed.questions}).`],
+    };
+  }
+  if (parsed.questions.length === 0) {
+    return {
+      questions: [],
+      warnings: [
+        "La IA devolvió un array `questions` vacío: no detectó preguntas en el documento.",
+      ],
+    };
   }
 
   const questions: ParsedQuestion[] = [];
@@ -123,6 +171,11 @@ export function parseQuestionsWithAi(documentText: string, aiJson: string): Pars
         evidence: q.evidence?.trim() || null,
         contextTitle,
         contextText,
+        // El parser IA genérico no tiene vínculo a figuras recortadas
+        // del PDF (eso es responsabilidad del saber-extractor-parser).
+        // Dejamos el campo presente y vacío para que la BD y los
+        // callers aguas abajo no tengan que tratarlo como opcional.
+        contextImages: {},
         image: q.imagePlaceholder ? { url: q.imagePlaceholder } : null,
         warnings: [],
       }),

@@ -12,13 +12,13 @@
  * - Texto de pie de página (institucional, contacto, resolución).
  * - Mostrar u ocultar el logo del colegio en portada.
  *
- * Además, por evaluación, pueden sobreescribirse:
+ * Además, por formulación, pueden sobreescribirse:
  * - Subtítulo de portada (período, fecha, docente).
  * - Bloque intro TipTap antes de las preguntas (ej. "Lee el siguiente texto").
  * - Estilo del separador entre secciones (línea / doble línea / puntos).
  *
  * Almacenamiento: las instituciones guardan el tema base en `Institution.theme`
- * (JSONB). Las evaluaciones guardan un override en `Evaluation.theme` (JSONB).
+ * (JSONB). Las formulaciones guardan un override en `Evaluation.theme` (JSONB).
  * En runtime, `mergeTheme()` colapsa los dos en un objeto aplanado con
  * defaults sensatos. Si nada está configurado, se usa el preset
  * `INSTITUCIONAL_DEFAULT` que coincide con el PDF de referencia institucional.
@@ -121,7 +121,7 @@ export const INSTITUTIONAL_DEFAULT: InstitutionalTheme = {
   primary: "#0B5C2E",
   fontFamily: "serif",
   density: "normal",
-  // Una columna por defecto: cambiar la maquetación de las evaluaciones ya
+  // Una columna por defecto: cambiar la maquetación de las formulaciones ya
   // creadas al desplegar sería una sorpresa. Quien quiera dos, lo activa.
   questionColumns: 1,
   footerText: "",
@@ -151,7 +151,7 @@ export const THEME_PRESETS: Record<
   moderno: {
     label: "Moderno",
     description:
-      "Sans serif, azul oscuro, espaciado generoso, ideal para evaluaciones digitales impresas.",
+      "Sans serif, azul oscuro, espaciado generoso, ideal para formulaciones digitales impresas.",
     theme: {
       primary: "#1E3A8A",
       fontFamily: "sans",
@@ -164,7 +164,7 @@ export const THEME_PRESETS: Record<
   compacto: {
     label: "Compacto",
     description:
-      "Densidad alta para evaluaciones con muchas preguntas (recorta hasta ~20% del papel).",
+      "Densidad alta para formulaciones con muchas preguntas (recorta hasta ~20% del papel).",
     theme: {
       primary: "#0B5C2E",
       fontFamily: "serif",
@@ -179,14 +179,14 @@ export const THEME_PRESETS: Record<
 // ===== Merge =====
 
 /**
- * Colapsa el tema institucional + override de evaluación en un objeto resuelto.
+ * Colapsa el tema institucional + override de formulación en un objeto resuelto.
  *
  * Precedencia (de mayor a menor):
  *   1. `evaluationTheme.campo` si está definido
  *   2. `institutionalTheme.campo` si está definido
  *   3. `INSTITUTIONAL_DEFAULT.campo`
  *
- * Arrays/objetos (introText) NO se mergean profundo: si la evaluación trae uno,
+ * Arrays/objetos (introText) NO se mergean profundo: si la formulación trae uno,
  * gana; si no, queda null.
  *
  * Acepta valores `null | undefined` o parcial-inválidos: usar `parseTheme()`
@@ -270,7 +270,7 @@ export function parseInstitutionalTheme(raw: unknown): Partial<InstitutionalThem
 export function parseEvaluationTheme(raw: unknown): Partial<EvaluationTheme> {
   if (!raw || typeof raw !== "object") return {};
   const o = raw as RawTheme;
-  // Base + extras de evaluación.
+  // Base + extras de formulación.
   const base = parseInstitutionalTheme(raw);
   const out: Partial<EvaluationTheme> = { ...base };
   const cs = pickString(o, "coverSubtitle", 200);

@@ -26,6 +26,7 @@ import type {
   PeriodRepository,
   Subject,
   SubjectRepository,
+  UpdatePeriodData,
 } from "../domain/types";
 
 // ===== Mappers (fila Prisma → shape del dominio) =====
@@ -69,6 +70,7 @@ const toPeriod = (r: PrismaPeriod): Period => ({
   order: r.order,
   startDate: r.startDate,
   endDate: r.endDate,
+  isCurrent: r.isCurrent,
 });
 
 // ===== Adaptadores =====
@@ -166,6 +168,9 @@ export class PrismaGroupRepository implements GroupRepository {
   async create(institutionId: string, data: CreateGroupData): Promise<Group> {
     return toGroup(await prisma.group.create({ data: { institutionId, ...data } }));
   }
+  async delete(institutionId: string, id: string): Promise<void> {
+    await prisma.group.delete({ where: { id, institutionId } });
+  }
 }
 
 export class PrismaCourseSubjectRepository implements CourseSubjectRepository {
@@ -199,6 +204,11 @@ export class PrismaCourseSubjectRepository implements CourseSubjectRepository {
     const row = await prisma.courseSubject.create({ data });
     return { id: row.id, courseId: row.courseId, subjectId: row.subjectId };
   }
+  async delete(courseId: string, subjectId: string): Promise<void> {
+    await prisma.courseSubject.delete({
+      where: { courseId_subjectId: { courseId, subjectId } },
+    });
+  }
 }
 
 export class PrismaPeriodRepository implements PeriodRepository {
@@ -215,5 +225,45 @@ export class PrismaPeriodRepository implements PeriodRepository {
   }
   async create(institutionId: string, data: CreatePeriodData): Promise<Period> {
     return toPeriod(await prisma.period.create({ data: { institutionId, ...data } }));
+  }
+  async update(institutionId: string, id: string, data: UpdatePeriodData): Promise<Period | null> {
+    // Only the fields present in `data` are touched; absent keys keep their
+    // current value. Pre-check + try/catch en el use case traduce P2002 a
+    // ConflictError (capa de aplicación no importa @prisma/client).
+    const row = await prisma.period.update({
+      where: { id, institutionId },
+      data: {
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.order !== undefined ? { order: data.order } : {}),
+        ...(data.startDate !== undefined ? { startDate: data.startDate } : {}),
+        ...(data.endDate !== undefined ? { endDate: data.endDate } : {}),
+      },
+    });
+    return toPeriod(row);
+  }
+  async delete(institutionId: string, id: string): Promise<void> {
+    await prisma.period.delete({ where: { id, institutionId } });
+  }
+  async setCurrent(
+    institutionId: string,
+    academicYearId: string,
+    periodId: string,
+    isCurrent: boolean,
+  ): Promise<void> {
+    if (isCurrent) {
+      // Flip atómico: desmarcamos las demás del mismo año académico + marcamos esta.
+      // Misma transacción para que dos requests concurrentes no terminen con dos pruebas marcadas.
+      await prisma.$transaction([
+        prisma.period.updateMany({
+          where: { institutionId, academicYearId, NOT: { id: periodId } },
+          data: { isCurrent: false },
+        }),
+        prisma.period.update({ where: { id: periodId }, data: { isCurrent: true } }),
+      ]);
+      return;
+    }
+    // Unmark: solo desmarca esta. No tocamos las demás — la marca en el
+    // mismo año académico puede quedar en otra Prueba (o en ninguna).
+    await prisma.period.update({ where: { id: periodId }, data: { isCurrent: false } });
   }
 }

@@ -5,19 +5,20 @@ test.describe("login + sesión", () => {
   test("la home redirige a login sin sesión", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveURL(/\/login/);
-    await expect(page.getByRole("heading", { name: "Eval" })).toBeVisible();
+    // Rebranding: ahora el heading es "Bienvenido a ecognIA".
+    await expect(page.getByRole("heading", { name: /ecognIA/i })).toBeVisible();
   });
 
   test("el formulario de login muestra los campos esperados", async ({ page }) => {
     await page.goto("/login");
-    await expect(page.getByLabel("Correo electrónico")).toBeVisible();
+    await expect(page.getByLabel("Correo institucional")).toBeVisible();
     await expect(page.getByLabel("Contraseña")).toBeVisible();
     await expect(page.getByRole("button", { name: "Iniciar sesión" })).toBeVisible();
   });
 
   test("credenciales inválidas muestran error y no entran", async ({ page }) => {
     await page.goto("/login");
-    await page.getByLabel("Correo electrónico").fill(DEMO_ADMIN.email);
+    await page.getByLabel("Correo institucional").fill(DEMO_ADMIN.email);
     await page.getByLabel("Contraseña").fill("contraseña-incorrecta");
     await page.getByRole("button", { name: "Iniciar sesión" }).click();
 

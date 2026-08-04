@@ -42,10 +42,10 @@ export default async function ResultsPage({ params }: Props) {
 
       <div className="mb-4 flex items-center gap-2">
         <Link
-          href={`/teacher/evaluations/${id}`}
+          href={`/teacher/evaluations/${id}/contexts`}
           className="text-muted-foreground text-sm hover:underline"
         >
-          ← Volver a la evaluación
+          ← Volver a la formulación
         </Link>
       </div>
 
@@ -150,7 +150,7 @@ export default async function ResultsPage({ params }: Props) {
         <h3 className="font-display mb-4 text-lg font-semibold">Hojas de respuestas</h3>
         {results.sheets.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            No hay hojas escaneadas para esta evaluación.
+            No hay hojas escaneadas para esta formulación.
           </p>
         ) : (
           <div className="overflow-x-auto">

@@ -14,7 +14,7 @@ export class GetBundle implements UseCase<GetBundleInput, BundleDetail> {
 
   async execute({ actor, bundleId }: GetBundleInput): Promise<Result<BundleDetail>> {
     const bundle = await this.bundles.findDetail(actor.institutionId, bundleId);
-    if (!bundle) return fail(new NotFoundError("Compendio", bundleId));
+    if (!bundle) return fail(new NotFoundError("Cuadernillo", bundleId));
     return ok(bundle);
   }
 }

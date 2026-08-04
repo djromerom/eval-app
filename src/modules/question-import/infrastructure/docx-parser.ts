@@ -143,7 +143,7 @@ export type KeyRow = {
 /**
  * Busca la primera tabla cuya cabecera contenga "Clave" y devuelve las filas
  * estructuradas. Solo toma filas con 4 o más celdas; la columna "Asignatura"
- * se ignora porque la importación apunta a una evaluación concreta.
+ * se ignora porque la importación apunta a una formulación concreta.
  */
 export function parseKeyTable(html: string): {
   keyByNumber: Map<number, KeyRow>;
@@ -312,6 +312,12 @@ async function buildQuestionsFromBlocks(params: {
       evidence: current.evidence ?? fromKey?.evidence ?? null,
       contextTitle: null,
       contextText: contextSanitized.text ?? null,
+      // DOCX no tiene figuras con id globalizado que vincule al
+      // contexto (los `!!IMAGEN N!!` se sanean arriba con
+      // `sanitizeImagePlaceholders`). Dejamos el campo presente y
+      // vacío para que la BD y los callers aguas abajo no tengan que
+      // tratarlo como opcional.
+      contextImages: {},
       image,
       warnings,
     };
@@ -402,7 +408,7 @@ function stripImagesFromText(text: string): string {
  *   !!IMAGEN 3!!   !!IMAGE 3!!   !!IMG 3!!   !!FIGURA 3!!   !!FIGURE 3!!
  *
  * Si llegan al texto, algo en la UI los renderiza como `<img src=…>` o como
- * `<a href=…>` y se generan 404 contra rutas de evaluación. Los saneamos
+ * `<a href=…>` y se generan 404 contra rutas de formulación. Los saneamos
  * aquí, ANTES de que `q.text` llegue a la BD, y dejamos un warning para que
  * el docente los marque con la imagen real desde el editor visual.
  *

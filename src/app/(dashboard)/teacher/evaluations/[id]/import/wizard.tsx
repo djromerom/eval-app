@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import type { ParsedQuestion } from "@/modules/question-import/domain/parsed-question";
-import { loadDocxSourceAction, loadAiSourceAction, loadSourceAction } from "./actions";
+import { enqueueAiImportAction, loadDocxSourceAction, loadSourceAction } from "./actions";
 import { QUESTIONS_CSV_TEMPLATE } from "@/modules/question-import/infrastructure/csv";
 import { ImportReviewForm } from "./review-form";
+import { ImportStream } from "./import-stream";
 
 /** Tamaño máximo de archivo para carga (15 MB). */
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
@@ -49,7 +50,9 @@ type LoadSource =
  */
 export function ImportWizard({ targetEvaluationId, sources, sections, subjects }: Props) {
   const [step, setStep] = useState<
-    { kind: "source" } | { kind: "review"; source: LoadSource; cached?: ParsedQuestion[] }
+    | { kind: "source" }
+    | { kind: "ai-streaming"; jobId: string; fileName: string }
+    | { kind: "review"; source: LoadSource; cached?: ParsedQuestion[] }
   >({ kind: "source" });
   const [error, setError] = useState<string | null>(null);
   const [csvFileName, setCsvFileName] = useState<string>("");
@@ -104,19 +107,17 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
       return;
     }
     setError(null);
+    const fileName = aiFile.name;
     startTransition(async () => {
       const fd = new FormData();
       fd.append("file", aiFile);
-      const res = await loadAiSourceAction(fd);
-      if (res.error) {
-        setError(res.error);
+      fd.append("evaluationId", targetEvaluationId);
+      const res = await enqueueAiImportAction(fd);
+      if (res.error || !res.jobId) {
+        setError(res.error ?? "No se pudo iniciar la importación con IA.");
         return;
       }
-      setStep({
-        kind: "review",
-        source: { kind: "ai", fileName: aiFile.name },
-        cached: res.questions,
-      });
+      setStep({ kind: "ai-streaming", jobId: res.jobId, fileName });
     });
   }
 
@@ -162,13 +163,38 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
     );
   }
 
+  if (step.kind === "ai-streaming") {
+    return (
+      <div className="space-y-6">
+        <ImportStream
+          jobId={step.jobId}
+          onDone={(questions, warnings) => {
+            setStep({
+              kind: "review",
+              source: { kind: "ai", fileName: step.fileName },
+              cached: questions as ParsedQuestion[],
+            });
+            // `warnings` se pierden en esta transición: el review-form no
+            // tiene slot para ellos todavía. Si la UI lo pide, lo
+            // propagamos por contexto.
+            void warnings;
+          }}
+          onError={(err) => {
+            setStep({ kind: "source" });
+            setError(err);
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <section className="bg-card space-y-3 rounded-xl border p-6">
-        <h2 className="font-semibold">Copiar de otra evaluación</h2>
+        <h2 className="font-semibold">Copiar de otra formulación</h2>
         {sources.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            No tienes otras evaluaciones con preguntas.
+            No tienes otras formulaciones con preguntas.
           </p>
         ) : (
           <>
@@ -196,7 +222,7 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
                 }}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 rounded-md px-4 text-sm font-medium disabled:opacity-50"
               >
-                Usar esta evaluación →
+                Usar esta formulación →
               </button>
             </div>
           </>
@@ -322,8 +348,11 @@ export function ImportWizard({ targetEvaluationId, sources, sections, subjects }
       ) : null}
 
       <p className="text-muted-foreground text-xs">
-        <Link href={`/teacher/evaluations/${targetEvaluationId}`} className="hover:underline">
-          ← Volver a la evaluación
+        <Link
+          href={`/teacher/evaluations/${targetEvaluationId}/unified`}
+          className="hover:underline"
+        >
+          ← Volver a la formulación
         </Link>
       </p>
     </div>

@@ -4,7 +4,7 @@ import { makeMarkBundleReady } from "@/modules/bundles/infrastructure/container"
 import { errorResponse, unauthorizedResponse } from "../../../_lib/domain-error";
 
 /**
- * POST /api/bundles/[id]/ready — sella el compendio (DRAFT → READY).
+ * POST /api/bundles/[id]/ready — sella el cuadernillo (DRAFT → READY).
  * Acceso: SUPER_ADMIN.
  */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {

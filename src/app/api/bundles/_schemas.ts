@@ -18,10 +18,10 @@ const objectId = z.string().min(1, "ID requerido");
 export const createBundleSchema = z.object({
   name: z.string().min(1, "El nombre es obligatorio."),
   bookletNumber: z.number().int().positive().nullable().optional(),
-  // Sprint 9: `null`/ausente = compendio cross-course. Si viene, el use case
+  // Sprint 9: `null`/ausente = cuadernillo cross-course. Si viene, el use case
   // valida que exista en la institución y que los items coincidan.
   courseId: objectId.nullable().optional(),
-  evaluationIds: z.array(objectId).min(1, "Selecciona al menos una evaluación."),
+  evaluationIds: z.array(objectId).min(1, "Selecciona al menos una formulación."),
   theme: EvaluationThemeSchema.partial().nullable().optional(),
 });
 

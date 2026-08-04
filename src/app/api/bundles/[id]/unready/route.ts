@@ -4,7 +4,7 @@ import { makeUnmarkBundleReady } from "@/modules/bundles/infrastructure/containe
 import { errorResponse, unauthorizedResponse } from "../../../_lib/domain-error";
 
 /**
- * POST /api/bundles/[id]/unready — desella el compendio (READY → DRAFT).
+ * POST /api/bundles/[id]/unready — desella el cuadernillo (READY → DRAFT).
  * Acceso: SUPER_ADMIN.
  */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {

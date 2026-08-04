@@ -34,6 +34,7 @@ class FakeEvaluations implements EvaluationRepository {
       academicYearId: "ay1",
       periodId: data.periodId ?? null,
       bookletNumber: data.bookletNumber ?? null,
+      bookletTypeId: data.bookletTypeId ?? null,
       totalQuestions: 0,
       durationMinutes: null,
       theme: null,
@@ -73,6 +74,12 @@ class FakeEvaluations implements EvaluationRepository {
   async deleteQuestion(): Promise<void> {
     throw new Error("no usado");
   }
+  async reorderQuestions(): Promise<void> {
+    throw new Error("no usado");
+  }
+  async duplicateQuestion(): Promise<void> {
+    throw new Error("no usado");
+  }
   async updateStatus(_i: string, id: string, status: EvaluationStatus) {
     const e = this.items.find((x) => x.id === id);
     if (e) e.status = status;
@@ -89,6 +96,9 @@ class FakeEvaluations implements EvaluationRepository {
   }
   async createNewVersion(): Promise<Evaluation> {
     throw new Error("no usado");
+  }
+  async existsByCourseSubjectPeriodYear(): Promise<boolean> {
+    return false;
   }
 }
 

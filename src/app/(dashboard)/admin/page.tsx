@@ -58,7 +58,7 @@ export default async function AdminDashboardPage() {
             </Link>
           }
         />
-        <StatCard label="Evaluaciones" value={evaluationsCount} accent />
+        <StatCard label="Formulaciones" value={evaluationsCount} accent />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -66,7 +66,7 @@ export default async function AdminDashboardPage() {
           {
             href: "/admin/academic",
             title: "Estructura académica",
-            desc: "Gestiona cursos, asignaturas, grupos y periodos.",
+            desc: "Gestiona cursos, asignaturas, grupos y pruebas.",
           },
           {
             href: "/admin/students",

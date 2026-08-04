@@ -8,12 +8,19 @@ import type { AnswerKey, SoloLevel } from "@/modules/evaluations/domain/evaluati
 import { MIN_OPTIONS, ANSWER_KEYS_ORDER } from "@/modules/evaluations/domain/evaluation";
 import { env } from "@/config/env";
 import {
+  makeListAcademicYears,
+  makeListCourseSubjects,
+  makeListPeriods,
+} from "@/modules/academic/infrastructure/container";
+import {
   makeAddQuestion,
   makeAddSection,
   makeChangeEvaluationStatus,
   makeCreateEvaluation,
   makeDeleteQuestion,
   makeDeleteSection,
+  makeDuplicateQuestion,
+  makeReorderQuestions,
   makeUpdateQuestion,
   makeUpdateSection,
 } from "@/modules/evaluations/infrastructure/container";
@@ -40,7 +47,7 @@ export async function createEvaluationAction(
   const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
   const bookletRaw = str(formData, "bookletNumber");
   // Sprint 7: duración estimada opcional al crear. "" → null (recae al
-  // cálculo heurístico en la portada del compendio). Si el input trae
+  // cálculo heurístico en la portada del cuadernillo). Si el input trae
   // basura no-entera, se omite (undefined → use case no valida).
   const durationRaw = str(formData, "durationMinutes");
   let durationMinutes: number | null | undefined;
@@ -50,18 +57,57 @@ export async function createEvaluationAction(
     const parsed = Number(durationRaw);
     durationMinutes = Number.isInteger(parsed) ? parsed : undefined;
   }
+
+  const courseSubjectId = str(formData, "courseSubjectId");
+  const periodId = str(formData, "periodId") || undefined;
+  // ago 2026: tipo de cuadernillo opcional seleccionado por el docente.
+  // "" → undefined (la formulación queda sin tipo). El use case valida
+  // que el id pertenezca al mismo `periodId` de la formulación.
+  const bookletTypeId = str(formData, "bookletTypeId") || undefined;
+
+  // Auto-generamos el título como `${Asignatura} ${Curso} - ${Año}`. Año
+  // viene del año académico del periodo seleccionado; si no hay periodo,
+  // usamos el año actual del calendario. Sin guion entre asignatura y
+  // curso (ago 2026): el docente pidió solo el guion antes del año, no
+  // después del nombre de la asignatura.
+  const [csRes, periodsRes, yearsRes] = await Promise.all([
+    makeListCourseSubjects().execute({ actor }),
+    makeListPeriods().execute({ actor }),
+    makeListAcademicYears().execute({ actor }),
+  ]);
+  const courseSubjects = csRes.ok ? csRes.value : [];
+  const periods = periodsRes.ok ? periodsRes.value : [];
+  const years = yearsRes.ok ? yearsRes.value : [];
+
+  const cs = courseSubjects.find((c) => c.id === courseSubjectId);
+  if (!cs) {
+    return { error: "La asignatura-curso no existe en tu institución." };
+  }
+
+  let year = new Date().getFullYear();
+  if (periodId) {
+    const period = periods.find((p) => p.id === periodId);
+    if (period) {
+      const ay = years.find((y) => y.id === period.academicYearId);
+      if (ay) year = ay.year;
+    }
+  }
+
+  const title = `${cs.subjectName} ${cs.courseName} - ${year}`;
+
   const result = await makeCreateEvaluation().execute({
     actor,
     data: {
-      title: str(formData, "title"),
-      courseSubjectId: str(formData, "courseSubjectId"),
-      periodId: str(formData, "periodId") || undefined,
+      title,
+      courseSubjectId,
+      periodId,
       bookletNumber: bookletRaw ? Number(bookletRaw) : undefined,
+      bookletTypeId,
       durationMinutes,
     },
   });
   if (!result.ok) return { error: result.error.message };
-  redirect(`/teacher/evaluations/${result.value.id}`);
+  redirect(`/teacher/evaluations/${result.value.id}/unified`);
 }
 
 export async function addSectionAction(
@@ -77,7 +123,10 @@ export async function addSectionAction(
   });
   if (!result.ok) return { error: result.error.message };
   revalidatePath(`/teacher/evaluations/${evaluationId}`);
-  return { success: true };
+  // Devolvemos el id de la sección creada para que el editor unificado
+  // pueda usarlo inmediatamente (ej. al guardar contexto + pregunta en un
+  // solo click, la pregunta se asocia a esta sección recién creada).
+  return { success: true, sectionId: result.value.id };
 }
 
 export async function updateSectionAction(
@@ -211,6 +260,64 @@ export async function deleteQuestionAction(
   return { success: true };
 }
 
+/**
+ * Duplica la pregunta indicada. La copia queda al final de la numeración
+ * (`totalQuestions + 1`) y hereda todo el contenido (enunciado, opciones,
+ * respuesta correcta, peso, justificación, etc.). `revalidatePath` refresca
+ * tanto el índice de contextos como el editor de la sección afectada.
+ */
+export async function duplicateQuestionAction(
+  _prev: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
+  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const evaluationId = str(formData, "evaluationId");
+  const result = await makeDuplicateQuestion().execute({
+    actor,
+    evaluationId,
+    questionId: str(formData, "questionId"),
+  });
+  if (!result.ok) return { error: result.error.message };
+  revalidatePath(`/teacher/evaluations/${evaluationId}/contexts`);
+  return { success: true };
+}
+
+/**
+ * Server action para el drag & drop del editor por contexto. Recibe la lista
+ * de IDs de preguntas en el orden deseado tras el drop, en formato JSON
+ * dentro de `orderedIds` (form-data es plano, no soporta arrays nativos).
+ *
+ * El use case valida pertenencia, DRAFT-only y ownership antes de renumerar.
+ */
+export async function reorderQuestionsAction(formData: FormData): Promise<AdminFormState> {
+  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const evaluationId = str(formData, "evaluationId");
+  const sectionId = str(formData, "sectionId");
+  const orderedIdsRaw = str(formData, "orderedIds");
+
+  let orderedQuestionIds: string[];
+  try {
+    const parsed = JSON.parse(orderedIdsRaw);
+    if (!Array.isArray(parsed) || !parsed.every((id) => typeof id === "string")) {
+      throw new Error("orderedIds no es un array de strings.");
+    }
+    orderedQuestionIds = parsed;
+  } catch (e) {
+    return { error: `Lista de preguntas inválida: ${(e as Error).message}` };
+  }
+
+  const result = await makeReorderQuestions().execute({
+    actor,
+    evaluationId,
+    sectionId,
+    orderedQuestionIds,
+  });
+  if (!result.ok) return { error: result.error.message };
+  revalidatePath(`/teacher/evaluations/${evaluationId}/contexts`);
+  revalidatePath(`/teacher/evaluations/${evaluationId}/contexts/${sectionId}`);
+  return { success: true };
+}
+
 export async function submitForReviewAction(formData: FormData): Promise<void> {
   const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
   const evaluationId = str(formData, "evaluationId");
@@ -221,5 +328,28 @@ export async function submitForReviewAction(formData: FormData): Promise<void> {
   });
   if (!result.ok) throw new Error(result.error.message);
   revalidatePath(`/teacher/evaluations/${evaluationId}`);
+  revalidatePath("/teacher/evaluations");
+}
+
+/**
+ * Publica una formulación en DRAFT directamente a PUBLISHED (atajo del
+ * editor unificado, ago 2026). El flujo canónico sigue siendo
+ * DRAFT → IN_REVIEW → APPROVED → PUBLISHED; este server action es solo
+ * para el botón "Publicar" del unified. Mismas validaciones de dominio
+ * (ownership + roles) que cualquier otra transición. Tras publicar,
+ * revalida todas las rutas donde la formulación aparece como estado.
+ */
+export async function publishEvaluationAction(formData: FormData): Promise<void> {
+  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const evaluationId = str(formData, "evaluationId");
+  const result = await makeChangeEvaluationStatus().execute({
+    actor,
+    evaluationId,
+    to: "PUBLISHED",
+  });
+  if (!result.ok) throw new Error(result.error.message);
+  revalidatePath(`/teacher/evaluations/${evaluationId}`);
+  revalidatePath(`/teacher/evaluations/${evaluationId}/unified`);
+  revalidatePath(`/teacher/evaluations/${evaluationId}/contexts`);
   revalidatePath("/teacher/evaluations");
 }

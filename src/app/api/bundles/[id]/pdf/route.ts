@@ -13,7 +13,7 @@ const WAIT_MS = 90_000;
 
 /**
  * GET /api/bundles/[id]/pdf — encola un job al worker PDF para que genere
- * el booklet del compendio (kind = "bundle") y devuelve el archivo.
+ * el booklet del cuadernillo (kind = "bundle") y devuelve el archivo.
  *
  * Sprint 1: solo el booklet combinado (kind = "bundle"). La hoja de respuestas
  * unificada entra en Sprint 2 como kind = "answer-sheets-bundle".
@@ -32,11 +32,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const bundleRes = await makeGetBundle().execute({ actor, bundleId: id });
   if (!bundleRes.ok) {
-    return NextResponse.json({ error: "Compendio no encontrado." }, { status: 404 });
+    return NextResponse.json({ error: "Cuadernillo no encontrado." }, { status: 404 });
   }
   if (bundleRes.value.status !== "READY") {
     return NextResponse.json(
-      { error: "El compendio debe estar marcado como READY antes de imprimir." },
+      { error: "El cuadernillo debe estar marcado como READY antes de imprimir." },
       { status: 409 },
     );
   }

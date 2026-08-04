@@ -16,7 +16,7 @@ function SubmitButton() {
 }
 
 /**
- * Form de edición de metadatos del compendio (solo DRAFT).
+ * Form de edición de metadatos del cuadernillo (solo DRAFT).
  * Usado en la página de detalle.
  */
 export function BundleEditForm({
@@ -93,7 +93,7 @@ export function BundleEditForm({
           ))}
         </select>
         <p className="text-muted-foreground text-xs">
-          Para asignar un curso, todas las evaluaciones del compendio deben ser de ese curso.
+          Para asignar un curso, todas las formulaciones del cuadernillo deben ser de ese curso.
         </p>
       </div>
 

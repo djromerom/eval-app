@@ -1,7 +1,7 @@
 /**
  * Máquina de estados del Bundle. Mismo modelo mental que
  * Evaluation.DRAFT → PUBLISHED, pero simplificado a 2 estados
- * en Sprint 1. Ver docs/compendios.md §"Estado y workflow".
+ * en Sprint 1. Ver docs/cuadernillos.md §"Estado y workflow".
  */
 
 export type BundleStatus = "DRAFT" | "READY";

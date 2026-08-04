@@ -37,16 +37,16 @@ function DeleteSubmit() {
       disabled={pending}
       className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-destructive w-full")}
     >
-      {pending ? "Eliminando…" : "Eliminar compendio"}
+      {pending ? "Eliminando…" : "Eliminar cuadernillo"}
     </button>
   );
 }
 
 /**
- * Panel lateral de acciones del compendio. Sólo los formularios que pueden
+ * Panel lateral de acciones del cuadernillo. Sólo los formularios que pueden
  * fallar (toggle ready / delete) se renderizan acá como client components:
  * capturan `BundleFormState.error` y lo muestran en un mensaje inline,
- * evitando que un fallo de negocio (p.ej. evaluación sin preguntas)
+ * evitando que un fallo de negocio (p.ej. formulación sin preguntas)
  * aparezca como Runtime Error overlay de Next.js.
  *
  * Los links de descarga / navegación (PDF, hojas, clave, reporte) se quedan
@@ -114,7 +114,7 @@ export function BundleActionPanel({ bundleId, isDraft }: { bundleId: string; isD
         </>
       ) : (
         <p className="text-muted-foreground text-xs">
-          Los PDFs se habilitan cuando el compendio está <strong>listo</strong>.
+          Los PDFs se habilitan cuando el cuadernillo está <strong>listo</strong>.
         </p>
       )}
 

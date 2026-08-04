@@ -86,6 +86,9 @@ class FakeBank implements BankQuestionRepository {
 class FakeEvaluations implements EvaluationRepository {
   detail: EvaluationDetail | null = null;
   added: CreateQuestionData[] = [];
+  /** sectionId → preguntas añadidas (en orden de inserción). */
+  addedBySection: Record<string, CreateQuestionData[]> = {};
+  addSectionCalls: Array<{ title?: string; content: unknown }> = [];
   async create(): Promise<Evaluation> {
     throw new Error("no usado");
   }
@@ -101,16 +104,29 @@ class FakeEvaluations implements EvaluationRepository {
   async findByInstitution(): Promise<EvaluationListItem[]> {
     return [];
   }
-  async addSection(): Promise<EvaluationSection> {
-    throw new Error("no usado");
+  async addSection(
+    _i: string,
+    _e: string,
+    data: { title?: string; content?: unknown },
+  ): Promise<EvaluationSection> {
+    const id = `sec-new-${this.addSectionCalls.length + 1}`;
+    this.addSectionCalls.push({ title: data.title, content: data.content });
+    return {
+      id,
+      title: data.title ?? null,
+      content: data.content ?? { type: "doc", content: [] },
+      order: (this.detail?.sections.length ?? 0) + this.addSectionCalls.length,
+      questions: [],
+    };
   }
   async addQuestion(
     _i: string,
     _e: string,
-    _s: string,
+    sectionId: string,
     data: CreateQuestionData,
   ): Promise<Question> {
     this.added.push(data);
+    (this.addedBySection[sectionId] ??= []).push(data);
     return {
       id: `q-${this.added.length}`,
       number: this.added.length,
@@ -161,6 +177,12 @@ class FakeEvaluations implements EvaluationRepository {
   async deleteQuestion(): Promise<void> {
     throw new Error("no usado");
   }
+  async reorderQuestions(): Promise<void> {
+    throw new Error("no usado");
+  }
+  async duplicateQuestion(): Promise<void> {
+    throw new Error("no usado");
+  }
   async updateStatus(): Promise<void> {}
   async updateSettings(
     _i: string,
@@ -171,6 +193,9 @@ class FakeEvaluations implements EvaluationRepository {
   }
   async createNewVersion(): Promise<Evaluation> {
     throw new Error("no usado");
+  }
+  async existsByCourseSubjectPeriodYear(): Promise<boolean> {
+    return false;
   }
 }
 
@@ -190,6 +215,7 @@ const valid = (over: Partial<ParsedQuestion> = {}): ParsedQuestion => ({
   evidence: null,
   contextTitle: null,
   contextText: null,
+  contextImages: {},
   image: null,
   warnings: [],
   ...over,
@@ -207,6 +233,7 @@ const draft = (over: Partial<Evaluation> = {}): Evaluation => ({
   periodId: null,
   teacherId: "t1",
   bookletNumber: null,
+  bookletTypeId: null,
   totalQuestions: 0,
   durationMinutes: null,
   theme: null,
@@ -556,6 +583,42 @@ describe("ImportQuestions", () => {
     expect(ctxPara.content?.[0]?.text).toBe("Texto introductorio");
   });
 
+  it("contextImages del banco → embebe el nodo `image` en el TipTap", async () => {
+    const url = "/api/uploads/evaluations/inst-1/uuid-1.jpg";
+    const bank = new FakeBank();
+    const r = await new ImportQuestions(new FakeEvaluations(), bank).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          contextText: "Observe el gráfico: [IMAGEN p04-fig1] y responda.",
+          correctAnswer: "B",
+          contextImages: { "p04-fig1": url },
+        }),
+      ],
+      destination: { kind: "bank", subjectId: "s1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const data = bank.createManyCalls[0]![0]!;
+    const tipTap = data.text as {
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    // header (h3 "Contexto") + paragraph ("Observe el gráfico:") + image
+    // + paragraph ("y responda.") + paragraph (el `text` de la pregunta)
+    expect(tipTap.content).toHaveLength(5);
+    expect(tipTap.content[0]!.type).toBe("heading");
+    expect(tipTap.content[1]!.type).toBe("paragraph");
+    expect(tipTap.content[1]!.content?.[0]?.text).toBe("Observe el gráfico:");
+    expect(tipTap.content[2]).toEqual({
+      type: "image",
+      attrs: { src: url, width: 80 },
+    });
+    expect(tipTap.content[3]!.type).toBe("paragraph");
+    expect(tipTap.content[3]!.content?.[0]?.text).toBe("y responda.");
+    expect(tipTap.content[4]!.type).toBe("paragraph");
+    expect(tipTap.content[4]!.content?.[0]?.text).toBe("¿Cuál es la respuesta?");
+  });
+
   it("preguntas SIN contexto no producen info ni modifican el section content", async () => {
     const evals = new FakeEvaluations();
     evals.detail = {
@@ -579,5 +642,417 @@ describe("ImportQuestions", () => {
     if (!r.ok) return;
     expect(evals.updateSectionCalls).toHaveLength(0);
     expect(r.value.infos).toEqual([]);
+  });
+
+  it("contextImages en formulación (Camino A) → nodo `image` en section.content", async () => {
+    const url = "/api/uploads/evaluations/inst-1/uuid-1.jpg";
+    const evals = new FakeEvaluations();
+    evals.detail = {
+      ...draft(),
+      sections: [
+        {
+          id: "sec1",
+          title: null,
+          content: { type: "doc", content: [] },
+          order: 1,
+          questions: [],
+        },
+      ],
+    };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          contextText: "Observe el gráfico: [IMAGEN p04-fig1] y responda.",
+          correctAnswer: "B",
+          contextImages: { "p04-fig1": url },
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(evals.updateSectionCalls).toHaveLength(1);
+    const content = evals.updateSectionCalls[0]!.content as {
+      type: string;
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    // paragraph + image + paragraph
+    expect(content.content).toHaveLength(3);
+    expect(content.content[0]).toMatchObject({ type: "paragraph" });
+    expect(content.content[1]).toEqual({
+      type: "image",
+      attrs: { src: url, width: 80 },
+    });
+    expect(content.content[2]).toMatchObject({ type: "paragraph" });
+  });
+
+  it("Camino A con `contextImages` undefined en una pregunta no rompe (defensa)", async () => {
+    // Reproduce el bug de runtime que ocurrió tras desplegar el campo
+    // `contextImages`: el payload persistido en BD por builds previos
+    // llega a `commitImportAction` sin la key. `aggregateContextImages`
+    // debe tolerarlo y seguir como si la pregunta no tuviera figuras.
+    const evals = new FakeEvaluations();
+    evals.detail = {
+      ...draft(),
+      sections: [
+        {
+          id: "sec1",
+          title: null,
+          content: { type: "doc", content: [] },
+          order: 1,
+          questions: [],
+        },
+      ],
+    };
+    const q1 = valid({
+      contextText: "Contexto compartido",
+      correctAnswer: "B",
+    });
+    // Simulamos el bug: el campo NO está presente en el JSON.
+    const { contextImages: _drop, ...broken } = q1;
+    void _drop;
+    expect((broken as { contextImages?: unknown }).contextImages).toBeUndefined();
+
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [broken as unknown as ParsedQuestion, broken as unknown as ParsedQuestion],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // El contexto se preserva, las imágenes del contexto son {}.
+    const content = evals.updateSectionCalls[0]!.content as {
+      content: { type: string }[];
+    };
+    expect(content.content).toHaveLength(1);
+    expect(content.content[0]).toMatchObject({ type: "paragraph" });
+  });
+
+  // ---------- AUTO-CREAR SECCIONES POR CONTEXTO (sin sectionId) ----------
+
+  it("sin sectionId + con contextos → crea una sección por contexto y reparte preguntas", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          contextText: "El agua es vital para la vida.",
+          contextTitle: "Ciencia",
+          text: "¿Por qué el agua es vital?",
+          correctAnswer: "B",
+        }),
+        valid({
+          sourceNumber: 2,
+          text: "¿Cuánta agua se debe beber al día?",
+          correctAnswer: "A",
+          contextText: "El agua es vital para la vida.",
+          contextTitle: "Ciencia",
+        }),
+        valid({
+          sourceNumber: 3,
+          text: "¿Cuál es la capital de Francia?",
+          correctAnswer: "D",
+          contextText: "Europa tiene muchos países.",
+          contextTitle: "Geografía",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.imported).toBe(3);
+    expect(evals.addSectionCalls).toHaveLength(2);
+    // Las preguntas se repartieron entre las dos secciones nuevas
+    const sectionIds = Object.keys(evals.addedBySection);
+    expect(sectionIds).toHaveLength(2);
+    // Las dos preguntas del contexto "Ciencia" caen en una sección,
+    // la de "Geografía" en la otra.
+    const counts = sectionIds.map((id) => evals.addedBySection[id]!.length).sort();
+    expect(counts).toEqual([1, 2]);
+    // Cada addSection recibió un content no vacío (el texto del contexto)
+    expect(evals.addSectionCalls.every((c) => c.content)).toBe(true);
+    expect(r.value.infos.some((m) => /Se crearon 2 secci/i.test(m))).toBe(true);
+  });
+
+  it("sin sectionId + sin contextos → auto-crea una sección con título derivado y ancla todas las preguntas", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          sourceNumber: 1,
+          text: "En el interior del siguiente círculo se muestra un triángulo y un trapecio.",
+        }),
+        valid({
+          sourceNumber: 2,
+          text: "Para construir una cerca rectangular se tomaron medidas.",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.imported).toBe(2);
+    // Crea exactamente una sección vacía
+    expect(evals.addSectionCalls).toHaveLength(1);
+    expect(evals.addSectionCalls[0]!.content).toEqual({ type: "doc", content: [] });
+    // Título derivado de la primera línea del primer enunciado
+    expect(evals.addSectionCalls[0]!.title).toBe(
+      "En el interior del siguiente círculo se muestra un triángulo y un trapecio.",
+    );
+    // Las dos preguntas van a esa misma sección
+    const sectionIds = Object.keys(evals.addedBySection);
+    expect(sectionIds).toHaveLength(1);
+    expect(evals.addedBySection[sectionIds[0]!]).toHaveLength(2);
+    // Info explica lo que pasó
+    expect(
+      r.value.infos.some(
+        (m) => /no tra[ií]a contextos compartidos/i.test(m) && /secci[oó]n|contexto/i.test(m),
+      ),
+    ).toBe(true);
+  });
+
+  it("sin sectionId + sin contextos + enunciado largo → trunca el título a 80 chars", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const long = "A".repeat(120);
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [valid({ sourceNumber: 1, text: long })],
+      destination: { kind: "evaluation", evaluationId: "e1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const title = evals.addSectionCalls[0]!.title!;
+    expect(title.length).toBeLessThanOrEqual(80);
+    expect(title.endsWith("…")).toBe(true);
+  });
+
+  it("sin sectionId + algunas preguntas sin contexto → caen a la primera sección creada", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          contextText: "Contexto A.",
+          contextTitle: "A",
+          text: "Pregunta con contexto A",
+          correctAnswer: "A",
+        }),
+        valid({
+          sourceNumber: 2,
+          text: "Pregunta suelta sin contexto",
+          correctAnswer: "A",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(evals.addSectionCalls).toHaveLength(1);
+    expect(evals.added).toHaveLength(2);
+    // Las dos preguntas van a la única sección creada
+    const sectionIds = Object.keys(evals.addedBySection);
+    expect(sectionIds).toHaveLength(1);
+    expect(evals.addedBySection[sectionIds[0]!]).toHaveLength(2);
+    expect(r.value.infos.some((m) => /sin contexto/i.test(m))).toBe(true);
+  });
+
+  it("contexto con [TABLA: ...] → la sección auto-creada recibe un nodo table real, no el string literal", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const tableContext = `Lea las descripciones de la columna izquierda.
+[TABLA: In the kitchen - Descripciones y Palabras | Descripciones | Palabras |
+|---------------|----------|
+| 1. These are round. | A. bowls |
+| 2. Hot drink. | B. cake |]`;
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          contextText: tableContext,
+          contextTitle: "In the kitchen",
+          text: "¿Cuál concuerda?",
+          correctAnswer: "A",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(evals.addSectionCalls).toHaveLength(1);
+    const content = evals.addSectionCalls[0]!.content as {
+      type: string;
+      content: { type: string; content?: unknown }[];
+    };
+    // El section content NO debe contener el string literal [TABLA:...
+    const flat = JSON.stringify(content);
+    expect(flat).not.toContain("[TABLA:");
+    // Debe contener un nodo `table` con la cabecera "Descripciones"
+    expect(content.type).toBe("doc");
+    const tableNode = content.content.find((n) => n.type === "table");
+    expect(tableNode).toBeDefined();
+    // El heading(4) con el título del bloque va antes de la tabla
+    const headingNode = content.content.find(
+      (n) => n.type === "heading" && (n as { attrs?: { level?: number } }).attrs?.level === 4,
+    ) as { content: { text: string }[] } | undefined;
+    expect(headingNode).toBeDefined();
+    expect(headingNode!.content[0]!.text).toBe("In the kitchen - Descripciones y Palabras");
+  });
+
+  // ---------- LATEX: $...$ / $$...$$ → nodos inlineMath / blockMath ----------
+
+  it("pregunta con $inline$ → nodo inlineMath dentro del paragraph del enunciado", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [valid({ text: "La energía $E=mc^2$ es famosa", correctAnswer: "B" })],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const data = evals.added[0]!;
+    const tipTap = data.text as {
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    expect(tipTap.content).toHaveLength(1);
+    expect(tipTap.content[0]!.type).toBe("paragraph");
+    expect(tipTap.content[0]!.content).toEqual([
+      { type: "text", text: "La energía " },
+      { type: "inlineMath", attrs: { tex: "E=mc^2" } },
+      { type: "text", text: " es famosa" },
+    ]);
+  });
+
+  it("pregunta con $$block$$ al inicio → blockMath top-level + paragraph con el resto", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          text: "$$x^2 + y^2 = z^2$$ Es el teorema de Pitágoras.",
+          correctAnswer: "A",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const data = evals.added[0]!;
+    const tipTap = data.text as {
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    // blockMath top-level ($$...$$ toma todo el contenido) + paragraph con el resto
+    expect(tipTap.content).toHaveLength(2);
+    expect(tipTap.content[0]).toEqual({
+      type: "blockMath",
+      attrs: { tex: "x^2 + y^2 = z^2" },
+    });
+    expect(tipTap.content[1]!.type).toBe("paragraph");
+    expect(tipTap.content[1]!.content?.[0]?.text).toBe(" Es el teorema de Pitágoras.");
+  });
+
+  it("contexto compartido con $inline$ → nodo inlineMath dentro del section.content (Camino A)", async () => {
+    const evals = new FakeEvaluations();
+    evals.detail = {
+      ...draft(),
+      sections: [
+        {
+          id: "sec1",
+          title: null,
+          content: { type: "doc", content: [] },
+          order: 1,
+          questions: [],
+        },
+      ],
+    };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          contextText: "Aplica la fórmula $\\Delta = b^2 - 4ac$ al caso.",
+          correctAnswer: "B",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(evals.updateSectionCalls).toHaveLength(1);
+    const content = evals.updateSectionCalls[0]!.content as {
+      type: string;
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    expect(content.content).toHaveLength(1);
+    expect(content.content[0]!.type).toBe("paragraph");
+    expect(content.content[0]!.content).toEqual([
+      { type: "text", text: "Aplica la fórmula " },
+      { type: "inlineMath", attrs: { tex: "\\Delta = b^2 - 4ac" } },
+      { type: "text", text: " al caso." },
+    ]);
+  });
+
+  it("banco con pregunta que trae $inline$ → el nodo inlineMath llega al doc TipTap persistido", async () => {
+    const bank = new FakeBank();
+    const r = await new ImportQuestions(new FakeEvaluations(), bank).execute({
+      actor: teacher,
+      questions: [valid({ text: "Si $x$ y $y$ son positivos…", correctAnswer: "A" })],
+      destination: { kind: "bank", subjectId: "s1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const data = bank.createManyCalls[0]![0]!;
+    const tipTap = data.text as {
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    expect(tipTap.content).toHaveLength(1);
+    expect(tipTap.content[0]!.type).toBe("paragraph");
+    expect(tipTap.content[0]!.content).toEqual([
+      { type: "text", text: "Si " },
+      { type: "inlineMath", attrs: { tex: "x" } },
+      { type: "text", text: " y " },
+      { type: "inlineMath", attrs: { tex: "y" } },
+      { type: "text", text: " son positivos…" },
+    ]);
+  });
+
+  // ---------- HEURÍSTICA POST-PARSE: pseudo-notación [expr]^N ----------
+
+  it("pregunta con corchetes literales + ^N (sin delimitadores LaTeX) → heurística produce inlineMath", async () => {
+    // Caso real que motivó el heurístico (PR #18): la IA emite el
+    // enunciado como texto plano y la profesora quiere ver la fórmula
+    // renderizada. El helper de import debe detectar el patrón
+    // `[expr]^N` y emitir un inlineMath con la versión LaTeX correcta.
+    const evals = new FakeEvaluations();
+    evals.detail = { ...draft(), sections: [] };
+    const r = await new ImportQuestions(evals, new FakeBank()).execute({
+      actor: teacher,
+      questions: [
+        valid({
+          text: "El resultado de la expresión [10 + 6 - 4(8/2)]^0 + 5, es:",
+          correctAnswer: "B",
+        }),
+      ],
+      destination: { kind: "evaluation", evaluationId: "e1", sectionId: "sec1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const data = evals.added[0]!;
+    const tipTap = data.text as {
+      content: { type: string; attrs?: Record<string, unknown>; content?: { text?: string }[] }[];
+    };
+    expect(tipTap.content).toHaveLength(1);
+    expect(tipTap.content[0]!.type).toBe("paragraph");
+    expect(tipTap.content[0]!.content).toEqual([
+      { type: "text", text: "El resultado de la expresión " },
+      { type: "inlineMath", attrs: { tex: "[10 + 6 - 4(8/2)]^{0}" } },
+      { type: "text", text: " + 5, es:" },
+    ]);
   });
 });

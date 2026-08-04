@@ -250,7 +250,7 @@ export function ThemeForm({ initial, logoUrl, logoPath }: Props) {
         <p className="text-muted-foreground mt-1 text-xs">
           Los cambios se aplican en la próxima impresión del cuadernillo (
           <a className="underline" href="/teacher/evaluations" target="_blank">
-            ir a evaluaciones
+            ir a formulaciones
           </a>
           ).
         </p>

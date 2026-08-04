@@ -1,8 +1,8 @@
 /**
  * Helper puro para el layout de la hoja de respuestas (OMR) con preguntas
- * de número de opciones variable (2..8). Sprint 1 del módulo compendios.
+ * de número de opciones variable (2..8). Sprint 1 del módulo cuadernillos.
  *
- * Ver docs/compendios.md §"Soporte de opciones variables". El booklet PDF
+ * Ver docs/cuadernillos.md §"Soporte de opciones variables". El booklet PDF
  * (single-evaluation, ya existente) y la hoja unificada (bundle, Sprint 2)
  * reusan este helper. Las burbujas tienen tamaño físico constante en mm;
  * solo cambia el espaciado entre ellas y el ancho total de la fila según
