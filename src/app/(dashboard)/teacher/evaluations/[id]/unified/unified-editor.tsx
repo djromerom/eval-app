@@ -1309,7 +1309,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                           Editar contexto
                         </Button>
                         <span className="text-muted-foreground text-xs">
-                          Modifica el título o el contenido del contexto asociado a esta pregunta.
+                          Info del contexto.
                         </span>
                       </div>
                     );
