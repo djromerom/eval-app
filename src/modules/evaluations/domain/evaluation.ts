@@ -76,6 +76,15 @@ export interface EvaluationDetail extends Evaluation {
   /** Nombre del tipo de cuadernillo (nullable). El repo hidrata este
    *  campo con `include: { bookletType: { select: { name: true } } }`. */
   bookletTypeName?: string | null;
+  /** Nombre de la asignatura (nullable defensivo). El repo hidrata este
+   *  campo con `include: { courseSubject: { subject: { name } } }`. Lo
+   *  consume el editor unificado para componer el header
+   *  `${periodName} ${subjectName} ${courseName} ${bookletTypeName}`
+   *  (ago 2026). */
+  subjectName?: string | null;
+  /** Nombre del curso / grado (nullable defensivo). El repo hidrata este
+   *  campo con `include: { courseSubject: { course: { name } } }`. */
+  courseName?: string | null;
 }
 
 /** Fila de listado enriquecida con nombres de curso/asignatura/periodo. */

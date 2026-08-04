@@ -184,6 +184,19 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         period: { select: { name: true } },
         // Hidrata bookletTypeName (ago 2026).
         bookletType: { select: { name: true } },
+        // Hidrata subjectName y courseName (ago 2026): el editor unificado
+        // compone el título del header como
+        // `${periodName} ${subjectName} ${courseName} ${bookletTypeName}`
+        // con espacios y omitiendo los bloques faltantes (sin periodo /
+        // sin tipo de cuadernillo). Antes se reutilizaba `evaluation.title`
+        // que concatenaba asignatura+grado+" - "+año, formato que el
+        // docente pidió reorganizar.
+        courseSubject: {
+          select: {
+            subject: { select: { name: true } },
+            course: { select: { name: true } },
+          },
+        },
       },
     });
     if (!row) return null;
@@ -192,6 +205,8 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
       sections: row.sections.map(toSection),
       periodName: row.period?.name ?? null,
       bookletTypeName: row.bookletType?.name ?? null,
+      subjectName: row.courseSubject?.subject?.name ?? null,
+      courseName: row.courseSubject?.course?.name ?? null,
     };
   }
 

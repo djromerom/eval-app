@@ -66,19 +66,54 @@ export interface UnifiedEditorData {
  *    con `initial={...}` precargado; al guardar, `onDone` cierra el form.
  */
 export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
-  // Sección objetivo (a la que se agrega una nueva pregunta). Por defecto
-  // la de MAYOR `order` (= la última en la tabla), para que el ítem recién
-  // agregado quede al final de la lista visible. Caso contrario cae en la
-  // primera sección y, si las demás tienen preguntas, aparece "en medio"
-  // aunque su número sea el más alto (bug visto en evaluaciones importadas
-  // donde la primera sección tiene ~25 preguntas y la nueva entra con #N).
-  const [targetSectionId, setTargetSectionId] = useState<string | null>(
-    data.sections[data.sections.length - 1]?.id ?? data.sections[0]?.id ?? null,
-  );
+  // Sección objetivo (a la que se agrega una nueva pregunta).
+  //
+  // Default contextual (ago 2026):
+  //  - Camino legacy (`?from` ausente o ≠"list"): última sección. Para que
+  //    el ítem recién agregado quede al final de la lista visible. Caso
+  //    contrario cae en la primera sección y, si las demás tienen
+  //    preguntas, aparece "en medio" aunque su número sea el más alto
+  //    (bug visto en evaluaciones importadas donde la primera sección
+  //    tiene ~25 preguntas y la nueva entra con #N).
+  //  - Camino `?from=list` (docente llega desde "Mis formulaciones"):
+  //    PRIMER placeholder vacío (la sección auto-creada por StrictMode,
+  //    sin título ni contenido). El docente suele entrar a la card a
+  //    CREAR un contexto nuevo, no a refinar uno existente — y si
+  //    apuntamos a la última sección con contenido, el gate
+  //    `sectionHasSavedContent` se evalúa a true y los botones
+  //    "Actualizar/Cancelar" emergen falsamente al tipear sobre un
+  //    input que arranca vacío (mismatch entre la intención del docente
+  //    y la sección destino). Apuntando al placeholder vacío, el gate
+  //    queda false hasta que el docente efectivamente escriba algo
+  //    distinto, y los botones solo aparecen si apunta a una sección
+  //    con contenido real (lo cual ya no es este caso por construcción).
+  //    Si NO hay placeholder vacío (todas las secciones tienen
+  //    contenido), caemos a `data.sections[0]` (primera por order) para
+  //    no dejar `targetSectionId=null` (eso mostraría "Preparando el
+  //    formulario…" indefinidamente, mala UX).
+  const [targetSectionId, setTargetSectionId] = useState<string | null>(() => {
+    if (data.initialHideForm) {
+      const empty = data.sections.find((s) => !s.title && !s.content);
+      if (empty) return empty.id;
+      return data.sections[0]?.id ?? null;
+    }
+    return data.sections[data.sections.length - 1]?.id ?? data.sections[0]?.id ?? null;
+  });
 
   // Estado del contexto a crear.
   const [draftSectionTitle, setDraftSectionTitle] = useState("");
   const [draftSectionContent, setDraftSectionContent] = useState<unknown>(null);
+  // Marca si el docente tocó los inputs de título/contenido del bloque
+  // "Contexto". El botón "Actualizar contexto" solo aparece cuando
+  // dirty=true (ago 2026). Sin esta marca, en el mount inicial
+  // drafts="" pero la sección destino tiene contenido → diff falso → los
+  // botones aparecen sin que el docente haya editado nada. Con la marca,
+  // los inputs arrancan vacíos (lo que el docente espera al pulsar
+  // "Agregar 1 a 1") y los botones solo emergen tras una edición real.
+  // Se resetea a false tras "Actualizar contexto" / "Cancelar cambios" /
+  // "Nuevo contexto" / startEdit (los flujos donde los drafts vuelven a
+  // coincidir con el estado persistido o recién creado).
+  const [contextoDirty, setContextoDirty] = useState(false);
   // Contador de iteraciones de "Nuevo contexto": se incrementa tras cada
   // guardado exitoso para forzar el remount del Input/RichTextEditor del
   // bloque Contexto (sus `defaultValue` solo aplican al montar). Sin esto,
@@ -90,6 +125,16 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   // `initial` y al guardar `onDone` lo limpia.
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [showEditingBanner, setShowEditingBanner] = useState(false);
+
+  // Cuando el docente edita una pregunta existente, los inputs del bloque
+  // Contexto nacen DESHABILITADOS (no queremos que un cambio accidental en
+  // el contexto del ítem se cuele mientras el docente solo quería editar el
+  // enunciado). Para poder editar el contexto desde ahí, hace falta un
+  // paso explícito: pulsar "Editar contexto" → este flag se enciende → los
+  // inputs se habilitan → aparecen "Guardar/Cancelar". Se resetea a false
+  // al cerrar el modo edición de pregunta (cancelEdit o tras guardar).
+  // (ago 2026)
+  const [editingContext, setEditingContext] = useState(false);
 
   // Modal de revisión.
   const [reviewModal, setReviewModal] = useState<QuestionLite | null>(null);
@@ -272,13 +317,31 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     // docente vea a qué contexto pertenece la pregunta. NO permitimos editar
     // el contexto desde aquí (los inputs quedan disabled más abajo y el form
     // no envía cambios de sección): si quiere cambiar el contexto, tiene
-    // que duplicar la pregunta en otra sección y borrar la original.
+    // que pulsar explícitamente "Editar contexto" en el bloque Contexto
+    // (lo monta editingContext=true; los inputs se desbloquean y aparecen
+    // Actualizar/Cancelar).
     const section = data.sections.find((s) => s.id === q.sectionId);
     setDraftSectionTitle(section?.title ?? "");
     setDraftSectionContent(section?.content ?? null);
     setReviewModal(null);
     setShowEditingBanner(true);
     setFormError(null);
+    // Si la card de creación/edición está cerrada (caso típico: el docente
+    // llegó desde "Mis formulaciones" con initialHideForm=true, o había
+    // pulsado "Cerrar" tras crear un ítem), el modal "Editar" debe abrirla
+    // para que el QuestionForm con el initial precargado sea visible. Sin
+    // esto, cerrar el modal deja al docente sin saber dónde quedó el ítem
+    // en edición. (ago 2026)
+    setShowForm(true);
+    // Los drafts se sincronizaron con la sección persistida → no hay edición
+    // pendiente. Los botones "Actualizar/Cancelar" deben quedar ocultos.
+    setContextoDirty(false);
+    // Entramos al modo edición de pregunta con el contexto BLOQUEADO por
+    // default (mostramos el botón "Editar contexto", NO los inputs ya
+    // habilitados). Defensivo: si el docente había entrado en modo edición
+    // de contexto antes (improbable, pero posible si re-carga la misma
+    // pregunta), reseteamos a false para arrancar limpio.
+    setEditingContext(false);
   }
 
   function cancelEdit() {
@@ -286,6 +349,10 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     setEditingQuestionId(null);
     setShowEditingBanner(false);
     setFormError(null);
+    // Salimos del modo edición de pregunta: cualquier desbloqueo de
+    // contexto que el docente hubiera hecho se descarta. Si vuelve a
+    // editar la misma pregunta, startEdit() lo deja en false otra vez.
+    setEditingContext(false);
   }
 
   /**
@@ -384,7 +451,8 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       // mismo título (trim case-insensitive) que el draft, NO creamos otra —
       // el backend (AddSection) no deduplica por título, así que esta es la
       // única barrera. Si la sección existente está VACÍA, la renombramos.
-      // Si tiene contenido, reusamos sin más (limpiamos drafts).
+      // Si tiene contenido, reusamos sin más (sincronizamos drafts con la
+      // sección destino).
       const matchingByTitle =
         title.length > 0
           ? data.sections.find((s) => (s.title ?? "").trim().toLowerCase() === title.toLowerCase())
@@ -406,11 +474,33 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           }
         }
         // Sección ya tiene el título (o lo acabamos de poner): nada que
-        // crear. Limpiamos drafts como en el camino exitoso normal.
-        setDraftSectionTitle("");
-        setDraftSectionContent(null);
+        // crear. Apuntamos `targetSectionId` a la sección existente y
+        // sincronizamos drafts con sus valores. Mismo principio que en
+        // el camino de creación nuevo (ago 2026): drafts == sección →
+        // sin diff → botones "Actualizar/Cancelar" quedan ocultos hasta
+        // que el docente EDITE el contexto.
+        setTargetSectionId(matchingByTitle.id);
+        setDraftSectionTitle(title);
+        if (hasContent) {
+          try {
+            setDraftSectionContent(JSON.parse(contentRaw));
+          } catch {
+            setDraftSectionContent(null);
+          }
+        } else {
+          setDraftSectionContent(null);
+        }
+        setNewSectionRenderKey((k) => k + 1);
         setActionStatus("saved");
         newSectionFormRef.current?.reset();
+        // Drafts sincronizados con la sección destino → no hay edición
+        // pendiente que mostrar.
+        setContextoDirty(false);
+        // La sección destino ya tenía id guardado (era la razón del
+        // dedupe), así que el bloque Contexto queda como está —
+        // contextoDirty=false cierra los botones Actualizar/Cancelar y
+        // los inputs siguen habilitados (cualquier edición futura los
+        // reabre automáticamente vía `setContextoDirty(true)`).
         setTimeout(() => {
           setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
         }, 2500);
@@ -427,9 +517,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         !onlySection.content;
 
       let res: AdminFormState;
+      let newSectionId: string | null = null;
       if (isEmpty && onlySection) {
         // RENOMBRAR: construimos un FormData con sectionId para
         // updateSectionAction.
+        newSectionId = onlySection.id;
         const fd = new FormData();
         fd.append("evaluationId", data.evaluationId);
         fd.append("sectionId", onlySection.id);
@@ -438,7 +530,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         res = await updateSectionAction({}, fd);
       } else {
         // CREAR nueva sección.
-        res = await addSectionAction({}, formData);
+        const fd = new FormData();
+        fd.append("evaluationId", data.evaluationId);
+        fd.append("title", title);
+        if (hasContent) fd.append("content", contentRaw);
+        const createRes = await addSectionAction({}, fd);
+        if (createRes.sectionId) newSectionId = createRes.sectionId;
+        res = createRes;
       }
 
       if (res?.error) {
@@ -447,15 +545,45 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         return;
       }
 
-      // Éxito: limpiar borradores + reset del form nativo (importante para
-      // que el `name="title"` y el hidden `name="content"` del RichTextEditor
-      // queden limpios). El `revalidatePath` de los server actions refresca
-      // automáticamente `data.sections`, así que el badge de CONTEXTO de la
-      // tabla se actualiza sin más.
-      setDraftSectionTitle("");
-      setDraftSectionContent(null);
+      // Éxito: sincronizamos drafts con la sección recién creada (o
+      // renombrada) en vez de limpiarlos. Si los drafts quedaran en ""
+      // y la sección tuviera título="C2", el comparador del botón
+      // "Actualizar contexto" vería un diff falso y los botones
+      // aparecerían innecesariamente — el docente acaba de CREAR ese
+      // contexto, no de editarlo. Manteniendo drafts == sección, el
+      // botón queda oculto hasta que el docente EDITE algo. (ago 2026)
+      //
+      // Además: apuntamos `targetSectionId` directamente a la nueva
+      // sección, en lugar de dejarlo en null. El effect de "sección
+      // objetivo inválida" lo re-asignaría al mismo id de todos modos
+      // (es la última sección), pero hacerlo explícito evita el ciclo.
+      // Replica también el comportamiento post-"Agregar enunciado"
+      // (drafts pre-cargados con el contexto recién persistido): la
+      // próxima pregunta del docente reutilizará esta sección vía
+      // `contextoMatchesSection` en el overrideAction.
+      if (newSectionId) {
+        setTargetSectionId(newSectionId);
+        setDraftSectionTitle(title);
+        if (hasContent) {
+          try {
+            setDraftSectionContent(JSON.parse(contentRaw));
+          } catch {
+            setDraftSectionContent(null);
+          }
+        } else {
+          setDraftSectionContent(null);
+        }
+      }
+      setNewSectionRenderKey((k) => k + 1);
       setActionStatus("saved");
       newSectionFormRef.current?.reset();
+      // Drafts sincronizados con la sección recién creada → no hay edición
+      // pendiente.
+      setContextoDirty(false);
+      // El bloque Contexto sigue habilitado; contextoDirty=false oculta
+      // los botones Actualizar/Cancelar. Si el docente quiere ajustar
+      // lo recién guardado, tipea y los botones reaparecen
+      // automáticamente vía setContextoDirty(true) en el onChange.
       setTimeout(() => {
         setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
       }, 2500);
@@ -490,7 +618,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
    * ve el diff ya salvado y el botón desaparece.
    */
   async function handleUpdateContext() {
-    if (editingQuestionId) return; // modo creación/edición puntual
+    // Modo edición de pregunta + docente pulsó "Editar contexto" →
+    // permitido (los botones Actualizar/Cancelar del bloque Contexto se
+    // rinden con editingContext=true; sin esta relajación no podríamos
+    // persistir el cambio del contexto desde el modo edición de ítem).
+    if (editingQuestionId && !editingContext) return; // modo edición sin unlock
     if (submittingRef.current) {
       console.warn("[Actualizar-contexto] BLOQUEADO por doble-submit");
       return;
@@ -532,6 +664,21 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         return;
       }
       setActionStatus("saved");
+      // Los drafts quedaron persistidos → ya coinciden con la sección
+      // destino. Limpiamos la marca dirty para que el botón
+      // "Actualizar contexto" desaparezca (el docente acaba de guardar,
+      // no hay más diff que mostrar).
+      setContextoDirty(false);
+      // Si guardamos el contexto desde el flujo "Editar contexto"
+      // (edición de pregunta existente), cerramos también ese flag para
+      // devolver el bloque al estado default — inputs bloqueados,
+      // docente sigue enfocado en editar la pregunta. En el otro flujo
+      // (no-editingQuestion), `editingContext` ya era false así que el
+      // setter es no-op.
+      if (editingContext) setEditingContext(false);
+      // Persistimos cambios del contexto. contextoDirty=false cierra
+      // los botones Actualizar/Cancelar; los inputs siguen habilitados
+      // para que el docente pueda seguir editando sin re-entradas.
       setTimeout(() => {
         setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
       }, 2500);
@@ -557,7 +704,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
    * NO toca el servidor: es 100% client-side. El backend ni se entera.
    */
   function handleCancelContextEdit() {
-    if (editingQuestionId) return; // no aplica en modo edición
+    // Modo edición de pregunta + docente pulsó "Editar contexto" →
+    // permitido (botón Cancelar del bloque Contexto visible con
+    // editingContext=true). Sin esta relajación no podríamos revertir
+    // los drafts del contexto desde el modo edición de ítem.
+    if (editingQuestionId && !editingContext) return;
     const sectionId = targetSectionId;
     if (!sectionId) return;
     const targetSection = data.sections.find((s) => s.id === sectionId);
@@ -576,6 +727,14 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     // El form nativo también: por si el docente tocó algo que no
     // levantamos al state (no debería pasar, pero defensivo).
     newSectionFormRef.current?.reset();
+    // Tras revertir, los drafts coinciden con la sección destino → no
+    // hay diff → no hay botones (controlado por contextoDirty=false).
+    setContextoDirty(false);
+    // Si estábamos en el flujo "Editar contexto" desde un modo edición
+    // de pregunta, también cerramos ese flag para volver al estado
+    // default (inputs bloqueados de nuevo, listo para tipear la
+    // pregunta sin tocar el contexto por accidente).
+    if (editingContext) setEditingContext(false);
   }
 
   /**
@@ -591,15 +750,27 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
    *      el contexto al que pertenece semánticamente.
    *   2. Crea (o renombra, si es la única sección vacía) un NUEVO
    *      contexto con el título/contenido del bloque "Contexto" arriba.
-   *      Este nuevo contexto queda asignado a `targetSectionId` para que
-   *      la PRÓXIMA pregunta (todavía no creada) sea la que se guarde
-   *      allí.
+   *      `targetSectionId` pasa a apuntar a esa nueva sección, y los
+   *      drafts del bloque "Contexto" se sincronizan con su contenido
+   *      (en vez de quedar vacíos) — ver PASO 3 abajo.
    *
    * Consecuencia: después de un "Nuevo contexto" exitoso, en la tabla
    * resumen aparece el ítem recién guardado en la sección anterior, y
-   * un nuevo bloque de contexto vacío queda listo para la siguiente
-   * pregunta. El docente NO tiene que volver a escribir el enunciado
-   * que ya tenía — pero tampoco queda "pegado" a la nueva sección.
+   * los inputs del bloque "Contexto" quedan pre-cargados con el
+   * título/contenido de la sección recién creada. El docente ve lo que
+   * acaba de guardar y puede reusarlo para la siguiente pregunta sin
+   * tener que re-tipear nada (vía `contextoMatchesSection` en el
+   * overrideAction de "Agregar enunciado"). Esto replica el
+   * comportamiento post-"Agregar enunciado" (consistencia UX).
+   *
+   * Por qué sincronizar drafts en vez de dejarlos vacíos (ago 2026): el
+   * botón "Actualizar contexto" compara los drafts contra la sección
+   * destino. Si drafts="" y la sección recién creada tiene
+   * título="C2", ve un diff falso y aparece el botón innecesariamente.
+   * Sincronizando los drafts con la sección, drafts == sección → no hay
+   * diff → el botón queda oculto. Además muestra al docente el contenido
+   * recién persistido, en vez de dejarlo con la impresión de que "se
+   * perdió" lo que tipeó.
    *
    * Excepción (ago 2026): si el docente hace click en "Nuevo contexto"
    * pero NO escribió enunciado, interpretamos que se arrepintió y
@@ -655,6 +826,10 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       setNewSectionRenderKey((k) => k + 1);
       questionForm.reset();
       sectionForm.reset();
+      // El docente descartó el nuevo contexto antes de tipear nada —
+      // cualquier botón "Actualizar contexto" / "Cancelar cambios" debe
+      // quedar oculto porque la intención no fue editar, fue descartar.
+      setContextoDirty(false);
       return;
     }
 
@@ -700,7 +875,9 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         onlySection !== undefined &&
         !onlySection.title &&
         !onlySection.content;
+      let newSectionId: string | null = null;
       if (isEmpty && onlySection) {
+        newSectionId = onlySection.id;
         const fd = new FormData();
         fd.append("evaluationId", data.evaluationId);
         fd.append("sectionId", onlySection.id);
@@ -732,36 +909,55 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           setActionStatus("error");
           return;
         }
+        newSectionId = res.sectionId;
       }
 
-      // PASO 3: dejar `targetSectionId` en null para que la próxima
-      // pregunta del docente NO quede auto-asociada a un contexto
-      // existente (ni al anterior ni al recién creado). El form de
-      // pregunta queda oculto hasta que el docente seleccione una
-      // sección desde la tabla resumen (o decida que esa pregunta
-      // vivirá en un contexto nuevo sin poblar). Limpiamos los drafts
-      // de contexto/enunciado/opciones para que la siguiente iteración
-      // arranque visualmente vacía.
+      // PASO 3: apuntar `targetSectionId` a la sección recién creada y
+      // sincronizar los drafts con su contenido (ago 2026).
       //
-      // Implementación del reset:
-      //  - draftSectionTitle/Content: se limpian del state React.
-      //  - Input/RichTextEditor del bloque "Contexto": como usan
-      //    `defaultValue` (no son controlados), sus `defaultValue` solo
-      //    se aplican al montar. Por eso bumpeamos newSectionRenderKey:
-      //    cambia la `key` y fuerza el remount → los `defaultValue=""`
-      //    y `defaultValue={null}` vuelven a aplicarse, dejando el
-      //    bloque visualmente vacío.
-      //  - questionForm.reset(): limpia el form interno del QuestionForm
-      //    (enunciado + opciones). El botón principal del QuestionForm
-      //    también tiene `useEffect` propio que limpia `correct`,
-      //    `optionCount` y remonta el RichTextEditor del enunciado
-      //    (controlado por la prop `clearCorrectAfterSave` que pasamos
-      //    desde acá: como NO estamos en editing mode, queremos dejar
-      //    la CLAVE sin seleccionar para obligar al docente a elegir
-      //    una en la próxima pregunta).
-      setTargetSectionId(null);
-      setDraftSectionTitle("");
-      setDraftSectionContent(null);
+      // Por qué NO seteamos `targetSectionId = null`: el `useEffect` de
+      // "sección objetivo inválida" lo re-asignaría automáticamente a la
+      // última sección (= la recién creada) en el siguiente render, así
+      // que el null era inútil y rompía el modelo mental del orquestador.
+      // Asignamos el id directamente y evitamos el ciclo.
+      //
+      // Por qué NO limpiamos los drafts: el botón "Actualizar contexto"
+      // compara drafts contra la sección destino. Si drafts="" y la
+      // sección tiene título="C2", ve un diff falso y aparece el botón
+      // innecesariamente. Manteniendo los drafts sincronizados con la
+      // sección recién creada, drafts == sección → no hay diff → el
+      // botón queda oculto. Esto además replica el comportamiento de
+      // "Agregar enunciado" (drafts pre-cargados) y muestra al docente
+      // exactamente lo que acaba de guardar — UX más coherente.
+      //
+      // Implementación:
+      //  - setTargetSectionId(newSectionId): apunta a la nueva sección.
+      //  - setDraftSectionTitle/Content: mantienen el título y el JSON
+      //    parseado del contenido (no string crudo) para que el Input y
+      //    el RichTextEditor del bloque "Contexto" sigan mostrando lo
+      //    recién persistido.
+      //  - setNewSectionRenderKey: bumpea la key para forzar el remount
+      //    del Input/RichTextEditor (no controlados; sus `defaultValue`
+      //    solo aplican al montar). Tras el remount, los inputs se ven
+      //    con el título y contenido de la sección recién guardada.
+      //  - questionForm.reset(): limpia enunciado + opciones del
+      //    QuestionForm (siguiente pregunta arranca en blanco). El form
+      //    del QuestionForm también limpia `correct`, `optionCount` y
+      //    remonta el RichTextEditor del enunciado vía
+      //    `clearCorrectAfterSave`.
+      if (newSectionId) {
+        setTargetSectionId(newSectionId);
+        setDraftSectionTitle(title);
+        if (hasContent) {
+          try {
+            setDraftSectionContent(JSON.parse(contentRaw));
+          } catch {
+            setDraftSectionContent(null);
+          }
+        } else {
+          setDraftSectionContent(null);
+        }
+      }
       setNewSectionRenderKey((k) => k + 1);
       // Reseteamos el debounce del orquestador de "Agregar enunciado".
       // Si el docente encadena otro submit inmediatamente (caso típico:
@@ -772,6 +968,17 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       setActionStatus("saved");
       questionForm.reset();
       newSectionFormRef.current?.reset();
+      // Acabamos de persistir el nuevo contexto: lo que está en los drafts
+      // YA es lo que está guardado. No hay diff real contra la sección
+      // recién creada, así que contextoDirty vuelve a false. Si el docente
+      // quiere editar el contexto recién creado, tendrá que tocar título o
+      // contenido de nuevo, y eso setea contextoDirty=true como cualquier
+      // otra edición.
+      setContextoDirty(false);
+      // Los inputs del bloque Contexto siguen habilitados y muestran
+      // lo recién guardado (sincronizamos los drafts antes). Si el
+      // docente quiere ajustar, tipea y contextoDirty=true habilita
+      // los botones Actualizar/Cancelar.
       setTimeout(() => {
         setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
       }, 2500);
@@ -909,10 +1116,9 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       className="bg-popover text-popover-foreground absolute top-full left-0 z-20 mt-2 w-72 rounded-md border p-3 text-xs leading-relaxed shadow-md"
                     >
                       <p>
-                        Un contexto agrupa varias preguntas bajo un mismo enunciado o tema (p.ej.
-                        una lectura + sus preguntas). Es <strong>opcional</strong>: si lo dejas
-                        vacío, la pregunta se guarda en una sección sin contexto y aparece como{" "}
-                        <em>“Sin contexto”</em> en la tabla.
+                        Este campo es opcional, siempre y cuando no haya diligenciado el campo anterior de título. 
+                        Ingrese aquí un texto, gráfica, tabla, formula y/o diagrama, en caso que se requiera de esta información previa para enmarcar la evaluación del ítem. 
+                        Este componente garantiza que el ítem evalúe el saber-hacer en contexto y no la simple memorización.
                       </p>
                     </div>
                   ) : null}
@@ -971,8 +1177,21 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   // enviar. La key cambia en modo edición para forzar el
                   // remount y que el `defaultValue` se aplique al precargar
                   // el contexto de la pregunta editada.
-                  onChange={(e) => setDraftSectionTitle(e.target.value)}
-                  disabled={!data.editable}
+                  onChange={(e) => {
+                    setDraftSectionTitle(e.target.value);
+                    setContextoDirty(true);
+                  }}
+                  // Input HABILITADO por defecto (ago 2026): el docente
+                  // pidió tipear libremente sobre una formulación
+                  // existente desde "Mis formulaciones" sin verse forzado
+                  // a pulsar un botón "Editar contexto" primero. Solo se
+                  // bloquea cuando la evaluación no es editable, o cuando
+                  // estamos editando una pregunta existente Y el docente
+                  // todavía no pulsó "Editar contexto" (en ese modo
+                  // bloqueamos el contexto por defecto para evitar
+                  // cambios simultáneos sobre ítem + contexto; el botón
+                  // "Editar contexto" desbloquea vía `setEditingContext`).
+                  disabled={!data.editable || (editingQuestionId !== null && !editingContext)}
                   className="max-w-md"
                 />
                 <div className="mt-2">
@@ -994,24 +1213,42 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     }
                     name="content"
                     defaultValue={draftSectionContent}
-                    onChange={(json) => setDraftSectionContent(json)}
+                    onChange={(json) => {
+                      setDraftSectionContent(json);
+                      setContextoDirty(true);
+                    }}
+                    // Misma regla que el Input del título (ago 2026):
+                    // HABILITADO por defecto. Se bloquea solo cuando la
+                    // evaluación no es editable o cuando estamos editando
+                    // una pregunta existente SIN haber pulsado "Editar
+                    // contexto" todavía. `disabled` mapea a
+                    // `editable: false` dentro de TipTap y oculta
+                    // Toolbar/controles.
+                    disabled={!data.editable || (editingQuestionId !== null && !editingContext)}
                     minHeightClass="min-h-12"
                   />
                 </div>
-                {/* "Actualizar contexto" (ago 2026): aparece cuando el
-                  docente EDITA el título o el contenido del contexto
-                  destino — es decir, cuando hay un diff real entre los
-                  drafts y el estado actual de la sección. Permite guardar
-                  SOLO el contexto sin agregar una pregunta (camino que antes
-                  no existía: o se aceptaba el diff implícitamente al crear
-                  una pregunta, o había que abrir el ContextEditor standalone).
-                  Condiciones:
-                   - editable (sino los inputs están disabled)
-                   - !editingQuestionId (en edición los inputs están
-                     deshabilitados por la lógica del orquestador)
-                   - targetSectionId (hay una sección destino que actualizar)
-                   - !contextoMatchesSection (hay diff real: o título
-                     distinto, o contenido nuevo/eliminado) */}
+                {/* Botones de gestión del bloque Contexto (ago 2026).
+                  Tres estados visuales mutuamente excluyentes:
+                    (a) Edición de pregunta existente con contexto BLOQUEADO
+                        (editingQuestionId && !editingContext) → botón único
+                        "Editar contexto" para que el docente desbloquee.
+                    (b) Edición de pregunta existente con contexto DESBLOQUEADO
+                        (editingQuestionId && editingContext) o flujo normal
+                        (!editingQuestionId) → "Actualizar/Cancelar" gated por
+                        diff real entre drafts y sección persistida.
+                    (c) Cualquier otro caso (sección vacía, no editable, sin
+                        diff) → nada.
+
+                  Por qué el botón (a) existe solo en modo edición de
+                  pregunta: en el flujo normal "Mis formulaciones"
+                  (b7bb2c7) los inputs nacen habilitados por default para
+                  no forzar al docente a pulsar una entrada extra. Pero al
+                  EDITAR una pregunta, los inputs sí están bloqueados
+                  (riesgo de cambios accidentales sobre el contexto del
+                  ítem mientras el docente solo quería editar el
+                  enunciado), y entonces necesitamos el botón explícito
+                  para entrar al modo edición del contexto. */}
                 {(() => {
                   const targetSection =
                     targetSectionId === null
@@ -1019,19 +1256,10 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       : (data.sections.find((s) => s.id === targetSectionId) ?? null);
 
                   // Comparamos drafts contra el estado guardado de la
-                  // sección destino (ago 2026). El botón debe aparecer
-                  // cuando hay un diff real, ya sea en el título o en el
-                  // contenido (TipTap).
-                  //
-                  // Importante: `contextoMatchesSection` NO sirve acá
-                  // porque solo compara títulos (asume ref-identidad del
-                  // contenido del RichTextEditor, que se rompe apenas el
-                  // docente edita el TipTap). Por eso usamos texto plano
-                  // (`richTextToPlain`) para comparar ambos campos.
-                  //
-                  // Comparamos por texto plano (richTextToPlain) para no
-                  // entrar en ruido de diferencias estructurales del JSON
-                  // TipTap (p.ej. marcas de posición del cursor).
+                  // sección destino para detectar diff real en título y/o
+                  // contenido (TipTap). Texto plano vía `richTextToPlain`
+                  // para no entrar en ruido de diferencias estructurales
+                  // del JSON TipTap (p.ej. marcas de posición del cursor).
                   const draftTitleTrimmed = draftSectionTitle.trim();
                   const sectionTitleTrimmed = (targetSection?.title ?? "").trim();
                   const titleChanged = draftTitleTrimmed !== sectionTitleTrimmed;
@@ -1039,26 +1267,105 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   const sectionContentPlain = richTextToPlain(targetSection?.content).trim();
                   const contentChanged = draftContentPlain !== sectionContentPlain;
 
+                  // La sección destino debe tener contenido REAL guardado
+                  // para que los botones de Actualizar/Cancelar tengan
+                  // sentido (ago 2026). Si el `targetSection` existe
+                  // (tiene id) pero está vacío (sin título ni contenido
+                  // JSON), el docente NO está editando un contexto
+                  // existente: el "contexto es nulo" desde la perspectiva
+                  // del bloque. Aunque tipee, el resultado de "Agregar
+                  // enunciado" será crear una sección nueva (vía la rama
+                  // `else` del overrideAction en
+                  // unified-editor.tsx:1525), no actualizar una vacía.
+                  // Mostrar "Actualizar contexto" en ese caso sería
+                  // engañoso: actualizaría una sección vacía para ponerle
+                  // contenido nuevo, lo cual NO es la intención — el
+                  // docente está construyendo un contexto fresh.
+                  //
+                  // Comprobamos: targetSection.title.trim() !== "" OR
+                  // targetSection.content no es null/vacío según
+                  // isTipTapEmpty. La sección placeholder auto-creada por
+                  // StrictMode cae aquí (sin título y sin contenido).
+                  const sectionHasSavedContent =
+                    targetSection !== null &&
+                    (sectionTitleTrimmed !== "" ||
+                      (targetSection.content !== null &&
+                        targetSection.content !== undefined &&
+                        !isTipTapEmpty(targetSection.content)));
+
+                  // (a) Edición de pregunta + contexto bloqueado
+                  // → botón "Editar contexto". Único modo donde este
+                  // botón aparece, para no contaminar el flujo normal
+                  // (b7bb2c7) en el que el docente tipea libremente sobre
+                  // la formulación sin pulsar entrada previa.
+                  if (
+                    data.editable &&
+                    editingQuestionId !== null &&
+                    !editingContext
+                  ) {
+                    return (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={actionStatus === "saving"}
+                          onClick={() => setEditingContext(true)}
+                        >
+                          Editar contexto
+                        </Button>
+                        <span className="text-muted-foreground text-xs">
+                          Modifica el título o el contenido del contexto asociado a esta pregunta.
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  // (b) "Actualizar contexto" + "Cancelar cambios"
+                  // aparecen SOLO cuando se cumplen TODAS estas
+                  // condiciones (ago 2026):
+                  //   1. La evaluación es editable.
+                  //   2. NO estamos editando una pregunta existente SIN
+                  //      haber desbloqueado el contexto (en ese modo los
+                  //      inputs del contexto van disabled y la intención
+                  //      del docente es editar el ítem, no el contexto).
+                  //      Si el docente pulsó "Editar contexto"
+                  //      (→editingContext=true), los botones SÍ se
+                  //      muestran: es justamente ese flujo el que los
+                  //      necesita.
+                  //   3. Hay un targetSection con contenido real
+                  //      guardado. Si la sección destino está vacía,
+                  //      los botones no aplican (sería una creación, no
+                  //      actualización).
+                  //   4. contextoDirty=true: el docente tocó el bloque,
+                  //      ya sea en este render o en uno previo sin
+                  //      sincronizar.
+                  //   5. Hay un diff real entre los drafts y el estado
+                  //      guardado.
+                  //
+                  // contextoDirty es necesario porque en el mount inicial
+                  // drafts="" pero la sección destino guardada tiene
+                  // título/contenido → diff verdadero aunque el docente
+                  // NO haya tocado nada. El flag se enciende en onChange
+                  // del título o del RichTextEditor; se apaga en
+                  // startEdit / handleUpdateContext OK /
+                  // handleCancelContextEdit / handleAddOrRenameSection
+                  // OK / handleNewContextWithQuestion OK o discard.
                   const showUpdateContextButton =
                     data.editable &&
-                    !editingQuestionId &&
-                    targetSection !== null &&
+                    (!editingQuestionId || editingContext) &&
+                    sectionHasSavedContent &&
+                    contextoDirty &&
                     (titleChanged || contentChanged);
                   if (!showUpdateContextButton) return null;
 
-                  // Detectamos QUÉ cambió (ago 2026) para armar el mensaje
-                  // de confirmación específico. El docente que solo tocó el
-                  // título no debería ver "se actualizará el contenido" (y
-                  // viceversa) — es ruido que merma confianza en la UI.
+                  // Mensaje de confirmación específico según QUÉ cambió.
                   let whatChanges: string;
                   if (titleChanged && contentChanged) {
                     whatChanges = "el título y el contenido";
                   } else if (titleChanged) {
                     whatChanges = "el título";
                   } else {
-                    // Solo contenido (o defensa por si ambos resultasen
-                    // false, que en práctica no debería pasar porque el
-                    // botón no se muestra sin diff).
                     whatChanges = "el contenido";
                   }
 
@@ -1080,15 +1387,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       >
                         Actualizar contexto
                       </Button>
-                      {/* "Cancelar cambios" (ago 2026): revierte los drafts
-                        del bloque Contexto al estado guardado de la
-                        sección destino. Botón rojo (destructive) para que
-                        se lea como "acción destructiva local" — pero ojo,
-                        NO toca la BD, solo los inputs. Útil cuando el
-                        docente empezó a editar y prefiere la versión
-                        original sin persistir nada. Sin confirmación:
-                        es reversible (el docente puede volver a editar)
-                        y 100% client-side. */}
                       <Button
                         type="button"
                         size="sm"
@@ -1135,7 +1433,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                 <span className="text-destructive" aria-hidden="true">
                   *
                 </span>
-                {editingQuestionId ? "Editar" : "Enunciado"}
+                {"Enunciado"}
                 <span ref={enunciadoInfoRef} className="relative inline-block">
                   <button
                     type="button"
@@ -1152,10 +1450,9 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       className="bg-popover text-popover-foreground absolute top-full left-0 z-20 mt-2 w-72 rounded-md border p-3 text-xs leading-relaxed shadow-md"
                     >
                       <p>
-                        Un <strong>enunciado</strong> es la pregunta que verá el estudiante, junto
-                        con sus opciones de respuesta. Cada enunciado pertenece a un
-                        <em> contexto</em> (o a ninguno, si lo dejas vacío). Al guardar, se numera
-                        globalmente para coincidir con la hoja de respuestas.
+                        Este campo es obligatorio. 
+                        Redacte aquí la pregunta o instrucción explícita que plantea el reto cognitivo. 
+                        Debe contener toda la información indispensable para que el estudiante comprenda lo que se le solicita de forma inequívoca.
                       </p>
                     </div>
                   ) : null}
@@ -1458,6 +1755,12 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       setEditingQuestionId(null);
                       setShowEditingBanner(false);
                       setActionStatus("saved");
+                      // Si el docente había desbloqueado el contexto
+                      // antes de guardar la pregunta, también limpiamos
+                      // ese flag — ya no estamos en modo edición de
+                      // pregunta, así que el botón "Editar contexto"
+                      // tampoco aplica.
+                      setEditingContext(false);
                       // IMPORTANTE: NO limpiamos draftSectionTitle ni
                       // draftSectionContent tras un "Agregar enunciado"
                       // exitoso. El docente espera ver el contexto
