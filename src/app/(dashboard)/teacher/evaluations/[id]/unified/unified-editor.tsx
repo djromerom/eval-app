@@ -79,17 +79,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   // Estado del contexto a crear.
   const [draftSectionTitle, setDraftSectionTitle] = useState("");
   const [draftSectionContent, setDraftSectionContent] = useState<unknown>(null);
-  // Marca si el docente tocó los inputs de título/contenido del bloque
-  // "Contexto". El botón "Actualizar contexto" solo aparece cuando
-  // dirty=true (ago 2026). Sin esta marca, en el mount inicial
-  // drafts="" pero la sección destino tiene contenido → diff falso → los
-  // botones aparecen sin que el docente haya editado nada. Con la marca,
-  // los inputs arrancan vacíos (lo que el docente espera al pulsar
-  // "Agregar 1 a 1") y los botones solo emergen tras una edición real.
-  // Se resetea a false tras "Actualizar contexto" / "Cancelar cambios" /
-  // "Nuevo contexto" / startEdit (los flujos donde los drafts vuelven a
-  // coincidir con el estado persistido o recién creado).
-  const [contextoDirty, setContextoDirty] = useState(false);
   // Contador de iteraciones de "Nuevo contexto": se incrementa tras cada
   // guardado exitoso para forzar el remount del Input/RichTextEditor del
   // bloque Contexto (sus `defaultValue` solo aplican al montar). Sin esto,
@@ -290,9 +279,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     setReviewModal(null);
     setShowEditingBanner(true);
     setFormError(null);
-    // Los drafts se sincronizaron con la sección persistida → no hay edición
-    // pendiente. Los botones "Actualizar/Cancelar" deben quedar ocultos.
-    setContextoDirty(false);
   }
 
   function cancelEdit() {
@@ -440,14 +426,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         setNewSectionRenderKey((k) => k + 1);
         setActionStatus("saved");
         newSectionFormRef.current?.reset();
-        // Drafts sincronizados con la sección destino → no hay edición
-        // pendiente que mostrar.
-        setContextoDirty(false);
-        // La sección destino ya tenía id guardado (era la razón del
-        // dedupe), así que el bloque Contexto queda como está —
-        // contextoDirty=false cierra los botones Actualizar/Cancelar y
-        // los inputs siguen habilitados (cualquier edición futura los
-        // reabre automáticamente vía `setContextoDirty(true)`).
         setTimeout(() => {
           setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
         }, 2500);
@@ -524,13 +502,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       setNewSectionRenderKey((k) => k + 1);
       setActionStatus("saved");
       newSectionFormRef.current?.reset();
-      // Drafts sincronizados con la sección recién creada → no hay edición
-      // pendiente.
-      setContextoDirty(false);
-      // El bloque Contexto sigue habilitado; contextoDirty=false oculta
-      // los botones Actualizar/Cancelar. Si el docente quiere ajustar
-      // lo recién guardado, tipea y los botones reaparecen
-      // automáticamente vía setContextoDirty(true) en el onChange.
       setTimeout(() => {
         setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
       }, 2500);
@@ -539,130 +510,17 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     }
   }
 
-  /**
-   * Disparado por el botón "Actualizar contexto" del bloque Contexto (ago
-   * 2026). PERSISTE SOLO el contexto destino (título + contenido) — NO
-   * toca ninguna pregunta. Complementa al orquestador de "Agregar
-   * enunciado", que solo guarda contexto cuando va a crear/renombrar
-   * sección como parte de la creación de un ítem.
-   *
-   * Caso de uso típico: el docente quiere afinar la descripción de un
-   * contexto existente SIN agregar una pregunta todavía. Antes de este
-   * botón, el único camino era pulsar "Agregar enunciado" (que crea
-   * también una pregunta). Ahora puede pulsar "Actualizar contexto" y
-   * los cambios se persisten inmediatamente sin pregunta adicional.
-   *
-   * Validaciones:
-   *  - solo permitido si `editable` y NO estamos editando una pregunta
-   *    (en modo edición los inputs del contexto van disabled).
-   *  - necesita `targetSectionId` (hay una sección destino que actualizar).
-   *  - necesita un diff real (`!contextoMatchesSection`) — el botón no se
-   *    muestra en este caso, así que acá es una red de seguridad.
-   *
-   * Persistencia: `updateSectionAction` con `evaluationId`, `sectionId =
-   * targetSectionId`, `title` y `content` (serializado a JSON). El
-   * `revalidatePath` refresca `data.sections` así que el siguiente render
-   * ve el diff ya salvado y el botón desaparece.
-   */
-  async function handleUpdateContext() {
-    if (editingQuestionId) return; // modo creación/edición puntual
-    if (submittingRef.current) {
-      console.warn("[Actualizar-contexto] BLOQUEADO por doble-submit");
-      return;
-    }
-    const sectionId = targetSectionId;
-    if (!sectionId) return;
-
-    const targetSection = data.sections.find((s) => s.id === sectionId);
-    if (!targetSection) return;
-
-    const title = draftSectionTitle.trim();
-    const hasContent = hasUnsavedContexto(null, draftSectionContent);
-    if (!title && !hasContent) {
-      // Red de seguridad: el botón no se muestra en este caso (ver
-      // `showUpdateContextButton`), pero si llegamos acá sin diff, fallamos
-      // silenciosamente (no hay nada que guardar).
-      return;
-    }
-
-    setFormError(null);
-    setActionStatus("saving");
-    submittingRef.current = true;
-    lastSubmitTsRef.current = Date.now();
-    try {
-      const fd = new FormData();
-      fd.append("evaluationId", data.evaluationId);
-      fd.append("sectionId", sectionId);
-      // Título vacío → null en el backend (la sección queda "Sin título");
-      // consistencia con el comportamiento de la edición inline del
-      // `ContextEditor` standalone.
-      fd.append("title", title);
-      if (draftSectionContent) {
-        fd.append("content", JSON.stringify(draftSectionContent));
-      }
-      const res = await updateSectionAction({}, fd);
-      if (res.error) {
-        setFormError(res.error);
-        setActionStatus("error");
-        return;
-      }
-      setActionStatus("saved");
-      // Los drafts quedaron persistidos → ya coinciden con la sección
-      // destino. Limpiamos la marca dirty para que el botón
-      // "Actualizar contexto" desaparezca (el docente acaba de guardar,
-      // no hay más diff que mostrar).
-      setContextoDirty(false);
-      // Persistimos cambios del contexto. contextoDirty=false cierra
-      // los botones Actualizar/Cancelar; los inputs siguen habilitados
-      // para que el docente pueda seguir editando sin re-entradas.
-      setTimeout(() => {
-        setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
-      }, 2500);
-    } finally {
-      submittingRef.current = false;
-      lastSubmitTsRef.current = 0;
-    }
-  }
-
-  /**
-   * Disparado por el botón "Cancelar cambios" del bloque Contexto (ago
-   * 2026). REVierte los drafts locales al estado guardado de la sección
-   * destino — útil cuando el docente empezó a editar el título/contenido
-   * pero decide que prefiere la versión anterior sin persistir nada.
-   *
-   * Implementación: copiamos los valores originales desde `data.sections`
-   * al state React, limpiamos errores y bumpeamos `newSectionRenderKey`
-   * para forzar el remount del Input/RichTextEditor del bloque (sus
-   * `defaultValue` solo aplican al montar, así que setear el state solo
-   * NO se refleja visualmente — necesitamos la key nueva para que el
-   * próximo render monte los inputs con el `defaultValue` original).
-   *
-   * NO toca el servidor: es 100% client-side. El backend ni se entera.
-   */
-  function handleCancelContextEdit() {
-    if (editingQuestionId) return; // no aplica en modo edición
-    const sectionId = targetSectionId;
-    if (!sectionId) return;
-    const targetSection = data.sections.find((s) => s.id === sectionId);
-    if (!targetSection) return;
-
-    // Revertimos los drafts al estado original de la sección.
-    setDraftSectionTitle(targetSection.title ?? "");
-    setDraftSectionContent(targetSection.content ?? null);
-    // Bumpeamos la key para remontar los inputs no-controlados del bloque
-    // Contexto (Input del título y RichTextEditor del contenido). Sin esto,
-    // los `defaultValue` viejos seguirían visibles aunque el state React
-    // ya esté limpio. Mismo patrón que el reset post-"Nuevo contexto".
-    setNewSectionRenderKey((k) => k + 1);
-    setFormError(null);
-    setActionStatus("idle");
-    // El form nativo también: por si el docente tocó algo que no
-    // levantamos al state (no debería pasar, pero defensivo).
-    newSectionFormRef.current?.reset();
-    // Tras revertir, los drafts coinciden con la sección destino → no
-    // hay diff → no hay botones (controlado por contextoDirty=false).
-    setContextoDirty(false);
-  }
+  // `handleUpdateContext` y `handleCancelContextEdit` ELIMINADOS (ago
+  // 2026): los botones "Actualizar/Cancelar" del bloque Contexto fueron
+  // removidos por contradicción con el orquestador de "Agregar
+  // enunciado" (ver comentario en el render). Toda persistencia de
+  // cambios de contexto pasa ahora por el `overrideAction` del
+  // QuestionForm, que sabe distinguir entre draft vacío / match / no
+  // match y decide si crear nueva sección, renombrar la vacía o reusar
+  // la destino. Si en el futuro hace falta refinar un contexto
+  // existente sin agregar pregunta, re-introducir un flujo dedicado
+  // (no este parche client-side que se confunde con la creación de
+  // ítems).
 
   /**
    * Disparado por el botón "Nuevo contexto" del `extraActions` del
@@ -754,9 +612,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       questionForm.reset();
       sectionForm.reset();
       // El docente descartó el nuevo contexto antes de tipear nada —
-      // cualquier botón "Actualizar contexto" / "Cancelar cambios" debe
-      // quedar oculto porque la intención no fue editar, fue descartar.
-      setContextoDirty(false);
       return;
     }
 
@@ -897,15 +752,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       newSectionFormRef.current?.reset();
       // Acabamos de persistir el nuevo contexto: lo que está en los drafts
       // YA es lo que está guardado. No hay diff real contra la sección
-      // recién creada, así que contextoDirty vuelve a false. Si el docente
-      // quiere editar el contexto recién creado, tendrá que tocar título o
-      // contenido de nuevo, y eso setea contextoDirty=true como cualquier
-      // otra edición.
-      setContextoDirty(false);
-      // Los inputs del bloque Contexto siguen habilitados y muestran
-      // lo recién guardado (sincronizamos los drafts antes). Si el
-      // docente quiere ajustar, tipea y contextoDirty=true habilita
-      // los botones Actualizar/Cancelar.
       setTimeout(() => {
         setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
       }, 2500);
@@ -1107,7 +953,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   // el contexto de la pregunta editada.
                   onChange={(e) => {
                     setDraftSectionTitle(e.target.value);
-                    setContextoDirty(true);
                   }}
                   // Input HABILITADO por defecto (ago 2026): el docente
                   // pidió tipear libremente sobre una formulación
@@ -1141,7 +986,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     defaultValue={draftSectionContent}
                     onChange={(json) => {
                       setDraftSectionContent(json);
-                      setContextoDirty(true);
                     }}
                     // Misma regla que el Input del título (ago 2026):
                     // HABILITADO por defecto. Se bloquea solo cuando la
@@ -1153,139 +997,33 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     minHeightClass="min-h-12"
                   />
                 </div>
-                {/* Botones de gestión del bloque Contexto (ago 2026).
-                  Caso único: `targetSection !== null && contextoDirty &&
-                  diff` → "Actualizar contexto" + "Cancelar cambios".
-                  Por qué NO hay botón "Editar contexto": el docente
-                  pidió tipear libremente sobre una formulación existente
-                  desde "Mis formulaciones" sin verse forzado a pulsar
-                  un botón de entrada. Los inputs del bloque nacen
-                  HABILITADOS (excepto en modo edición de pregunta) y los
-                  botones de commit emergen automáticamente cuando hay
-                  un diff real entre los drafts y la sección destino. */}
-                {(() => {
-                  const targetSection =
-                    targetSectionId === null
-                      ? null
-                      : (data.sections.find((s) => s.id === targetSectionId) ?? null);
-
-                  // Comparamos drafts contra el estado guardado de la
-                  // sección destino para detectar diff real en título y/o
-                  // contenido (TipTap). Texto plano vía `richTextToPlain`
-                  // para no entrar en ruido de diferencias estructurales
-                  // del JSON TipTap (p.ej. marcas de posición del cursor).
-                  const draftTitleTrimmed = draftSectionTitle.trim();
-                  const sectionTitleTrimmed = (targetSection?.title ?? "").trim();
-                  const titleChanged = draftTitleTrimmed !== sectionTitleTrimmed;
-                  const draftContentPlain = richTextToPlain(draftSectionContent).trim();
-                  const sectionContentPlain = richTextToPlain(targetSection?.content).trim();
-                  const contentChanged = draftContentPlain !== sectionContentPlain;
-
-                  // La sección destino debe tener contenido REAL guardado
-                  // para que los botones de Actualizar/Cancelar tengan
-                  // sentido (ago 2026). Si el `targetSection` existe
-                  // (tiene id) pero está vacío (sin título ni contenido
-                  // JSON), el docente NO está editando un contexto
-                  // existente: el "contexto es nulo" desde la perspectiva
-                  // del bloque. Aunque tipee, el resultado de "Agregar
-                  // enunciado" será crear una sección nueva (vía la rama
-                  // `else` del overrideAction en
-                  // unified-editor.tsx:1525), no actualizar una vacía.
-                  // Mostrar "Actualizar contexto" en ese caso sería
-                  // engañoso: actualizaría una sección vacía para ponerle
-                  // contenido nuevo, lo cual NO es la intención — el
-                  // docente está construyendo un contexto fresh.
-                  //
-                  // Comprobamos: targetSection.title.trim() !== "" OR
-                  // targetSection.content no es null/vacío según
-                  // isTipTapEmpty. La sección placeholder auto-creada por
-                  // StrictMode cae aquí (sin título y sin contenido).
-                  const sectionHasSavedContent =
-                    targetSection !== null &&
-                    (sectionTitleTrimmed !== "" ||
-                      (targetSection.content !== null &&
-                        targetSection.content !== undefined &&
-                        !isTipTapEmpty(targetSection.content)));
-
-                  // "Actualizar contexto" + "Cancelar cambios" aparecen
-                  // SOLO cuando se cumplen TODAS estas condiciones (ago
-                  // 2026):
-                  //   1. La evaluación es editable.
-                  //   2. NO estamos editando una pregunta existente
-                  //      (los inputs del contexto van disabled en ese
-                  //      modo y el flujo de Actualizar no aplica).
-                  //   3. Hay un targetSection con contenido real
-                  //      guardado. Si la sección destino está vacía,
-                  //      los botones no aplican (sería una creación, no
-                  //      actualización).
-                  //   4. contextoDirty=true: el docente tocó el bloque,
-                  //      ya sea en este render o en uno previo sin
-                  //      sincronizar.
-                  //   5. Hay un diff real entre los drafts y el estado
-                  //      guardado.
-                  //
-                  // contextoDirty es necesario porque en el mount inicial
-                  // drafts="" pero la sección destino guardada tiene
-                  // título/contenido → diff verdadero aunque el docente
-                  // NO haya tocado nada. El flag se enciende en onChange
-                  // del título o del RichTextEditor; se apaga en
-                  // startEdit / handleUpdateContext OK /
-                  // handleCancelContextEdit / handleAddOrRenameSection
-                  // OK / handleNewContextWithQuestion OK o discard.
-                  const showUpdateContextButton =
-                    data.editable &&
-                    !editingQuestionId &&
-                    sectionHasSavedContent &&
-                    contextoDirty &&
-                    (titleChanged || contentChanged);
-                  if (!showUpdateContextButton) return null;
-
-                  // Mensaje de confirmación específico según QUÉ cambió.
-                  let whatChanges: string;
-                  if (titleChanged && contentChanged) {
-                    whatChanges = "el título y el contenido";
-                  } else if (titleChanged) {
-                    whatChanges = "el título";
-                  } else {
-                    whatChanges = "el contenido";
-                  }
-
-                  return (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="default"
-                        disabled={actionStatus === "saving"}
-                        title="Guardar los cambios del contexto sin agregar una pregunta"
-                        onClick={() => {
-                          const ok = window.confirm(
-                            `¿Está seguro que desea actualizar ${whatChanges} del contexto?`,
-                          );
-                          if (!ok) return;
-                          void handleUpdateContext();
-                        }}
-                      >
-                        Actualizar contexto
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="destructive"
-                        disabled={actionStatus === "saving"}
-                        title="Revertir los cambios no guardados al estado original"
-                        onClick={() => {
-                          handleCancelContextEdit();
-                        }}
-                      >
-                        Cancelar cambios
-                      </Button>
-                      <span className="text-muted-foreground text-xs">
-                        Guarda los cambios solo en el contexto (no crea ni edita preguntas).
-                      </span>
-                    </div>
-                  );
-                })()}
+                {/* Bloque Contexto (ago 2026): los botones
+                  "Actualizar/Cancelar" fueron ELIMINADOS porque generaban
+                  una contradicción funcional con el orquestador de
+                  "Agregar enunciado". El docente que tipea sobre el input
+                  vacío del título tiene la intención de CREAR un contexto
+                  nuevo; los botones le sugerían "actualizar el contexto
+                  existente con lo que tipeas" — pero al hacer click en
+                  "Agregar enunciado", el `overrideAction` del QuestionForm
+                  crea una sección NUEVA con el draft y guarda la pregunta
+                  ahí (no toca el targetSection pre-seleccionado, que
+                  puede tener contenido real). El overrideAction es la
+                  única vía para persistir cambios de contexto y cubre:
+                    - Drafts vacíos → guarda la pregunta en la sección
+                      destino sin modificar contexto.
+                    - Drafts coinciden con la sección destino → guarda la
+                      pregunta en esa sección (reuso).
+                    - Drafts NO coinciden → crea sección nueva + guarda
+                      pregunta ahí.
+                    - Drafts matchean por título con sección existente →
+                      reusa por dedupe.
+                    - Sección única vacía + drafts no-vacíos → renombra la
+                      vacía.
+                  Si en el futuro hace falta "refinar un contexto
+                  existente sin agregar pregunta", debe entrar como un
+                  flujo DEDICADO (botón en la sección de la tabla resumen
+                  o modal propio), no como un botón que se confunde con la
+                  creación de ítems. */}
                 {!targetSectionId && data.editable ? (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <Button
