@@ -171,24 +171,6 @@ export function CreateEvaluationForm({
         }
       }}
     >
-      <FieldBlock label={csField.label} required={csField.required}>
-        <select
-          id={csField.name}
-          name={csField.name}
-          required={csField.required}
-          className={selectClass}
-          value={courseSubjectId}
-          onChange={handleCourseSubjectChange}
-        >
-          <option value="">—</option>
-          {csField.options?.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </FieldBlock>
-
       <FieldBlock label={periodField.label} required={periodField.required}>
         {/* Importante: cuando la Prueba viene preseleccionada por ser la
           "actual" del año académico del courseSubject, el <select> queda
@@ -218,6 +200,24 @@ export function CreateEvaluationForm({
           ))}
         </select>
         {periodLocked && <input type="hidden" name={periodField.name} value={periodId} />}
+      </FieldBlock>
+
+      <FieldBlock label={csField.label} required={csField.required}>
+        <select
+          id={csField.name}
+          name={csField.name}
+          required={csField.required}
+          className={selectClass}
+          value={courseSubjectId}
+          onChange={handleCourseSubjectChange}
+        >
+          <option value="">—</option>
+          {csField.options?.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </FieldBlock>
 
       <FieldBlock label="Tipo de cuadernillo">
