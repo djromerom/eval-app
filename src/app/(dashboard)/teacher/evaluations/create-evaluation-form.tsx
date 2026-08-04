@@ -79,8 +79,27 @@ export function CreateEvaluationForm({
   const [state, formAction] = useActionState<AdminFormState, FormData>(action, {});
   const formRef = useRef<HTMLFormElement>(null);
 
+  // Encontrar el periodo "actual" (uno por institución/año académico). Si
+  // la institución no tiene ninguno marcado como `isCurrent`, no hay
+  // preselección ni bloqueo y el form queda con todos los campos vacíos
+  // (caso defensivo). (ago 2026 — pedido del docente: "Prueba solo la
+  // actual por defecto y bloqueada, Asignatura solo del año marcado como
+  // actual".)
+  const currentPeriod = useMemo(() => periods.find((p) => p.isCurrent), [periods]);
+  const currentAcademicYearId = currentPeriod?.academicYearId;
+
+  // Definimos los fields arriba para poder usarlos en los useMemos de abajo
+  // (filteredCsOptions, etc.) sin tener que duplicar el lookup.
+  const periodField = fields.find((f) => f.name === "periodId");
+  const csField = fields.find((f) => f.name === "courseSubjectId");
+
   // Mantenemos el estado de los dos selects que dependen entre sí.
-  const [periodId, setPeriodId] = useState("");
+  // periodId se inicializa con el periodo actual si existe (lazy initializer,
+  // solo corre en el primer render): el docente ve Prueba preseleccionada y
+  // bloqueada desde el mount, sin tener que tipear nada para "armar" la
+  // formulación. bookletTypeId y courseSubjectId arrancan vacíos para que
+  // el docente los elija explícitamente.
+  const [periodId, setPeriodId] = useState(() => currentPeriod?.id ?? "");
   const [bookletTypeId, setBookletTypeId] = useState("");
   const [courseSubjectId, setCourseSubjectId] = useState("");
 
@@ -90,22 +109,28 @@ export function CreateEvaluationForm({
     [periodId, bookletTypes],
   );
 
+  // Filtramos las Asignaturas disponibles al año académico del periodo
+  // actual (ago 2026): el docente solo ve las Asignaturas del año
+  // vigente, no las de años pasados. Si no hay periodo actual (caso
+  // defensivo), mostramos todas las opciones. El filtro es client-side
+  // porque el server ya pasa el csYearMap precomputado.
+  const filteredCsOptions = useMemo(() => {
+    const opts = csField?.options ?? [];
+    if (!currentAcademicYearId) return opts;
+    return opts.filter((opt) => csYearMap[opt.value] === currentAcademicYearId);
+  }, [csField?.options, csYearMap, currentAcademicYearId]);
+
   // Cuando cambia el periodo, limpiamos el bookletTypeId.
   const handlePeriodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setPeriodId(e.target.value);
     setBookletTypeId("");
   };
 
-  // Cuando cambia la asignatura, intentamos preseleccionar la Prueba
-  // "actual" del año académico del curso asociado. Si existe, marcamos
-  // `periodLocked = true` para bloquear el select. Si no hay Prueba
-  // actual para ese año, dejamos el select libre.
-  const periodLocked = useMemo(() => {
-    if (!courseSubjectId) return false;
-    const ay = csYearMap[courseSubjectId];
-    if (!ay) return false;
-    return periods.some((p) => p.academicYearId === ay && p.isCurrent);
-  }, [courseSubjectId, csYearMap, periods]);
+  // periodLocked: si hay un periodo actual preseleccionado, la Prueba se
+  // queda BLOQUEADA desde el mount (consistente con la preselección).
+  // Sin periodo actual, el docente elige libremente cualquier Prueba y
+  // cualquier Asignatura. (ago 2026)
+  const periodLocked = !!currentPeriod;
 
   // Detección client-side de duplicados (ago 2026). Cuando el docente
   // selecciona una combinación (courseSubjectId, periodId) para la que ya
@@ -119,7 +144,10 @@ export function CreateEvaluationForm({
     return existingMap[key] ?? null;
   }, [courseSubjectId, periodId, existingMap]);
 
-  // Cuando cambia la asignatura, preseleccionamos la Prueba actual.
+  // Cuando cambia la asignatura, resincronizamos periodId con el periodo
+  // actual del año del curso asociado (sigue siendo el mismo currentPeriod
+  // gracias al filtro de filteredCsOptions, pero defendemos contra la
+  // posibilidad de que el docente manipule el DOM).
   const handleCourseSubjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const nextCsId = e.target.value;
     setCourseSubjectId(nextCsId);
@@ -134,22 +162,22 @@ export function CreateEvaluationForm({
     }
   };
 
-  // Reseteo del form tras éxito (mismo patrón que EntityForm).
+  // Reseteo del form tras éxito (mismo patrón que EntityForm). Tras
+  // guardar exitosamente, dejamos Prueba preseleccionada con el periodo
+  // actual (no la vaciamos) para que el docente pueda crear otra
+  // formulación sin re-pickear el periodo.
   useEffect(() => {
     if (state.success) {
       formRef.current?.reset();
       setCourseSubjectId("");
-      setPeriodId("");
+      setPeriodId(currentPeriod?.id ?? "");
       setBookletTypeId("");
     }
-  }, [state.success]);
+  }, [state.success, currentPeriod]);
 
   if (disabledReason) {
     return <p className="text-muted-foreground text-sm">{disabledReason}</p>;
   }
-
-  const periodField = fields.find((f) => f.name === "periodId");
-  const csField = fields.find((f) => f.name === "courseSubjectId");
 
   if (!periodField || !csField) {
     return null;
@@ -212,7 +240,7 @@ export function CreateEvaluationForm({
           onChange={handleCourseSubjectChange}
         >
           <option value="">—</option>
-          {csField.options?.map((opt) => (
+          {filteredCsOptions.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>
