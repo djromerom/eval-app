@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorContent, ReactNodeViewRenderer, useEditor, type Editor } from "@tiptap/react";
 import { EMPTY_DOC, ResizableImage, richTextExtensions } from "./extensions";
 import type { Alignment } from "./text-align";
@@ -262,6 +262,13 @@ export function RichTextEditor({
     // `editable: !disabled` controla toda la interactividad del editor —
     // teclado, pegar, arrastrar, comandos. Cuando es `false`, TipTap
     // ignora cualquier intento de mutación del documento. (ago 2026)
+    //
+    // OJO: esta opción SOLO se lee al construir el editor. Cambiar la prop
+    // `disabled` después del mount NO reconfigura el editor por sí sola —
+    // necesitamos reflejarlo con `editor.setEditable(!disabled)` en el
+    // effect de abajo (caso de uso: el docente pulsa "Editar contexto"
+    // en el editor unificado, lo cual cambia editingContext de false a
+    // true y por tanto `disabled` de true a false).
     editable: !disabled,
     immediatelyRender: false,
     editorProps: {
@@ -295,6 +302,18 @@ export function RichTextEditor({
     },
   });
   editorRef.current = editor;
+
+  // Refleja cambios reactivos de `disabled` en el editor. TipTap solo lee
+  // `editable` en el constructor; cuando el padre cambia la prop (caso
+  // típico: el docente pulsa "Editar contexto" en el bloque Contexto del
+  // editor unificado, encendiendo `editingContext` y por tanto bajando
+  // `disabled` de true a false), tenemos que llamar `setEditable` para
+  // que el editor deje de ignorar teclado/pegado/arrastre. Sin este
+  // effect, los inputs del formulario se desbloquean pero TipTap sigue
+  // mudo. (ago 2026)
+  useEffect(() => {
+    if (editor) editor.setEditable(!disabled);
+  }, [editor, disabled]);
 
   return (
     <div className="border-input bg-background rounded-md border shadow-sm">
