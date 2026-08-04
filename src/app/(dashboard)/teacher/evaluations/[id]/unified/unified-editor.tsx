@@ -66,15 +66,39 @@ export interface UnifiedEditorData {
  *    con `initial={...}` precargado; al guardar, `onDone` cierra el form.
  */
 export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
-  // Sección objetivo (a la que se agrega una nueva pregunta). Por defecto
-  // la de MAYOR `order` (= la última en la tabla), para que el ítem recién
-  // agregado quede al final de la lista visible. Caso contrario cae en la
-  // primera sección y, si las demás tienen preguntas, aparece "en medio"
-  // aunque su número sea el más alto (bug visto en evaluaciones importadas
-  // donde la primera sección tiene ~25 preguntas y la nueva entra con #N).
-  const [targetSectionId, setTargetSectionId] = useState<string | null>(
-    data.sections[data.sections.length - 1]?.id ?? data.sections[0]?.id ?? null,
-  );
+  // Sección objetivo (a la que se agrega una nueva pregunta).
+  //
+  // Default contextual (ago 2026):
+  //  - Camino legacy (`?from` ausente o ≠"list"): última sección. Para que
+  //    el ítem recién agregado quede al final de la lista visible. Caso
+  //    contrario cae en la primera sección y, si las demás tienen
+  //    preguntas, aparece "en medio" aunque su número sea el más alto
+  //    (bug visto en evaluaciones importadas donde la primera sección
+  //    tiene ~25 preguntas y la nueva entra con #N).
+  //  - Camino `?from=list` (docente llega desde "Mis formulaciones"):
+  //    PRIMER placeholder vacío (la sección auto-creada por StrictMode,
+  //    sin título ni contenido). El docente suele entrar a la card a
+  //    CREAR un contexto nuevo, no a refinar uno existente — y si
+  //    apuntamos a la última sección con contenido, el gate
+  //    `sectionHasSavedContent` se evalúa a true y los botones
+  //    "Actualizar/Cancelar" emergen falsamente al tipear sobre un
+  //    input que arranca vacío (mismatch entre la intención del docente
+  //    y la sección destino). Apuntando al placeholder vacío, el gate
+  //    queda false hasta que el docente efectivamente escriba algo
+  //    distinto, y los botones solo aparecen si apunta a una sección
+  //    con contenido real (lo cual ya no es este caso por construcción).
+  //    Si NO hay placeholder vacío (todas las secciones tienen
+  //    contenido), caemos a `data.sections[0]` (primera por order) para
+  //    no dejar `targetSectionId=null` (eso mostraría "Preparando el
+  //    formulario…" indefinidamente, mala UX).
+  const [targetSectionId, setTargetSectionId] = useState<string | null>(() => {
+    if (data.initialHideForm) {
+      const empty = data.sections.find((s) => !s.title && !s.content);
+      if (empty) return empty.id;
+      return data.sections[0]?.id ?? null;
+    }
+    return data.sections[data.sections.length - 1]?.id ?? data.sections[0]?.id ?? null;
+  });
 
   // Estado del contexto a crear.
   const [draftSectionTitle, setDraftSectionTitle] = useState("");
