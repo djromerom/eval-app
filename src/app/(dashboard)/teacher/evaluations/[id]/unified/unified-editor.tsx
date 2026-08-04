@@ -1853,7 +1853,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
             <table className="w-full text-sm">
               <thead className="text-foreground border-b-2 border-slate-300 bg-slate-200 text-left font-bold dark:border-slate-600 dark:bg-slate-700 dark:text-white">
                 <tr>
-                  <th className="px-4 py-3 font-medium">DESCRIPCIÓN</th>
+                  <th className="px-4 py-3 text-center font-medium">DESCRIPCIÓN</th>
                   <th className="px-4 py-3 text-center font-medium">CONTEXTO</th>
                   <th className="px-4 py-3 text-center font-medium">OPCIONES</th>
                   <th className="px-4 py-3 text-center font-medium">CLAVE</th>
@@ -1945,7 +1945,8 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         <div className="sticky bottom-4 z-20 flex justify-end">
           <div className="bg-card flex items-center gap-3 rounded-xl border-2 border-black p-3 shadow-lg dark:border-white">
             <p className="text-muted-foreground text-xs">
-              Cuando termines de editar, publícala como versión final.
+              Cuando concluya con la formulación de este bloque de ítems, publíquelos como versión
+              final.
             </p>
             <Button
               type="button"
