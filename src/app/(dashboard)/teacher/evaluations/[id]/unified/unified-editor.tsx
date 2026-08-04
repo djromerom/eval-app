@@ -1099,8 +1099,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           >
             {showEditingBanner && editingQuestionId ? (
               <div className="bg-warning/10 border-warning rounded-md border px-3 py-2 text-xs font-medium text-black">
-                ⚠️ Editando pregunta existente. Los cambios se aplican al pulsar Guardar dentro del
-                formulario de pregunta.
+                ⚠️ Editando ítem. Los cambios se aplican al pulsar Guardar cambios
               </div>
             ) : null}
 
