@@ -1181,33 +1181,61 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   const sectionContentPlain = richTextToPlain(targetSection?.content).trim();
                   const contentChanged = draftContentPlain !== sectionContentPlain;
 
+                  // La sección destino debe tener contenido REAL guardado
+                  // para que los botones de Actualizar/Cancelar tengan
+                  // sentido (ago 2026). Si el `targetSection` existe
+                  // (tiene id) pero está vacío (sin título ni contenido
+                  // JSON), el docente NO está editando un contexto
+                  // existente: el "contexto es nulo" desde la perspectiva
+                  // del bloque. Aunque tipee, el resultado de "Agregar
+                  // enunciado" será crear una sección nueva (vía la rama
+                  // `else` del overrideAction en
+                  // unified-editor.tsx:1525), no actualizar una vacía.
+                  // Mostrar "Actualizar contexto" en ese caso sería
+                  // engañoso: actualizaría una sección vacía para ponerle
+                  // contenido nuevo, lo cual NO es la intención — el
+                  // docente está construyendo un contexto fresh.
+                  //
+                  // Comprobamos: targetSection.title.trim() !== "" OR
+                  // targetSection.content no es null/vacío según
+                  // isTipTapEmpty. La sección placeholder auto-creada por
+                  // StrictMode cae aquí (sin título y sin contenido).
+                  const sectionHasSavedContent =
+                    targetSection !== null &&
+                    (sectionTitleTrimmed !== "" ||
+                      (targetSection.content !== null &&
+                        targetSection.content !== undefined &&
+                        !isTipTapEmpty(targetSection.content)));
+
                   // "Actualizar contexto" + "Cancelar cambios" aparecen
-                  // SOLO cuando hay un diff real entre los drafts y la
-                  // sección destino guardada (ago 2026).
+                  // SOLO cuando se cumplen TODAS estas condiciones (ago
+                  // 2026):
+                  //   1. La evaluación es editable.
+                  //   2. NO estamos editando una pregunta existente
+                  //      (los inputs del contexto van disabled en ese
+                  //      modo y el flujo de Actualizar no aplica).
+                  //   3. Hay un targetSection con contenido real
+                  //      guardado. Si la sección destino está vacía,
+                  //      los botones no aplican (sería una creación, no
+                  //      actualización).
+                  //   4. contextoDirty=true: el docente tocó el bloque,
+                  //      ya sea en este render o en uno previo sin
+                  //      sincronizar.
+                  //   5. Hay un diff real entre los drafts y el estado
+                  //      guardado.
                   //
-                  // Cambió el modelo con respecto al commit previo (PR #18
-                  // commit `4212102`): ya NO hay un botón "Editar contexto"
-                  // que gating los inputs. Los inputs del bloque Contexto
-                  // nacen HABILITADOS (excepto en modo edición de pregunta,
-                  // donde seguimos bloqueándolos para evitar que el docente
-                  // cambie el contexto y la pregunta al mismo tiempo). El
-                  // docente tipea libremente; los botones emergen cuando
-                  // hay algo que persistir (diff) y desaparecen tras un
-                  // save/cancel exitoso (vía contextoDirty=false en cada
-                  // sync point).
-                  //
-                  // contextoDirty sigue siendo necesario: en el mount
-                  // inicial drafts="" pero la sección destino guardada
-                  // puede tener título/contenido → diff verdadero aunque
-                  // el docente NO haya tocado nada. El flag se enciende
-                  // en onChange del título o del RichTextEditor; se apaga
-                  // en startEdit / handleUpdateContext OK /
+                  // contextoDirty es necesario porque en el mount inicial
+                  // drafts="" pero la sección destino guardada tiene
+                  // título/contenido → diff verdadero aunque el docente
+                  // NO haya tocado nada. El flag se enciende en onChange
+                  // del título o del RichTextEditor; se apaga en
+                  // startEdit / handleUpdateContext OK /
                   // handleCancelContextEdit / handleAddOrRenameSection
                   // OK / handleNewContextWithQuestion OK o discard.
                   const showUpdateContextButton =
                     data.editable &&
                     !editingQuestionId &&
-                    targetSection !== null &&
+                    sectionHasSavedContent &&
                     contextoDirty &&
                     (titleChanged || contentChanged);
                   if (!showUpdateContextButton) return null;
