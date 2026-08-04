@@ -126,6 +126,16 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [showEditingBanner, setShowEditingBanner] = useState(false);
 
+  // Cuando el docente edita una pregunta existente, los inputs del bloque
+  // Contexto nacen DESHABILITADOS (no queremos que un cambio accidental en
+  // el contexto del ítem se cuele mientras el docente solo quería editar el
+  // enunciado). Para poder editar el contexto desde ahí, hace falta un
+  // paso explícito: pulsar "Editar contexto" → este flag se enciende → los
+  // inputs se habilitan → aparecen "Guardar/Cancelar". Se resetea a false
+  // al cerrar el modo edición de pregunta (cancelEdit o tras guardar).
+  // (ago 2026)
+  const [editingContext, setEditingContext] = useState(false);
+
   // Modal de revisión.
   const [reviewModal, setReviewModal] = useState<QuestionLite | null>(null);
 
@@ -307,7 +317,9 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     // docente vea a qué contexto pertenece la pregunta. NO permitimos editar
     // el contexto desde aquí (los inputs quedan disabled más abajo y el form
     // no envía cambios de sección): si quiere cambiar el contexto, tiene
-    // que duplicar la pregunta en otra sección y borrar la original.
+    // que pulsar explícitamente "Editar contexto" en el bloque Contexto
+    // (lo monta editingContext=true; los inputs se desbloquean y aparecen
+    // Actualizar/Cancelar).
     const section = data.sections.find((s) => s.id === q.sectionId);
     setDraftSectionTitle(section?.title ?? "");
     setDraftSectionContent(section?.content ?? null);
@@ -317,6 +329,12 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     // Los drafts se sincronizaron con la sección persistida → no hay edición
     // pendiente. Los botones "Actualizar/Cancelar" deben quedar ocultos.
     setContextoDirty(false);
+    // Entramos al modo edición de pregunta con el contexto BLOQUEADO por
+    // default (mostramos el botón "Editar contexto", NO los inputs ya
+    // habilitados). Defensivo: si el docente había entrado en modo edición
+    // de contexto antes (improbable, pero posible si re-carga la misma
+    // pregunta), reseteamos a false para arrancar limpio.
+    setEditingContext(false);
   }
 
   function cancelEdit() {
@@ -324,6 +342,10 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     setEditingQuestionId(null);
     setShowEditingBanner(false);
     setFormError(null);
+    // Salimos del modo edición de pregunta: cualquier desbloqueo de
+    // contexto que el docente hubiera hecho se descarta. Si vuelve a
+    // editar la misma pregunta, startEdit() lo deja en false otra vez.
+    setEditingContext(false);
   }
 
   /**
@@ -589,7 +611,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
    * ve el diff ya salvado y el botón desaparece.
    */
   async function handleUpdateContext() {
-    if (editingQuestionId) return; // modo creación/edición puntual
+    // Modo edición de pregunta + docente pulsó "Editar contexto" →
+    // permitido (los botones Actualizar/Cancelar del bloque Contexto se
+    // rinden con editingContext=true; sin esta relajación no podríamos
+    // persistir el cambio del contexto desde el modo edición de ítem).
+    if (editingQuestionId && !editingContext) return; // modo edición sin unlock
     if (submittingRef.current) {
       console.warn("[Actualizar-contexto] BLOQUEADO por doble-submit");
       return;
@@ -636,6 +662,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       // "Actualizar contexto" desaparezca (el docente acaba de guardar,
       // no hay más diff que mostrar).
       setContextoDirty(false);
+      // Si guardamos el contexto desde el flujo "Editar contexto"
+      // (edición de pregunta existente), cerramos también ese flag para
+      // devolver el bloque al estado default — inputs bloqueados,
+      // docente sigue enfocado en editar la pregunta. En el otro flujo
+      // (no-editingQuestion), `editingContext` ya era false así que el
+      // setter es no-op.
+      if (editingContext) setEditingContext(false);
       // Persistimos cambios del contexto. contextoDirty=false cierra
       // los botones Actualizar/Cancelar; los inputs siguen habilitados
       // para que el docente pueda seguir editando sin re-entradas.
@@ -664,7 +697,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
    * NO toca el servidor: es 100% client-side. El backend ni se entera.
    */
   function handleCancelContextEdit() {
-    if (editingQuestionId) return; // no aplica en modo edición
+    // Modo edición de pregunta + docente pulsó "Editar contexto" →
+    // permitido (botón Cancelar del bloque Contexto visible con
+    // editingContext=true). Sin esta relajación no podríamos revertir
+    // los drafts del contexto desde el modo edición de ítem.
+    if (editingQuestionId && !editingContext) return;
     const sectionId = targetSectionId;
     if (!sectionId) return;
     const targetSection = data.sections.find((s) => s.id === sectionId);
@@ -686,6 +723,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     // Tras revertir, los drafts coinciden con la sección destino → no
     // hay diff → no hay botones (controlado por contextoDirty=false).
     setContextoDirty(false);
+    // Si estábamos en el flujo "Editar contexto" desde un modo edición
+    // de pregunta, también cerramos ese flag para volver al estado
+    // default (inputs bloqueados de nuevo, listo para tipear la
+    // pregunta sin tocar el contexto por accidente).
+    if (editingContext) setEditingContext(false);
   }
 
   /**
@@ -1138,10 +1180,12 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   // existente desde "Mis formulaciones" sin verse forzado
                   // a pulsar un botón "Editar contexto" primero. Solo se
                   // bloquea cuando la evaluación no es editable, o cuando
-                  // estamos editando una pregunta existente (en ese modo
-                  // bloqueamos el contexto para evitar cambios
-                  // simultáneos sobre ítem + contexto).
-                  disabled={!data.editable || editingQuestionId !== null}
+                  // estamos editando una pregunta existente Y el docente
+                  // todavía no pulsó "Editar contexto" (en ese modo
+                  // bloqueamos el contexto por defecto para evitar
+                  // cambios simultáneos sobre ítem + contexto; el botón
+                  // "Editar contexto" desbloquea vía `setEditingContext`).
+                  disabled={!data.editable || (editingQuestionId !== null && !editingContext)}
                   className="max-w-md"
                 />
                 <div className="mt-2">
@@ -1170,23 +1214,35 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     // Misma regla que el Input del título (ago 2026):
                     // HABILITADO por defecto. Se bloquea solo cuando la
                     // evaluación no es editable o cuando estamos editando
-                    // una pregunta existente. `disabled` mapea a
+                    // una pregunta existente SIN haber pulsado "Editar
+                    // contexto" todavía. `disabled` mapea a
                     // `editable: false` dentro de TipTap y oculta
                     // Toolbar/controles.
-                    disabled={!data.editable || editingQuestionId !== null}
+                    disabled={!data.editable || (editingQuestionId !== null && !editingContext)}
                     minHeightClass="min-h-12"
                   />
                 </div>
                 {/* Botones de gestión del bloque Contexto (ago 2026).
-                  Caso único: `targetSection !== null && contextoDirty &&
-                  diff` → "Actualizar contexto" + "Cancelar cambios".
-                  Por qué NO hay botón "Editar contexto": el docente
-                  pidió tipear libremente sobre una formulación existente
-                  desde "Mis formulaciones" sin verse forzado a pulsar
-                  un botón de entrada. Los inputs del bloque nacen
-                  HABILITADOS (excepto en modo edición de pregunta) y los
-                  botones de commit emergen automáticamente cuando hay
-                  un diff real entre los drafts y la sección destino. */}
+                  Tres estados visuales mutuamente excluyentes:
+                    (a) Edición de pregunta existente con contexto BLOQUEADO
+                        (editingQuestionId && !editingContext) → botón único
+                        "Editar contexto" para que el docente desbloquee.
+                    (b) Edición de pregunta existente con contexto DESBLOQUEADO
+                        (editingQuestionId && editingContext) o flujo normal
+                        (!editingQuestionId) → "Actualizar/Cancelar" gated por
+                        diff real entre drafts y sección persistida.
+                    (c) Cualquier otro caso (sección vacía, no editable, sin
+                        diff) → nada.
+
+                  Por qué el botón (a) existe solo en modo edición de
+                  pregunta: en el flujo normal "Mis formulaciones"
+                  (b7bb2c7) los inputs nacen habilitados por default para
+                  no forzar al docente a pulsar una entrada extra. Pero al
+                  EDITAR una pregunta, los inputs sí están bloqueados
+                  (riesgo de cambios accidentales sobre el contexto del
+                  ítem mientras el docente solo quería editar el
+                  enunciado), y entonces necesitamos el botón explícito
+                  para entrar al modo edición del contexto. */}
                 {(() => {
                   const targetSection =
                     targetSectionId === null
@@ -1231,13 +1287,46 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         targetSection.content !== undefined &&
                         !isTipTapEmpty(targetSection.content)));
 
-                  // "Actualizar contexto" + "Cancelar cambios" aparecen
-                  // SOLO cuando se cumplen TODAS estas condiciones (ago
-                  // 2026):
+                  // (a) Edición de pregunta + contexto bloqueado
+                  // → botón "Editar contexto". Único modo donde este
+                  // botón aparece, para no contaminar el flujo normal
+                  // (b7bb2c7) en el que el docente tipea libremente sobre
+                  // la formulación sin pulsar entrada previa.
+                  if (
+                    data.editable &&
+                    editingQuestionId !== null &&
+                    !editingContext
+                  ) {
+                    return (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={actionStatus === "saving"}
+                          onClick={() => setEditingContext(true)}
+                        >
+                          Editar contexto
+                        </Button>
+                        <span className="text-muted-foreground text-xs">
+                          Modifica el título o el contenido del contexto asociado a esta pregunta.
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  // (b) "Actualizar contexto" + "Cancelar cambios"
+                  // aparecen SOLO cuando se cumplen TODAS estas
+                  // condiciones (ago 2026):
                   //   1. La evaluación es editable.
-                  //   2. NO estamos editando una pregunta existente
-                  //      (los inputs del contexto van disabled en ese
-                  //      modo y el flujo de Actualizar no aplica).
+                  //   2. NO estamos editando una pregunta existente SIN
+                  //      haber desbloqueado el contexto (en ese modo los
+                  //      inputs del contexto van disabled y la intención
+                  //      del docente es editar el ítem, no el contexto).
+                  //      Si el docente pulsó "Editar contexto"
+                  //      (→editingContext=true), los botones SÍ se
+                  //      muestran: es justamente ese flujo el que los
+                  //      necesita.
                   //   3. Hay un targetSection con contenido real
                   //      guardado. Si la sección destino está vacía,
                   //      los botones no aplican (sería una creación, no
@@ -1258,7 +1347,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   // OK / handleNewContextWithQuestion OK o discard.
                   const showUpdateContextButton =
                     data.editable &&
-                    !editingQuestionId &&
+                    (!editingQuestionId || editingContext) &&
                     sectionHasSavedContent &&
                     contextoDirty &&
                     (titleChanged || contentChanged);
@@ -1661,6 +1750,12 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       setEditingQuestionId(null);
                       setShowEditingBanner(false);
                       setActionStatus("saved");
+                      // Si el docente había desbloqueado el contexto
+                      // antes de guardar la pregunta, también limpiamos
+                      // ese flag — ya no estamos en modo edición de
+                      // pregunta, así que el botón "Editar contexto"
+                      // tampoco aplica.
+                      setEditingContext(false);
                       // IMPORTANTE: NO limpiamos draftSectionTitle ni
                       // draftSectionContent tras un "Agregar enunciado"
                       // exitoso. El docente espera ver el contexto
