@@ -102,8 +102,13 @@ export default async function UnifiedEditorPage({
         ]}
       />
       <PageHeader
-        title={`${evaluation.title} — ${evaluation.periodName ?? "Sin periodo"}`}
-
+        title={[
+          evaluation.periodName,
+          [evaluation.subjectName, evaluation.courseName].filter(Boolean).join(" "),
+          evaluation.bookletTypeName,
+        ]
+          .filter((part) => part && String(part).trim().length > 0)
+          .join(" ")}
       />
 
       <div className="mb-4 flex items-center gap-3">
