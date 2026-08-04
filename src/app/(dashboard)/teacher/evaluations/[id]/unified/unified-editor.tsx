@@ -1400,7 +1400,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   }
 
                   return (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
                       <Button
                         type="button"
                         size="sm"
