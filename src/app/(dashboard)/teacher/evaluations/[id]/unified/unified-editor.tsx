@@ -156,6 +156,10 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   const formRef = useRef<HTMLDivElement>(null);
   const contextInfoRef = useRef<HTMLSpanElement>(null);
   const enunciadoInfoRef = useRef<HTMLSpanElement>(null);
+  // ago 2026: popover (i) junto al botón "Editar contexto" (reemplaza el
+  // <span> con hint inline que pedía mucho ancho). Mismo patrón visual
+  // que los dos popovers de arriba, state independiente para no chocar.
+  const editarContextoInfoRef = useRef<HTMLSpanElement>(null);
   // Ref al <form> real de "Nuevo contexto" (mismo patrón que `section-form.tsx`).
   // Lo usa el botón "Nuevo contexto" que vive dentro del `extraActions` del
   // QuestionForm: como ese botón está anidado en el `<form>` del QuestionForm,
@@ -200,6 +204,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   // Estado de los popovers de info (botones (i) junto a los títulos).
   const [isContextInfoOpen, setIsContextInfoOpen] = useState(false);
   const [isEnunciadoInfoOpen, setIsEnunciadoInfoOpen] = useState(false);
+  const [isEditarContextoInfoOpen, setIsEditarContextoInfoOpen] = useState(false);
 
   // En la vista inicial, cuando NO hay ítems todavía, solo mostramos los dos
   // botones (Importar con IA / Agregar 1 a 1). Las secciones inferiores
@@ -218,7 +223,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
 
   // Click fuera o Esc → cerrar popovers.
   useEffect(() => {
-    if (!isContextInfoOpen && !isEnunciadoInfoOpen) return;
+    if (!isContextInfoOpen && !isEnunciadoInfoOpen && !isEditarContextoInfoOpen) return;
     function handleClickOutside(e: MouseEvent) {
       const t = e.target as Node;
       if (isContextInfoOpen && contextInfoRef.current && !contextInfoRef.current.contains(t)) {
@@ -231,11 +236,19 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       ) {
         setIsEnunciadoInfoOpen(false);
       }
+      if (
+        isEditarContextoInfoOpen &&
+        editarContextoInfoRef.current &&
+        !editarContextoInfoRef.current.contains(t)
+      ) {
+        setIsEditarContextoInfoOpen(false);
+      }
     }
     function handleEsc(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setIsContextInfoOpen(false);
         setIsEnunciadoInfoOpen(false);
+        setIsEditarContextoInfoOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -244,7 +257,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEsc);
     };
-  }, [isContextInfoOpen, isEnunciadoInfoOpen]);
+  }, [isContextInfoOpen, isEnunciadoInfoOpen, isEditarContextoInfoOpen]);
 
   // Banner de edición: scroll al top + auto-ocultar tras 5s.
   useEffect(() => {
@@ -1086,8 +1099,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           >
             {showEditingBanner && editingQuestionId ? (
               <div className="bg-warning/10 border-warning rounded-md border px-3 py-2 text-xs font-medium text-black">
-                ⚠️ Editando pregunta existente. Los cambios se aplican al pulsar Guardar dentro del
-                formulario de pregunta.
+                ⚠️ Editando ítem. Los cambios se aplican al pulsar Guardar cambios
               </div>
             ) : null}
 
@@ -1116,9 +1128,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       className="bg-popover text-popover-foreground absolute top-full left-0 z-20 mt-2 w-72 rounded-md border p-3 text-xs leading-relaxed shadow-md"
                     >
                       <p>
-                        Este campo es opcional, siempre y cuando no haya diligenciado el campo anterior de título. 
-                        Ingrese aquí un texto, gráfica, tabla, formula y/o diagrama, en caso que se requiera de esta información previa para enmarcar la evaluación del ítem. 
-                        Este componente garantiza que el ítem evalúe el saber-hacer en contexto y no la simple memorización.
+                        Este campo es opcional, siempre y cuando no haya diligenciado el campo
+                        anterior de título. Ingrese aquí un texto, gráfica, tabla, formula y/o
+                        diagrama, en caso que se requiera de esta información previa para enmarcar
+                        la evaluación del ítem. Este componente garantiza que el ítem evalúe el
+                        saber-hacer en contexto y no la simple memorización.
                       </p>
                     </div>
                   ) : null}
@@ -1298,11 +1312,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   // botón aparece, para no contaminar el flujo normal
                   // (b7bb2c7) en el que el docente tipea libremente sobre
                   // la formulación sin pulsar entrada previa.
-                  if (
-                    data.editable &&
-                    editingQuestionId !== null &&
-                    !editingContext
-                  ) {
+                  if (data.editable && editingQuestionId !== null && !editingContext) {
                     return (
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <Button
@@ -1314,8 +1324,27 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         >
                           Editar contexto
                         </Button>
-                        <span className="text-muted-foreground text-xs">
-                          Modifica el título o el contenido del contexto asociado a esta pregunta.
+                        <span ref={editarContextoInfoRef} className="relative inline-block">
+                          <button
+                            type="button"
+                            onClick={() => setIsEditarContextoInfoOpen((o) => !o)}
+                            className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-5 w-5 items-center justify-center rounded-full transition-colors"
+                            aria-label="Más información sobre Editar contexto"
+                            aria-expanded={isEditarContextoInfoOpen}
+                          >
+                            <Info className="h-3.5 w-3.5" />
+                          </button>
+                          {isEditarContextoInfoOpen ? (
+                            <div
+                              role="tooltip"
+                              className="bg-popover text-popover-foreground absolute top-full left-0 z-20 mt-2 w-72 rounded-md border p-3 text-xs leading-relaxed shadow-md"
+                            >
+                              <p>
+                                Modifica el título o el contenido del contexto asociado a esta
+                                pregunta.
+                              </p>
+                            </div>
+                          ) : null}
                         </span>
                       </div>
                     );
@@ -1370,7 +1399,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   }
 
                   return (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
                       <Button
                         type="button"
                         size="sm"
@@ -1399,9 +1428,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       >
                         Cancelar cambios
                       </Button>
-                      <span className="text-muted-foreground text-xs">
-                        Guarda los cambios solo en el contexto (no crea ni edita preguntas).
-                      </span>
                     </div>
                   );
                 })()}
@@ -1450,9 +1476,10 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       className="bg-popover text-popover-foreground absolute top-full left-0 z-20 mt-2 w-72 rounded-md border p-3 text-xs leading-relaxed shadow-md"
                     >
                       <p>
-                        Este campo es obligatorio. 
-                        Redacte aquí la pregunta o instrucción explícita que plantea el reto cognitivo. 
-                        Debe contener toda la información indispensable para que el estudiante comprenda lo que se le solicita de forma inequívoca.
+                        Este campo es obligatorio. Redacte aquí la pregunta o instrucción explícita
+                        que plantea el reto cognitivo. Debe contener toda la información
+                        indispensable para que el estudiante comprenda lo que se le solicita de
+                        forma inequívoca.
                       </p>
                     </div>
                   ) : null}
@@ -1825,7 +1852,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
             <table className="w-full text-sm">
               <thead className="text-foreground border-b-2 border-slate-300 bg-slate-200 text-left font-bold dark:border-slate-600 dark:bg-slate-700 dark:text-white">
                 <tr>
-                  <th className="px-4 py-3 font-medium">DESCRIPCIÓN</th>
+                  <th className="px-4 py-3 text-center font-medium">DESCRIPCIÓN</th>
                   <th className="px-4 py-3 text-center font-medium">CONTEXTO</th>
                   <th className="px-4 py-3 text-center font-medium">OPCIONES</th>
                   <th className="px-4 py-3 text-center font-medium">CLAVE</th>
@@ -1917,7 +1944,8 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         <div className="sticky bottom-4 z-20 flex justify-end">
           <div className="bg-card flex items-center gap-3 rounded-xl border-2 border-black p-3 shadow-lg dark:border-white">
             <p className="text-muted-foreground text-xs">
-              Cuando termines de editar, publícala como versión final.
+              Cuando concluya con la formulación de este bloque de ítems, publíquelos como versión
+              final.
             </p>
             <Button
               type="button"

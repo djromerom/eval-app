@@ -48,7 +48,7 @@ export function LoginForm() {
           required
           autoComplete="current-password"
           placeholder="••••••••••"
-          className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring w-full rounded-lg border px-3.5 py-2.5 text-sm shadow-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
+          className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring w-full rounded-lg border px-3.5 py-2.5 text-sm shadow-sm transition-colors placeholder:transition-opacity placeholder:duration-150 focus:placeholder:opacity-0 focus-visible:ring-2 focus-visible:outline-none"
         />
       </div>
       <Button type="submit" size="lg" className="w-full">
