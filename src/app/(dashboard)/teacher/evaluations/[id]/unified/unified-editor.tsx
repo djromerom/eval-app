@@ -235,7 +235,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
 
   // Click fuera o Esc → cerrar popovers.
   useEffect(() => {
-    if (!isContextInfoOpen && !isEnunciadoInfoOpen && !isEditarContextoInfoOpen) return;
     function handleClickOutside(e: MouseEvent) {
       const t = e.target as Node;
       if (isContextInfoOpen && contextInfoRef.current && !contextInfoRef.current.contains(t)) {
@@ -1594,7 +1593,9 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                             targetSection,
                           )
                         ) {
-                          return addQuestionAction({}, formData);
+                          const result = await addQuestionAction({}, formData);
+                          if (result.success) notifyItemSaved();
+                          return result;
                         }
                         // Decide: ¿renombrar la sección vacía auto-creada, o
                         // crear una nueva sección? Renombrar evita el caso
@@ -1640,7 +1641,9 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                           );
                           formData.set("sectionId", matchingByTitle.id);
                           setTargetSectionId(matchingByTitle.id);
-                          return addQuestionAction({}, formData);
+                          const result = await addQuestionAction({}, formData);
+                          if (result.success) notifyItemSaved();
+                          return result;
                         }
                         const onlySection = data.sections.length === 1 ? data.sections[0] : null;
                         const isEmpty =
@@ -1718,7 +1721,16 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                             setTargetSectionId(res.sectionId);
                           }
                         }
-                        return addQuestionAction({}, formData);
+                        const result = await addQuestionAction({}, formData);
+                        // FIX (ago 2026): dispara el toast directamente desde
+                        // el overrideAction. El onDone del QuestionForm NO se
+                        // está ejecutando consistentemente (probable bug del
+                        // useEffect tras la cadena de revalidates), así que
+                        // confiamos en el resultado del server action.
+                        if (result.success) {
+                          notifyItemSaved();
+                        }
+                        return result;
                       } finally {
                         submittingRef.current = false;
                       }
@@ -1793,16 +1805,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       setEditingQuestionId(null);
                       setShowEditingBanner(false);
                       setActionStatus("saved");
-                      // Toast de éxito solo en CREACIÓN. Cuando el docente
-                      // está editando un ítem existente (editingQuestionId
-                      // != null en el momento del submit), el feedback
-                      // sigue siendo el cierre silencioso de la card. Esta
-                      // guarda cubre tanto "Agregar enunciado" como
-                      // "Guardar" del extraActions — ambos reusan este
-                      // mismo onDone tras el overrideAction.
-                      if (!editingQuestionId) {
-                        notifyItemSaved();
-                      }
+                      // El toast de éxito "El ítem fue guardado de manera
+                      // correcta" se dispara desde el overrideAction (no
+                      // desde aquí), porque el useEffect del QuestionForm
+                      // que invoca onDone NO corre consistentemente cuando
+                      // hay revalidates encadenadas (ver commit del fix).
                       // Si el docente había desbloqueado el contexto
                       // antes de guardar la pregunta, también limpiamos
                       // ese flag — ya no estamos en modo edición de
