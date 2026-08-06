@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Info, Plus, Send, Sparkles, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import type { EvaluationStatus } from "@/modules/evaluations/domain/evaluation-status";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import { Button } from "@/components/ui/button";
@@ -142,6 +143,17 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   // Errores inline.
   const [formError, setFormError] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  /** Toast de éxito al crear un ítem. Centraliza el copy para que un
+   *  cambio futuro (p. ej. añadir tildes) toque un único punto. Se
+   *  dispara en: handleAddOrRenameSection (2 ramas), handleNewContextWithQuestion
+   *  y onDone del QuestionForm (cubrir "Agregar enunciado" y "Guardar" en
+   *  modo creación). NO se dispara en edición ni en publicación — esos
+   *  paths están filtrados por el `if (!editingQuestionId)` en onDone. */
+  const TOAST_SAVED = "El ítem fue guardado de manera correcta";
+  function notifyItemSaved() {
+    toast.success(TOAST_SAVED);
+  }
 
   // El form "Nuevo contexto" delega a `handleAddOrRenameSection` (definido
   // más abajo). Lo decidimos en el cliente porque el form usa un <form>
@@ -517,6 +529,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         setTimeout(() => {
           setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
         }, 2500);
+        notifyItemSaved();
         return;
       }
 
@@ -600,6 +613,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       setTimeout(() => {
         setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
       }, 2500);
+      notifyItemSaved();
     } finally {
       submittingRef.current = false;
     }
@@ -995,6 +1009,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       setTimeout(() => {
         setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
       }, 2500);
+      notifyItemSaved();
     } finally {
       submittingRef.current = false;
     }
@@ -1447,10 +1462,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   </div>
                 ) : null}
               </form>
-
-              {actionStatus === "saved" && !formError && !editingQuestionId ? (
-                <p className="text-primary text-xs">✓ Contexto guardado</p>
-              ) : null}
             </section>
 
             {/* Bloque: Formulario de pregunta (delega a QuestionForm) */}
@@ -1782,6 +1793,16 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       setEditingQuestionId(null);
                       setShowEditingBanner(false);
                       setActionStatus("saved");
+                      // Toast de éxito solo en CREACIÓN. Cuando el docente
+                      // está editando un ítem existente (editingQuestionId
+                      // != null en el momento del submit), el feedback
+                      // sigue siendo el cierre silencioso de la card. Esta
+                      // guarda cubre tanto "Agregar enunciado" como
+                      // "Guardar" del extraActions — ambos reusan este
+                      // mismo onDone tras el overrideAction.
+                      if (!editingQuestionId) {
+                        notifyItemSaved();
+                      }
                       // Si el docente había desbloqueado el contexto
                       // antes de guardar la pregunta, también limpiamos
                       // ese flag — ya no estamos en modo edición de
