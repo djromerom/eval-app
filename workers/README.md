@@ -33,3 +33,7 @@ La compilación TS→JS se hace en el stage `builder` del Dockerfile
 El pipeline OMR usa `sharp` + heurística; el microservicio Python/OpenCV es un
 fallback **solo si** la precisión baja del 95 % — no se construye de forma
 preventiva.
+
+<!-- dashboard: este README se mantiene como referencia técnica del directorio
+     workers/. Si agregas un worker nuevo, añádelo a la tabla de la sección
+     "Workers" junto con su cola BullMQ correspondiente. -->
