@@ -66,6 +66,22 @@ export class PrismaTeacherRepository implements TeacherRepository {
     return row !== null;
   }
 
+  async idNumberTakenInInstitution(
+    institutionId: string,
+    idType: string,
+    idNumber: string,
+  ): Promise<boolean> {
+    const row = await prisma.teacher.findFirst({
+      where: {
+        idType,
+        idNumber,
+        user: { institutionId, deletedAt: null },
+      },
+      select: { id: true },
+    });
+    return row !== null;
+  }
+
   async createProfileForUser(userId: string, data: TeacherProfileData): Promise<Teacher> {
     const row = await prisma.teacher.create({
       data: { userId, idType: data.idType, idNumber: data.idNumber, phone: data.phone },

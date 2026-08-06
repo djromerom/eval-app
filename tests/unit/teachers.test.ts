@@ -34,6 +34,11 @@ class InMemoryTeachers implements TeacherRepository {
   async emailTaken(email: string) {
     return this.items.some((t) => t.email === email);
   }
+  async idNumberTakenInInstitution(institutionId: string, idType: string, idNumber: string) {
+    return this.items.some(
+      (t) => t.institutionId === institutionId && t.idType === idType && t.idNumber === idNumber,
+    );
+  }
   async findByUserId(institutionId: string, userId: string) {
     return this.items.find((t) => t.institutionId === institutionId && t.userId === userId) ?? null;
   }

@@ -55,6 +55,13 @@ export interface TeacherRepository {
   findByUserId(institutionId: string, userId: string): Promise<Teacher | null>;
   /** ¿Ya existe un usuario (cualquiera) con este correo? El email es único global. */
   emailTaken(email: string): Promise<boolean>;
+  /** ¿Ya existe un docente con este (idType, idNumber) en la institución?
+   *  Como Teacher no tiene institutionId directo, cruzar por user. */
+  idNumberTakenInInstitution(
+    institutionId: string,
+    idType: string,
+    idNumber: string,
+  ): Promise<boolean>;
   /** Crea la cuenta (TEACHER, inactiva) + el perfil docente en una transacción. */
   createWithUser(institutionId: string, data: CreateTeacherData): Promise<Teacher>;
   /** Crea el perfil docente para un usuario ya existente (rol Profesor asignado
