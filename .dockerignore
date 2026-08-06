@@ -3,6 +3,7 @@
 # Mantiene la imagen delgada y evita filtrar artefactos locales al build.
 # ============================================================================
 
+
 # Dependencias (se reinstalan dentro del builder)
 node_modules
 .pnpm-store
