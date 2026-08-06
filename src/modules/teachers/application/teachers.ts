@@ -8,6 +8,7 @@ import { isValidEmail } from "@/modules/users/domain/user";
 import type { CourseSubjectRepository } from "@/modules/academic/domain/types";
 import {
   type CreateTeacherData,
+  TEACHER_ID_TYPES,
   type Teacher,
   type TeacherAssignment,
   type TeacherRepository,
@@ -181,6 +182,165 @@ export class ResendTeacherInvitation implements UseCase<ResendTeacherInvitationI
     }
 
     return ok(undefined);
+  }
+}
+
+// ============= IMPORT MASIVO (XLSX/CSV) =============
+
+/** Una fila del archivo a importar (formato canonical, sin normalizar). */
+export interface TeacherImportRow {
+  name: string;
+  email: string;
+  idType: string;
+  idNumber: string;
+  phone?: string;
+}
+
+export interface TeacherImportError {
+  /** 1-based, contando la fila de encabezado como 1. */
+  row: number;
+  message: string;
+}
+
+export interface TeacherImportResult {
+  total: number;
+  created: number;
+  failed: number;
+  errors: TeacherImportError[];
+}
+
+const ERROR_CAP = 50;
+
+export interface ImportTeachersInput {
+  actor: AuthenticatedUser;
+  rows: TeacherImportRow[];
+  institutionName: string;
+}
+
+/**
+ * Importación masiva de docentes desde XLSX/CSV. Reusa {@link CreateTeacher}
+ * por fila: cada fila válida dispara el mismo flujo (transacción User+Teacher,
+ * token URL firmado, email de bienvenida). Una fila inválida NO aborta el resto.
+ *
+ * Diferencias con el alta individual:
+ *  - Recolecta errores por fila en `errors[]` (cap a 50 para no abrumar la UI;
+ *    el contador `failed` sí refleja el total real).
+ *  - Detecta duplicados internos (mismo email o (idType, idNumber) en el
+ *    mismo archivo) antes de consultar la BD.
+ *  - Chequea unicidad de (idType, idNumber) por institución vía
+ *    {@link TeacherRepository.idNumberTakenInInstitution} antes de delegar.
+ *
+ * El actor y el institutionName se pasan por `execute()` para mantener el use
+ * case testeable con varias instituciones.
+ */
+export class ImportTeachers implements UseCase<ImportTeachersInput, TeacherImportResult> {
+  constructor(
+    private readonly teachers: TeacherRepository,
+    private readonly createTeacher: CreateTeacher,
+  ) {}
+
+  async execute({
+    actor,
+    rows,
+    institutionName,
+  }: ImportTeachersInput): Promise<Result<TeacherImportResult>> {
+    const authorized = requireRole(actor, "ECU_MASTER");
+    if (!authorized.ok) return fail(authorized.error);
+
+    if (rows.length === 0) {
+      return ok({ total: 0, created: 0, failed: 0, errors: [] });
+    }
+
+    const seenEmails = new Set<string>();
+    const seenIds = new Set<string>();
+    const errors: TeacherImportError[] = [];
+    let created = 0;
+
+    const pushErr = (row: number, message: string) => {
+      if (errors.length < ERROR_CAP) errors.push({ row, message });
+    };
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i]!;
+      const rowNum = i + 2; // encabezado en fila 1
+
+      const trimmedName = (r.name ?? "").trim();
+      const trimmedEmail = (r.email ?? "").trim().toLowerCase();
+      const trimmedIdNumber = (r.idNumber ?? "").trim();
+      const normIdType = (r.idType ?? "").trim().toUpperCase();
+
+      if (!trimmedName) {
+        pushErr(rowNum, "El nombre es obligatorio.");
+        continue;
+      }
+      if (!isValidEmail(trimmedEmail)) {
+        pushErr(rowNum, "Correo inválido.");
+        continue;
+      }
+      if (!isValidTeacherIdType(normIdType)) {
+        pushErr(rowNum, `Tipo de documento inválido: "${r.idType}".`);
+        continue;
+      }
+      if (!trimmedIdNumber) {
+        pushErr(rowNum, "El número de documento es obligatorio.");
+        continue;
+      }
+
+      const idKey = `${normIdType}|${trimmedIdNumber}`;
+      if (seenEmails.has(trimmedEmail)) {
+        pushErr(rowNum, `Correo duplicado dentro del archivo: ${trimmedEmail}.`);
+        continue;
+      }
+      if (seenIds.has(idKey)) {
+        pushErr(rowNum, `Documento duplicado dentro del archivo.`);
+        continue;
+      }
+      seenEmails.add(trimmedEmail);
+      seenIds.add(idKey);
+
+      if (await this.teachers.emailTaken(trimmedEmail)) {
+        pushErr(rowNum, `Ya existe un usuario con el correo "${trimmedEmail}".`);
+        continue;
+      }
+      if (
+        await this.teachers.idNumberTakenInInstitution(
+          actor.institutionId,
+          normIdType,
+          trimmedIdNumber,
+        )
+      ) {
+        pushErr(
+          rowNum,
+          `Ya existe un docente con ${normIdType} ${trimmedIdNumber} en tu institución.`,
+        );
+        continue;
+      }
+
+      const result = await this.createTeacher.execute({
+        actor,
+        institutionName,
+        data: {
+          name: trimmedName,
+          email: trimmedEmail,
+          idType: normIdType as (typeof TEACHER_ID_TYPES)[number],
+          idNumber: trimmedIdNumber,
+          phone: r.phone?.trim() || undefined,
+        },
+      });
+
+      if (!result.ok) {
+        pushErr(rowNum, result.error.message);
+        continue;
+      }
+      created++;
+    }
+
+    return ok({
+      total: rows.length,
+      created,
+      failed: rows.length - created,
+      errors,
+    });
   }
 }
 
