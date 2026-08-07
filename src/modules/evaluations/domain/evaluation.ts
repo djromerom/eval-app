@@ -241,6 +241,22 @@ export interface EvaluationRepository {
   ): Promise<Question>;
 
   /**
+   * Devuelve el `sectionId` de la pregunta indicada, o `null` si no existe.
+   * Usado por `DeleteQuestion` para resolver la sección dueña antes de
+   * borrarla y poder evaluar la cascada de sección vacía.
+   *
+   * El `institutionId` se valida aquí (no basta con `sectionId` solo)
+   * porque la pregunta es globalmente única por id pero la verificación
+   * de pertenencia a la institución se hace por la relación
+   * `section.evaluationId = evaluationId ∧ evaluation.institutionId = ...`.
+   */
+  findQuestionSectionId(
+    institutionId: string,
+    evaluationId: string,
+    questionId: string,
+  ): Promise<string | null>;
+
+  /**
    * Elimina la pregunta, renumera las siguientes para que la numeración siga
    * siendo continua (la hoja OMR la asume así) y recalcula `totalQuestions`.
    */

@@ -175,7 +175,13 @@ class FakeEvaluations implements EvaluationRepository {
   async updateQuestion(): Promise<Question> {
     throw new Error("no usado");
   }
+  async findQuestionSectionId(): Promise<string | null> {
+    throw new Error("no usado");
+  }
   async deleteQuestion(): Promise<void> {
+    throw new Error("no usado");
+  }
+  async countQuestionsInSection(): Promise<number> {
     throw new Error("no usado");
   }
   async reorderQuestions(): Promise<void> {

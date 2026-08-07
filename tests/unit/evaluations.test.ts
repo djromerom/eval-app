@@ -83,12 +83,24 @@ class FakeEvaluations implements EvaluationRepository {
   /** Registro de llamadas, para comprobar que el use case delega. */
   updated: Array<{ kind: "section" | "question"; id: string }> = [];
   deleted: Array<{ kind: "section" | "question"; id: string }> = [];
+  /** Mapa pregunta → sección dueña. Usado por el fake para simular la
+   *  cascada de "sección vacía → borrarla también". Sembrar con `seed`. */
+  questionSections: Map<string, string> = new Map();
+  /** Sembrador para que los tests pueblen la sección dueña de cada pregunta. */
+  seed(questionId: string, sectionId: string): void {
+    this.questionSections.set(questionId, sectionId);
+  }
   async updateSection(_i: string, _e: string, sectionId: string): Promise<EvaluationSection> {
     this.updated.push({ kind: "section", id: sectionId });
     return { id: sectionId, title: null, content: null, order: 0, questions: [] };
   }
   async deleteSection(_i: string, _e: string, sectionId: string): Promise<void> {
     this.deleted.push({ kind: "section", id: sectionId });
+    // Borra también las preguntas que vivían en esa sección para que
+    // `countQuestionsInSection` quede coherente con el "después" del delete.
+    for (const [qid, sid] of this.questionSections) {
+      if (sid === sectionId) this.questionSections.delete(qid);
+    }
   }
   async updateQuestion(_i: string, _e: string, questionId: string): Promise<Question> {
     this.updated.push({ kind: "question", id: questionId });
@@ -107,8 +119,18 @@ class FakeEvaluations implements EvaluationRepository {
       competency: null,
     };
   }
+  async findQuestionSectionId(_i: string, _e: string, questionId: string): Promise<string | null> {
+    return this.questionSections.get(questionId) ?? null;
+  }
   async deleteQuestion(_i: string, _e: string, questionId: string): Promise<void> {
     this.deleted.push({ kind: "question", id: questionId });
+    // Quita del mapa para que `countQuestionsInSection` refleje el post-delete.
+    this.questionSections.delete(questionId);
+  }
+  async countQuestionsInSection(sectionId: string): Promise<number> {
+    let n = 0;
+    for (const sid of this.questionSections.values()) if (sid === sectionId) n++;
+    return n;
   }
   async reorderQuestions(): Promise<void> {
     // No-op en este fake: el flujo que ejercita reorderQuestions se cubre
@@ -889,6 +911,11 @@ describe("Edición de contextos y preguntas", () => {
 
   describe("DeleteQuestion", () => {
     it("el autor borra su pregunta", async () => {
+      // Sembramos el mapa pregunta→sección para que el fake resuelva la
+      // cascada. Con otra pregunta en "s1" (q2), NO debería dispararse el
+      // borrado de la sección al eliminar q1.
+      repo.seed("q1", "s1");
+      repo.seed("q2", "s1");
       const r = await new DeleteQuestion(repo).execute({
         actor: teacher,
         evaluationId: evalId,

@@ -431,6 +431,18 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
     });
   }
 
+  async findQuestionSectionId(
+    institutionId: string,
+    evaluationId: string,
+    questionId: string,
+  ): Promise<string | null> {
+    const q = await prisma.question.findFirst({
+      where: { id: questionId, section: { evaluationId, evaluation: { institutionId } } },
+      select: { sectionId: true },
+    });
+    return q?.sectionId ?? null;
+  }
+
   async deleteQuestion(
     institutionId: string,
     evaluationId: string,
@@ -448,6 +460,13 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
       await tx.question.delete({ where: { id: q.id } });
       await renumberQuestions(tx, evaluationId);
     });
+  }
+
+  async countQuestionsInSection(sectionId: string): Promise<number> {
+    // Cuenta plana sobre la tabla Question filtrada por sectionId. No hace
+    // falta `institutionId` porque `sectionId` ya es globalmente único (UUID).
+    // El use case valida ownership antes de llamar aquí.
+    return prisma.question.count({ where: { sectionId } });
   }
 
   async duplicateQuestion(
