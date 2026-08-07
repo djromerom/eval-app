@@ -132,6 +132,7 @@ class FakeEvaluations implements EvaluationRepository {
       number: this.added.length,
       text: data.text,
       image: null,
+      sectionId,
       options: data.options,
       correctAnswer: data.correctAnswer,
       justification: null,
@@ -347,6 +348,7 @@ describe("QuestionsFromEvaluation", () => {
               number: 1,
               text: "¿Algo?",
               image: null,
+              sectionId: "sec1",
               options: [
                 { key: "A", text: "a" },
                 { key: "B", text: "b" },
@@ -400,6 +402,7 @@ describe("QuestionsFromEvaluation", () => {
               number: 1,
               text: "¿?",
               image: null,
+              sectionId: "sec2",
               options: [
                 { key: "A", text: "a" },
                 { key: "B", text: "b" },

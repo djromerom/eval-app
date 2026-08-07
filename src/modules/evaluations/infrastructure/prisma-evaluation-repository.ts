@@ -67,6 +67,7 @@ type SectionRow = {
     number: number;
     text: Prisma.JsonValue;
     image: string | null;
+    sectionId: string;
     correctAnswer: string;
     justification: string | null;
     weight: number;
@@ -115,6 +116,7 @@ function toSection(s: SectionRow): EvaluationSection {
       number: q.number,
       text: q.text,
       image: q.image,
+      sectionId: q.sectionId,
       correctAnswer: q.correctAnswer as AnswerKey,
       justification: q.justification,
       weight: q.weight,
@@ -360,6 +362,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         number: q.number,
         text: q.text,
         image: q.image,
+        sectionId: q.sectionId,
         correctAnswer: q.correctAnswer as AnswerKey,
         justification: q.justification,
         weight: q.weight,
@@ -416,6 +419,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         number: q.number,
         text: q.text,
         image: q.image,
+        sectionId: q.sectionId,
         correctAnswer: q.correctAnswer as AnswerKey,
         justification: q.justification,
         weight: q.weight,
