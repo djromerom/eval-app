@@ -109,7 +109,11 @@ export function QuestionForm({
   clearCorrectAfterSave = false,
 }: {
   evaluationId: string;
-  sectionId: string;
+  /** Puede ser vacío cuando la evaluación aún no tiene secciones: el
+   *  `overrideAction` del editor unificado crea la sección justo antes
+   *  de invocar `addQuestionAction`. Sin esto, el form no podría
+   *  renderizarse al cargar una evaluación recién creada. */
+  sectionId?: string;
   defaultOptions?: number;
   maxOptions?: number;
   /** Si viene, el formulario edita esa pregunta en vez de crear una nueva. */
