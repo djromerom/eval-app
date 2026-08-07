@@ -46,7 +46,14 @@ export class ListCourses implements UseCase<ListCoursesInput, Course[]> {
   constructor(private readonly courses: CourseRepository) {}
 
   async execute({ actor, academicYearId }: ListCoursesInput): Promise<Result<Course[]>> {
-    const authorized = requireRole(actor, "ECU_MASTER");
+    // Lectura abierta a ECU_MASTER, COORDINATOR y TEACHER: crear cursos sigue
+    // restringido a ECU_MASTER (CreateCourse), pero listarlos es metadata
+    // que la página /teacher/evaluations necesita para mapear
+    // courseSubjectId → academicYearId y preseleccionar la Prueba actual
+    // del año del docente (ago 2026). Sin este permiso el filtro
+    // client-side de Asignaturas filtraba 0 resultados para roles no
+    // admin.
+    const authorized = requireRole(actor, "ECU_MASTER", "COORDINATOR", "TEACHER");
     if (!authorized.ok) return authorized;
     return ok(await this.courses.findAll(actor.institutionId, academicYearId));
   }

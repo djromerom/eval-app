@@ -188,9 +188,21 @@ else
 fi
 
 # ---------- Pull ----------
+# Listamos los servicios definidos en el compose (`docker compose config
+# --services`) y filtramos solo los que deberían hacer pull. Antes
+# (ago 2026) el set estaba hardcodeado y rompía cuando un compose no
+# declaraba alguno (típico en staging donde todavía no se monta
+# `worker-question-extract`). El filtro cubre los nombres canónicos
+# del repo y descarta servicios de infra (postgres, redis, etc.).
 log "pulling images…"
-docker compose -f "$COMPOSE_FILE" pull --ignore-pull-failures \
-  web worker-omr worker-pdf omr-service migrate
+PULL_TARGETS=$(docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null \
+  | grep -E '^(web|worker-omr|worker-pdf|worker-question-extract|omr-service|migrate)$' \
+  | xargs)
+if [ -n "$PULL_TARGETS" ]; then
+  docker compose -f "$COMPOSE_FILE" pull --ignore-pull-failures $PULL_TARGETS
+else
+  log "  (ningún servicio para pull en este compose)"
+fi
 
 # ---------- Migraciones ----------
 if [ "$SKIP_MIGRATE" = "0" ]; then
@@ -214,12 +226,21 @@ log "rolling out: omr-service, web, workers…"
 # nuevo se añade al compose y se olvida acá, sus env vars (p.ej. las AI keys
 # del `worker-question-extract`) NUNCA se releen tras un `deploy --sha` y
 # un cambio de `.env.prod` queda sin efecto hasta un recreate manual.
-docker compose -f "$COMPOSE_FILE" up -d \
-  omr-service \
-  web \
-  worker-omr \
-  worker-pdf \
-  worker-question-extract
+# ago 2026: el set se filtra contra los servicios realmente declarados en
+# el compose (`docker compose config --services`) para tolerar entornos
+# (típicamente staging) donde todavía no se monta algún worker. Si el
+# servicio no está definido, lo logueamos y seguimos.
+ROLLOUT_TARGETS=""
+for svc in omr-service web worker-omr worker-pdf worker-question-extract; do
+  if docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null | grep -qx "$svc"; then
+    ROLLOUT_TARGETS="$ROLLOUT_TARGETS $svc"
+  else
+    log "  (skip) $svc no está definido en $COMPOSE_FILE"
+  fi
+done
+if [ -n "$ROLLOUT_TARGETS" ]; then
+  docker compose -f "$COMPOSE_FILE" up -d $ROLLOUT_TARGETS
+fi
 
 # ---------- Healthcheck del web ----------
 log "esperando que 'web' quede healthy…"

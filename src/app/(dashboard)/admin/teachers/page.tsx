@@ -11,6 +11,7 @@ import { makeListCourseSubjects } from "@/modules/academic/infrastructure/contai
 import { assignTeacherAction, createTeacherAction } from "./actions";
 import { CompleteProfileForm } from "./complete-profile-form";
 import { ResendInviteButton } from "./resend-invite-button";
+import { TeachersPageChrome } from "./_components/teachers-page-chrome";
 
 export const metadata: Metadata = { title: "Docentes" };
 
@@ -41,6 +42,8 @@ export default async function TeachersPage() {
         title="Docentes"
         description="Registra docentes (crea su cuenta inactiva) y asígnalos a asignaturas-curso. §3.2"
       />
+
+      <TeachersPageChrome />
 
       <div className="space-y-6">
         <section className="bg-card space-y-4 rounded-xl border p-6">

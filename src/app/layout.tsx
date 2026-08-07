@@ -3,6 +3,7 @@ import { Inter, Sora } from "next/font/google";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 import { ServerActionRecovery } from "@/components/server-action-recovery";
+import { Toaster } from "@/components/ui/sonner";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
        */}
       <body className="min-h-screen antialiased" suppressHydrationWarning>
         <ServerActionRecovery />
+        <Toaster />
         {children}
       </body>
     </html>

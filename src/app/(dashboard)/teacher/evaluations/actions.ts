@@ -205,7 +205,11 @@ export async function addQuestionAction(
   });
   if (!result.ok) return { error: result.error.message };
   revalidatePath(`/teacher/evaluations/${evaluationId}`);
-  return { success: true };
+  // Devolvemos el `sectionId` real persistido (no el que envió el
+  // cliente) para que el editor unificado pueda sincronizar
+  // `targetSectionId` con la verdad del servidor. (ago 2026, pedido del
+  // docente: usar el sectionId real del response, no del cliente).
+  return { success: true, sectionId: result.value.sectionId };
 }
 
 export async function updateQuestionAction(

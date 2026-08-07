@@ -108,6 +108,7 @@ class FakeEvaluations implements EvaluationRepository {
       number: this.added.length,
       text: data.text,
       image: null,
+      sectionId: _s,
       options: data.options,
       correctAnswer: data.correctAnswer,
       justification: null,

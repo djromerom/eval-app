@@ -6,6 +6,7 @@ import {
   CompleteTeacherProfile,
   CreateTeacher,
   EnsureTeacherProfile,
+  ImportTeachers,
   ListTeacherAssignments,
   ListTeachers,
   ResendTeacherInvitation,
@@ -21,6 +22,7 @@ const emailService = smtpConfig ? new SmtpEmailService(smtpConfig) : undefined;
 export const makeCreateTeacher = () => new CreateTeacher(teachers, emailService);
 export const makeResendTeacherInvitation = () =>
   new ResendTeacherInvitation(teachers, emailService);
+export const makeImportTeachers = () => new ImportTeachers(teachers, makeCreateTeacher());
 export const makeEnsureTeacherProfile = () => new EnsureTeacherProfile(teachers);
 export const makeCompleteTeacherProfile = () => new CompleteTeacherProfile(teachers);
 export const makeListTeachers = () => new ListTeachers(teachers);

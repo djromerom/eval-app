@@ -72,7 +72,12 @@ const NAV_ITEMS: readonly NavItem[] = [
     requires: "create-evaluations",
     roles: ["COORDINATOR", "ECU_MASTER"],
   },
-  { href: "/teacher/question-bank", label: "Banco de preguntas", requires: "create-evaluations" },
+  {
+    href: "/teacher/question-bank",
+    label: "Banco de preguntas",
+    requires: "create-evaluations",
+    roles: ["ECU_MASTER"],
+  },
   {
     href: "/teacher/scan",
     label: "Escanear",

@@ -4,10 +4,13 @@ import { revalidatePath } from "next/cache";
 import { requireAuthenticatedUser } from "@/lib/session";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import { prisma } from "@/shared/infrastructure/db/prisma";
+import { parseTeacherImport } from "@/modules/teachers/infrastructure/import-parser";
+import type { TeacherImportError } from "@/modules/teachers/application/teachers";
 import {
   makeAssignTeacher,
   makeCompleteTeacherProfile,
   makeCreateTeacher,
+  makeImportTeachers,
   makeResendTeacherInvitation,
 } from "@/modules/teachers/infrastructure/container";
 
@@ -91,4 +94,61 @@ export async function assignTeacherAction(
   if (!result.ok) return { error: result.error.message };
   revalidatePath(PATH);
   return { success: true };
+}
+
+// ============= Import masivo (XLSX/CSV) =============
+
+export interface TeachersImportState {
+  error?: string;
+  done?: boolean;
+  total?: number;
+  created?: number;
+  failed?: number;
+  errors?: TeacherImportError[];
+}
+
+/**
+ * Importación masiva de docentes vía XLSX/CSV. Reusa el flujo de bienvenida
+ * individual (token URL + email de invitación) por cada fila válida.
+ */
+export async function importTeachersAction(
+  _prev: TeachersImportState,
+  formData: FormData,
+): Promise<TeachersImportState> {
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Selecciona un archivo XLSX o CSV." };
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    return { error: "El archivo excede 5 MB." };
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const parsed = parseTeacherImport(buffer, file.name);
+  if (parsed.error) return { error: parsed.error };
+  if (parsed.missing.length > 0) {
+    return { error: `Faltan columnas: ${parsed.missing.join(", ")}.` };
+  }
+
+  const institution = await prisma.institution.findUnique({
+    where: { id: actor.institutionId },
+    select: { name: true },
+  });
+
+  const result = await makeImportTeachers().execute({
+    actor,
+    rows: parsed.rows,
+    institutionName: institution?.name ?? "Institución",
+  });
+  if (!result.ok) return { error: result.error.message };
+
+  revalidatePath(PATH);
+  return {
+    done: true,
+    total: result.value.total,
+    created: result.value.created,
+    failed: result.value.failed,
+    errors: result.value.errors,
+  };
 }

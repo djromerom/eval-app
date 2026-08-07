@@ -48,6 +48,12 @@ export interface Question {
   number: number;
   text: unknown; // TipTap JSON (soporta KaTeX)
   image: string | null;
+  // sectionId real persistido (ago 2026): algunas rutas crean/renombran
+  // secciones server-side antes de guardar la pregunta, así que el
+  // sectionId que el cliente envió puede no coincidir con el real. El
+  // orquestador del editor unificado usa este campo para sincronizar
+  // `targetSectionId` con la verdad del servidor tras el guardado.
+  sectionId: string;
   options: QuestionOption[];
   correctAnswer: AnswerKey;
   justification: string | null;
