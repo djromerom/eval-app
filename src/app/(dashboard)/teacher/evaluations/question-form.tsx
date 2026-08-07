@@ -3,7 +3,7 @@
 import type { RefObject } from "react";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Info } from "lucide-react";
+import { Info, Maximize2, Minimize2 } from "lucide-react";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,17 +46,18 @@ function SubmitButton({ editing, createLabel }: { editing: boolean; createLabel:
 }
 
 /**
- * Texto plano de una opción para precargar su `<input>`.
+ * Texto plano de un valor de opción (TipTap JSON o string) para precargar
+ * un `<input>` colapsado.
  *
  * Las opciones creadas desde este formulario se guardan como string, pero las
  * importadas del banco pueden venir como documento TipTap. Se recorre el JSON
  * en vez de reusar `richTextToPlain` de `editor/render` para no arrastrar
  * `@tiptap/html` + KaTeX al bundle del cliente.
  */
-function plainOption(initial: QuestionInitialValues | undefined, key: string): string | undefined {
-  if (!initial) return undefined;
-  const value = initial.options.find((o) => o.key === key)?.text;
-  return toPlain(value);
+function plainValue(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string") return value;
+  return toPlain(value) || undefined;
 }
 
 function toPlain(value: unknown): string {
@@ -66,6 +67,110 @@ function toPlain(value: unknown): string {
   if (typeof node.text === "string") return node.text;
   if (Array.isArray(node.content)) return node.content.map(toPlain).join("");
   return "";
+}
+
+/** Tipos de nodo TipTap que indican formato complejo en una opción
+ *  (math, imagen, tabla). Coinciden con la nomenclatura de
+ *  `extensions.ts` (ago 2026).
+ *
+ *  Lista explícita y no heurística "si no es string" porque las
+ *  opciones vacías se serializan como string "" o como
+ *  `{type:"doc", content:[]}` — ambos deben seguir siendo
+ *  renderizados con Input plano, no con RichTextEditor. */
+const COMPLEX_OPTION_NODE_TYPES = ["math-inline", "math-block", "image", "tableBlock"] as const;
+
+/** ¿El texto de la opción tiene formato complejo (math/imagen/tabla)? */
+export function isComplexOption(text: unknown): boolean {
+  if (typeof text === "string") return false;
+  if (!text || typeof text !== "object") return false;
+  // Recorremos todos los `type` string del árbol via JSON.stringify —
+  // rápido y suficiente para este chequeo. El doc TipTap puede estar
+  // en la raíz (type:"doc") o anidado dentro de un wrapper.
+  const json = JSON.stringify(text);
+  return COMPLEX_OPTION_NODE_TYPES.some((t) => json.includes(`"type":"${t}"`));
+}
+
+/**
+ * Campo de opción ADAPTATIVO (ago 2026, pedido del docente).
+ *  - Si el valor inicial NO es complejo (string plano o doc vacío),
+ *    renderiza un `<Input>` (mismo UX que antes, sin toolbar).
+ *  - Si el valor inicial SÍ es complejo (math, imagen, tabla) o el
+ *    docente fuerza el modo "rich", renderiza un `<RichTextEditor
+ *    variant="option" />` con toolbar mínima.
+ *  - Botón a la derecha: ↗ (expandir) Input → RichTextEditor;
+ *    ↘ (colapsar) RichTextEditor → Input. Al colapsar, si el doc
+ *    tiene nodos complejos, se confirma antes de perderlos.
+ *
+ *  Estado interno: nada del padre — el ciclo de vida lo gestiona
+ *  el padre que renderiza la lista de keys. Para forzar el modo
+ *  usamos un state local `mode: "auto" | "rich" | "plain"`.
+ */
+function OptionInput({
+  name,
+  initial,
+  required,
+  placeholder,
+}: {
+  name: string;
+  initial: unknown;
+  required?: boolean;
+  placeholder?: string;
+}) {
+  const [mode, setMode] = useState<"auto" | "rich" | "plain">("auto");
+  const resolvedMode = mode === "auto" ? (isComplexOption(initial) ? "rich" : "plain") : mode;
+
+  if (resolvedMode === "plain") {
+    return (
+      <div className="flex flex-1 items-center gap-1">
+        <Input
+          name={name}
+          required={required}
+          placeholder={placeholder}
+          className="flex-1"
+          defaultValue={plainValue(initial)}
+        />
+        <button
+          type="button"
+          aria-label="Expandir a editor con fórmulas e imágenes"
+          title="Expandir a editor con fórmulas e imágenes"
+          onClick={() => setMode("rich")}
+          className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors"
+        >
+          <Maximize2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-1 items-start gap-1">
+      <div className="flex-1">
+        <RichTextEditor
+          name={name}
+          variant="option"
+          minHeightClass="min-h-9"
+          defaultValue={initial}
+        />
+      </div>
+      <button
+        type="button"
+        aria-label="Colapsar a campo de texto plano"
+        title="Colapsar a campo de texto plano"
+        onClick={() => {
+          if (
+            isComplexOption(initial) &&
+            !window.confirm("¿Colapsar a texto plano? Se perderán fórmulas e imágenes.")
+          ) {
+            return;
+          }
+          setMode("plain");
+        }}
+        className="text-muted-foreground hover:text-foreground hover:bg-muted mt-1 inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors"
+      >
+        <Minimize2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
 }
 
 /** Datos de la pregunta que se está editando. Ausente = alta. */
@@ -433,12 +538,11 @@ export function QuestionForm({
                 />
                 {k}
               </label>
-              <Input
+              <OptionInput
                 name={`option${k}`}
                 required
                 placeholder={`Opción ${k}`}
-                className="flex-1"
-                defaultValue={plainOption(initial, k)}
+                initial={initial?.options.find((o) => o.key === k)?.text}
               />
               {correct === k ? (
                 <span className="text-primary text-xs font-medium">✓ correcta</span>
