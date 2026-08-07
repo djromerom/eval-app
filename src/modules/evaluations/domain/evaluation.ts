@@ -247,6 +247,17 @@ export interface EvaluationRepository {
   deleteQuestion(institutionId: string, evaluationId: string, questionId: string): Promise<void>;
 
   /**
+   * Cuenta cuántas preguntas vivas tiene una sección. Usado por el use case
+   * `DeleteQuestion` para la cascada: tras eliminar la pregunta, si la
+   * sección queda con 0 preguntas, también se borra la sección (queda
+   * huérfana sin preguntas que la justifiquen).
+   *
+   * NO se acopla al ciclo de vida de la pregunta — la sección puede tener
+   * preguntas en cualquier `number`, basta con `count > 0` para NO borrarla.
+   */
+  countQuestionsInSection(sectionId: string): Promise<number>;
+
+  /**
    * Duplica la pregunta: clona enunciado, opciones, correctAnswer, peso y
    * metadatos (justificación, competencia, etc.) en una pregunta nueva al
    * final de la formulación. La copia queda con `bankOriginId = null` (ya no
