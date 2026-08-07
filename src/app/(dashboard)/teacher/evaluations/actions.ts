@@ -193,7 +193,7 @@ export async function addQuestionAction(
       text: rich(formData, "text"),
       options: keys.map((key) => ({
         key,
-        text: str(formData, `option${key}`),
+        text: rich(formData, `option${key}`),
       })),
       correctAnswer: str(formData, "correctAnswer") as AnswerKey,
       justification: str(formData, "justification") || undefined,
@@ -234,7 +234,7 @@ export async function updateQuestionAction(
     questionId: str(formData, "questionId"),
     data: {
       text: rich(formData, "text"),
-      options: keys.map((key) => ({ key, text: str(formData, `option${key}`) })),
+      options: keys.map((key) => ({ key, text: rich(formData, `option${key}`) })),
       correctAnswer: str(formData, "correctAnswer") as AnswerKey,
       justification: str(formData, "justification") || null,
       weight: weightRaw ? Number(weightRaw) : undefined,
