@@ -935,5 +935,65 @@ describe("Edición de contextos y preguntas", () => {
       expect(r.ok).toBe(false);
       expect(repo.deleted).toEqual([]);
     });
+
+    it("cascada: borra la sección si la pregunta era la única de esa sección", async () => {
+      // s1 contiene SOLO q1; al eliminarla, la cascada debe borrar s1 también.
+      repo.seed("q1", "s1");
+      const r = await new DeleteQuestion(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        questionId: "q1",
+      });
+      expect(r.ok).toBe(true);
+      // El orden importa: primero la pregunta, luego la sección.
+      expect(repo.deleted).toEqual([
+        { kind: "question", id: "q1" },
+        { kind: "section", id: "s1" },
+      ]);
+    });
+
+    it("sin cascada: NO borra la sección si quedan más preguntas", async () => {
+      // s1 tiene 2 preguntas (q1, q2); borrar q1 NO debe tocar s1.
+      repo.seed("q1", "s1");
+      repo.seed("q2", "s1");
+      const r = await new DeleteQuestion(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        questionId: "q1",
+      });
+      expect(r.ok).toBe(true);
+      expect(repo.deleted).toEqual([{ kind: "question", id: "q1" }]);
+    });
+
+    it("sin cascada: borrar la última pregunta de s1 NO afecta s2 que sigue llena", async () => {
+      // s1 tiene 1 pregunta (q1), s2 tiene 2 preguntas (q2, q3).
+      // Al borrar q1 → cascada borra s1, pero NO toca s2.
+      repo.seed("q1", "s1");
+      repo.seed("q2", "s2");
+      repo.seed("q3", "s2");
+      const r = await new DeleteQuestion(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        questionId: "q1",
+      });
+      expect(r.ok).toBe(true);
+      expect(repo.deleted).toEqual([
+        { kind: "question", id: "q1" },
+        { kind: "section", id: "s1" },
+      ]);
+    });
+
+    it("rechaza si la pregunta no existe (findQuestionSectionId=null)", async () => {
+      // q404 nunca fue sembrada → sectionId es null → NotFoundError.
+      const r = await new DeleteQuestion(repo).execute({
+        actor: teacher,
+        evaluationId: evalId,
+        questionId: "q404",
+      });
+      expect(r.ok).toBe(false);
+      if (r.ok) return;
+      expect(r.error.code).toBe("NOT_FOUND");
+      expect(repo.deleted).toEqual([]);
+    });
   });
 });
