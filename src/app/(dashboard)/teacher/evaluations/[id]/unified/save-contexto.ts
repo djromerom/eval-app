@@ -54,10 +54,10 @@ export function hasUnsavedContexto(title: string | null | undefined, content: un
 /**
  * ¿El draft del docente coincide con el contexto ya guardado en `section`?
  *
- * Devuelve true cuando título y contenido son equivalentes (ambos vacíos,
- * o ambos con el mismo texto). Usado por el orquestador de "Agregar
- * enunciado" para decidir si debe reusar la sección destino (camino
- * rápido) o crear/renombrar una sección.
+ * Devuelve true cuando título y contenido son EQUIVALENTES palabra por
+ * palabra. Usado por el orquestador de "Agregar enunciado" para decidir
+ * si debe reusar la sección destino (camino rápido) o crear/renombrar
+ * una sección.
  *
  * Casos cubiertos:
  *  - sección vacía (title=null, content=null) y draft vacío → true
@@ -65,6 +65,14 @@ export function hasUnsavedContexto(title: string | null | undefined, content: un
  *  - sección con "Contexto A" y draft="Contexto A" → true (reusar).
  *  - sección con "Contexto A" y draft="Contexto B" → false (crear nueva).
  *  - sección vacía y draft con texto → false (renombrar la vacía).
+ *
+ * IMPORTANTE (ago 2026, pedido del docente): NO dedupe por título
+ * contra OTRAS secciones. Este comparador SOLO decide si el draft
+ * coincide con la sección DESTINO (`targetSection`). El id es la
+ * verdad; si el docente escribe un título que coincide con el de una
+ * sección que NO es la destino, igual debe crear una nueva → ese
+ * camino lo maneja el removeByTitle del orquestador, no este
+ * comparador.
  */
 export function contextoMatchesSection(
   draftTitle: string | null | undefined,
@@ -79,8 +87,15 @@ export function contextoMatchesSection(
   if (!draftHasText && !sectionHasText) return true;
   // Solo uno tiene texto → no coincide (hay que persistir el del docente).
   if (draftHasText !== sectionHasText) return false;
-  // Ambos tienen texto → comparar título (suficiente: el contenido del
-  // RichTextEditor se precarga con `defaultValue={section.content}`, así
-  // que si el docente no tocó el editor, el content es idéntico por ref).
-  return (draftTitle ?? "").trim() === (section.title ?? "").trim();
+  // Ambos tienen texto → comparar título Y contenido (por valor JSON).
+  // El draft del bloque Contexto puede haber sido editado tanto en el
+  // Input (título) como en el RichTextEditor (contenido). Si AMBOS
+  // coinciden con la sección destino, reusamos. Si difieren en
+  // cualquiera, hay que crear/renombrar — incluso si el título
+  // coincide (caso típico: el docente pegó el mismo texto del TipTap
+  // por accidente, o el título repetido es legítimo).
+  const titleMatches = (draftTitle ?? "").trim() === (section.title ?? "").trim();
+  const contentMatches =
+    JSON.stringify(draftContent ?? null) === JSON.stringify(section.content ?? null);
+  return titleMatches && contentMatches;
 }
