@@ -547,7 +547,12 @@ export function QuestionForm({
           </p>
         ) : null}
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <SubmitButton editing={editing} createLabel={createLabel} />
+          {/* En modo edición ocultamos el SubmitButton interno ("Guardar
+              cambios"): el botón "Guardar" del slot `extraActions` (con
+              data-close-on-save="true") ya hace el submit completo y
+              cierra la card. Quedan solo "Guardar" + "Cancelar", patrón
+              estándar de modal de edición. */}
+          {editing ? null : <SubmitButton editing={editing} createLabel={createLabel} />}
           {extraActions}
         </div>
       </form>

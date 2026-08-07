@@ -1114,11 +1114,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
             ref={formRef}
             className="bg-card space-y-4 rounded-xl border-2 border-black p-5 dark:border-white"
           >
-            {showEditingBanner && editingQuestionId ? (
-              <div className="bg-warning/10 border-warning rounded-md border px-3 py-2 text-xs font-medium text-black">
-                ⚠️ Editando ítem. Los cambios se aplican al pulsar Guardar cambios
-              </div>
-            ) : null}
+            {/* El banner "Editando ítem. Los cambios se aplican al pulsar
+                Guardar cambios" se eliminó (ago 2026, pedido del docente):
+                el botón "Guardar" del slot extraActions es ahora el único
+                submit visible en modo edición, así que el banner quedaba
+                con copy roto (mencionaba un botón que ya no existe). El
+                estado `showEditingBanner` queda en el código por si en el
+                futuro se quiere reintroducir un indicador de modo. */}
 
             {/* Bloque: Crear nuevo contexto (inputs). El botón para crearlo es
             el MISMO en toda la vista: cuando hay secciones, vive al lado del
