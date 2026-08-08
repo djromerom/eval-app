@@ -215,7 +215,11 @@ if [ "$SKIP_MIGRATE" = "0" ]; then
     sleep 2
   done
   log "aplicando migraciones (prisma migrate deploy)…"
-  docker compose -f "$COMPOSE_FILE" run --rm migrate
+  if docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null | grep -qx "migrate"; then
+    docker compose -f "$COMPOSE_FILE" run --rm migrate
+  else
+    log "  (skip) migrate no está definido en $COMPOSE_FILE"
+  fi
 else
   log "--skip-migrate: saltando prisma migrate deploy"
 fi
