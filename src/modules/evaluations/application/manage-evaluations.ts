@@ -354,7 +354,19 @@ export interface DeleteQuestionInput {
   questionId: string;
 }
 
-/** Elimina una pregunta; el repositorio renumera las siguientes. */
+/**
+ * Elimina una pregunta; el repositorio renumera las siguientes.
+ *
+ * Cascada automática: si la sección a la que pertenecía la pregunta queda
+ * con 0 preguntas, también se elimina. Regla de limpieza del modelo — una
+ * sección sin preguntas es ruido en el cuadernillo y no debería sobrevivir.
+ *
+ * El borrado de la sección se hace en una segunda llamada al repo (no en
+ * la misma transacción que `deleteQuestion`). Aceptable porque la edición
+ * de formulaciones es DRAFT-only y de un solo usuario a la vez; no hay
+ * concurrencia que provoque condiciones de carrera entre el delete y el
+ * count.
+ */
 export class DeleteQuestion implements UseCase<DeleteQuestionInput, void> {
   constructor(private readonly evaluations: EvaluationRepository) {}
 
@@ -363,7 +375,25 @@ export class DeleteQuestion implements UseCase<DeleteQuestionInput, void> {
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
+
+    // 1. Localiza la sección dueña de la pregunta antes de borrarla — el repo
+    // no expone sectionId tras el delete, y necesitamos sectionId para el
+    // count y el posible deleteSection.
+    const sectionId = await this.evaluations.findQuestionSectionId(
+      actor.institutionId,
+      evaluationId,
+      questionId,
+    );
+    if (!sectionId) return fail(new NotFoundError("Pregunta", questionId));
+
+    // 2. Borra la pregunta (el repo renumera internamente).
     await this.evaluations.deleteQuestion(actor.institutionId, evaluationId, questionId);
+
+    // 3. Cascada: si la sección queda vacía, también la borramos.
+    const remaining = await this.evaluations.countQuestionsInSection(sectionId);
+    if (remaining === 0) {
+      await this.evaluations.deleteSection(actor.institutionId, evaluationId, sectionId);
+    }
     return ok(undefined);
   }
 }
