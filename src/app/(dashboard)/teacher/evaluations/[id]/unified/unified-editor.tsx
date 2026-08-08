@@ -1594,15 +1594,71 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       }
                       const debounceWindow = 800;
                       const sinceLast = nowTs - lastSubmitTsRef.current;
+                      // FIX (ago 2026, bug del docente): leer el borrador
+                      // del contexto desde el DOM (form nativo
+                      // `newSectionFormRef.current`) en lugar de desde
+                      // React state. Si el docente tipea rápido y pulsa
+                      // "Agregar enunciado" antes de que React batchee el
+                      // último keystroke, `draftSectionTitle` /
+                      // `draftSectionContent` quedan stale y la sección
+                      // nueva se crea sin título → el ítem queda con
+                      // NINGUNO. Mismo patrón que
+                      // `handleNewContextWithQuestion` (línea 829). El
+                      // Input/RichTextEditor son no controlados
+                      // (`defaultValue`), así que el DOM es la fuente de
+                      // verdad en el momento del click. Si el form aún
+                      // no está montado (caso extremo), caemos al state
+                      // como antes para no romper.
+                      const sectionFormFd = newSectionFormRef.current
+                        ? new FormData(newSectionFormRef.current)
+                        : null;
+                      const orchestratorTitle = sectionFormFd
+                        ? String(sectionFormFd.get("title") ?? "").trim()
+                        : draftSectionTitle.trim();
+                      const orchestratorContentRaw = sectionFormFd
+                        ? String(sectionFormFd.get("content") ?? "")
+                        : (draftSectionContent
+                            ? JSON.stringify(draftSectionContent)
+                            : "");
+                      let orchestratorContent: unknown = null;
+                      if (orchestratorContentRaw) {
+                        try {
+                          orchestratorContent = JSON.parse(orchestratorContentRaw);
+                        } catch {
+                          orchestratorContent = null;
+                        }
+                      }
+                      // TEMP DEBUG (ago 2026): log para verificar qué está
+                      // leyendo del DOM vs del state. Borrar tras diagnosticar.
+                      // (movido tras `willCreate` para acceder a esa var)
+                      const debugOrchestrator = {
+                        domTitle: orchestratorTitle,
+                        stateTitle: draftSectionTitle,
+                        domContentLen: orchestratorContentRaw.length,
+                        stateContentLen: draftSectionContent
+                          ? JSON.stringify(draftSectionContent).length
+                          : 0,
+                        formRefAttached: newSectionFormRef.current !== null,
+                      };
                       // willCreate: solo true si NO hay sección destino (targetSectionId
                       // apunta a sección existente → siempre reusamos, no creamos).
                       // Antes (jul 2026) se comparaba draft vs sección destino
                       // vía contextoMatchesSection; eso producía duplicados cuando
                       // el docente refinaba el título entre dos clicks. Ahora el
                       // id es la verdad. (ago 2026, pedido del docente).
+                      // FIX (ago 2026): usa los valores leídos del DOM
+                      // (`orchestratorTitle` / `orchestratorContent`) en vez de
+                      // React state, para no perder el último keystroke.
                       const willCreate =
-                        hasUnsavedContexto(draftSectionTitle, draftSectionContent) &&
+                        hasUnsavedContexto(orchestratorTitle, orchestratorContent) &&
                         !data.sections.some((s) => s.id === targetSectionId);
+                      // TEMP DEBUG (ago 2026): log ampliado con el branch info.
+                      console.log("[override] DOM vs state + branch", {
+                        ...debugOrchestrator,
+                        targetSectionId,
+                        sectionsLen: data.sections.length,
+                        willCreate,
+                      });
                       if (sinceLast < debounceWindow && willCreate && lastSubmitTsRef.current > 0) {
                         console.warn("[Agregar-enunciado] BLOQUEADO por debounce", {
                           sinceLast,
@@ -1633,13 +1689,17 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         // pulsar "Agregar enunciado", "Nuevo contexto" o
                         // "Guardar" — no antes.)
                         if (!targetSectionId && data.sections.length === 0) {
+                          console.log("[override] Branch 1 (length===0)");
                           const createFd = new FormData();
                           createFd.append("evaluationId", data.evaluationId);
-                          if (draftSectionTitle.trim().length > 0) {
-                            createFd.append("title", draftSectionTitle.trim());
+                          // FIX (ago 2026): usa los valores leídos del DOM
+                          // (`orchestratorTitle` / `orchestratorContentRaw`)
+                          // en vez de React state.
+                          if (orchestratorTitle.length > 0) {
+                            createFd.append("title", orchestratorTitle);
                           }
-                          if (draftSectionContent) {
-                            createFd.append("content", JSON.stringify(draftSectionContent));
+                          if (orchestratorContentRaw) {
+                            createFd.append("content", orchestratorContentRaw);
                           }
                           const created = await addSectionAction({}, createFd);
                           if (!created.success || !created.sectionId) {
@@ -1695,16 +1755,59 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         // porque `Array.prototype.find` lo tipa así.
                         if (targetSection) {
                           const targetIsEmpty = !targetSection.title && !targetSection.content;
+                          // FIX (ago 2026): usa los valores leídos del DOM
+                          // (`orchestratorTitle` / `orchestratorContent`) en
+                          // vez de React state, para no perder el último
+                          // keystroke.
                           const draftIsUnsaved = hasUnsavedContexto(
-                            draftSectionTitle,
-                            draftSectionContent,
+                            orchestratorTitle,
+                            orchestratorContent,
                           );
+                          // FIX (ago 2026, bug del docente): el REUSE debe
+                          // considerar si el docente tipeó un título NUEVO.
+                          // Si el título del draft difiere del título de la
+                          // sección destino, el docente quiere CREAR una
+                          // sección nueva, NO reusar la destino. Caso típico
+                          // del bug: tras "Nuevo contexto" sin tipear título,
+                          // queda una sección vacía de título pero con
+                          // contenido (heredado del docente que tipeó
+                          // contenido); el `useEffect` (línea 326)
+                          // auto-asigna `targetSectionId` a esa sección
+                          // huérfana; cuando el docente luego escribe un
+                          // título nuevo (C2) y pulsa "Agregar enunciado",
+                          // el orquestador REUSABA la sección destino (sin
+                          // título) y el ítem quedaba con NINGUNO.
+                          //
+                          // Reglas nuevas:
+                          //   - Draft completamente vacío → REUSE.
+                          //   - Draft con título vacío → REUSE (solo refinó
+                          //     contenido, sin contexto nuevo).
+                          //   - Draft con título igual al destino → REUSE
+                          //     (refinó contenido manteniendo el contexto).
+                          //   - Draft con título diferente al destino →
+                          //     NO REUSE, crear sección nueva.
+                          const draftTitleDiffersFromTarget =
+                            orchestratorTitle !== (targetSection.title ?? "");
+                          const shouldReuse =
+                            !draftIsUnsaved ||
+                            orchestratorTitle === "" ||
+                            !draftTitleDiffersFromTarget;
+                          // TEMP DEBUG
+                          console.log("[override] Branch 2 REUSE check", {
+                            targetSectionId: targetSection.id,
+                            targetTitle: targetSection.title,
+                            targetIsEmpty,
+                            draftIsUnsaved,
+                            draftTitle: orchestratorTitle,
+                            draftTitleDiffersFromTarget,
+                            shouldReuse,
+                          });
                           // REUSAR sólo si la sección destino YA TIENE
-                          // contenido o el docente NO tipeó nada nuevo.
-                          // Si la sección está vacía Y el docente tipeó
-                          // algo, caemos al legacy (rename-empty /
+                          // contenido Y el título del draft coincide (o
+                          // está vacío). Si el docente tipeó un título
+                          // diferente, caemos al legacy (rename-empty /
                           // create-new) que propaga el draft del docente.
-                          if (!targetIsEmpty || !draftIsUnsaved) {
+                          if (shouldReuse) {
                             const result = await addQuestionAction({}, formData);
                             if (result.success) {
                               // Sincronizar targetSectionId con la verdad
@@ -1760,17 +1863,39 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                           !onlySection.title &&
                           !onlySection.content;
                         if (isEmpty && onlySection) {
+                          console.log("[override] Branch 3 (rename-empty)", {
+                            onlySectionId: onlySection.id,
+                            orchestratorTitle,
+                          });
                           const fd = new FormData();
                           fd.append("evaluationId", data.evaluationId);
                           fd.append("sectionId", onlySection.id);
-                          fd.append("title", draftSectionTitle.trim());
-                          if (draftSectionContent) {
-                            fd.append("content", JSON.stringify(draftSectionContent));
+                          // FIX (ago 2026): usa los valores leídos del DOM
+                          // (`orchestratorTitle` / `orchestratorContentRaw`)
+                          // en vez de React state.
+                          fd.append("title", orchestratorTitle);
+                          if (orchestratorContentRaw) {
+                            fd.append("content", orchestratorContentRaw);
                           }
                           const res = await updateSectionAction({}, fd);
                           if (res.error) return res;
                           // sectionId no cambia: la pregunta va a la misma
                           // sección (ahora con título/contenido).
+                          //
+                          // FIX (ago 2026, bug del docente): pero el `sectionId` que
+                          // ve `addQuestionAction` viene del `formData` del
+                          // QuestionForm (hidden input alimentado por la prop
+                          // `sectionId={targetSectionId ?? ""}`). Si el docente llegó
+                          // a este branch con `targetSectionId=null` (caso típico:
+                          // tras "Nuevo contexto" con enunciado vacío, el orquestador
+                          // limpia drafts y pone targetSectionId=null; el QuestionForm
+                          // se remonta con `sectionId=""`), el `addQuestionAction`
+                          // siguiente recibiría `sectionId=""` y la pregunta se
+                          // perdería. Sincronizamos formData y state con el id real,
+                          // igual que hace la rama de creación inicial arriba (línea
+                          // 1651).
+                          formData.set("sectionId", onlySection.id);
+                          setTargetSectionId(onlySection.id);
                         } else {
                           // FIX ago 2026 (revertido/recuperado ago 2026):
                           // el draft del docente, cuando NO coincide con la
@@ -1817,11 +1942,33 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                           // se confunda con la creación de ítems.
                           const fd = new FormData();
                           fd.append("evaluationId", data.evaluationId);
-                          fd.append("title", draftSectionTitle.trim());
-                          if (draftSectionContent) {
-                            fd.append("content", JSON.stringify(draftSectionContent));
+                          // FIX (ago 2026, bug del docente): usa los valores
+                          // leídos del DOM (`orchestratorTitle` /
+                          // `orchestratorContentRaw`) en vez de React state.
+                          // Esta es la rama que se ejecutaba en el bug
+                          // reportado por el docente: tras "Nuevo contexto"
+                          // con enunciado escrito, `targetSectionId` queda
+                          // null y `data.sections.length >= 2`, así que caemos
+                          // aquí. Si React aún no había aplicado el último
+                          // keystroke del título/contenido, se creaba una
+                          // sección sin título → el ítem quedaba con NINGUNO.
+                          fd.append("title", orchestratorTitle);
+                          if (orchestratorContentRaw) {
+                            fd.append("content", orchestratorContentRaw);
                           }
+                          // TEMP DEBUG (ago 2026): ver qué llega al server.
+                          console.log("[override] Branch 4 addSection", {
+                            sentTitle: orchestratorTitle,
+                            sentContentLen: orchestratorContentRaw.length,
+                            fdTitle: fd.get("title"),
+                            fdContentLen: String(fd.get("content") ?? "").length,
+                          });
                           const res = await addSectionAction({}, fd);
+                          console.log("[override] Branch 4 addSection result", {
+                            success: res.success,
+                            error: res.error,
+                            sectionId: res.sectionId,
+                          });
                           if (res.error) return res;
                           if (res.sectionId) {
                             formData.set("sectionId", res.sectionId);
