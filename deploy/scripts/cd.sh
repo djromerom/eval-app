@@ -215,11 +215,10 @@ if [ "$SKIP_MIGRATE" = "0" ]; then
     sleep 2
   done
   log "aplicando migraciones (prisma migrate deploy)…"
-  if docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null | grep -qx "migrate"; then
-    docker compose -f "$COMPOSE_FILE" run --rm migrate
-  else
-    log "  (skip) migrate no está definido en $COMPOSE_FILE"
-  fi
+  # `migrate` está bajo `profiles: ["init"]` en docker-compose.prod.yml,
+  # así que necesita `--profile init` para ser visible. Sin el perfil
+  # `docker compose run --rm migrate` falla con "no such service".
+  docker compose -f "$COMPOSE_FILE" --profile init run --rm migrate
 else
   log "--skip-migrate: saltando prisma migrate deploy"
 fi
