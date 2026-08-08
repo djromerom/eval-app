@@ -75,7 +75,7 @@ function buildInvitationEmail(target: InvitationTarget, inviteUrl: string): Emai
             Este enlace expira en 48 horas.
           </p>
         </td></tr>
-        <tr><td style="background:#f4f4f5;padding:16px 24px;text-align:center;font-size:12px;color:#a1a1aa">ecognIA — Plataforma de formulaciones tipo ICFES</td></tr>
+        <tr><td style="background:#f4f4f5;padding:16px 24px;text-align:center;font-size:12px;color:#a1a1aa">Plataforma inteligente de evaluación ecognIA</td></tr>
       </table>
     </td></tr>
   </table>
