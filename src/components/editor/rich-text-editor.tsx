@@ -118,7 +118,23 @@ const ALIGN_BUTTONS: { align: Alignment; title: string; icon: React.ReactNode }[
   { align: "justify", title: "Justificar", icon: <AlignIcon align="justify" /> },
 ];
 
-function Toolbar({ editor, onPickImage }: { editor: Editor; onPickImage: () => void }) {
+function Toolbar({
+  editor,
+  onPickImage,
+  variant = "default",
+}: {
+  editor: Editor;
+  onPickImage: () => void;
+  variant?: "default" | "option";
+}) {
+  // Variante "option" (ago 2026): toolbar mínima para las opciones de
+  // respuesta del QuestionForm. Bold, Math inline, Math bloque, Imagen
+  // y Tabla. SIN headings, listas, blockquote, alineación — el docente
+  // no compone un ensayo en una opción, solo incrusta una fórmula o
+  // una imagen al lado del texto. La altura también se reduce (el
+  // padre pasa una minHeightClass menor).
+  const isOption = variant === "option";
+
   return (
     <div className="bg-muted/40 flex flex-wrap items-center gap-0.5 border-b p-1">
       <ToolbarButton
@@ -128,64 +144,78 @@ function Toolbar({ editor, onPickImage }: { editor: Editor; onPickImage: () => v
       >
         <b>B</b>
       </ToolbarButton>
-      <ToolbarButton
-        title="Itálica"
-        active={editor.isActive("italic")}
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-      >
-        <i>I</i>
-      </ToolbarButton>
-      <ToolbarButton
-        title="Título"
-        active={editor.isActive("heading", { level: 3 })}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-      >
-        H
-      </ToolbarButton>
-      <ToolbarButton
-        title="Lista con viñetas"
-        active={editor.isActive("bulletList")}
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-      >
-        •
-      </ToolbarButton>
-      <ToolbarButton
-        title="Lista numerada"
-        active={editor.isActive("orderedList")}
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-      >
-        1.
-      </ToolbarButton>
-      <ToolbarButton
-        title="Cita"
-        active={editor.isActive("blockquote")}
-        onClick={() => editor.chain().focus().toggleBlockquote().run()}
-      >
-        ❝
-      </ToolbarButton>
+      {!isOption ? (
+        <ToolbarButton
+          title="Itálica"
+          active={editor.isActive("italic")}
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+        >
+          <i>I</i>
+        </ToolbarButton>
+      ) : null}
+      {!isOption ? (
+        <ToolbarButton
+          title="Título"
+          active={editor.isActive("heading", { level: 3 })}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+        >
+          H
+        </ToolbarButton>
+      ) : null}
+      {!isOption ? (
+        <ToolbarButton
+          title="Lista con viñetas"
+          active={editor.isActive("bulletList")}
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+        >
+          •
+        </ToolbarButton>
+      ) : null}
+      {!isOption ? (
+        <ToolbarButton
+          title="Lista numerada"
+          active={editor.isActive("orderedList")}
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        >
+          1.
+        </ToolbarButton>
+      ) : null}
+      {!isOption ? (
+        <ToolbarButton
+          title="Cita"
+          active={editor.isActive("blockquote")}
+          onClick={() => editor.chain().focus().toggleBlockquote().run()}
+        >
+          ❝
+        </ToolbarButton>
+      ) : null}
       <TableInsertButton editor={editor} />
       <ToolbarButton title="Insertar imagen (o pégala / arrástrala)" onClick={onPickImage}>
         🖼
       </ToolbarButton>
 
-      <span className="bg-border mx-1 h-5 w-px" aria-hidden />
+      {!isOption ? (
+        <>
+          <span className="bg-border mx-1 h-5 w-px" aria-hidden />
 
-      {/* Alinea el párrafo donde está el cursor, o la imagen seleccionada. */}
-      {ALIGN_BUTTONS.map(({ align, title, icon }) => (
-        <ToolbarButton
-          key={align}
-          title={title}
-          // `left` es el valor por defecto y no se guarda: se marca activo
-          // también cuando no hay alineación puesta.
-          active={
-            editor.isActive({ align }) ||
-            (align === "justify" && !editor.getAttributes("paragraph").align)
-          }
-          onClick={() => editor.chain().focus().setAlign(align).run()}
-        >
-          {icon}
-        </ToolbarButton>
-      ))}
+          {/* Alinea el párrafo donde está el cursor, o la imagen seleccionada. */}
+          {ALIGN_BUTTONS.map(({ align, title, icon }) => (
+            <ToolbarButton
+              key={align}
+              title={title}
+              // `left` es el valor por defecto y no se guarda: se marca activo
+              // también cuando no hay alineación puesta.
+              active={
+                editor.isActive({ align }) ||
+                (align === "justify" && !editor.getAttributes("paragraph").align)
+              }
+              onClick={() => editor.chain().focus().setAlign(align).run()}
+            >
+              {icon}
+            </ToolbarButton>
+          ))}
+        </>
+      ) : null}
       <span className="text-muted-foreground ml-1 text-xs">
         Fórmulas: escribe <code>$x^2$</code> o <code>$$…$$</code>
       </span>
@@ -203,6 +233,7 @@ export function RichTextEditor({
   defaultValue,
   minHeightClass = "min-h-24",
   disabled = false,
+  variant = "default",
   onChange,
 }: {
   name: string;
@@ -216,6 +247,18 @@ export function RichTextEditor({
    * `editable: !disabled` de TipTap (ago 2026).
    */
   disabled?: boolean;
+  /**
+   * Variante visual del editor (ago 2026).
+   *  - "default": toolbar completa (negrita, itálica, headings, listas,
+   *    cita, tabla, imagen, alineación). Usado por el enunciado y el
+   *    bloque Contexto.
+   *  - "option": toolbar mínima (negrita, tabla, imagen) pensada para
+   *    las opciones de respuesta del QuestionForm. El docente que
+   *    escribe "x²+1" en plano no quiere ver 11 botones; el que
+   *    necesita incrustar una fórmula/imagen lo hace con 3 botones.
+   *    Mismo schema JSON que "default" — solo cambia el chrome.
+   */
+  variant?: "default" | "option";
   /**
    * Callback opcional con el JSON parseado en cada edición. Útil cuando el
    * padre necesita el documento (por ejemplo para reflejarlo en una preview
@@ -319,7 +362,11 @@ export function RichTextEditor({
     <div className="border-input bg-background rounded-md border shadow-sm">
       {editor && !disabled ? (
         <>
-          <Toolbar editor={editor} onPickImage={() => fileInputRef.current?.click()} />
+          <Toolbar
+            editor={editor}
+            onPickImage={() => fileInputRef.current?.click()}
+            variant={variant}
+          />
           {/* Segunda fila contextual: solo aparece con el cursor en una tabla. */}
           <TableControls editor={editor} />
         </>

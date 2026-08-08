@@ -22,7 +22,7 @@ import {
 } from "../../actions";
 import { ReviewModal, type QuestionLite } from "./review-modal";
 import { contextLabel, type SectionLite } from "./context-label";
-import { contextoMatchesSection, hasUnsavedContexto } from "./save-contexto";
+import { hasUnsavedContexto } from "./save-contexto";
 
 export interface SectionWithQuestions extends SectionLite {
   order: number;
@@ -76,28 +76,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   //    preguntas, aparece "en medio" aunque su número sea el más alto
   //    (bug visto en evaluaciones importadas donde la primera sección
   //    tiene ~25 preguntas y la nueva entra con #N).
-  //  - Camino `?from=list` (docente llega desde "Mis formulaciones"):
-  //    PRIMER placeholder vacío (la sección auto-creada por StrictMode,
-  //    sin título ni contenido). El docente suele entrar a la card a
-  //    CREAR un contexto nuevo, no a refinar uno existente — y si
-  //    apuntamos a la última sección con contenido, el gate
-  //    `sectionHasSavedContent` se evalúa a true y los botones
-  //    "Actualizar/Cancelar" emergen falsamente al tipear sobre un
-  //    input que arranca vacío (mismatch entre la intención del docente
-  //    y la sección destino). Apuntando al placeholder vacío, el gate
-  //    queda false hasta que el docente efectivamente escriba algo
-  //    distinto, y los botones solo aparecen si apunta a una sección
-  //    con contenido real (lo cual ya no es este caso por construcción).
-  //    Si NO hay placeholder vacío (todas las secciones tienen
-  //    contenido), caemos a `data.sections[0]` (primera por order) para
-  //    no dejar `targetSectionId=null` (eso mostraría "Preparando el
-  //    formulario…" indefinidamente, mala UX).
+  //  - Camino `?from=list` (docente llega desde "Mis formulaciones"): null.
+  //    Así, al abrir una formulación existente, ninguna sección queda
+  //    seleccionada por accidente. `startEdit` asigna la sección real al
+  //    editar un ítem; el flujo de creación persiste una sección nueva al
+  //    guardar el primer enunciado.
   const [targetSectionId, setTargetSectionId] = useState<string | null>(() => {
-    if (data.initialHideForm) {
-      const empty = data.sections.find((s) => !s.title && !s.content);
-      if (empty) return empty.id;
-      return data.sections[0]?.id ?? null;
-    }
+    if (data.initialHideForm) return null;
     return data.sections[data.sections.length - 1]?.id ?? data.sections[0]?.id ?? null;
   });
 
@@ -333,7 +318,15 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         return;
       }
     }
-    if (!targetSectionId || !data.sections.some((s) => s.id === targetSectionId)) {
+    // Al llegar desde "Mis formulaciones", `null` es intencional: no
+    // asociamos la próxima creación a una sección existente por defecto.
+    // `startEdit` asignará el id real si el docente edita un ítem.
+    if (!targetSectionId) {
+      if (data.initialHideForm) return;
+      setTargetSectionId(data.sections[data.sections.length - 1]?.id ?? null);
+      return;
+    }
+    if (!data.sections.some((s) => s.id === targetSectionId)) {
       setTargetSectionId(data.sections[data.sections.length - 1]?.id ?? null);
       return;
     }
@@ -351,7 +344,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     if (targetIsEmpty && lastWithContent && lastWithContent.id !== targetSectionId) {
       setTargetSectionId(lastWithContent.id);
     }
-  }, [data.sections, targetSectionId]);
+  }, [data.initialHideForm, data.sections, targetSectionId]);
 
   // Cuando el status pasa a PUBLISHED, liberamos el flag de publicación por
   // si quedó enganchado (p.ej. la promesa tiró excepción justo cuando llegó
@@ -510,66 +503,14 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       setFormError(null);
       setActionStatus("saving");
 
-      // DEFENSIVE DEDUPE (jul-ago 2026): si ya existe una sección con el
-      // mismo título (trim case-insensitive) que el draft, NO creamos otra —
-      // el backend (AddSection) no deduplica por título, así que esta es la
-      // única barrera. Si la sección existente está VACÍA, la renombramos.
-      // Si tiene contenido, reusamos sin más (sincronizamos drafts con la
-      // sección destino).
-      const matchingByTitle =
-        title.length > 0
-          ? data.sections.find((s) => (s.title ?? "").trim().toLowerCase() === title.toLowerCase())
-          : null;
-
-      if (matchingByTitle) {
-        const isExistingEmpty = !matchingByTitle.title && !matchingByTitle.content;
-        if (isExistingEmpty) {
-          const fd = new FormData();
-          fd.append("evaluationId", data.evaluationId);
-          fd.append("sectionId", matchingByTitle.id);
-          fd.append("title", title);
-          if (hasContent) fd.append("content", contentRaw);
-          const renameRes = await updateSectionAction({}, fd);
-          if (renameRes.error) {
-            setFormError(renameRes.error);
-            setActionStatus("error");
-            return;
-          }
-        }
-        // Sección ya tiene el título (o lo acabamos de poner): nada que
-        // crear. Tras un "Nuevo contexto" exitoso el docente quiere
-        // EMPEZAR LIMPIO: vaciamos drafts (título y contenido) y
-        // dejamos targetSectionId en null para que el siguiente
-        // "Agregar enunciado" o "Nuevo contexto" decida a dónde va.
-        // (ago 2026, pedido del docente: limpiar el contexto después
-        // de haber guardado).
-        setDraftSectionTitle("");
-        setDraftSectionContent(null);
-        setTargetSectionId(null);
-        // Marcamos que el docente acaba de "Nuevo contexto" → el
-        // useEffect de "sección objetivo inválida" NO debe re-asignar
-        // targetSectionId a la última sección recién creada en el
-        // próximo render, así el siguiente "Agregar enunciado" no
-        // encuentra contexto por error. El flag se limpia en onChange
-        // de los inputs o al disparar overrideAction.
-        justCreatedContextRef.current = true;
-        setNewSectionRenderKey((k) => k + 1);
-        setActionStatus("saved");
-        newSectionFormRef.current?.reset();
-        // El docente acaba de "Nuevo contexto" (rama dedupe, 1 sección
-        // vacía renombrada): quiere empezar en blanco. Aunque la sección
-        // ya tiene título persistido, los inputs deben quedar
-        // HABILITADOS para que pueda tipear el siguiente contexto.
-        // (ago 2026).
-        setContextSaved(false);
-        // Los inputs quedan vacíos hasta que el docente tipee un nuevo
-        // contexto.
-        setTimeout(() => {
-          setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
-        }, 2500);
-        notifyItemSaved();
-        return;
-      }
+      // NOTA (ago 2026, pedido del docente): hemos ELIMINADO el dedupe
+      // por título. Aunque el título escrito coincida con el de una
+      // sección existente, NO reusamos ni renombramos esa sección — el
+      // docente puede haber tenido un contexto repetido legítimo o
+      // simple coincidencia. El id es la verdad. La única rama de
+      // re-uso que queda es la decisión por id de abajo (rename-empty
+      // cuando solo hay 1 sección vacía). Ese rename usa el id de la
+      // sección placeholder, no el título, así que es seguro.
 
       // Decisión: ¿hay exactamente 1 sección vacía? Si sí, RENOMBRAR.
       // Si no, CREAR nueva.
@@ -912,6 +853,18 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       setNewSectionRenderKey((k) => k + 1);
       questionForm.reset();
       sectionForm.reset();
+      // Habilitamos los inputs del bloque Contexto por si venían
+      // bloqueados de un guardado anterior (contextSaved=true → input
+      // disabled). El docente acaba de hacer click en "Nuevo contexto"
+      // sin escribir enunciado: queremos que pueda tipear el contexto
+      // inmediatamente, sin pulsar antes "Editar contexto". (ago 2026,
+      // pedido del docente).
+      setContextSaved(false);
+      // Sincronizamos el "reset" semántico del botón: la siguiente
+      // creación no debe reusar la sección destino actual, sino partir
+      // de null para que el orquestador cree un contexto fresco. (ago
+      // 2026, pedido del docente).
+      setTargetSectionId(null);
       return;
     }
 
@@ -949,27 +902,23 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       // PASO 2: reusar o crear la sección con el título/contenido del
       // bloque "Contexto" arriba.
       //
-      // Reglas (ago 2026, pedido del docente: "se crea otro contexto
-      // nuevo contexto debe utilizar el contexto anterior y limpiarlo
-      // para el proximo"):
-      //   1. Si la única sección está VACÍA, renombrarla (evita el bug
-      //      de "dos secciones iniciales vacías").
-      //   2. Si ya existe una sección con el mismo título (trim
-      //      case-insensitive), REUSARLA (no crear duplicado). Si la
-      //      sección existente está vacía, renombrarla; si tiene
-      //      contenido, reusar sin más (el docente puede haberla
-      //      querido explícitamente).
-      //   3. Si no hay match por título, crear nueva sección.
+      // Reglas actualizadas (ago 2026, pedido del docente: NO buscar
+      // secciones por título — el id es la verdad):
+      //   1. Si la única sección está VACÍA, renombrarla por id (evita
+      //      el bug de "dos secciones iniciales vacías"). El rename
+      //      usa el id de la sección placeholder, no el título, así
+      //      que es seguro aunque el título escrito coincida con otra
+      //      sección.
+      //   2. En cualquier otro caso (2+ secciones, o 1 sección con
+      //      contenido), CREAR una nueva sección con el título del
+      //      docente — aunque el título coincida con el de una sección
+      //      existente. NO dedupe por título.
       const onlySection = data.sections.length === 1 ? data.sections[0] : null;
       const isEmpty =
         onlySection !== null &&
         onlySection !== undefined &&
         !onlySection.title &&
         !onlySection.content;
-      const matchingByTitle =
-        title.length > 0
-          ? data.sections.find((s) => (s.title ?? "").trim().toLowerCase() === title.toLowerCase())
-          : null;
       if (isEmpty && onlySection) {
         // renombrar: la única sección existente está vacía
         const fd = new FormData();
@@ -983,28 +932,9 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           setActionStatus("error");
           return;
         }
-      } else if (matchingByTitle) {
-        // Reusar sección existente por título (dedupe). Si está vacía,
-        // actualizamos con el contenido nuevo; si tiene contenido,
-        // dejamos tal cual.
-        if (!matchingByTitle.content && hasContent) {
-          const fd = new FormData();
-          fd.append("evaluationId", data.evaluationId);
-          fd.append("sectionId", matchingByTitle.id);
-          fd.append("title", title);
-          fd.append("content", contentRaw);
-          const updateRes = await updateSectionAction({}, fd);
-          if (updateRes.error) {
-            setFormError(updateRes.error);
-            setActionStatus("error");
-            return;
-          }
-        }
-        // Si matchingByTitle.content existe, no hacemos nada — la
-        // sección ya tiene el contenido del docente.
       } else {
-        // Crear sección nueva — solo cuando realmente NO existe
-        // ninguna con ese título.
+        // Crear sección nueva — siempre que NO haya una sola sección
+        // vacía que renombrar. NO dedupe por título.
         const fd = new FormData();
         fd.append("evaluationId", data.evaluationId);
         fd.append("title", title);
@@ -1015,6 +945,8 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
           setActionStatus("error");
           return;
         }
+        // res.sectionId puede ser null si el action no devolvió id
+        // (no es nuestro caso, pero por defensa).
         if (!res.sectionId) {
           setFormError("No se pudo crear el nuevo contexto.");
           setActionStatus("error");
@@ -1072,15 +1004,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       setActionStatus("saved");
       questionForm.reset();
       newSectionFormRef.current?.reset();
-      // Acabamos de persistir el nuevo contexto: lo que está en los drafts
-      // YA es lo que está guardado. Si el docente quiere editar el
-      // contexto recién creado, tendrá que pulsar "Editar contexto"
-      // (que muestra Actualizar/Cancelar inmediatamente).
-      // Los inputs del bloque Contexto siguen habilitados y muestran
-      // lo recién guardado (sincronizamos los drafts antes). Si el
-      // docente quiere ajustar, tipea y los cambios quedan listos para
-      // Actualizar o Cancelar.
-      // los botones Actualizar/Cancelar.
+      // Tras un "Nuevo contexto" + pregunta exitoso, los inputs del
+      // bloque Contexto deben quedar HABILITADOS para que el docente
+      // pueda tipear el siguiente contexto sin pulsar "Editar contexto"
+      // primero. Coherente con handleAddOrRenameSection (línea 581) y
+      // con la semántica del botón: "Nuevo contexto" es explícitamente
+      // "el siguiente, después de este". (ago 2026, pedido del docente).
+      setContextSaved(false);
       setTimeout(() => {
         setActionStatus((cur) => (cur === "saved" ? "idle" : cur));
       }, 2500);
@@ -1562,21 +1492,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     </div>
                   );
                 })()}
-                {!targetSectionId && data.editable ? (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <Button
-                      type="submit"
-                      size="sm"
-                      variant="outline"
-                      disabled={actionStatus === "saving"}
-                    >
-                      Nuevo contexto
-                    </Button>
-                    <span className="text-muted-foreground text-xs">
-                      Créalo primero si quieres asociar el enun a un contexto.
-                    </span>
-                  </div>
-                ) : null}
               </form>
             </section>
 
@@ -1679,13 +1594,15 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       }
                       const debounceWindow = 800;
                       const sinceLast = nowTs - lastSubmitTsRef.current;
+                      // willCreate: solo true si NO hay sección destino (targetSectionId
+                      // apunta a sección existente → siempre reusamos, no creamos).
+                      // Antes (jul 2026) se comparaba draft vs sección destino
+                      // vía contextoMatchesSection; eso producía duplicados cuando
+                      // el docente refinaba el título entre dos clicks. Ahora el
+                      // id es la verdad. (ago 2026, pedido del docente).
                       const willCreate =
                         hasUnsavedContexto(draftSectionTitle, draftSectionContent) &&
-                        !contextoMatchesSection(
-                          draftSectionTitle,
-                          draftSectionContent,
-                          data.sections.find((s) => s.id === targetSectionId),
-                        );
+                        !data.sections.some((s) => s.id === targetSectionId);
                       if (sinceLast < debounceWindow && willCreate && lastSubmitTsRef.current > 0) {
                         console.warn("[Agregar-enunciado] BLOQUEADO por debounce", {
                           sinceLast,
@@ -1697,7 +1614,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       lastSubmitTsRef.current = nowTs;
                       submittingRef.current = true;
                       try {
-                        const unsaved = hasUnsavedContexto(draftSectionTitle, draftSectionContent);
                         // BUG FIX: si el draft ya coincide con la sección
                         // destino (caso típico tras un "Agregar enunciado"
                         // anterior que dejó el contexto precargado), NO crear
@@ -1757,28 +1673,52 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                           }
                           return result;
                         }
-                        if (
-                          !unsaved ||
-                          contextoMatchesSection(
+                        // targetSection existe → evaluar si REUSAR o completar
+                        // la vacía. El id es la verdad sólo cuando la
+                        // sección destino YA tiene contenido persistido
+                        // (ago 2026, pedido del docente).
+                        //
+                        // Excepción crítica (ago 2026, bug reportado): si la
+                        // sección destino está VACÍA y el docente tipeó
+                        // algo en el bloque Contexto, NO reusamos tal cual
+                        // — caeríamos al mismo caso de abajo ("rename-empty"
+                        // / "create-new") pero saltándonos la propagación
+                        // del draft. Consecuencia: la pregunta se guardaba
+                        // en una sección sin título. Caso típico: tras
+                        // "Nuevo contexto" sin tipear nada, queda una
+                        // sección vacía y `targetSectionId` se reasigna a
+                        // ella por el effect de auto-asignación. Si el
+                        // docente luego escribe título + descripción y
+                        // pulsa "Agregar enunciado", el draft debe poblar
+                        // la sección vacía, no descartarse.
+                        // Narrowing: targetSection puede ser undefined
+                        // porque `Array.prototype.find` lo tipa así.
+                        if (targetSection) {
+                          const targetIsEmpty = !targetSection.title && !targetSection.content;
+                          const draftIsUnsaved = hasUnsavedContexto(
                             draftSectionTitle,
                             draftSectionContent,
-                            targetSection,
-                          )
-                        ) {
-                          const result = await addQuestionAction({}, formData);
-                          if (result.success) {
-                            // Sincronizar targetSectionId con la verdad
-                            // del servidor. (ago 2026)
-                            if (result.sectionId) setTargetSectionId(result.sectionId);
-                            // El contexto (que ya coincidía con la sección
-                            // destino) quedó persistido junto con la
-                            // pregunta → bloqueamos el bloque Contexto y
-                            // mostramos "Editar contexto" como única
-                            // salida. (ago 2026)
-                            setContextSaved(true);
-                            notifyItemSaved();
+                          );
+                          // REUSAR sólo si la sección destino YA TIENE
+                          // contenido o el docente NO tipeó nada nuevo.
+                          // Si la sección está vacía Y el docente tipeó
+                          // algo, caemos al legacy (rename-empty /
+                          // create-new) que propaga el draft del docente.
+                          if (!targetIsEmpty || !draftIsUnsaved) {
+                            const result = await addQuestionAction({}, formData);
+                            if (result.success) {
+                              // Sincronizar targetSectionId con la verdad
+                              // del servidor. (ago 2026)
+                              if (result.sectionId) setTargetSectionId(result.sectionId);
+                              // El contexto (de la sección destino) quedó persistido
+                              // junto con la pregunta → bloqueamos el bloque
+                              // Contexto y mostramos "Editar contexto" como única
+                              // salida. (ago 2026)
+                              setContextSaved(true);
+                              notifyItemSaved();
+                            }
+                            return result;
                           }
-                          return result;
                         }
                         // Decide: ¿renombrar la sección vacía auto-creada, o
                         // crear una nueva sección? Renombrar evita el caso
@@ -1786,59 +1726,33 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         // 2+ secciones, O si la única sección ya tiene
                         // título/contenido, creamos nueva.
                         //
-                        // DEFENSIVE DEDUPE: si ya existe una sección con el
-                        // mismo título (trim case-insensitive) que el draft,
-                        // reusamos esa sección en vez de crear una nueva. El
-                        // backend (AddSection) NO deduplica por título — cada
-                        // llamada crea una fila nueva — así que esta
-                        // comprobación client-side es la ÚNICA defensa contra
-                        // duplicados por título. Cubre tres escenarios
-                        // observados en bug reports (jul-ago 2026):
-                        //   1. Click 1 crea C9; click 2 con draft="C9" cae en
-                        //      `reuse` pero por race condition entre
-                        //      revalidatePath y el segundo submit, el
-                        //      orquestador evalúa contra `data.sections`
-                        //      STALE (sin C9) y crea OTRA sección C9.
-                        //   2. StrictMode de React dispara el useEffect de
-                        //      auto-creación dos veces (en dev) y produce dos
-                        //      secciones vacías iniciales; el orquestador ve
-                        //      `data.sections.length === 2` y entra en
-                        //      create-new en vez de rename-empty.
-                        //   3. El docente pulsa "Agregar enunciado" dos
-                        //      veces, pero el segundo submit llega antes del
-                        //      revalidate → `data.sections` aún no incluye
-                        //      C9 → crea C9 duplicado.
-                        const trimmedDraftTitle = draftSectionTitle.trim();
-                        const matchingByTitle =
-                          trimmedDraftTitle.length > 0
-                            ? data.sections.find(
-                                (s) =>
-                                  (s.title ?? "").trim().toLowerCase() ===
-                                  trimmedDraftTitle.toLowerCase(),
-                              )
-                            : null;
-                        if (matchingByTitle) {
-                          console.log(
-                            "[Agregar-enunciado] reusando sección existente por título (dédup)",
-                            { sectionId: matchingByTitle.id, title: matchingByTitle.title },
-                          );
-                          formData.set("sectionId", matchingByTitle.id);
-                          setTargetSectionId(matchingByTitle.id);
-                          const result = await addQuestionAction({}, formData);
-                          if (result.success) {
-                            // Sincronizar targetSectionId con la verdad
-                            // del servidor. (ago 2026)
-                            if (result.sectionId) setTargetSectionId(result.sectionId);
-                            // El contexto (que matcheaba por título con
-                            // una sección existente) quedó persistido
-                            // junto con la pregunta → bloqueamos el
-                            // bloque Contexto. (ago 2026, pedido del
-                            // docente).
-                            setContextSaved(true);
-                            notifyItemSaved();
-                          }
-                          return result;
-                        }
+                        // IMPORTANTE (ago 2026, pedido del docente): ya NO
+                        // deduplicamos por título. Si el docente escribe un
+                        // título que coincide con el de una sección existente
+                        // (que NO es la sección destino), eso puede ser
+                        // casualidad o contexto repetido legítimo — pero NO
+                        // debemos asumir que el docente quiere reutilizar esa
+                        // sección. El id del contexto destino es la verdad y
+                        // se preserva explícitamente vía `targetSectionId` /
+                        // `editingOriginalSectionIdRef`. La única rama de
+                        // re-uso de sección existente es la de arriba
+                        // (`contextoMatchesSection` contra `targetSection`),
+                        // que compara por id + contenido.
+                        //
+                        // Histórico: las 3 defensas que existían contra
+                        // duplicados por título (jul-ago 2026) ya no aplican
+                        // porque reusamos por id, no por título:
+                        //   1. Race condition entre revalidate y submit
+                        //      (sections stale) → SIN EFECTO: ahora no
+                        //      buscamos por título.
+                        //   2. StrictMode dobla el useEffect de auto-creación
+                        //      → SIN EFECTO: el useEffect de auto-creación
+                        //      ya se eliminó (ago 2026).
+                        //   3. Doble click del docente → SIN EFECTO: la
+                        //      rama que coincidía con la sección recién
+                        //      creada se cubre vía
+                        //      `contextoMatchesSection(targetSection)`, no
+                        //      por título.
                         const onlySection = data.sections.length === 1 ? data.sections[0] : null;
                         const isEmpty =
                           onlySection !== null &&
@@ -1860,9 +1774,8 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         } else {
                           // FIX ago 2026 (revertido/recuperado ago 2026):
                           // el draft del docente, cuando NO coincide con la
-                          // sección destino Y NO matchea por título con
-                          // ninguna existente, representa un contexto
-                          // NUEVO que el docente está construyendo desde el
+                          // sección destino, representa un contexto NUEVO
+                          // que el docente está construyendo desde el
                           // form. Lo creamos como sección nueva en vez de
                           // pisar la sección destino.
                           //

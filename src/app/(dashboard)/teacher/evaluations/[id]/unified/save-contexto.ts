@@ -5,19 +5,29 @@
  *  - `title`: string en el input controlado por `draftSectionTitle`
  *  - `content`: doc TipTap serializado en `draftSectionContent`
  *
- * Dos preguntas que el orquestador de "Agregar enunciado" debe responder:
+ * El orquestador de "Agregar enunciado" (`unified-editor.tsx > overrideAction`)
+ * responde dos preguntas:
  *
  *  1. ¿El docente escribió algo? → `hasUnsavedContexto()`
- *     (EMPTY_DOC de TipTap cuenta como "vacío").
+ *     (EMPTY_DOC de TipTap cuenta como "vacío"). El orquestador lo usa
+ *     para el debounce pre-flight (lockout anti-doble-submit cuando el
+ *     docente tipeó algo) y para decidir si crear/renombrar sección.
  *
- *  2. Lo que escribió, ¿es DIFERENTE al contexto de la sección destino?
- *     → `contextoMatchesSection()`
- *     Esto evita el bug clásico: tras un "Agregar enunciado" exitoso, los
- *     drafts quedan precargados con el título/contenido de la sección recién
- *     creada. Si el docente añade OTRA pregunta sin tocar los inputs, el draft
- *     "viejo" coincide con la sección destino y NO debe disparar la creación
- *     de una sección nueva. Solo se crea sección nueva cuando el docente
- *     efectivamente escribió algo DISTINTO.
+ *  2. ¿Qué sección usar para la nueva pregunta? La decisión NO pasa
+ *     por comparar contenido/título. Pasa por `targetSectionId` (la
+ *     sección destino que el docente fijó vía el contexto visible
+ *     arriba). Si `targetSectionId` apunta a una sección CON contenido,
+ *     se REUSA. Si no, se cae en la rama legacy: rename-empty si hay
+ *     1 sección vacía, o create-new si no.
+ *
+ * Por eso `contextoMatchesSection()` se eliminó (ago 2026): comparaba
+ * título+contenido y producía secciones duplicadas cuando el docente
+ * refinaba el título de su contexto entre dos "Agregar enunciado"
+ * consecutivos. La nueva regla es: el id es la verdad; el draft del
+ * docente es input libre, no decide la sección destino. Si el docente
+ * quiere modificar el contexto destino, debe pulsar explícitamente el
+ * botón "Editar contexto" del bloque Contexto (que llama a
+ * `handleUpdateContext` → `updateSectionAction`).
  */
 
 /**
@@ -49,38 +59,4 @@ export function hasUnsavedContexto(title: string | null | undefined, content: un
     }
   }
   return true;
-}
-
-/**
- * ¿El draft del docente coincide con el contexto ya guardado en `section`?
- *
- * Devuelve true cuando título y contenido son equivalentes (ambos vacíos,
- * o ambos con el mismo texto). Usado por el orquestador de "Agregar
- * enunciado" para decidir si debe reusar la sección destino (camino
- * rápido) o crear/renombrar una sección.
- *
- * Casos cubiertos:
- *  - sección vacía (title=null, content=null) y draft vacío → true
- *    (no hay nada que persistir, la pregunta va a la sección vacía).
- *  - sección con "Contexto A" y draft="Contexto A" → true (reusar).
- *  - sección con "Contexto A" y draft="Contexto B" → false (crear nueva).
- *  - sección vacía y draft con texto → false (renombrar la vacía).
- */
-export function contextoMatchesSection(
-  draftTitle: string | null | undefined,
-  draftContent: unknown,
-  section: { title: string | null; content: unknown } | null | undefined,
-): boolean {
-  if (!section) return false;
-  const draftHasText = hasUnsavedContexto(draftTitle, draftContent);
-  const sectionHasText = hasUnsavedContexto(section.title, section.content);
-
-  // Ambos vacíos → coincide (no hay nada que guardar).
-  if (!draftHasText && !sectionHasText) return true;
-  // Solo uno tiene texto → no coincide (hay que persistir el del docente).
-  if (draftHasText !== sectionHasText) return false;
-  // Ambos tienen texto → comparar título (suficiente: el contenido del
-  // RichTextEditor se precarga con `defaultValue={section.content}`, así
-  // que si el docente no tocó el editor, el content es idéntico por ref).
-  return (draftTitle ?? "").trim() === (section.title ?? "").trim();
 }
