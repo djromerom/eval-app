@@ -9,7 +9,7 @@ import { makeListCourseSubjects } from "@/modules/academic/infrastructure/contai
 import { getResolvedTheme } from "@/modules/theme/application/get-resolved-theme";
 import { themeToCssVars } from "@/modules/theme/domain/theme";
 import { RichText, RichTextInline } from "@/components/editor/rich-text";
-import { richTextToPlain } from "@/components/editor/render";
+import { richTextHasRenderableContent } from "@/shared/domain/rich-text";
 import { inlineSectionsImages } from "@/modules/uploads/application/inline-content-images";
 import { isWideQuestion } from "@/modules/printing/domain/wide-question";
 import { localStorage } from "@/shared/infrastructure/storage/local-storage";
@@ -76,7 +76,7 @@ export default async function PrintEvaluationPage({
             const numbers = section.questions.map((q) => q.number);
             const first = numbers[0];
             const last = numbers[numbers.length - 1];
-            const hasContext = richTextToPlain(section.content).length > 0;
+            const hasContext = richTextHasRenderableContent(section.content);
             return (
               <Fragment key={section.id}>
                 {/* Separador configurable (line / double / dots) — el primer
