@@ -14,7 +14,7 @@ import { computeCoverTable, formatDuration } from "@/modules/bundles/domain/cove
 import { getResolvedBundleTheme } from "@/modules/theme/application/get-resolved-bundle-theme";
 import { themeToCssVars } from "@/modules/theme/domain/theme";
 import { RichText, RichTextInline } from "@/components/editor/rich-text";
-import { richTextToPlain } from "@/components/editor/render";
+import { richTextHasRenderableContent } from "@/shared/domain/rich-text";
 import { PrintButton } from "../../evaluation/[id]/print-button";
 
 export const metadata: Metadata = { title: "Vista previa del cuadernillo" };
@@ -315,7 +315,7 @@ export default async function PrintBundlePage({
                   );
                   const first = numbers[0];
                   const last = numbers[numbers.length - 1];
-                  const hasContext = richTextToPlain(section.content).length > 0;
+                  const hasContext = richTextHasRenderableContent(section.content);
                   return (
                     <Fragment key={section.id}>
                       {idx > 0 ? (
