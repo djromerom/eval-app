@@ -6,6 +6,7 @@ import { EMPTY_DOC, ResizableImage, richTextExtensions } from "./extensions";
 import type { Alignment } from "./text-align";
 import { ResizableImageView } from "./resizable-image-view";
 import { TableControls, TableInsertButton } from "./table-toolbar";
+import { cn } from "@/lib/utils";
 
 /**
  * Extensiones del editor = las compartidas, pero con la imagen envuelta en su
@@ -235,6 +236,8 @@ export function RichTextEditor({
   disabled = false,
   variant = "default",
   onChange,
+  autoFocus = false,
+  focusHighlight = false,
 }: {
   name: string;
   defaultValue?: unknown;
@@ -266,10 +269,34 @@ export function RichTextEditor({
    * input y no notifica al padre.
    */
   onChange?: (json: Record<string, unknown>) => void;
+  /**
+   * Si `true`, el editor se enfoca automáticamente al (re)montar.
+   * Pensado para el flujo "guardar y seguir" del QuestionForm: tras
+   * un guardado exitoso el form resetea + remonta el TipTap del
+   * enunciado vía `key={resetKey}`; el padre pasa `autoFocus=true`
+   * en ese nuevo mount y el cursor aterriza en el enunciado listo
+   * para tipear la siguiente pregunta. Se consume una vez por
+   * instancia (no refocus en re-renders del mismo mount). (ago 2026)
+   */
+  autoFocus?: boolean;
+  /**
+   * Si `true`, ilumina el borde con el azul marca (color primario
+   * ecognIA, `#0A4FA8`) + ring suave cuando el editor recibe foco.
+   * El highlight se desvanece cuando el usuario EMPIEZA a escribir
+   * (primer onUpdate) — el feedback es solo para confirmar "el cursor
+   * aterrizó aquí", no para estorbar mientras se tipea. Default
+   * `false` para no afectar las opciones expandidas ni el bloque
+   * Contexto; el enunciado del QuestionForm lo activa explícitamente.
+   * (ago 2026, pedido del docente).
+   */
+  focusHighlight?: boolean;
 }) {
   const [json, setJson] = useState(() => JSON.stringify(initialContent(defaultValue)));
   const [uploading, setUploading] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // Highlight de foco (opt-in vía `focusHighlight`). true entre onFocus
+  // y el primer onUpdate; false en onBlur. (ago 2026)
+  const [isFocusHighlighted, setIsFocusHighlighted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // El editor se necesita dentro de los handlers, que se definen antes de que
   // `useEditor` retorne; la ref rompe esa dependencia circular.
@@ -342,6 +369,24 @@ export function RichTextEditor({
       const next = editor.getJSON() as Record<string, unknown>;
       setJson(JSON.stringify(next));
       onChange?.(next);
+      // Empezó a escribir → el highlight de foco cumplió su función
+      // ("sabés que el cursor está acá"), lo apagamos para no estorbar.
+      // Solo si el padre pidió el highlight; en caso contrario es un
+      // no-op gratis. (ago 2026)
+      setIsFocusHighlighted(false);
+    },
+    onFocus: () => {
+      // onFocus también se dispara en el autoFocus programático (el
+      // editor.commands.focus() interno de TipTap emite el evento), así
+      // que el highlight se enciende también en el flujo "guardar y
+      // seguir". (ago 2026)
+      setIsFocusHighlighted(true);
+    },
+    onBlur: () => {
+      // Blur siempre apaga, incluso si el usuario nunca llegó a escribir
+      // (ej. tab-in, tab-out sin tipear). El highlight solo vive entre
+      // focus y el primer cambio del documento. (ago 2026)
+      setIsFocusHighlighted(false);
     },
   });
   editorRef.current = editor;
@@ -358,8 +403,33 @@ export function RichTextEditor({
     if (editor) editor.setEditable(!disabled);
   }, [editor, disabled]);
 
+  // Auto-focus al (re)montar cuando el padre lo pide. Se consume una vez
+  // por instancia: el flag `hasFocusedRef` evita refocus en re-renders
+  // del mismo mount, y como `key` fuerza remount entre guardados del
+  // QuestionForm, cada nuevo instance arranca fresco y enfoca. (ago 2026)
+  const hasFocusedRef = useRef(false);
+  useEffect(() => {
+    if (autoFocus && editor && !hasFocusedRef.current) {
+      hasFocusedRef.current = true;
+      // Un tick para que el EditorContent ya esté pintado y el cursor
+      // aterrice en el `<p>` inicial del doc vacío (TipTap enfoca el
+      // contenteditable, posición por defecto = inicio).
+      requestAnimationFrame(() => {
+        editor.commands.focus();
+      });
+    }
+  }, [editor, autoFocus]);
+
   return (
-    <div className="border-input bg-background rounded-md border shadow-sm">
+    <div
+      className={cn(
+        "border-input bg-background rounded-md border shadow-sm transition-colors",
+        // Highlight de foco (opt-in): solo se enciende cuando el padre
+        // pasa `focusHighlight` y el editor está en el intervalo entre
+        // onFocus y el primer onUpdate. Se desvanece al tipear. (ago 2026)
+        focusHighlight && isFocusHighlighted && "border-primary ring-primary/30 ring-2",
+      )}
+    >
       {editor && !disabled ? (
         <>
           <Toolbar

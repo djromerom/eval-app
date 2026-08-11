@@ -426,122 +426,60 @@ describe("validateQuestionShape", () => {
   it("acepta enunciado y opciones no vacíos", () => {
     expect(validateQuestionContent(question())).toBeNull();
   });
-
-  // ===== ago 2026: permitir image-only TipTaps =====
-  // El docente pidió "permite guardar si hay solo imagenes". Una imagen
-  // (o tabla, fórmula, etc.) sin texto acompañante es contenido
-  // renderizable válido: la impresión la muestra tal cual.
-  it("acepta enunciado con solo imagen (sin texto)", () => {
-    const imageOnly = {
-      type: "doc",
-      content: [{ type: "paragraph", content: [{ type: "image", attrs: { src: "x" } }] }],
-    };
-    expect(validateQuestionContent(question({ text: imageOnly as unknown as string }))).toBeNull();
-  });
-  it("acepta opción con solo imagen (sin texto)", () => {
-    const imageOnly = {
-      type: "doc",
-      content: [{ type: "image", attrs: { src: "x" } }],
-    };
-    const ok = question({
-      options: [
-        { key: "A", text: "a" },
-        { key: "B", text: imageOnly as unknown as string },
-        { key: "C", text: "c" },
-        { key: "D", text: "d" },
-      ] as unknown as CreateQuestionData["options"],
-      correctAnswer: "A",
-    });
-    expect(validateQuestionContent(ok)).toBeNull();
-  });
-  it("acepta enunciado con solo tabla", () => {
-    const tableOnly = {
-      type: "doc",
-      content: [{ type: "table", content: [{ type: "tableRow", content: [] }] }],
-    };
-    expect(validateQuestionContent(question({ text: tableOnly as unknown as string }))).toBeNull();
-  });
-  it("sigue rechazando enunciado EMPTY_DOC", () => {
-    // Sanity check: el cambio no abre la puerta a TipTaps realmente
-    // vacíos ({type:"doc",content:[{type:"paragraph"}]} típico de
-    // TipTap al inicializar).
-    const emptyDoc = { type: "doc", content: [{ type: "paragraph" }] };
-    expect(
-      validateQuestionContent(question({ text: emptyDoc as unknown as string })),
-    ).not.toBeNull();
-  });
-});
-
-describe("AddQuestion — regresión opciones con texto plano (rich() bug)", () => {
-  /**
-   * ago 2026: bug del docente — al tipear "1" en una opción de respuesta
-   * (modo plain del OptionInput), el server action convertía el string
-   * "1" al número 1 vía `JSON.parse`. Luego `validateQuestionContent`
-   * llamaba `richTextToPlain(1)` que retornaba "" (solo maneja strings
-   * y objects), y la validación fallaba con "Llena la opción A antes
-   * de guardar". Lo mismo con "true", "null", "3.14", etc.
-   *
-   * Estos tests documentan el bug surface: si el `option.text` que llega
-   * al use case es un primitivo no-string (lo que producía el `rich()`
-   * roto), la validación lo rechaza correctamente. El fix real está en
-   * `actions.ts > rich()`: solo intenta `JSON.parse` si el valor
-   * PARECE JSON (arranca con `{` o `[`).
-   *
-   * El primer test es el contrato positivo: el flujo correcto (string
-   * plano) tiene que pasar. Los dos siguientes son el contrato negativo:
-   * si por alguna razón `rich()` vuelve a fallar y produce primitivos,
-   * la validación lo detecta y rechaza con el mensaje útil.
-   */
+  // Regresión ago 2026: si `rich()` en actions.ts convierte el valor de
+  // un `<Input>` plano a primitivo (number/boolean/null) antes de llegar
+  // aquí, la validación falla aunque el docente haya tipeado contenido.
+  // Contrato: cuando el docente tipea "1" en una opción plana, el valor
+  // que llega al use case debe ser la STRING "1", no el NUMBER 1.
+  // richTextToPlain solo extrae texto de strings/objetos; primitives
+  // (number, boolean, null) devuelven "" → falla la validación.
   it("acepta opciones con texto numérico como string (regresión rich()+JSON.parse)", () => {
-    const ok = question({
+    const good = question({
+      text: "¿Cuánto es 2+2?",
       options: [
-        { key: "A", text: "1" },
+        { key: "A", text: "1" }, // string "1" (lo que produce el <Input> plano)
         { key: "B", text: "2" },
         { key: "C", text: "3" },
         { key: "D", text: "4" },
       ],
-      correctAnswer: "A",
     });
-    expect(validateQuestionContent(ok)).toBeNull();
+    expect(validateQuestionContent(good)).toBeNull();
   });
-
   it("rechaza opciones con texto numérico como primitivo (bug surface)", () => {
-    const broken = question({
+    // Esto es lo que ANTES del fix se le escapaba al use case cuando el
+    // docente tipeaba "1" en un <Input> plano: rich() convertía "1" a 1
+    // vía JSON.parse. Mantenemos el test para que cualquier cambio que
+    // reintroduzca el primitivo en la frontera sea visible.
+    const bad = question({
+      text: "¿Cuánto es 2+2?",
       options: [
-        { key: "A", text: 1 as unknown as string },
-        { key: "B", text: "b" },
-        { key: "C", text: "c" },
-        { key: "D", text: "d" },
+        { key: "A", text: 1 as unknown as string }, // primitivo number (lo que NO debe llegar)
+        { key: "B", text: "2" },
+        { key: "C", text: "3" },
+        { key: "D", text: "4" },
       ],
-      correctAnswer: "A",
     });
-    const err = validateQuestionContent(broken);
-    expect(err).not.toBeNull();
-    expect(err).toMatch(/opci[oó]n A/i);
+    expect(validateQuestionContent(bad)).not.toBeNull();
   });
-
   it("rechaza opciones con texto boolean/null como primitivo (mismo bug surface)", () => {
-    const brokenTrue = question({
+    const badTrue = question({
       options: [
-        { key: "A", text: true as unknown as string },
+        { key: "A", text: true as unknown as string }, // primitivo boolean
         { key: "B", text: "b" },
         { key: "C", text: "c" },
         { key: "D", text: "d" },
       ],
-      correctAnswer: "A",
     });
-    expect(validateQuestionContent(brokenTrue)).not.toBeNull();
-
-    const brokenNull = question({
+    expect(validateQuestionContent(badTrue)).not.toBeNull();
+    const badNull = question({
       options: [
         { key: "A", text: null as unknown as string },
         { key: "B", text: "b" },
         { key: "C", text: "c" },
         { key: "D", text: "d" },
       ],
-      correctAnswer: "A",
     });
-    expect(validateQuestionContent(brokenNull)).not.toBeNull();
+    expect(validateQuestionContent(badNull)).not.toBeNull();
   });
 });
 

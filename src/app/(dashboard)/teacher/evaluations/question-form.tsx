@@ -474,6 +474,19 @@ export function QuestionForm({
             name="text"
             minHeightClass="min-h-16"
             defaultValue={initial?.text}
+            // Tras un guardado exitoso queremos que el cursor aterrice
+            // en el enunciado listo para tipear la siguiente pregunta
+            // (sin tener que volver a hacer click). `key={resetKey}`
+            // fuerza el remount del editor; `state.success` se queda
+            // en true hasta la próxima mutación del padre, así que cada
+            // nuevo instance consume el autoFocus una vez. (ago 2026)
+            autoFocus={state.success}
+            // Highlight azul marca + ring cuando el cursor aterriza acá;
+            // se desvanece al empezar a escribir. Solo el enunciado lo
+            // activa (las opciones y el contexto del editor unificado
+            // mantienen el estilo por defecto). (ago 2026, pedido del
+            // docente).
+            focusHighlight
           />
         </div>
 

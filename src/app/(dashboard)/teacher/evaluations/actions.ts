@@ -29,22 +29,21 @@ function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
 }
 
-/**
- * Parsea el JSON del editor rico; si no es JSON válido, lo trata como texto.
+/** Parsea el JSON del editor rico; si no es JSON válido, lo trata como texto.
  *
  * Solo intenta parsear cuando el valor PARECE un objeto/array JSON
  * (arranca con `{` o `[` después de trim). De otro modo lo devuelve
  * crudo como string.
  *
- * ago 2026: bug reportado por el docente — al tipear "1", "true" o
- * "null" en una opción de respuesta (modo plain del OptionInput), el
- * `JSON.parse` previo los convertía a primitivos (number/boolean/null)
- * y luego `richTextToPlain` retornaba "" porque solo maneja strings y
- * objects. La validación caía con "Llena la opción A antes de guardar"
- * para opciones de contenido perfectamente válido. El guard
- * `head.startsWith("{") || head.startsWith("[")` evita esa conversión
- * accidental: el texto plano nunca fue JSON, así que tampoco debe
- * pasar por el parser.
+ * Por qué el guard: el OptionInput renderiza un `<Input>` plano
+ * cuando el contenido inicial no es complejo (string o doc vacío).
+ * Si el docente tipea "1", "true", "null", "1.5" o "[hola]",
+ * `JSON.parse` convierte eso en primitivo (number/boolean/null) y
+ * luego `richTextToPlain(primitivo)` devuelve "" (la función solo
+ * maneja string y objeto) → la validación falla con "Llena la
+ * opción X antes de guardar" aunque el docente haya tipeado texto
+ * real. Bug ago 2026: solo se disparaba en modo Input plano, no en
+ * TipTap (el hidden input del TipTap siempre envía JSON válido).
  */
 function rich(formData: FormData, key: string): unknown {
   const raw = str(formData, key);
@@ -54,6 +53,9 @@ function rich(formData: FormData, key: string): unknown {
     try {
       return JSON.parse(raw);
     } catch {
+      // Parecía JSON (arrancaba con { o [) pero está malformado: lo
+      // dejamos como texto plano para que la validación cliente lo
+      // pueda mostrar.
       return raw;
     }
   }
