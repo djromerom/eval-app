@@ -331,6 +331,29 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
         return;
       }
     }
+    // Modo "Sin contexto" (ago 2026, pedido del docente): al pulsar
+    // "Sin contexto" dejamos `targetSectionId = null` para que cada
+    // "Agregar enunciado" persista el ítem en una SECCIÓN PLACEHOLDER
+    // NUEVA (`overrideAction` rama `noContextMode` la crea si
+    // `sectionIdToUse` es null). No queremos que el effect reasigne a
+    // la última sección existente mientras el modo esté activo:
+    // contaminaría su contexto con ítems "Sin contexto".
+    //
+    // El modo se apaga al pulsar "Con Contexto", al cancelar el card
+    // (`Cancelar` del extraActions), o al iniciar la edición de un
+    // ítem existente (`startEdit`). A partir de ahí, el effect vuelve
+    // a comportarse normalmente. (ago 2026).
+    if (noContextMode) {
+      // Cancelamos si el docente acaba de establecer un id que ya no
+      // existe tras un revalidate (cubre el caso "placeholder recién
+      // creado en una sección que fue eliminada por otro flow"). Pero
+      // NO asignamos nada nuevo: respetamos el null mientras el modo
+      // esté activo.
+      if (targetSectionId && !data.sections.some((s) => s.id === targetSectionId)) {
+        setTargetSectionId(null);
+      }
+      return;
+    }
     // Al llegar desde "Mis formulaciones", `null` es intencional: no
     // asociamos la próxima creación a una sección existente por defecto.
     // `startEdit` asignará el id real si el docente edita un ítem.
@@ -357,7 +380,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     if (targetIsEmpty && lastWithContent && lastWithContent.id !== targetSectionId) {
       setTargetSectionId(lastWithContent.id);
     }
-  }, [data.initialHideForm, data.sections, targetSectionId]);
+  }, [data.initialHideForm, data.sections, targetSectionId, noContextMode]);
 
   // Cuando el status pasa a PUBLISHED, liberamos el flag de publicación por
   // si quedó enganchado (p.ej. la promesa tiró excepción justo cuando llegó
@@ -1133,6 +1156,24 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                 onClick={() => {
                   setShowForm(true);
                   setNoContextMode(true);
+                  // Dejamos `targetSectionId` en null al pulsar
+                  // "Sin contexto" para que cada "Agregar enunciado"
+                  // persista el ítem en una SECCIÓN PLACEHOLDER NUEVA
+                  // sin título ni contenido (`overrideAction` rama
+                  // `noContextMode` la crea si `sectionIdToUse` es
+                  // null). Si asgináramos la última sección aquí, los
+                  // ítems "Sin contexto" se apilarían en una sección
+                  // existente con contenido, contaminando su contexto.
+                  //
+                  // El `useEffect` de sincronización (más abajo)
+                  // respeta este null mientras `noContextMode` esté
+                  // activo: solo reasigna a la última sección cuando
+                  // NO estamos en modo "Sin contexto". Así no pisamos
+                  // el null del docente. (ago 2026, pedido del
+                  // docente: "cuando se le da click al boton sin
+                  // contexto debe dejar en blanco el targetSectionId
+                  // para que el proximo lo guarde sin contexto").
+                  setTargetSectionId(null);
                 }}
               >
                 <Plus className="mr-1 h-3.5 w-3.5" /> Sin contexto
@@ -2226,6 +2267,18 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         </Button>
                       </>
                     }
+                    // Cierre optimista del card cuando el botón submitido
+                    // trae `data-close-on-save="true"` (p.ej. "Guardar").
+                    // Se dispara DENTRO del `onSubmit` del QuestionForm, no
+                    // desde `onDone`, porque el `useEffect` de
+                    // `state.success` no se vuelve a correr de forma
+                    // consistente tras las revalidates encadenadas y el
+                    // card quedaba abierto en la primera carga. (ago 2026,
+                    // bug reportado: "porque el boton guardar no cierra
+                    // el card del item la primera vez?").
+                    onWillClose={() => {
+                      setShowForm(false);
+                    }}
                     onDone={(info) => {
                       // Al guardar exitosamente: limpiamos el modo edición.
                       setEditingQuestionId(null);
@@ -2274,9 +2327,15 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       //
                       // En modo edición NO tocamos nada: el padre cierra
                       // el formulario y se sale del flujo de creación.
-                      // Si el botón submitido traía data-close-on-save="true"
-                      // (caso: "Guardar"), ocultamos la card de creación.
-                      // Quedan visibles solo los botones superiores y la tabla.
+                      //
+                      // El cierre del card por `data-close-on-save="true"`
+                      // ahora vive en `onWillClose` (más arriba), que se
+                      // dispara desde `onSubmit` antes del server action —
+                      // es la ruta fiable (la del `useEffect` de
+                      // `state.success` falla tras revalidates encadenadas,
+                      // bug confirmado en ago 2026). El flag legacy
+                      // `info?.close` se mantiene como red de seguridad
+                      // por si un padre aún no pasó `onWillClose`.
                       if (info?.close) {
                         setShowForm(false);
                       }
