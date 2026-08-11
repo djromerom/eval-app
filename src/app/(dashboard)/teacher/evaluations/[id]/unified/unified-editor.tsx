@@ -1068,6 +1068,20 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
 
   const items = data.sections.flatMap((s) => s.questions);
 
+  // Predicado compartido: ¿se muestra el botón "Editar contexto" del
+  // bloque Contexto? Es la MISMA regla que aplicamos a "Nuevo contexto"
+  // del QuestionForm (siguiente use): ambos viven en el mismo flujo
+  // "existe un contexto persistido listo para afinar". Si la regla
+  // cambia, ambos botones cambian en bloque. (ago 2026, pedido del
+  // docente: "que [Nuevo contexto] aparezca cuando aparece el boton de
+  // 'Editar contexto'").
+  //   - edición de pregunta existente → editar contexto es útil
+  //   - tras un guardado (contextSaved=true) → editar contexto desbloquea
+  //   - cualquier otro caso (contexto recién inicial, nunca persistido):
+  //     NO se muestra, y "Nuevo contexto" tampoco.
+  const showEditContextButton =
+    data.editable && !editingContext && (editingQuestionId !== null || contextSaved);
+
   return (
     <div className="space-y-6">
       {/* SWITCHER DE MODO */}
@@ -1407,11 +1421,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     // enunciado" o "Guardar") para que un tipeo
                     // accidental no se cuele como diff en el siguiente
                     // submit. (ago 2026, pedido del docente).
-                    if (
-                      data.editable &&
-                      !editingContext &&
-                      (editingQuestionId !== null || contextSaved)
-                    ) {
+                    if (showEditContextButton) {
                       return (
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                           <Button
@@ -1594,7 +1604,23 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     initial={editingInitial()}
                     createLabel="Agregar enunciado"
                     extraActionsLeft={
-                      editingQuestionId ? null : (
+                      // "Nuevo contexto" aparece cuando aparece el botón
+                      // "Editar contexto" del bloque Contexto. Reusamos
+                      // el mismo predicado (`showEditContextButton`, ver
+                      // arriba) en lugar de duplicar la lógica:
+                      //   - edición de ítem existente → aparece
+                      //   - tras un guardado del contexto (contextSaved) → aparece
+                      //   - cualquier otro caso (creación inicial sin
+                      //     contexto persistido, ya sea 0 secciones o
+                      //     solo placeholders) → OCULTO, y el docente
+                      //     usa "Agregar enunciado" para arrancar.
+                      // Razón semántica: "Nuevo contexto" presupone un
+                      // contexto previo al que estamos a punto de bifurcar.
+                      // Si no hay ningún contexto persistido, no hay
+                      // bifurcación posible. (ago 2026, pedido del
+                      // docente: "que aparezca cuando aparece el boton
+                      // de 'Editar contexto'").
+                      showEditContextButton ? (
                         <Button
                           type="button"
                           size="sm"
@@ -1607,7 +1633,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         >
                           Nuevo contexto
                         </Button>
-                      )
+                      ) : null
                     }
                     // "Nuevo contexto" va en `extraActionsLeft` (slot
                     // izquierdo del `flex justify-between` de la fila de
