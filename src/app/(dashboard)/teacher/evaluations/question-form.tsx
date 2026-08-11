@@ -532,6 +532,7 @@ export function QuestionForm({
                 {k}
               </label>
               <OptionInput
+                key={resetKey}
                 name={`option${k}`}
                 required
                 placeholder={`Opción ${k}`}
