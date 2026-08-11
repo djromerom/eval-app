@@ -1161,7 +1161,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   // persista el ítem en una SECCIÓN PLACEHOLDER NUEVA
                   // sin título ni contenido (`overrideAction` rama
                   // `noContextMode` la crea si `sectionIdToUse` es
-                  // null). Si asgináramos la última sección aquí, los
+                  // null). Si asignáramos la última sección aquí, los
                   // ítems "Sin contexto" se apilarían en una sección
                   // existente con contenido, contaminando su contexto.
                   //
@@ -1174,6 +1174,28 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   // contexto debe dejar en blanco el targetSectionId
                   // para que el proximo lo guarde sin contexto").
                   setTargetSectionId(null);
+                  // Misma limpieza que hace "Nuevo contexto" tras
+                  // guardar (handler handleAddOrRenameSection, líneas
+                  // 596-602): vaciamos los drafts del bloque Contexto
+                  // (Título + TipTap) y bumpeamos la key para remontar
+                  // los inputs no-controlados. El bloque sigue
+                  // OCULTO mientras `noContextMode=true`, pero al
+                  // volver a pulsar "Con Contexto", el docente lo ve
+                  // con Título/TipTap VACÍOS — exactamente el mismo
+                  // estado que tendría si acabara de "Nuevo contexto".
+                  // (ago 2026, pedido del docente: "después de dar
+                  // click en el botón sin contexto hacer la misma
+                  // acción que hace el botón nuevo contexto para
+                  // limpiar el título y el tip tap del contexto").
+                  setDraftSectionTitle("");
+                  setDraftSectionContent(null);
+                  setNewSectionRenderKey((k) => k + 1);
+                  // Si el docente venía de un guardado (contextSaved=true,
+                  // inputs bloqueados por la derecha), al pasar a "Sin
+                  // contexto" debe poder tipear libremente si vuelve a
+                  // "Con contexto". Mismo rationale que
+                  // handleAddOrRenameSection línea 615.
+                  setContextSaved(false);
                 }}
               >
                 <Plus className="mr-1 h-3.5 w-3.5" /> Sin contexto
