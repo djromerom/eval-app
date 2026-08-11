@@ -29,15 +29,35 @@ function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
 }
 
-/** Parsea el JSON del editor rico; si no es JSON válido, lo trata como texto. */
+/**
+ * Parsea el JSON del editor rico; si no es JSON válido, lo trata como texto.
+ *
+ * Solo intenta parsear cuando el valor PARECE un objeto/array JSON
+ * (arranca con `{` o `[` después de trim). De otro modo lo devuelve
+ * crudo como string.
+ *
+ * ago 2026: bug reportado por el docente — al tipear "1", "true" o
+ * "null" en una opción de respuesta (modo plain del OptionInput), el
+ * `JSON.parse` previo los convertía a primitivos (number/boolean/null)
+ * y luego `richTextToPlain` retornaba "" porque solo maneja strings y
+ * objects. La validación caía con "Llena la opción A antes de guardar"
+ * para opciones de contenido perfectamente válido. El guard
+ * `head.startsWith("{") || head.startsWith("[")` evita esa conversión
+ * accidental: el texto plano nunca fue JSON, así que tampoco debe
+ * pasar por el parser.
+ */
 function rich(formData: FormData, key: string): unknown {
   const raw = str(formData, key);
   if (!raw) return undefined;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return raw;
+  const head = raw.trimStart();
+  if (head.startsWith("{") || head.startsWith("[")) {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return raw;
+    }
   }
+  return raw;
 }
 
 export async function createEvaluationAction(

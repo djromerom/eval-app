@@ -428,6 +428,79 @@ describe("validateQuestionShape", () => {
   });
 });
 
+describe("AddQuestion — regresión opciones con texto plano (rich() bug)", () => {
+  /**
+   * ago 2026: bug del docente — al tipear "1" en una opción de respuesta
+   * (modo plain del OptionInput), el server action convertía el string
+   * "1" al número 1 vía `JSON.parse`. Luego `validateQuestionContent`
+   * llamaba `richTextToPlain(1)` que retornaba "" (solo maneja strings
+   * y objects), y la validación fallaba con "Llena la opción A antes
+   * de guardar". Lo mismo con "true", "null", "3.14", etc.
+   *
+   * Estos tests documentan el bug surface: si el `option.text` que llega
+   * al use case es un primitivo no-string (lo que producía el `rich()`
+   * roto), la validación lo rechaza correctamente. El fix real está en
+   * `actions.ts > rich()`: solo intenta `JSON.parse` si el valor
+   * PARECE JSON (arranca con `{` o `[`).
+   *
+   * El primer test es el contrato positivo: el flujo correcto (string
+   * plano) tiene que pasar. Los dos siguientes son el contrato negativo:
+   * si por alguna razón `rich()` vuelve a fallar y produce primitivos,
+   * la validación lo detecta y rechaza con el mensaje útil.
+   */
+  it("acepta opciones con texto numérico como string (regresión rich()+JSON.parse)", () => {
+    const ok = question({
+      options: [
+        { key: "A", text: "1" },
+        { key: "B", text: "2" },
+        { key: "C", text: "3" },
+        { key: "D", text: "4" },
+      ],
+      correctAnswer: "A",
+    });
+    expect(validateQuestionContent(ok)).toBeNull();
+  });
+
+  it("rechaza opciones con texto numérico como primitivo (bug surface)", () => {
+    const broken = question({
+      options: [
+        { key: "A", text: 1 as unknown as string },
+        { key: "B", text: "b" },
+        { key: "C", text: "c" },
+        { key: "D", text: "d" },
+      ],
+      correctAnswer: "A",
+    });
+    const err = validateQuestionContent(broken);
+    expect(err).not.toBeNull();
+    expect(err).toMatch(/opci[oó]n A/i);
+  });
+
+  it("rechaza opciones con texto boolean/null como primitivo (mismo bug surface)", () => {
+    const brokenTrue = question({
+      options: [
+        { key: "A", text: true as unknown as string },
+        { key: "B", text: "b" },
+        { key: "C", text: "c" },
+        { key: "D", text: "d" },
+      ],
+      correctAnswer: "A",
+    });
+    expect(validateQuestionContent(brokenTrue)).not.toBeNull();
+
+    const brokenNull = question({
+      options: [
+        { key: "A", text: null as unknown as string },
+        { key: "B", text: "b" },
+        { key: "C", text: "c" },
+        { key: "D", text: "d" },
+      ],
+      correctAnswer: "A",
+    });
+    expect(validateQuestionContent(brokenNull)).not.toBeNull();
+  });
+});
+
 describe("CreateEvaluation", () => {
   it("crea BORRADOR cuando la asignatura-curso existe", async () => {
     const repo = new FakeEvaluations();
