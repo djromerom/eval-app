@@ -187,8 +187,10 @@ export function QuestionForm({
   maxOptions = MAX_OPTIONS,
   initial,
   onDone,
+  onWillClose,
   createLabel = "Agregar pregunta",
   extraActions,
+  extraActionsLeft,
   overrideAction,
   formRef,
   clearCorrectAfterSave = false,
@@ -210,16 +212,53 @@ export function QuestionForm({
    * unificado). En ese caso, además, NO reseteamos los inputs — el padre
    * cerrará el card y los inputs se desmontan. Si la vista solo quiere
    * ignorar el flag, el callback sigue siendo válido como `() => void`.
+   *
+   * NOTA: el flag `close` se mantiene por compatibilidad, pero el editor
+   * unificado prefiere `onWillClose` (ver abajo): el cierre se dispara
+   * dentro de `onSubmit` (en cuanto se detecta el botón con
+   * `data-close-on-save="true"`) y por tanto es independiente de si el
+   * `useEffect` que consume `state.success` corre o no tras el revalidate.
+   * El propio comentario en `unified-editor.tsx` reconoce que ese
+   * `useEffect` "NO corre consistentemente cuando hay revalidates
+   * encadenadas": confiar en él para cerrar el card provocaba que
+   * "Guardar" (data-close-on-save="true") dejara la card abierta. La
+   * solución implementada es invocar `onWillClose` desde `onSubmit`
+   * para garantizar el cierre.
    */
   onDone?: (info?: { close?: boolean }) => void;
+  /** Se invoca desde `onSubmit` en cuanto se detecta que el botón
+   * submitido trae `data-close-on-save="true"` — ANTES del server action
+   * y sin esperar a `state.success`. Garantiza que el card se cierre
+   * incluso si el `useEffect` de `state.success` no se vuelve a
+   * disparar tras el revalidate. Si no se pasa, el form cae al
+   * comportamiento legacy (`onDone({ close: true })` cuando `state.success`
+   * es true). (ago 2026, fix de regresión: "Guardar" dejaba el card
+   * abierto en la primera carga).
+   *
+   * IMPORTANTE: NO cierre del form aquí — solo notifica al padre para que
+   * cierre el card (típicamente `setShowForm(false)`). El QuestionForm
+   * sigue desmontándose porque el padre lo ocultará.
+   */
+  onWillClose?: () => void;
   /** Etiqueta del botón de submit en modo creación. Default: "Agregar pregunta".
    *  Las vistas que quieran otro wording (p.ej. "Agregar enunciado" en el
    *  editor unificado) lo pasan por aquí sin tocar a las demás. */
   createLabel?: string;
   /** Acciones extra que se renderizan a la IZQUIERDA del submit, en la misma
-   *  fila. Lo usa el editor unificado para poner "Nuevo contexto" al lado
-   *  de "Agregar enunciado". Las otras vistas lo dejan `undefined`. */
+   *  fila. Lo usa el editor unificado para poner "Guardar" y "Cancelar"
+   *  al lado del submit "Agregar enunciado". Las otras vistas lo dejan
+   *  `undefined`. */
   extraActions?: React.ReactNode;
+  /** Acción que se renderiza al PRINCIPIO de la fila de acciones (extremo
+   *  IZQUIERDO, opuesto a submit/cancel). Sigue siendo la MISMA FILA
+   *  HORIZONTAL: cuando se pasa, el contenedor pasa a `justify-between`
+   *  para empujar submit+Guardar+Cancelar a la derecha. Lo usa el editor
+   *  unificado para el botón "Nuevo contexto" (ago 2026, pedido del
+   *  docente: "que aparezca a principio pero en la misma linea
+   *  horizontal de los demas botones"). Cuando NO se pasa, el
+   *  contenedor mantiene `justify-end` legacy para no afectar a las
+   *  demás vistas. */
+  extraActionsLeft?: React.ReactNode;
   /** Si se pasa, REEMPLAZA el action interno del form. El editor unificado
    *  lo usa para orquestar contexto + pregunta en una sola invocación
    *  (p.ej. "Agregar enunciado" crea/renombra la sección Y guarda el ítem
@@ -407,6 +446,32 @@ export function QuestionForm({
             return;
           }
           setClientError(null);
+
+          // Cierre optimista del card cuando el botón trae
+          // `data-close-on-save="true"` (p.ej. "Guardar" del editor
+          // unificado). Se dispara AQUÍ, al final del handler, DESPUÉS
+          // de todas las validaciones que podrían `preventDefault`: si
+          // falta clave o el enunciado está vacío, el form NO se envía,
+          // y el card debe quedarse abierto para que el docente vea el
+          // error y corrija. Sin este orden, el card se cerraría sin
+          // guardar (regresión: "ahora el botón guardar no está
+          // guardando" — el docente pulsaba "Guardar" sin clave
+          // marcada, el card se cerraba, y el ítem nunca llegaba al
+          // server action).
+          //
+          // Por qué no esperar al `useEffect` de `state.success`:
+          // ese useEffect "NO corre consistentemente cuando hay
+          // revalidates encadenadas" (comentario previo en el código),
+          // así que el card quedaba abierto al pulsar "Guardar" en la
+          // primera carga. Mover el cierre a `onSubmit` lo arregla, a
+          // costa de tener que respetar el orden de validaciones.
+          //
+          // Si el padre NO pasó `onWillClose`, caemos al
+          // comportamiento legacy: el `useEffect` cierra vía
+          // `onDone({ close: true })`. (ago 2026).
+          if (closeOnSaveRef.current && onWillClose) {
+            onWillClose();
+          }
         }}
         // Traducimos los mensajes por defecto de validación HTML5 (los inputs
         // con `required` muestran "Please fill out this field" en algunos
@@ -644,9 +709,22 @@ export function QuestionForm({
             {clientError ?? state.error}
           </p>
         ) : null}
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <SubmitButton editing={editing} createLabel={createLabel} />
-          {extraActions}
+        {/* Fila de acciones del form. Cuando el padre pasa
+            `extraActionsLeft` (slot izquierdo, p.ej. "Nuevo contexto"),
+            usamos `justify-between` para empujar submit/extraActions a la
+            DERECHA y dejar el slot alineado al EXTREMO IZQUIERDO — todo
+            en la MISMA fila horizontal. Sin slot izquierdo, mantenemos
+            `justify-end` (legacy) para no afectar a las otras vistas.
+            (ago 2026, pedido del docente: "que aparezca a principio
+            pero en la misma linea horizontal de los demas botones"). */}
+        <div
+          className={`flex flex-wrap items-center gap-2 ${extraActionsLeft ? "justify-between" : "justify-end"}`}
+        >
+          {extraActionsLeft}
+          <div className="flex flex-wrap items-center gap-2">
+            <SubmitButton editing={editing} createLabel={createLabel} />
+            {extraActions}
+          </div>
         </div>
       </form>
       <AlertDialog open={showMissingKeyDialog} onOpenChange={setShowMissingKeyDialog}>
