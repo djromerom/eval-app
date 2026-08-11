@@ -1,4 +1,4 @@
-import { richTextToPlain } from "@/shared/domain/rich-text";
+import { richTextHasRenderableContent } from "@/shared/domain/rich-text";
 import type { EvaluationStatus } from "./evaluation-status";
 
 export type AnswerKey = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
@@ -421,18 +421,24 @@ export function validateQuestionShape(data: {
  * (no en `validateQuestionShape`, que solo verifica la forma A–D).
  *
  * Devuelve `null` si está OK, o un mensaje de error para mostrar inline.
+ *
+ * ago 2026: antes se usaba `richTextToPlain(...).trim()` que solo extrae
+ * texto, lo cual rechazaba enunciados u opciones de solo imagen/tabla/
+ * fórmula. El docente pidió permitir guardar si hay solo imágenes
+ * (image-only TipTaps son contenido renderizable válido). Ahora usamos
+ * `richTextHasRenderableContent` que cuenta imágenes, tablas, fórmulas y
+ * otros nodos no-texto como contenido. `richTextToPlain` se mantiene para
+ * snippets e impresión (ahí sí queremos solo el texto).
  */
 export function validateQuestionContent(data: {
   text: unknown;
   options: { key: AnswerKey; text: unknown }[];
 }): string | null {
-  const textPlain = richTextToPlain(data.text).trim();
-  if (!textPlain) {
+  if (!richTextHasRenderableContent(data.text)) {
     return "Describe el enunciado de la pregunta.";
   }
   for (const opt of data.options) {
-    const optPlain = richTextToPlain(opt.text).trim();
-    if (!optPlain) {
+    if (!richTextHasRenderableContent(opt.text)) {
       return `Llena la opción ${opt.key} antes de guardar.`;
     }
   }

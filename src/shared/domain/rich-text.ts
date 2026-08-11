@@ -33,7 +33,8 @@ export function richTextToPlain(value: unknown): string {
  * Determina si un documento TipTap tiene contenido renderizable a nivel de
  * bloque. Lo usan las páginas de impresión (`/print/evaluation/[id]`,
  * `/print/bundle/[id]`) para decidir si mostrar el bloque de contexto de
- * una sección.
+ * una sección, y `validateQuestionContent` para aceptar enunciados/opciones
+ * con solo imágenes.
  *
  * Por qué hace falta: `richTextToPlain` solo extrae `node.text`. Cuando el
  * contexto es SOLO una imagen, una tabla o un `blockMath` (sin texto
@@ -43,8 +44,11 @@ export function richTextToPlain(value: unknown): string {
  *   que devuelve TipTap al inicializar, no cuenta).
  * - Cualquier otro nodo top-level (`image`, `table`, `blockMath`,
  *   `heading`, etc.) cuenta con solo estar presente.
+ * - `string` no-whitespace (modo plain del OptionInput y casos donde el
+ *   form aún no ha parseado JSON) también cuenta como contenido.
  */
 export function richTextHasRenderableContent(value: unknown): boolean {
+  if (typeof value === "string") return value.trim().length > 0;
   if (!value || typeof value !== "object") return false;
   const doc = value as { content?: unknown[] };
   if (!Array.isArray(doc.content) || doc.content.length === 0) return false;
