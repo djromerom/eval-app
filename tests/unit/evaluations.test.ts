@@ -426,6 +426,50 @@ describe("validateQuestionShape", () => {
   it("acepta enunciado y opciones no vacíos", () => {
     expect(validateQuestionContent(question())).toBeNull();
   });
+
+  // ===== ago 2026: permitir image-only TipTaps =====
+  // El docente pidió "permite guardar si hay solo imagenes". Una imagen
+  // (o tabla, fórmula, etc.) sin texto acompañante es contenido
+  // renderizable válido: la impresión la muestra tal cual.
+  it("acepta enunciado con solo imagen (sin texto)", () => {
+    const imageOnly = {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "image", attrs: { src: "x" } }] }],
+    };
+    expect(validateQuestionContent(question({ text: imageOnly as unknown as string }))).toBeNull();
+  });
+  it("acepta opción con solo imagen (sin texto)", () => {
+    const imageOnly = {
+      type: "doc",
+      content: [{ type: "image", attrs: { src: "x" } }],
+    };
+    const ok = question({
+      options: [
+        { key: "A", text: "a" },
+        { key: "B", text: imageOnly as unknown as string },
+        { key: "C", text: "c" },
+        { key: "D", text: "d" },
+      ] as unknown as CreateQuestionData["options"],
+      correctAnswer: "A",
+    });
+    expect(validateQuestionContent(ok)).toBeNull();
+  });
+  it("acepta enunciado con solo tabla", () => {
+    const tableOnly = {
+      type: "doc",
+      content: [{ type: "table", content: [{ type: "tableRow", content: [] }] }],
+    };
+    expect(validateQuestionContent(question({ text: tableOnly as unknown as string }))).toBeNull();
+  });
+  it("sigue rechazando enunciado EMPTY_DOC", () => {
+    // Sanity check: el cambio no abre la puerta a TipTaps realmente
+    // vacíos ({type:"doc",content:[{type:"paragraph"}]} típico de
+    // TipTap al inicializar).
+    const emptyDoc = { type: "doc", content: [{ type: "paragraph" }] };
+    expect(
+      validateQuestionContent(question({ text: emptyDoc as unknown as string })),
+    ).not.toBeNull();
+  });
 });
 
 describe("AddQuestion — regresión opciones con texto plano (rich() bug)", () => {

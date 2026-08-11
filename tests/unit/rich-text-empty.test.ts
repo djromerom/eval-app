@@ -97,14 +97,52 @@ describe("isTipTapEmpty", () => {
     ).toBe(false);
   });
 
-  it("doc con solo imagen (sin caption) → vacío", () => {
-    // Decisión: el enunciado debe tener texto. Imagen sola no cuenta.
+  it("doc con solo imagen (sin caption) → NO vacío", () => {
+    // ago 2026: pedido del docente, "permite guardar si hay solo
+    // imagenes". Una imagen es contenido renderizable válido aunque no
+    // tenga texto acompañante (la impresión la muestra tal cual).
     expect(
       isTipTapEmpty({
         type: "doc",
         content: [{ type: "paragraph", content: [{ type: "image", attrs: { src: "x" } }] }],
       }),
-    ).toBe(true);
+    ).toBe(false);
+  });
+
+  it("doc con imagen a nivel top-level (sin paragraph) → NO vacío", () => {
+    expect(
+      isTipTapEmpty({
+        type: "doc",
+        content: [{ type: "image", attrs: { src: "x" } }],
+      }),
+    ).toBe(false);
+  });
+
+  it("doc con solo tabla → NO vacío", () => {
+    expect(
+      isTipTapEmpty({
+        type: "doc",
+        content: [{ type: "table", content: [] }],
+      }),
+    ).toBe(false);
+  });
+
+  it("doc con solo blockMath → NO vacío", () => {
+    expect(
+      isTipTapEmpty({
+        type: "doc",
+        content: [{ type: "blockMath", attrs: { latex: "x^2" } }],
+      }),
+    ).toBe(false);
+  });
+
+  it("doc con solo heading → NO vacío", () => {
+    expect(
+      isTipTapEmpty({
+        type: "doc",
+        content: [{ type: "heading", attrs: { level: 3 } }],
+      }),
+    ).toBe(false);
   });
 
   it("objeto sin content ni text → vacío", () => {
