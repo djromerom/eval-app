@@ -1666,6 +1666,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     formRef={questionFormRef}
                     initial={editingInitial()}
                     createLabel="Agregar enunciado"
+                    hideSubmit={true}
                     extraActionsLeft={
                       // "Nuevo contexto" aparece cuando aparece el botón
                       // "Editar contexto" del bloque Contexto. Reusamos

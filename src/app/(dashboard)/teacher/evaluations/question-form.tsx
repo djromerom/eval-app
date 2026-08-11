@@ -191,6 +191,7 @@ export function QuestionForm({
   createLabel = "Agregar pregunta",
   extraActions,
   extraActionsLeft,
+  hideSubmit,
   overrideAction,
   formRef,
   clearCorrectAfterSave = false,
@@ -259,6 +260,13 @@ export function QuestionForm({
    *  contenedor mantiene `justify-end` legacy para no afectar a las
    *  demás vistas. */
   extraActionsLeft?: React.ReactNode;
+  /** Oculta el botón submit (SubmitButton). El editor unificado lo pasa
+   *  `true` en modo creación para no mostrar "Agregar enunciado" (ago
+   *  2026, pedido del docente: "oculta 'Agregar enunciado' por ahora no
+   *  lo vamos a usar mas"). En modo edición el submit sigue mostrándose
+   *  (label "Guardar cambios") porque es el único camino para persistir
+   *  cambios sobre una pregunta existente. */
+  hideSubmit?: boolean;
   /** Si se pasa, REEMPLAZA el action interno del form. El editor unificado
    *  lo usa para orquestar contexto + pregunta en una sola invocación
    *  (p.ej. "Agregar enunciado" crea/renombra la sección Y guarda el ítem
@@ -722,7 +730,7 @@ export function QuestionForm({
         >
           {extraActionsLeft}
           <div className="flex flex-wrap items-center gap-2">
-            <SubmitButton editing={editing} createLabel={createLabel} />
+            {!hideSubmit && <SubmitButton editing={editing} createLabel={createLabel} />}
             {extraActions}
           </div>
         </div>
