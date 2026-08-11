@@ -1593,12 +1593,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     formRef={questionFormRef}
                     initial={editingInitial()}
                     createLabel="Agregar enunciado"
-                    // "Nuevo contexto" va en `leadingAction` (ago 2026,
-                    // pedido del docente: "en la punta izquierda") → se
-                    // renderiza ANTES del submit "Agregar enunciado".
-                    // En edición de ítem no aplica (no tiene sentido
-                    // cambiar de contexto sobre una pregunta existente).
-                    leadingAction={
+                    extraActionsLeft={
                       editingQuestionId ? null : (
                         <Button
                           type="button"
@@ -1614,6 +1609,15 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         </Button>
                       )
                     }
+                    // "Nuevo contexto" va en `extraActionsLeft` (slot
+                    // izquierdo del `flex justify-between` de la fila de
+                    // acciones). Así comparte FILA HORIZONTAL con submit/
+                    // Guardar/Cancelar pero queda a la IZQUIERDA, "al
+                    // principio" como pidió el docente (ago 2026:
+                    // "que aparezca a principio pero en la misma linea
+                    // horizontal de los demas botones"). En edición de
+                    // ítem no aplica (no tiene sentido cambiar de contexto
+                    // sobre una pregunta existente).
                     // Tras "Agregar enunciado" (y "Nuevo contexto", que
                     // reutiliza el mismo submit vía overrideAction) el
                     // docente debe re-elegir la CLAVE en la siguiente
@@ -2136,17 +2140,20 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       }
                     }}
                     // Una sola cadena de acciones a la derecha del submit:
-                    // [Guardar] [Cancelar]. "Nuevo contexto" ya no vive
-                    // aquí: pasó a `leadingAction` para quedar en la punta
-                    // izquierda de la fila (ago 2026, pedido del docente).
+                    // [Guardar] [Cancelar]. "Nuevo contexto" se renderiza
+                    // en `extraActionsLeft` (la contraparte izquierda de
+                    // este slot) para alinearse horizontalmente con submit/
+                    // Guardar/Cancelar pero a la IZQUIERDA. Pedido del
+                    // docente (ago 2026: "que aparezca a principio pero en
+                    // la misma linea horizontal de los demas botones").
                     //
                     // - "Guardar" y "Cancelar" se muestran SIEMPRE — incluso
                     //   en creación, donde "Guardar" reusa el submit del form
                     //   (atajo equivalente al botón principal) y "Cancelar"
                     //   limpia los borradores sin guardar.
                     //
-                    // Orden final de la fila:
-                    //   [Nuevo contexto?] [Agregar enunciado] [Guardar] [Cancelar]
+                    // Orden final de la fila (alineado por `justify-between`):
+                    //   [Nuevo contexto?]    [Agregar enunciado] [Guardar] [Cancelar]
                     // donde "Nuevo contexto" solo aparece en modo creación.
                     extraActions={
                       <>

@@ -189,7 +189,7 @@ export function QuestionForm({
   onDone,
   createLabel = "Agregar pregunta",
   extraActions,
-  leadingAction,
+  extraActionsLeft,
   overrideAction,
   formRef,
   clearCorrectAfterSave = false,
@@ -222,14 +222,16 @@ export function QuestionForm({
    *  al lado del submit "Agregar enunciado". Las otras vistas lo dejan
    *  `undefined`. */
   extraActions?: React.ReactNode;
-  /** Acción que se renderiza al INICIO del formulario, justo debajo de
-   *  la fila de gestión de opciones (`+ Opción` / `− Opción` / "N de M
-   *  opciones") (ago 2026, pedido del docente: "al inicio del form
-   *  debajo de los botones opción"). Lo usa el editor unificado para
-   *  poner el botón "Nuevo contexto" ahí, separado del submit principal
-   *  por todo el cuerpo del formulario. Las otras vistas lo dejan
-   *  `undefined`. */
-  leadingAction?: React.ReactNode;
+  /** Acción que se renderiza al PRINCIPIO de la fila de acciones (extremo
+   *  IZQUIERDO, opuesto a submit/cancel). Sigue siendo la MISMA FILA
+   *  HORIZONTAL: cuando se pasa, el contenedor pasa a `justify-between`
+   *  para empujar submit+Guardar+Cancelar a la derecha. Lo usa el editor
+   *  unificado para el botón "Nuevo contexto" (ago 2026, pedido del
+   *  docente: "que aparezca a principio pero en la misma linea
+   *  horizontal de los demas botones"). Cuando NO se pasa, el
+   *  contenedor mantiene `justify-end` legacy para no afectar a las
+   *  demás vistas. */
+  extraActionsLeft?: React.ReactNode;
   /** Si se pasa, REEMPLAZA el action interno del form. El editor unificado
    *  lo usa para orquestar contexto + pregunta en una sola invocación
    *  (p.ej. "Agregar enunciado" crea/renombra la sección Y guarda el ítem
@@ -571,13 +573,6 @@ export function QuestionForm({
             {optionCount} de {maxOptions} opciones
           </span>
         </div>
-        {/* Slot `leadingAction`: acción que el padre quiere mostrar al
-            inicio del form, justo debajo de la fila de gestión de
-            opciones (ago 2026, pedido del docente: "al inicio del form
-            debajo de los botones opción"). Lo usa el editor unificado
-            para el botón "Nuevo contexto". Lo demás del form (clave,
-            metadatos) sigue después. */}
-        {leadingAction}
 
         <div className="flex flex-wrap items-end gap-3">
           {/* Campo Nivel SOLO oculto temporalmente — el backend sigue aceptando el
@@ -648,9 +643,22 @@ export function QuestionForm({
             {clientError ?? state.error}
           </p>
         ) : null}
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <SubmitButton editing={editing} createLabel={createLabel} />
-          {extraActions}
+        {/* Fila de acciones del form. Cuando el padre pasa
+            `extraActionsLeft` (slot izquierdo, p.ej. "Nuevo contexto"),
+            usamos `justify-between` para empujar submit/extraActions a la
+            DERECHA y dejar el slot alineado al EXTREMO IZQUIERDO — todo
+            en la MISMA fila horizontal. Sin slot izquierdo, mantenemos
+            `justify-end` (legacy) para no afectar a las otras vistas.
+            (ago 2026, pedido del docente: "que aparezca a principio
+            pero en la misma linea horizontal de los demas botones"). */}
+        <div
+          className={`flex flex-wrap items-center gap-2 ${extraActionsLeft ? "justify-between" : "justify-end"}`}
+        >
+          {extraActionsLeft}
+          <div className="flex flex-wrap items-center gap-2">
+            <SubmitButton editing={editing} createLabel={createLabel} />
+            {extraActions}
+          </div>
         </div>
       </form>
       <AlertDialog open={showMissingKeyDialog} onOpenChange={setShowMissingKeyDialog}>
