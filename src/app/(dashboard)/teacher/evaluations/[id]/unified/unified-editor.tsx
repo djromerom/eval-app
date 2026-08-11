@@ -1593,6 +1593,27 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     formRef={questionFormRef}
                     initial={editingInitial()}
                     createLabel="Agregar enunciado"
+                    // "Nuevo contexto" va en `leadingAction` (ago 2026,
+                    // pedido del docente: "en la punta izquierda") → se
+                    // renderiza ANTES del submit "Agregar enunciado".
+                    // En edición de ítem no aplica (no tiene sentido
+                    // cambiar de contexto sobre una pregunta existente).
+                    leadingAction={
+                      editingQuestionId ? null : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="default"
+                          disabled={!data.editable || actionStatus === "saving"}
+                          title="Crea un nuevo contexto y guarda aquí el enunciado + opciones que estés escribiendo"
+                          onClick={() => {
+                            void handleNewContextWithQuestion();
+                          }}
+                        >
+                          Nuevo contexto
+                        </Button>
+                      )
+                    }
                     // Tras "Agregar enunciado" (y "Nuevo contexto", que
                     // reutiliza el mismo submit vía overrideAction) el
                     // docente debe re-elegir la CLAVE en la siguiente
@@ -2115,33 +2136,20 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       }
                     }}
                     // Una sola cadena de acciones a la derecha del submit:
-                    // [Nuevo contexto?] [Guardar?] [Cancelar?]. Las dos últimas
-                    // solo se muestran en modo edición; Nuevo contexto solo en
-                    // modo creación. Resultado final:
-                    // Orden fijo a la derecha del submit:
-                    //   [Agregar enunciado] [Nuevo contexto] [Guardar] [Cancelar]
-                    // - "Nuevo contexto" solo se muestra en modo creación
-                    //   (en edición no tiene sentido cambiar de contexto).
+                    // [Guardar] [Cancelar]. "Nuevo contexto" ya no vive
+                    // aquí: pasó a `leadingAction` para quedar en la punta
+                    // izquierda de la fila (ago 2026, pedido del docente).
+                    //
                     // - "Guardar" y "Cancelar" se muestran SIEMPRE — incluso
                     //   en creación, donde "Guardar" reusa el submit del form
                     //   (atajo equivalente al botón principal) y "Cancelar"
                     //   limpia los borradores sin guardar.
+                    //
+                    // Orden final de la fila:
+                    //   [Nuevo contexto?] [Agregar enunciado] [Guardar] [Cancelar]
+                    // donde "Nuevo contexto" solo aparece en modo creación.
                     extraActions={
                       <>
-                        {editingQuestionId ? null : (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="default"
-                            disabled={!data.editable || actionStatus === "saving"}
-                            title="Crea un nuevo contexto y guarda aquí el enunciado + opciones que estés escribiendo"
-                            onClick={() => {
-                              void handleNewContextWithQuestion();
-                            }}
-                          >
-                            Nuevo contexto
-                          </Button>
-                        )}
                         <Button
                           type="submit"
                           size="sm"

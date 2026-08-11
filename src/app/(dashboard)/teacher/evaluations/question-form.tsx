@@ -189,6 +189,7 @@ export function QuestionForm({
   onDone,
   createLabel = "Agregar pregunta",
   extraActions,
+  leadingAction,
   overrideAction,
   formRef,
   clearCorrectAfterSave = false,
@@ -217,9 +218,16 @@ export function QuestionForm({
    *  editor unificado) lo pasan por aquí sin tocar a las demás. */
   createLabel?: string;
   /** Acciones extra que se renderizan a la IZQUIERDA del submit, en la misma
-   *  fila. Lo usa el editor unificado para poner "Nuevo contexto" al lado
-   *  de "Agregar enunciado". Las otras vistas lo dejan `undefined`. */
+   *  fila. Lo usa el editor unificado para poner "Guardar" y "Cancelar"
+   *  al lado del submit "Agregar enunciado". Las otras vistas lo dejan
+   *  `undefined`. */
   extraActions?: React.ReactNode;
+  /** Acción que se renderiza a la IZQUIERDA del submit, ANTES incluso de
+   *  `extraActions` (ago 2026, pedido del docente: "Nuevo contexto" en la
+   *  punta izquierda). Lo usa el editor unificado para empujar ese botón
+   *  al primer puesto de la fila, separado del submit por nada. Las
+   *  otras vistas lo dejan `undefined`. */
+  leadingAction?: React.ReactNode;
   /** Si se pasa, REEMPLAZA el action interno del form. El editor unificado
    *  lo usa para orquestar contexto + pregunta en una sola invocación
    *  (p.ej. "Agregar enunciado" crea/renombra la sección Y guarda el ítem
@@ -632,6 +640,7 @@ export function QuestionForm({
           </p>
         ) : null}
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {leadingAction}
           <SubmitButton editing={editing} createLabel={createLabel} />
           {extraActions}
         </div>
