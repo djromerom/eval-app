@@ -222,13 +222,13 @@ export function QuestionForm({
    *  al lado del submit "Agregar enunciado". Las otras vistas lo dejan
    *  `undefined`. */
   extraActions?: React.ReactNode;
-  /** Acción que se renderiza al INICIO del formulario, justo debajo de
-   *  la fila de gestión de opciones (`+ Opción` / `− Opción` / "N de M
-   *  opciones") (ago 2026, pedido del docente: "al inicio del form
-   *  debajo de los botones opción"). Lo usa el editor unificado para
-   *  poner el botón "Nuevo contexto" ahí, separado del submit principal
-   *  por todo el cuerpo del formulario. Las otras vistas lo dejan
-   *  `undefined`. */
+  /** Acción que se renderiza en la FILA INFERIOR de acciones,
+   *  inmediatamente a la izquierda del submit y antes de `extraActions`
+   *  (ago 2026, pedido del docente: "Nuevo contexto alineado con los
+   *  botones Agregar enunciado, Guardar, Cancelar"). Lo usa el editor
+   *  unificado para que el botón "Nuevo contexto" quede visualmente
+   *  agrupado con los demás botones de envío, todos en la misma fila
+   *  derecha. Las otras vistas lo dejan `undefined`. */
   leadingAction?: React.ReactNode;
   /** Si se pasa, REEMPLAZA el action interno del form. El editor unificado
    *  lo usa para orquestar contexto + pregunta en una sola invocación
@@ -571,13 +571,6 @@ export function QuestionForm({
             {optionCount} de {maxOptions} opciones
           </span>
         </div>
-        {/* Slot `leadingAction`: acción que el padre quiere mostrar al
-            inicio del form, justo debajo de la fila de gestión de
-            opciones (ago 2026, pedido del docente: "al inicio del form
-            debajo de los botones opción"). Lo usa el editor unificado
-            para el botón "Nuevo contexto". Lo demás del form (clave,
-            metadatos) sigue después. */}
-        {leadingAction}
 
         <div className="flex flex-wrap items-end gap-3">
           {/* Campo Nivel SOLO oculto temporalmente — el backend sigue aceptando el
@@ -649,6 +642,7 @@ export function QuestionForm({
           </p>
         ) : null}
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {leadingAction}
           <SubmitButton editing={editing} createLabel={createLabel} />
           {extraActions}
         </div>
