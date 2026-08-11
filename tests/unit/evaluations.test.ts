@@ -426,6 +426,61 @@ describe("validateQuestionShape", () => {
   it("acepta enunciado y opciones no vacíos", () => {
     expect(validateQuestionContent(question())).toBeNull();
   });
+  // Regresión ago 2026: si `rich()` en actions.ts convierte el valor de
+  // un `<Input>` plano a primitivo (number/boolean/null) antes de llegar
+  // aquí, la validación falla aunque el docente haya tipeado contenido.
+  // Contrato: cuando el docente tipea "1" en una opción plana, el valor
+  // que llega al use case debe ser la STRING "1", no el NUMBER 1.
+  // richTextToPlain solo extrae texto de strings/objetos; primitives
+  // (number, boolean, null) devuelven "" → falla la validación.
+  it("acepta opciones con texto numérico como string (regresión rich()+JSON.parse)", () => {
+    const good = question({
+      text: "¿Cuánto es 2+2?",
+      options: [
+        { key: "A", text: "1" }, // string "1" (lo que produce el <Input> plano)
+        { key: "B", text: "2" },
+        { key: "C", text: "3" },
+        { key: "D", text: "4" },
+      ],
+    });
+    expect(validateQuestionContent(good)).toBeNull();
+  });
+  it("rechaza opciones con texto numérico como primitivo (bug surface)", () => {
+    // Esto es lo que ANTES del fix se le escapaba al use case cuando el
+    // docente tipeaba "1" en un <Input> plano: rich() convertía "1" a 1
+    // vía JSON.parse. Mantenemos el test para que cualquier cambio que
+    // reintroduzca el primitivo en la frontera sea visible.
+    const bad = question({
+      text: "¿Cuánto es 2+2?",
+      options: [
+        { key: "A", text: 1 as unknown as string }, // primitivo number (lo que NO debe llegar)
+        { key: "B", text: "2" },
+        { key: "C", text: "3" },
+        { key: "D", text: "4" },
+      ],
+    });
+    expect(validateQuestionContent(bad)).not.toBeNull();
+  });
+  it("rechaza opciones con texto boolean/null como primitivo (mismo bug surface)", () => {
+    const badTrue = question({
+      options: [
+        { key: "A", text: true as unknown as string }, // primitivo boolean
+        { key: "B", text: "b" },
+        { key: "C", text: "c" },
+        { key: "D", text: "d" },
+      ],
+    });
+    expect(validateQuestionContent(badTrue)).not.toBeNull();
+    const badNull = question({
+      options: [
+        { key: "A", text: null as unknown as string },
+        { key: "B", text: "b" },
+        { key: "C", text: "c" },
+        { key: "D", text: "d" },
+      ],
+    });
+    expect(validateQuestionContent(badNull)).not.toBeNull();
+  });
 });
 
 describe("CreateEvaluation", () => {
