@@ -1293,24 +1293,34 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                 {/* Botones de gestión del bloque Contexto (ago 2026).
                   Tres estados visuales mutuamente excluyentes:
                     (a) Edición de pregunta existente con contexto BLOQUEADO
-                        (editingQuestionId && !editingContext) → botón único
-                        "Editar contexto" para que el docente desbloquee.
-                    (b) Edición de pregunta existente con contexto DESBLOQUEADO
-                        (editingQuestionId && editingContext) o flujo normal
-                        (!editingQuestionId) → "Actualizar/Cancelar" gated por
-                        diff real entre drafts y sección persistida.
-                    (c) Cualquier otro caso (sección vacía, no editable, sin
-                        diff) → nada.
+                        (editingQuestionId && !editingContext) O contexto recién
+                        guardado (!editingContext && contextSaved) → botón
+                        único "Editar contexto" para que el docente desbloquee
+                        los inputs.
+                    (b) editingContext=true → "Actualizar/Cancelar" aparecen
+                        inmediatamente, sin esperar a que el docente tipee
+                        (ago 2026, pedido del docente) y sin importar si la
+                        sección persistida tiene contenido previo (la sección
+                        placeholder de "Sin contexto" cae aquí — antes los
+                        botones quedaban ocultos por el guard
+                        `sectionHasSavedContent` y el docente no podía
+                        guardar el contexto recién tipeado).
+                    (c) Cualquier otro caso (no editable, contexto bloqueado
+                        sin click previo) → nada.
 
                   Por qué el botón (a) existe solo en modo edición de
-                  pregunta: en el flujo normal "Mis formulaciones"
-                  (b7bb2c7) los inputs nacen habilitados por default para
-                  no forzar al docente a pulsar una entrada extra. Pero al
-                  EDITAR una pregunta, los inputs sí están bloqueados
-                  (riesgo de cambios accidentales sobre el contexto del
-                  ítem mientras el docente solo quería editar el
-                  enunciado), y entonces necesitamos el botón explícito
-                  para entrar al modo edición del contexto. */}
+                  pregunta o tras un guardado: en el flujo normal "Mis
+                  formulaciones" (b7bb2c7) los inputs nacen habilitados
+                  por default para no forzar al docente a pulsar una
+                  entrada extra. Pero al EDITAR una pregunta, los inputs
+                  sí están bloqueados (riesgo de cambios accidentales
+                  sobre el contexto del ítem mientras el docente solo
+                  quería editar el enunciado), y entonces necesitamos el
+                  botón explícito para entrar al modo edición del
+                  contexto. Mismo caso tras un guardado reciente:
+                  `contextSaved=true` bloquea los inputs hasta que el
+                  docente decida explícitamente tocar el contexto de
+                  nuevo. */}
                 {(() => {
                   const targetSection =
                     targetSectionId === null
@@ -1328,32 +1338,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   const draftContentPlain = richTextToPlain(draftSectionContent).trim();
                   const sectionContentPlain = richTextToPlain(targetSection?.content).trim();
                   const contentChanged = draftContentPlain !== sectionContentPlain;
-
-                  // La sección destino debe tener contenido REAL guardado
-                  // para que los botones de Actualizar/Cancelar tengan
-                  // sentido (ago 2026). Si el `targetSection` existe
-                  // (tiene id) pero está vacío (sin título ni contenido
-                  // JSON), el docente NO está editando un contexto
-                  // existente: el "contexto es nulo" desde la perspectiva
-                  // del bloque. Aunque tipee, el resultado de "Agregar
-                  // enunciado" será crear una sección nueva (vía la rama
-                  // `else` del overrideAction en
-                  // unified-editor.tsx:1525), no actualizar una vacía.
-                  // Mostrar "Actualizar contexto" en ese caso sería
-                  // engañoso: actualizaría una sección vacía para ponerle
-                  // contenido nuevo, lo cual NO es la intención — el
-                  // docente está construyendo un contexto fresh.
-                  //
-                  // Comprobamos: targetSection.title.trim() !== "" OR
-                  // targetSection.content no es null/vacío según
-                  // isTipTapEmpty. La sección placeholder auto-creada por
-                  // StrictMode cae aquí (sin título y sin contenido).
-                  const sectionHasSavedContent =
-                    targetSection !== null &&
-                    (sectionTitleTrimmed !== "" ||
-                      (targetSection.content !== null &&
-                        targetSection.content !== undefined &&
-                        !isTipTapEmpty(targetSection.content)));
 
                   // (a) Edición de pregunta + contexto bloqueado, O
                   // contexto recién guardado → botón "Editar contexto".
@@ -1430,12 +1414,21 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   //      explícitamente el botón "Editar contexto" del
                   //      bloque Contexto. Sin ese click, los botones
                   //      permanecen ocultos.
-                  //   3. Hay un targetSection con contenido real
-                  //      guardado. Si la sección destino está vacía,
-                  //      los botones no aplican (sería una creación, no
-                  //      actualización).
                   //
-                  // Antes se pedía también `contextoDirty` y diff real
+                  // ANTES se pedía también `sectionHasSavedContent`: si
+                  // la sección destino estaba vacía (caso típico de
+                  // "Sin contexto" — el placeholder auto-creado por el
+                  // modo sin-contexto tiene title=null y content=null),
+                  // los botones quedaban ocultos incluso después de
+                  // pulsar "Editar contexto" y tipear. El docente no
+                  // tenía forma de persistir el contexto recién tipeado
+                  // sobre la sección placeholder. Bug reportado en ago
+                  // 2026: "editar contexto no está funcionando
+                  // normalmente trata de mostrar los botones de
+                  // actualizar contexto y cancelar contexto pero no lo
+                  // consigue".
+                  //
+                  // También se pedía antes `contextoDirty` y diff real
                   // (`titleChanged || contentChanged`). El docente
                   // pidió (ago 2026) que los botones aparezcan
                   // INMEDIATAMENTE al pulsar "Editar contexto", sin
@@ -1445,8 +1438,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   // mismo estado), lo cual es inofensivo. Si pulsa
                   // "Cancelar cambios", los drafts revierten al estado
                   // persistido sin tocar el servidor.
-                  const showUpdateContextButton =
-                    data.editable && editingContext && sectionHasSavedContent;
+                  const showUpdateContextButton = data.editable && editingContext;
                   if (!showUpdateContextButton) return null;
 
                   // Mensaje de confirmación específico según QUÉ cambió.
@@ -1617,9 +1609,9 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         : draftSectionTitle.trim();
                       const orchestratorContentRaw = sectionFormFd
                         ? String(sectionFormFd.get("content") ?? "")
-                        : (draftSectionContent
-                            ? JSON.stringify(draftSectionContent)
-                            : "");
+                        : draftSectionContent
+                          ? JSON.stringify(draftSectionContent)
+                          : "";
                       let orchestratorContent: unknown = null;
                       if (orchestratorContentRaw) {
                         try {
