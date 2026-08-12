@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { isTipTapEmpty } from "@/components/editor/rich-text-empty";
 import { richTextToPlain } from "@/components/editor/render";
+import { RichTextInline } from "@/components/editor/rich-text";
 import { DownloadPdfButton } from "../download-pdf-button";
 import { QuestionForm, type QuestionInitialValues } from "../../question-form";
 import {
@@ -1264,169 +1265,200 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
             (título + TipTap del contexto + botones Actualizar/Cancelar
             del contexto). El ítem que se guarde a continuación no
             tendrá contexto. */}
-            {!noContextMode ? (
-              <section className="space-y-2 border-b pb-4">
-                <h3 className="font-display flex items-center gap-1.5 text-sm font-semibold">
-                  Contexto
-                  <span ref={contextInfoRef} className="relative inline-block">
-                    <button
-                      type="button"
-                      onClick={() => setIsContextInfoOpen((o) => !o)}
-                      className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-5 w-5 items-center justify-center rounded-full transition-colors"
-                      aria-label="Más información sobre el contexto"
-                      aria-expanded={isContextInfoOpen}
-                    >
-                      <Info className="h-3.5 w-3.5" />
-                    </button>
-                    {isContextInfoOpen ? (
-                      <div
-                        role="tooltip"
-                        className="bg-popover text-popover-foreground absolute top-full left-0 z-20 mt-2 w-72 rounded-md border p-3 text-xs leading-relaxed shadow-md"
+            {/* En edición de un ítem cuyo contexto es "tipo ninguno" (sin
+                sección o con sección sin título), ocultamos el bloque
+                Contexto ENTERO (ago 2026, pedido del docente). El docente
+                ve solo el bloque "Enunciado / Opciones" del QuestionForm.
+                Si quiere darle contexto al ítem desde aquí, debe hacerlo
+                desde la tabla resumen (cambiando la sección del ítem o
+                creando un contexto con título). Ocultamos el `<section>`
+                completo — el form con `name="title"` y `name="content"`
+                se retira del DOM y no se serializa vacío al submit.
+
+                Adicional (ago 2026, pedido del docente): cuando se edita
+                un ítem con contexto "Comun"/"Especifico", ocultamos el
+                botón "Nuevo contexto". La bifurcación a un contexto
+                paralelo no aplica sobre un ítem existente que ya tiene
+                contexto — sería contradictorio (se descarta el contexto
+                actual). En creación, "Nuevo contexto" sigue apareciendo
+                como antes para que el docente pueda poblar el bloque. */}
+            {(() => {
+              const hideContextoEditor =
+                editingQuestionId !== null &&
+                contextLabel(
+                  { id: editingQuestionId, sectionId: targetSectionId ?? "" },
+                  data.sections,
+                ).kind === "Ninguno";
+              // "Nuevo contexto" solo aparece cuando NO estamos editando
+              // un ítem con contexto "Comun"/"Especifico". En edición de
+              // un ítem sin contexto (`hideContextoEditor=true`) el botón
+              // también "aparecería" pero el bloque entero está oculto
+              // por la condición de arriba, así que es irrelevante.
+              const showNewContextButton =
+                showEditContextButton && (editingQuestionId === null || hideContextoEditor);
+              return !noContextMode && !hideContextoEditor ? (
+                <section className="space-y-2 border-b pb-4">
+                  <h3 className="font-display flex items-center gap-1.5 text-sm font-semibold">
+                    Contexto
+                    <span ref={contextInfoRef} className="relative inline-block">
+                      <button
+                        type="button"
+                        onClick={() => setIsContextInfoOpen((o) => !o)}
+                        className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-5 w-5 items-center justify-center rounded-full transition-colors"
+                        aria-label="Más información sobre el contexto"
+                        aria-expanded={isContextInfoOpen}
                       >
-                        <p>
-                          Este campo es opcional, siempre y cuando no haya diligenciado el campo
-                          anterior de título. Ingrese aquí un texto, gráfica, tabla, formula y/o
-                          diagrama, en caso que se requiera de esta información previa para enmarcar
-                          la evaluación del ítem. Este componente garantiza que el ítem evalúe el
-                          saber-hacer en contexto y no la simple memorización.
-                        </p>
-                      </div>
-                    ) : null}
-                  </span>
-                </h3>
-                {/* Form real para "Nuevo contexto" (mismo patrón que
+                        <Info className="h-3.5 w-3.5" />
+                      </button>
+                      {isContextInfoOpen ? (
+                        <div
+                          role="tooltip"
+                          className="bg-popover text-popover-foreground absolute top-full left-0 z-20 mt-2 w-72 rounded-md border p-3 text-xs leading-relaxed shadow-md"
+                        >
+                          <p>
+                            Este campo es opcional, siempre y cuando no haya diligenciado el campo
+                            anterior de título. Ingrese aquí un texto, gráfica, tabla, formula y/o
+                            diagrama, en caso que se requiera de esta información previa para
+                            enmarcar la evaluación del ítem. Este componente garantiza que el ítem
+                            evalúe el saber-hacer en contexto y no la simple memorización.
+                          </p>
+                        </div>
+                      ) : null}
+                    </span>
+                  </h3>
+                  {/* Form real para "Nuevo contexto" (mismo patrón que
               `section-form.tsx`). Lo usa tanto el botón de esta sección
               (cuando !targetSectionId) como el botón que vive dentro del
               `extraActions` del QuestionForm (atributo HTML5 `form=`). El
               input del título es no-controlado con `name="title"` para que
               el submit nativo incluya el valor; `defaultValue` lo precarga
               con el state por si el docente está editando. */}
-                <form
-                  ref={newSectionFormRef}
-                  id="new-section-form"
-                  action={handleAddOrRenameSection}
-                  onSubmit={(e) => {
-                    // Validación local: título o contenido deben estar presentes.
-                    // Si falta ambos, evitamos el viaje al servidor cortando en
-                    // `handleAddOrRenameSection` (que retorna temprano). El
-                    // preventDefault acá evita disparar el action inválido.
-                    const fd = new FormData(e.currentTarget);
-                    const title = String(fd.get("title") ?? "").trim();
-                    const content = String(fd.get("content") ?? "");
-                    if (!title && !content) {
-                      e.preventDefault();
-                      setFormError(
-                        "Define al menos el título o el contenido del contexto antes de crearlo.",
-                      );
-                      return;
-                    }
-                    setFormError(null);
-                    setActionStatus("saving");
-                  }}
-                  onChange={() => {
-                    // Mientras el docente edita el título o el contenido, limpiamos
-                    // el indicador de "guardado" y el error para que no quede
-                    // stale de un envío anterior.
-                    if (actionStatus !== "idle") setActionStatus("idle");
-                    if (formError) setFormError(null);
-                  }}
-                >
-                  <input type="hidden" name="evaluationId" value={data.evaluationId} />
-                  <Input
-                    key={
-                      editingQuestionId
-                        ? `edit-title-${editingQuestionId}-${targetSectionId ?? "none"}`
-                        : `new-section-title-${newSectionRenderKey}`
-                    }
-                    name="title"
-                    placeholder="Título de contexto (opcional)"
-                    defaultValue={draftSectionTitle}
-                    // Mantenemos `draftSectionTitle` en sync para que el banner de
-                    // edición y la validación lean el valor actual; pero el form
-                    // nativo usa `name="title"` y el DOM como fuente de verdad al
-                    // enviar. La key cambia en modo edición para forzar el
-                    // remount y que el `defaultValue` se aplique al precargar
-                    // el contexto de la pregunta editada.
-                    onChange={(e) => {
-                      setDraftSectionTitle(e.target.value);
-                      // El docente volvió a tipear tras un "Nuevo contexto":
-                      // re-habilitamos la lógica normal de asignación de
-                      // targetSectionId en el effect. Si NO limpiáramos el
-                      // flag, jamás volvería a apuntar a una sección
-                      // existente al tipear (quedaría huérfano de cualquier
-                      // contexto para siempre).
-                      if (justCreatedContextRef.current) {
-                        justCreatedContextRef.current = false;
+                  <form
+                    ref={newSectionFormRef}
+                    id="new-section-form"
+                    action={handleAddOrRenameSection}
+                    onSubmit={(e) => {
+                      // Validación local: título o contenido deben estar presentes.
+                      // Si falta ambos, evitamos el viaje al servidor cortando en
+                      // `handleAddOrRenameSection` (que retorna temprano). El
+                      // preventDefault acá evita disparar el action inválido.
+                      const fd = new FormData(e.currentTarget);
+                      const title = String(fd.get("title") ?? "").trim();
+                      const content = String(fd.get("content") ?? "");
+                      if (!title && !content) {
+                        e.preventDefault();
+                        setFormError(
+                          "Define al menos el título o el contenido del contexto antes de crearlo.",
+                        );
+                        return;
                       }
+                      setFormError(null);
+                      setActionStatus("saving");
                     }}
-                    // Input HABILITADO por defecto (ago 2026): el docente
-                    // pidió tipear libremente sobre una formulación
-                    // existente desde "Mis formulaciones" sin verse forzado
-                    // a pulsar un botón "Editar contexto" primero. Solo se
-                    // bloquea cuando la evaluación no es editable, o cuando
-                    // el contexto está en estado "guardado/bloqueado" SIN
-                    // haber pulsado "Editar contexto" (puede ser por un
-                    // guardado previo reciente, `contextSaved=true`, o por
-                    // estar editando una pregunta existente sin unlock).
-                    // Al pulsar "Editar contexto" → `editingContext=true` →
-                    // ambos términos se desactivan → inputs habilitados.
-                    // (ago 2026, pedido del docente: "después de darle
-                    // editar contexto debe habilitar el titulo y el tiptap
-                    // del contexto").
-                    disabled={
-                      !data.editable ||
-                      (!editingContext && (contextSaved || editingQuestionId !== null))
-                    }
-                    className="max-w-md"
-                  />
-                  <div className="mt-2">
-                    <label className="text-muted-foreground mb-1 block text-xs font-medium">
-                      Contenido del contexto (opcional)
-                    </label>
-                    <RichTextEditor
-                      // Key dependiente del modo: cuando entramos a editar un
-                      // ítem (startEdit), draftSectionContent pasa de null al
-                      // JSON real de la sección, pero TipTap solo lee
-                      // `defaultValue` en mount. Sin remontar el editor, el
-                      // "Contenido del contexto (opcional)" seguiría vacío al
-                      // editar. Usamos una key distinta en modo edición para
-                      // forzar el remount.
+                    onChange={() => {
+                      // Mientras el docente edita el título o el contenido, limpiamos
+                      // el indicador de "guardado" y el error para que no quede
+                      // stale de un envío anterior.
+                      if (actionStatus !== "idle") setActionStatus("idle");
+                      if (formError) setFormError(null);
+                    }}
+                  >
+                    <input type="hidden" name="evaluationId" value={data.evaluationId} />
+                    <Input
                       key={
                         editingQuestionId
-                          ? `edit-question-${editingQuestionId}-${targetSectionId ?? "none"}`
-                          : `new-section-content-${newSectionRenderKey}`
+                          ? `edit-title-${editingQuestionId}-${targetSectionId ?? "none"}`
+                          : `new-section-title-${newSectionRenderKey}`
                       }
-                      name="content"
-                      defaultValue={draftSectionContent}
-                      onChange={(json) => {
-                        setDraftSectionContent(json);
-                        // Mismo rationale que el onChange del título: el
-                        // docente volvió a tipear → re-habilitamos la
-                        // asignación automática de targetSectionId en el
-                        // effect (siguiente render). Sin esto, el flag
-                        // quedaría pegado y targetSectionId nunca volvería
-                        // a apuntar a una sección existente.
+                      name="title"
+                      placeholder="Título de contexto (opcional)"
+                      defaultValue={draftSectionTitle}
+                      // Mantenemos `draftSectionTitle` en sync para que el banner de
+                      // edición y la validación lean el valor actual; pero el form
+                      // nativo usa `name="title"` y el DOM como fuente de verdad al
+                      // enviar. La key cambia en modo edición para forzar el
+                      // remount y que el `defaultValue` se aplique al precargar
+                      // el contexto de la pregunta editada.
+                      onChange={(e) => {
+                        setDraftSectionTitle(e.target.value);
+                        // El docente volvió a tipear tras un "Nuevo contexto":
+                        // re-habilitamos la lógica normal de asignación de
+                        // targetSectionId en el effect. Si NO limpiáramos el
+                        // flag, jamás volvería a apuntar a una sección
+                        // existente al tipear (quedaría huérfano de cualquier
+                        // contexto para siempre).
                         if (justCreatedContextRef.current) {
                           justCreatedContextRef.current = false;
                         }
                       }}
-                      // Misma regla que el Input del título (ago 2026):
-                      // HABILITADO por defecto. Se bloquea solo cuando la
-                      // evaluación no es editable o cuando el contexto
-                      // está en estado "guardado/bloqueado" SIN haber
-                      // pulsado "Editar contexto". Al pulsar "Editar
-                      // contexto" → `editingContext=true` → ambos términos
-                      // se desactivan → TipTap habilitado. `disabled`
-                      // mapea a `editable: false` dentro de TipTap y oculta
-                      // Toolbar/controles.
+                      // Input HABILITADO por defecto (ago 2026): el docente
+                      // pidió tipear libremente sobre una formulación
+                      // existente desde "Mis formulaciones" sin verse forzado
+                      // a pulsar un botón "Editar contexto" primero. Solo se
+                      // bloquea cuando la evaluación no es editable, o cuando
+                      // el contexto está en estado "guardado/bloqueado" SIN
+                      // haber pulsado "Editar contexto" (puede ser por un
+                      // guardado previo reciente, `contextSaved=true`, o por
+                      // estar editando una pregunta existente sin unlock).
+                      // Al pulsar "Editar contexto" → `editingContext=true` →
+                      // ambos términos se desactivan → inputs habilitados.
+                      // (ago 2026, pedido del docente: "después de darle
+                      // editar contexto debe habilitar el titulo y el tiptap
+                      // del contexto").
                       disabled={
                         !data.editable ||
                         (!editingContext && (contextSaved || editingQuestionId !== null))
                       }
-                      minHeightClass="min-h-12"
+                      className="max-w-md"
                     />
-                  </div>
-                  {/* Botones de gestión del bloque Contexto (ago 2026).
+                    <div className="mt-2">
+                      <label className="text-muted-foreground mb-1 block text-xs font-medium">
+                        Contenido del contexto (opcional)
+                      </label>
+                      <RichTextEditor
+                        // Key dependiente del modo: cuando entramos a editar un
+                        // ítem (startEdit), draftSectionContent pasa de null al
+                        // JSON real de la sección, pero TipTap solo lee
+                        // `defaultValue` en mount. Sin remontar el editor, el
+                        // "Contenido del contexto (opcional)" seguiría vacío al
+                        // editar. Usamos una key distinta en modo edición para
+                        // forzar el remount.
+                        key={
+                          editingQuestionId
+                            ? `edit-question-${editingQuestionId}-${targetSectionId ?? "none"}`
+                            : `new-section-content-${newSectionRenderKey}`
+                        }
+                        name="content"
+                        defaultValue={draftSectionContent}
+                        onChange={(json) => {
+                          setDraftSectionContent(json);
+                          // Mismo rationale que el onChange del título: el
+                          // docente volvió a tipear → re-habilitamos la
+                          // asignación automática de targetSectionId en el
+                          // effect (siguiente render). Sin esto, el flag
+                          // quedaría pegado y targetSectionId nunca volvería
+                          // a apuntar a una sección existente.
+                          if (justCreatedContextRef.current) {
+                            justCreatedContextRef.current = false;
+                          }
+                        }}
+                        // Misma regla que el Input del título (ago 2026):
+                        // HABILITADO por defecto. Se bloquea solo cuando la
+                        // evaluación no es editable o cuando el contexto
+                        // está en estado "guardado/bloqueado" SIN haber
+                        // pulsado "Editar contexto". Al pulsar "Editar
+                        // contexto" → `editingContext=true` → ambos términos
+                        // se desactivan → TipTap habilitado. `disabled`
+                        // mapea a `editable: false` dentro de TipTap y oculta
+                        // Toolbar/controles.
+                        disabled={
+                          !data.editable ||
+                          (!editingContext && (contextSaved || editingQuestionId !== null))
+                        }
+                        minHeightClass="min-h-12"
+                      />
+                    </div>
+                    {/* Botones de gestión del bloque Contexto (ago 2026).
                   Tres estados visuales mutuamente excluyentes:
                     (a) Edición de pregunta existente con contexto BLOQUEADO
                         (editingQuestionId && !editingContext) O contexto recién
@@ -1457,168 +1489,192 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   `contextSaved=true` bloquea los inputs hasta que el
                   docente decida explícitamente tocar el contexto de
                   nuevo. */}
-                  {(() => {
-                    const targetSection =
-                      targetSectionId === null
-                        ? null
-                        : (data.sections.find((s) => s.id === targetSectionId) ?? null);
+                    {(() => {
+                      const targetSection =
+                        targetSectionId === null
+                          ? null
+                          : (data.sections.find((s) => s.id === targetSectionId) ?? null);
 
-                    // Comparamos drafts contra el estado guardado de la
-                    // sección destino para detectar diff real en título y/o
-                    // contenido (TipTap). Texto plano vía `richTextToPlain`
-                    // para no entrar en ruido de diferencias estructurales
-                    // del JSON TipTap (p.ej. marcas de posición del cursor).
-                    const draftTitleTrimmed = draftSectionTitle.trim();
-                    const sectionTitleTrimmed = (targetSection?.title ?? "").trim();
-                    const titleChanged = draftTitleTrimmed !== sectionTitleTrimmed;
-                    const draftContentPlain = richTextToPlain(draftSectionContent).trim();
-                    const sectionContentPlain = richTextToPlain(targetSection?.content).trim();
-                    const contentChanged = draftContentPlain !== sectionContentPlain;
+                      // Comparamos drafts contra el estado guardado de la
+                      // sección destino para detectar diff real en título y/o
+                      // contenido (TipTap). Texto plano vía `richTextToPlain`
+                      // para no entrar en ruido de diferencias estructurales
+                      // del JSON TipTap (p.ej. marcas de posición del cursor).
+                      const draftTitleTrimmed = draftSectionTitle.trim();
+                      const sectionTitleTrimmed = (targetSection?.title ?? "").trim();
+                      const titleChanged = draftTitleTrimmed !== sectionTitleTrimmed;
+                      const draftContentPlain = richTextToPlain(draftSectionContent).trim();
+                      const sectionContentPlain = richTextToPlain(targetSection?.content).trim();
+                      const contentChanged = draftContentPlain !== sectionContentPlain;
 
-                    // (a) Edición de pregunta + contexto bloqueado, O
-                    // contexto recién guardado → botón "Editar contexto".
-                    // El primer modo evita cambios simultáneos sobre
-                    // ítem + contexto al editar una pregunta existente;
-                    // el segundo bloquea el contexto tras un guardado
-                    // exitoso (sea vía "Nuevo contexto", "Agregar
-                    // enunciado" o "Guardar") para que un tipeo
-                    // accidental no se cuele como diff en el siguiente
-                    // submit. (ago 2026, pedido del docente).
-                    if (showEditContextButton) {
+                      // (a) Edición de pregunta + contexto bloqueado, O
+                      // contexto recién guardado → botón "Editar contexto".
+                      // El primer modo evita cambios simultáneos sobre
+                      // ítem + contexto al editar una pregunta existente;
+                      // el segundo bloquea el contexto tras un guardado
+                      // exitoso (sea vía "Nuevo contexto", "Agregar
+                      // enunciado" o "Guardar") para que un tipeo
+                      // accidental no se cuele como diff en el siguiente
+                      // submit. (ago 2026, pedido del docente).
+                      if (showEditContextButton) {
+                        return (
+                          // "Nuevo contexto" + "Editar contexto" en la misma
+                          // fila (ago 2026, pedido del docente). "Nuevo
+                          // contexto" va PRIMERO a la izquierda. Antes vivía
+                          // en `extraActionsLeft` del QuestionForm (fila
+                          // inferior, junto a submit/Cancelar); ahora se
+                          // mueve aquí para que visualmente quede pegado al
+                          // TipTap del que depende. Misma visibilidad que
+                          // "Editar contexto" (showEditContextButton) y mismo
+                          // handler `handleNewContextWithQuestion`.
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            {showNewContextButton ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="default"
+                                disabled={!data.editable || actionStatus === "saving"}
+                                title="Crea un nuevo contexto y guarda aquí el enunciado + opciones que estés escribiendo"
+                                onClick={() => {
+                                  void handleNewContextWithQuestion();
+                                }}
+                              >
+                                Nuevo contexto
+                              </Button>
+                            ) : null}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={actionStatus === "saving"}
+                              onClick={() => {
+                                // NO tocamos `contextSaved` aquí: ese flag
+                                // representa "el contexto persistido es el
+                                // que está en el form". Entrar a modo
+                                // edición de contexto no cambia ese hecho.
+                                // Si el docente cancela los cambios,
+                                // `handleCancelContextEdit` restaura el
+                                // flag a su valor previo (true si no
+                                // estamos editando pregunta, false si sí).
+                                // Tomamos un snapshot del targetSectionId
+                                // actual para que Cancelar/Actualizar
+                                // contexto operen sobre esta sección
+                                // original aunque el targetSectionId cambie
+                                // durante la edición.
+                                editingOriginalSectionIdRef.current = targetSectionId;
+                                setEditingContext(true);
+                              }}
+                            >
+                              Editar contexto
+                            </Button>
+                            <span ref={editarContextoInfoRef} className="relative inline-block">
+                              <button
+                                type="button"
+                                onClick={() => setIsEditarContextoInfoOpen((o) => !o)}
+                                className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-5 w-5 items-center justify-center rounded-full transition-colors"
+                                aria-label="Más información sobre Editar contexto"
+                                aria-expanded={isEditarContextoInfoOpen}
+                              >
+                                <Info className="h-3.5 w-3.5" />
+                              </button>
+                              {isEditarContextoInfoOpen ? (
+                                <div
+                                  role="tooltip"
+                                  className="bg-popover text-popover-foreground absolute top-full left-0 z-20 mt-2 w-72 rounded-md border p-3 text-xs leading-relaxed shadow-md"
+                                >
+                                  <p>
+                                    Modifica el título o el contenido del contexto asociado a esta
+                                    pregunta.
+                                  </p>
+                                </div>
+                              ) : null}
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      // (b) "Actualizar contexto" + "Cancelar cambios"
+                      // aparecen SOLO cuando se cumplen TODAS estas
+                      // condiciones (ago 2026):
+                      //   1. La evaluación es editable.
+                      //   2. editingContext=true: el docente pulsó
+                      //      explícitamente el botón "Editar contexto" del
+                      //      bloque Contexto. Sin ese click, los botones
+                      //      permanecen ocultos.
+                      //
+                      // ANTES se pedía también `sectionHasSavedContent`: si
+                      // la sección destino estaba vacía (caso típico de
+                      // "Sin contexto" — el placeholder auto-creado por el
+                      // modo sin-contexto tiene title=null y content=null),
+                      // los botones quedaban ocultos incluso después de
+                      // pulsar "Editar contexto" y tipear. El docente no
+                      // tenía forma de persistir el contexto recién tipeado
+                      // sobre la sección placeholder. Bug reportado en ago
+                      // 2026: "editar contexto no está funcionando
+                      // normalmente trata de mostrar los botones de
+                      // actualizar contexto y cancelar contexto pero no lo
+                      // consigue".
+                      //
+                      // También se pedía antes `contextoDirty` y diff real
+                      // (`titleChanged || contentChanged`). El docente
+                      // pidió (ago 2026) que los botones aparezcan
+                      // INMEDIATAMENTE al pulsar "Editar contexto", sin
+                      // esperar a que el docente tipee algo. Si no hay diff
+                      // y pulsa "Actualizar contexto", el handler ejecuta
+                      // un UPDATE no-op en el servidor (mismos valores →
+                      // mismo estado), lo cual es inofensivo. Si pulsa
+                      // "Cancelar cambios", los drafts revierten al estado
+                      // persistido sin tocar el servidor.
+                      const showUpdateContextButton = data.editable && editingContext;
+                      if (!showUpdateContextButton) return null;
+
+                      // Mensaje de confirmación específico según QUÉ cambió.
+                      let whatChanges: string;
+                      if (titleChanged && contentChanged) {
+                        whatChanges = "el título y el contenido";
+                      } else if (titleChanged) {
+                        whatChanges = "el título";
+                      } else {
+                        whatChanges = "el contenido";
+                      }
+
                       return (
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
                           <Button
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="default"
                             disabled={actionStatus === "saving"}
+                            title="Guardar los cambios del contexto sin agregar una pregunta"
                             onClick={() => {
-                              // NO tocamos `contextSaved` aquí: ese flag
-                              // representa "el contexto persistido es el
-                              // que está en el form". Entrar a modo
-                              // edición de contexto no cambia ese hecho.
-                              // Si el docente cancela los cambios,
-                              // `handleCancelContextEdit` restaura el
-                              // flag a su valor previo (true si no
-                              // estamos editando pregunta, false si sí).
-                              // Tomamos un snapshot del targetSectionId
-                              // actual para que Cancelar/Actualizar
-                              // contexto operen sobre esta sección
-                              // original aunque el targetSectionId cambie
-                              // durante la edición.
-                              editingOriginalSectionIdRef.current = targetSectionId;
-                              setEditingContext(true);
+                              const ok = window.confirm(
+                                `¿Está seguro que desea actualizar ${whatChanges} del contexto?`,
+                              );
+                              if (!ok) return;
+                              void handleUpdateContext();
                             }}
                           >
-                            Editar contexto
+                            Actualizar contexto
                           </Button>
-                          <span ref={editarContextoInfoRef} className="relative inline-block">
-                            <button
-                              type="button"
-                              onClick={() => setIsEditarContextoInfoOpen((o) => !o)}
-                              className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-5 w-5 items-center justify-center rounded-full transition-colors"
-                              aria-label="Más información sobre Editar contexto"
-                              aria-expanded={isEditarContextoInfoOpen}
-                            >
-                              <Info className="h-3.5 w-3.5" />
-                            </button>
-                            {isEditarContextoInfoOpen ? (
-                              <div
-                                role="tooltip"
-                                className="bg-popover text-popover-foreground absolute top-full left-0 z-20 mt-2 w-72 rounded-md border p-3 text-xs leading-relaxed shadow-md"
-                              >
-                                <p>
-                                  Modifica el título o el contenido del contexto asociado a esta
-                                  pregunta.
-                                </p>
-                              </div>
-                            ) : null}
-                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            disabled={actionStatus === "saving"}
+                            title="Revertir los cambios no guardados al estado original"
+                            onClick={() => {
+                              handleCancelContextEdit();
+                            }}
+                          >
+                            Cancelar cambios
+                          </Button>
                         </div>
                       );
-                    }
-
-                    // (b) "Actualizar contexto" + "Cancelar cambios"
-                    // aparecen SOLO cuando se cumplen TODAS estas
-                    // condiciones (ago 2026):
-                    //   1. La evaluación es editable.
-                    //   2. editingContext=true: el docente pulsó
-                    //      explícitamente el botón "Editar contexto" del
-                    //      bloque Contexto. Sin ese click, los botones
-                    //      permanecen ocultos.
-                    //
-                    // ANTES se pedía también `sectionHasSavedContent`: si
-                    // la sección destino estaba vacía (caso típico de
-                    // "Sin contexto" — el placeholder auto-creado por el
-                    // modo sin-contexto tiene title=null y content=null),
-                    // los botones quedaban ocultos incluso después de
-                    // pulsar "Editar contexto" y tipear. El docente no
-                    // tenía forma de persistir el contexto recién tipeado
-                    // sobre la sección placeholder. Bug reportado en ago
-                    // 2026: "editar contexto no está funcionando
-                    // normalmente trata de mostrar los botones de
-                    // actualizar contexto y cancelar contexto pero no lo
-                    // consigue".
-                    //
-                    // También se pedía antes `contextoDirty` y diff real
-                    // (`titleChanged || contentChanged`). El docente
-                    // pidió (ago 2026) que los botones aparezcan
-                    // INMEDIATAMENTE al pulsar "Editar contexto", sin
-                    // esperar a que el docente tipee algo. Si no hay diff
-                    // y pulsa "Actualizar contexto", el handler ejecuta
-                    // un UPDATE no-op en el servidor (mismos valores →
-                    // mismo estado), lo cual es inofensivo. Si pulsa
-                    // "Cancelar cambios", los drafts revierten al estado
-                    // persistido sin tocar el servidor.
-                    const showUpdateContextButton = data.editable && editingContext;
-                    if (!showUpdateContextButton) return null;
-
-                    // Mensaje de confirmación específico según QUÉ cambió.
-                    let whatChanges: string;
-                    if (titleChanged && contentChanged) {
-                      whatChanges = "el título y el contenido";
-                    } else if (titleChanged) {
-                      whatChanges = "el título";
-                    } else {
-                      whatChanges = "el contenido";
-                    }
-
-                    return (
-                      <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="default"
-                          disabled={actionStatus === "saving"}
-                          title="Guardar los cambios del contexto sin agregar una pregunta"
-                          onClick={() => {
-                            const ok = window.confirm(
-                              `¿Está seguro que desea actualizar ${whatChanges} del contexto?`,
-                            );
-                            if (!ok) return;
-                            void handleUpdateContext();
-                          }}
-                        >
-                          Actualizar contexto
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          disabled={actionStatus === "saving"}
-                          title="Revertir los cambios no guardados al estado original"
-                          onClick={() => {
-                            handleCancelContextEdit();
-                          }}
-                        >
-                          Cancelar cambios
-                        </Button>
-                      </div>
-                    );
-                  })()}
-                </form>
-              </section>
-            ) : null}
+                    })()}
+                  </form>
+                </section>
+              ) : null;
+            })()}
 
             {/* Bloque: Formulario de pregunta (delega a QuestionForm) */}
             <section className="space-y-3">
@@ -1667,47 +1723,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     initial={editingInitial()}
                     createLabel="Agregar enunciado"
                     hideSubmit={true}
-                    extraActionsLeft={
-                      // "Nuevo contexto" aparece cuando aparece el botón
-                      // "Editar contexto" del bloque Contexto. Reusamos
-                      // el mismo predicado (`showEditContextButton`, ver
-                      // arriba) en lugar de duplicar la lógica:
-                      //   - edición de ítem existente → aparece
-                      //   - tras un guardado del contexto (contextSaved) → aparece
-                      //   - cualquier otro caso (creación inicial sin
-                      //     contexto persistido, ya sea 0 secciones o
-                      //     solo placeholders) → OCULTO, y el docente
-                      //     usa "Agregar enunciado" para arrancar.
-                      // Razón semántica: "Nuevo contexto" presupone un
-                      // contexto previo al que estamos a punto de bifurcar.
-                      // Si no hay ningún contexto persistido, no hay
-                      // bifurcación posible. (ago 2026, pedido del
-                      // docente: "que aparezca cuando aparece el boton
-                      // de 'Editar contexto'").
-                      showEditContextButton ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="default"
-                          disabled={!data.editable || actionStatus === "saving"}
-                          title="Crea un nuevo contexto y guarda aquí el enunciado + opciones que estés escribiendo"
-                          onClick={() => {
-                            void handleNewContextWithQuestion();
-                          }}
-                        >
-                          Nuevo contexto
-                        </Button>
-                      ) : null
-                    }
-                    // "Nuevo contexto" va en `extraActionsLeft` (slot
-                    // izquierdo del `flex justify-between` de la fila de
-                    // acciones). Así comparte FILA HORIZONTAL con submit/
-                    // Guardar/Cancelar pero queda a la IZQUIERDA, "al
-                    // principio" como pidió el docente (ago 2026:
-                    // "que aparezca a principio pero en la misma linea
-                    // horizontal de los demas botones"). En edición de
-                    // ítem no aplica (no tiene sentido cambiar de contexto
-                    // sobre una pregunta existente).
+                    // "Nuevo contexto" se renderiza en el bloque Contexto,
+                    // en la misma fila que "Editar contexto" y a la izquierda
+                    // de él, justo debajo del TipTap (ver arriba, dentro del
+                    // IIFE que pinta los botones del contexto). Antes vivía
+                    // en `extraActionsLeft` (slot izquierdo de la fila de
+                    // acciones del QuestionForm); ahora cambió de posición
+                    // por pedido del docente (ago 2026).
                     // Tras "Agregar enunciado" (y "Nuevo contexto", que
                     // reutiliza el mismo submit vía overrideAction) el
                     // docente debe re-elegir la CLAVE en la siguiente
@@ -2410,12 +2432,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
               </thead>
               <tbody>
                 {items.map((q) => {
-                  let snippet = "";
+                  let snippetPlain = "";
                   try {
-                    snippet = richTextToPlain(q.text).slice(0, 60);
+                    snippetPlain = richTextToPlain(q.text);
                   } catch {
-                    snippet = "(sin enunciado)";
+                    snippetPlain = "";
                   }
+                  const hasSnippet = snippetPlain.trim().length > 0;
                   return (
                     <tr
                       key={q.id}
@@ -2424,9 +2447,14 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     >
                       <td className="px-4 py-2">
                         Ítem {q.number}
-                        <span className="text-muted-foreground ml-2 text-xs">
-                          {snippet}
-                          {snippet.length >= 60 ? "…" : ""}
+                        <span className="text-muted-foreground ml-2 inline-block max-w-full align-middle text-xs">
+                          {hasSnippet ? (
+                            <span className="line-clamp-1 inline">
+                              <RichTextInline value={q.text} />
+                            </span>
+                          ) : (
+                            "(sin enunciado)"
+                          )}
                         </span>
                       </td>
                       <td className="px-4 py-2 text-center align-top">
