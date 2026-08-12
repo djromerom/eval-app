@@ -36,7 +36,15 @@ export function renderRichText(value: unknown): string {
 
   if (typeof value === "string") {
     if (!value.trim()) return "";
-    return applyKatex(escapeHtml(value)).replace(/\n/g, "<br/>");
+    // El `\n` → `<br/>` se aplica sobre el texto ORIGINAL, antes de KaTeX.
+    // Si se hiciera sobre el HTML post-KaTeX, también rompería los `\n` que
+    // KaTeX inserta dentro del atributo `d` del <path> del radical √ (los
+    // saltos de línea del path SVG son parte de la sintaxis del path, no
+    // separadores de bloque; un `<br/>` insertado allí deja el path
+    // inválido y Chrome deja de pintar el radical). El enunciado (TipTap
+    // doc) no padecía este bug porque va por la otra rama (`generateHTML`)
+    // que nunca aplica esta sustitución.
+    return applyKatex(escapeHtml(value).replace(/\n/g, "<br/>"));
   }
 
   if (typeof value === "object" && (value as { type?: string }).type === "doc") {
