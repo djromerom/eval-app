@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Image as ImageIcon } from "lucide-react";
 import { EditorContent, ReactNodeViewRenderer, useEditor, type Editor } from "@tiptap/react";
 import { EMPTY_DOC, ResizableImage, richTextExtensions } from "./extensions";
 import type { Alignment } from "./text-align";
@@ -192,7 +193,7 @@ function Toolbar({
       ) : null}
       <TableInsertButton editor={editor} />
       <ToolbarButton title="Insertar imagen (o pégala / arrástrala)" onClick={onPickImage}>
-        🖼
+        <ImageIcon className="h-4 w-4" aria-hidden />
       </ToolbarButton>
 
       {!isOption ? (
@@ -238,6 +239,7 @@ export function RichTextEditor({
   onChange,
   autoFocus = false,
   focusHighlight = false,
+  error = false,
 }: {
   name: string;
   defaultValue?: unknown;
@@ -282,14 +284,27 @@ export function RichTextEditor({
   /**
    * Si `true`, ilumina el borde con el azul marca (color primario
    * ecognIA, `#0A4FA8`) + ring suave cuando el editor recibe foco.
-   * El highlight se desvanece cuando el usuario EMPIEZA a escribir
-   * (primer onUpdate) — el feedback es solo para confirmar "el cursor
-   * aterrizó aquí", no para estorbar mientras se tipea. Default
-   * `false` para no afectar las opciones expandidas ni el bloque
-   * Contexto; el enunciado del QuestionForm lo activa explícitamente.
-   * (ago 2026, pedido del docente).
+   * El highlight se mantiene mientras el editor esté enfocado — se
+   * apaga solo en `onBlur`. Antes se desvanecía en el primer `onUpdate`
+   * ("feedback solo para confirmar 'el cursor aterrizó aquí'"), pero
+   * el docente pidió (ago 2026) que se mantenga mientras se tipea:
+   * "cuando este editando deja el borde azul oscuro no lo quites
+   * mientras edito en un tip tap". Default `false` para no afectar las
+   * opciones expandidas ni el bloque Contexto; el enunciado del
+   * QuestionForm lo activa explícitamente.
    */
   focusHighlight?: boolean;
+  /**
+   * Si `true`, pinta el borde con el color destructivo (rojo) + ring
+   * persistente (no depende de foco). Lo usa el editor unificado para
+   * señalar campos del bloque Contexto que fallaron validación:
+   * cuando el docente pulsa "Guardar" sin título y/o descripción, el
+   * borde se queda rojo hasta que empiece a tipear. Default `false`
+   * para no afectar las opciones expandidas ni el enunciado. (ago 2026,
+   * pedido del docente: "vamos a colorear el borde de rojo de los que
+   * no se hayan llenado").
+   */
+  error?: boolean;
 }) {
   const [json, setJson] = useState(() => JSON.stringify(initialContent(defaultValue)));
   const [uploading, setUploading] = useState(0);
@@ -369,11 +384,13 @@ export function RichTextEditor({
       const next = editor.getJSON() as Record<string, unknown>;
       setJson(JSON.stringify(next));
       onChange?.(next);
-      // Empezó a escribir → el highlight de foco cumplió su función
-      // ("sabés que el cursor está acá"), lo apagamos para no estorbar.
-      // Solo si el padre pidió el highlight; en caso contrario es un
-      // no-op gratis. (ago 2026)
-      setIsFocusHighlighted(false);
+      // NO apagamos el highlight de foco en onUpdate. Antes sí
+      // (feedback solo para confirmar "el cursor aterrizó acá"), pero
+      // el docente pidió (ago 2026) que se mantenga mientras se tipea.
+      // El highlight solo se apaga en onBlur, más abajo. Si en el
+      // futuro hay que distinguir entre "focus sin tipear" y
+      // "focus + tipeando", este es el lugar para reintroducir la
+      // distinción.
     },
     onFocus: () => {
       // onFocus también se dispara en el autoFocus programático (el
@@ -428,6 +445,12 @@ export function RichTextEditor({
         // pasa `focusHighlight` y el editor está en el intervalo entre
         // onFocus y el primer onUpdate. Se desvanece al tipear. (ago 2026)
         focusHighlight && isFocusHighlighted && "border-primary ring-primary/30 ring-2",
+        // Error de validación (opt-in): cuando el padre pasa `error=true`,
+        // pintamos el borde rojo persistente (sin depender de foco). Lo usa
+        // el editor unificado para resaltar el campo Contexto cuando la
+        // validación falla (ago 2026, pedido del docente: "vamos a colorear
+        // el borde de rojo de los que no se hayan llenado").
+        error && "border-destructive ring-destructive/30 ring-2",
       )}
     >
       {editor && !disabled ? (

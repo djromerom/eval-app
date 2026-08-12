@@ -7,6 +7,7 @@ import type { EvaluationStatus } from "@/modules/evaluations/domain/evaluation-s
 import type { AdminFormState } from "@/components/admin/entity-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { isTipTapEmpty } from "@/components/editor/rich-text-empty";
 import { richTextToPlain } from "@/components/editor/render";
@@ -143,6 +144,15 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   // Errores inline.
   const [formError, setFormError] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  // Marca qué campo(s) del bloque Contexto quedaron vacíos al fallar
+  // la validación. Lo usamos para pintar el borde de rojo (vía
+  // `className`/"error" en el Input/RichTextEditor) hasta que el
+  // docente empiece a tipear. `null` = sin error visual. (ago 2026,
+  // pedido del docente: "vamos a colorear el borde de rojo de los que
+  // no se hayan llenado").
+  const [contextValidationError, setContextValidationError] = useState<
+    "title" | "content" | "both" | null
+  >(null);
 
   /** Toast de éxito al crear un ítem. Centraliza el copy para que un
    *  cambio futuro (p. ej. añadir tildes) toque un único punto. Se
@@ -540,12 +550,12 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       const hasTitle = title.length > 0;
       const hasContent = contentRaw.length > 0;
 
-      // Validación local: title O content deben estar presentes. Si falta
-      // ambos, mostramos el error y evitamos el viaje al servidor (no se
+      // Validación local: title Y content deben estar presentes. Si falta
+      // alguno, mostramos el error y evitamos el viaje al servidor (no se
       // llama preventDefault porque la función `action` se ejecuta igual;
-      // cortamos acá antes del await).
-      if (!hasTitle && !hasContent) {
-        setFormError("Define al menos el título o el contenido del contexto antes de crearlo.");
+      // cortamos acá antes del await). (ago 2026, pedido del docente).
+      if (!hasTitle || !hasContent) {
+        setFormError("Ingresa el título y la descripción del contexto antes de crearlo.");
         return;
       }
       setFormError(null);
@@ -916,8 +926,8 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       return;
     }
 
-    if (!hasTitle && !hasContent) {
-      setFormError("Define al menos el título o el contenido del contexto antes de crearlo.");
+    if (!hasTitle || !hasContent) {
+      setFormError("Ingresa el título y la descripción del contexto antes de crearlo.");
       return;
     }
     setFormError(null);
@@ -1338,17 +1348,18 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     id="new-section-form"
                     action={handleAddOrRenameSection}
                     onSubmit={(e) => {
-                      // Validación local: título o contenido deben estar presentes.
-                      // Si falta ambos, evitamos el viaje al servidor cortando en
+                      // Validación local: título Y contenido deben estar presentes.
+                      // Si falta alguno, evitamos el viaje al servidor cortando en
                       // `handleAddOrRenameSection` (que retorna temprano). El
                       // preventDefault acá evita disparar el action inválido.
+                      // (ago 2026, pedido del docente).
                       const fd = new FormData(e.currentTarget);
                       const title = String(fd.get("title") ?? "").trim();
                       const content = String(fd.get("content") ?? "");
-                      if (!title && !content) {
+                      if (!title || !content) {
                         e.preventDefault();
                         setFormError(
-                          "Define al menos el título o el contenido del contexto antes de crearlo.",
+                          "Ingresa el título y la descripción del contexto antes de crearlo.",
                         );
                         return;
                       }
@@ -1371,7 +1382,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                           : `new-section-title-${newSectionRenderKey}`
                       }
                       name="title"
-                      placeholder="Título de contexto (opcional)"
+                      placeholder="Título de contexto"
                       defaultValue={draftSectionTitle}
                       // Mantenemos `draftSectionTitle` en sync para que el banner de
                       // edición y la validación lean el valor actual; pero el form
@@ -1389,6 +1400,12 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         // contexto para siempre).
                         if (justCreatedContextRef.current) {
                           justCreatedContextRef.current = false;
+                        }
+                        // Limpia el borde rojo de validación al tipear
+                        // (ago 2026, pedido del docente: "vamos a colorear
+                        // el borde de rojo de los que no se hayan llenado").
+                        if (contextValidationError) {
+                          setContextValidationError(null);
                         }
                       }}
                       // Input HABILITADO por defecto (ago 2026): el docente
@@ -1409,11 +1426,19 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         !data.editable ||
                         (!editingContext && (contextSaved || editingQuestionId !== null))
                       }
-                      className="max-w-md"
+                      // Borde rojo persistente cuando la validación falla
+                      // y este campo es uno de los vacíos. Se monta
+                      // DESPUÉS de `border-input` para ganarle vía el orden
+                      // de clases de Tailwind. (ago 2026).
+                      className={cn(
+                        "max-w-md",
+                        (contextValidationError === "title" || contextValidationError === "both") &&
+                          "border-destructive ring-destructive/30 ring-2",
+                      )}
                     />
                     <div className="mt-2">
                       <label className="text-muted-foreground mb-1 block text-xs font-medium">
-                        Contenido del contexto (opcional)
+                        Contenido del contexto
                       </label>
                       <RichTextEditor
                         // Key dependiente del modo: cuando entramos a editar un
@@ -1430,6 +1455,12 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         }
                         name="content"
                         defaultValue={draftSectionContent}
+                        // Borde rojo persistente cuando la validación
+                        // falla y este campo es uno de los vacíos.
+                        // (ago 2026, pedido del docente).
+                        error={
+                          contextValidationError === "content" || contextValidationError === "both"
+                        }
                         onChange={(json) => {
                           setDraftSectionContent(json);
                           // Mismo rationale que el onChange del título: el
@@ -1440,6 +1471,10 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                           // a apuntar a una sección existente.
                           if (justCreatedContextRef.current) {
                             justCreatedContextRef.current = false;
+                          }
+                          // Limpia el borde rojo de validación al tipear.
+                          if (contextValidationError) {
+                            setContextValidationError(null);
                           }
                         }}
                         // Misma regla que el Input del título (ago 2026):
@@ -1458,6 +1493,18 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         minHeightClass="min-h-12"
                       />
                     </div>
+                    {/* Error de validación de Contexto pegado al TipTap
+                        (ago 2026, pedido del docente: "este texto colocalo
+                        debajo del tip tap del contexto"). Solo se pinta
+                        cuando `contextValidationError` está activo y el
+                        docente aún no ha empezado a tipear; el
+                        `validateContexto` lo setea, el `onChange` de cada
+                        campo lo limpia. */}
+                    {contextValidationError ? (
+                      <p className="text-destructive mt-2 text-sm" role="alert">
+                        Ingresa el título y la descripción del contexto antes de crearlo.
+                      </p>
+                    ) : null}
                     {/* Botones de gestión del bloque Contexto (ago 2026).
                   Tres estados visuales mutuamente excluyentes:
                     (a) Edición de pregunta existente con contexto BLOQUEADO
@@ -1723,6 +1770,126 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     initial={editingInitial()}
                     createLabel="Agregar enunciado"
                     hideSubmit={true}
+                    // Validación de Contexto en el `onSubmit` del
+                    // QuestionForm (NO en `overrideAction`). El form
+                    // cierra la card en `onWillClose` ANTES de correr el
+                    // action, así que la validación dentro de
+                    // `overrideAction` llegaba tarde y la card se cerraba
+                    // sin error. Esta callback corre en el `onSubmit`,
+                    // hace `preventDefault` + `setClientError` si faltan
+                    // campos y la card se queda abierta para corregir.
+                    // (ago 2026, pedido del docente: "validar si el
+                    // usuario ingreso titulo y descripcion del contexto").
+                    validateContexto={() => {
+                      if (noContextMode) {
+                        setContextValidationError(null);
+                        return null;
+                      }
+                      // En modo EDICIÓN el contexto ya está creado en la
+                      // BD. No leemos el draft del form (puede estar
+                      // vacío o pre-poblado, da igual) — miramos el
+                      // contexto persistido. Si el docente quiere
+                      // modificarlo, debe pulsar "Editar contexto" en el
+                      // bloque Contexto, que tiene su propio flujo de
+                      // guardado. (ago 2026, pedido del docente:
+                      // "cuando edito un item con contexto ya tiene
+                      // contexto pero esta haciendo la validación en
+                      // este caso debe revisar el contexto que ya está
+                      // creado").
+                      if (editingQuestionId) {
+                        const section = data.sections.find((s) => s.id === targetSectionId);
+                        if (!section) {
+                          setContextValidationError(null);
+                          return null;
+                        }
+                        const hasTitle = Boolean(section.title && section.title.trim().length > 0);
+                        const hasContent = hasUnsavedContexto(null, section.content);
+                        if (!hasTitle || !hasContent) {
+                          // El contexto persistido está incompleto.
+                          // (Caso raro: contexto creado antes de que
+                          // se endureciera la validación.) Bloqueamos.
+                          if (!hasTitle && !hasContent) {
+                            setContextValidationError("both");
+                          } else if (!hasTitle) {
+                            setContextValidationError("title");
+                          } else {
+                            setContextValidationError("content");
+                          }
+                          return "Ingresa el título y la descripción del contexto antes de crearlo.";
+                        }
+                        setContextValidationError(null);
+                        return null;
+                      }
+                      // Modo CREACIÓN: chequeamos el draft del form
+                      // (lo que el docente tipeó en este instante).
+                      // PERO si el contexto está BLOQUEADO (contextSaved=true,
+                      // justo tras un guardado o por la rama "Editar
+                      // contexto" todavía sin pulsar), el docente NO puede
+                      // tipear nada en título/TipTap — los inputs están
+                      // `disabled`. El form native devuelve "" para esos
+                      // campos, así que validar contra el draft dispararía
+                      // "Ingresa el título..." cuando en realidad el
+                      // contexto persistido ya está completo. Si el bloque
+                      // está mostrando un contexto válido (el docente lo
+                      // ve), no tiene sentido bloquearlo. (ago 2026,
+                      // pedido del docente: "hay un contexto ya diligenciado
+                      // y bloqueado, deberia dejarme pasar y guardar el
+                      // nuevo item como comun en este caso").
+                      // TEMP DEBUG: confirmar que el guard se evalúa y con qué
+                      // valor de `contextSaved`. Si el docente sigue viendo
+                      // el error con `contextSaved=true` aquí, el problema
+                      // está en otro path (no en este callback).
+                      console.log("[validateContexto][create-mode]", {
+                        contextSaved,
+                        draftTitle: draftSectionTitle,
+                        draftContentLen: draftSectionContent
+                          ? JSON.stringify(draftSectionContent).length
+                          : 0,
+                      });
+                      if (contextSaved) {
+                        setContextValidationError(null);
+                        return null;
+                      }
+                      const formFd = newSectionFormRef.current
+                        ? new FormData(newSectionFormRef.current)
+                        : null;
+                      const title = formFd
+                        ? String(formFd.get("title") ?? "").trim()
+                        : draftSectionTitle.trim();
+                      const contentRaw = formFd
+                        ? String(formFd.get("content") ?? "")
+                        : draftSectionContent
+                          ? JSON.stringify(draftSectionContent)
+                          : "";
+                      let content: unknown = null;
+                      if (contentRaw) {
+                        try {
+                          content = JSON.parse(contentRaw);
+                        } catch {
+                          content = null;
+                        }
+                      }
+                      const hasTitle = title.length > 0;
+                      const hasContent = hasUnsavedContexto(null, content);
+                      if (!hasTitle || !hasContent) {
+                        // Marca qué campo(s) están vacíos para pintar el
+                        // borde de rojo del Input/TipTap. Se limpia en el
+                        // onChange de cada uno al empezar a tipear.
+                        // (ago 2026, pedido del docente: "vamos a
+                        // colorear el borde de rojo de los que no se
+                        // hayan llenado").
+                        if (!hasTitle && !hasContent) {
+                          setContextValidationError("both");
+                        } else if (!hasTitle) {
+                          setContextValidationError("title");
+                        } else {
+                          setContextValidationError("content");
+                        }
+                        return "Ingresa el título y la descripción del contexto antes de crearlo.";
+                      }
+                      setContextValidationError(null);
+                      return null;
+                    }}
                     // "Nuevo contexto" se renderiza en el bloque Contexto,
                     // en la misma fila que "Editar contexto" y a la izquierda
                     // de él, justo debajo del TipTap (ver arriba, dentro del
