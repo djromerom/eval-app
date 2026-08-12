@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Copy, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { richTextToPlain } from "@/components/editor/render";
+import { RichTextInline } from "@/components/editor/rich-text";
 import { deleteQuestionAction, duplicateQuestionAction } from "../../actions";
 
 /** Forma mínima de la pregunta para pintar la modal de revisión. */
@@ -149,7 +150,7 @@ export function ReviewModal({
             <div className="bg-muted/30 rounded-md p-3 text-sm leading-snug">
               {(() => {
                 try {
-                  return richTextToPlain(question.text);
+                  return <RichTextInline value={question.text} />;
                 } catch {
                   return "(sin enunciado)";
                 }
@@ -186,7 +187,7 @@ export function ReviewModal({
                     <span className="leading-snug">
                       {(() => {
                         try {
-                          return richTextToPlain(opt.text);
+                          return <RichTextInline value={opt.text} />;
                         } catch {
                           return "(vacío)";
                         }

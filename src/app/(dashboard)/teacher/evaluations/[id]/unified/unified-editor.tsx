@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { isTipTapEmpty } from "@/components/editor/rich-text-empty";
 import { richTextToPlain } from "@/components/editor/render";
+import { RichTextInline } from "@/components/editor/rich-text";
 import { DownloadPdfButton } from "../download-pdf-button";
 import { QuestionForm, type QuestionInitialValues } from "../../question-form";
 import {
@@ -2410,12 +2411,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
               </thead>
               <tbody>
                 {items.map((q) => {
-                  let snippet = "";
+                  let snippetPlain = "";
                   try {
-                    snippet = richTextToPlain(q.text).slice(0, 60);
+                    snippetPlain = richTextToPlain(q.text);
                   } catch {
-                    snippet = "(sin enunciado)";
+                    snippetPlain = "";
                   }
+                  const hasSnippet = snippetPlain.trim().length > 0;
                   return (
                     <tr
                       key={q.id}
@@ -2424,9 +2426,14 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     >
                       <td className="px-4 py-2">
                         Ítem {q.number}
-                        <span className="text-muted-foreground ml-2 text-xs">
-                          {snippet}
-                          {snippet.length >= 60 ? "…" : ""}
+                        <span className="text-muted-foreground ml-2 inline-block max-w-full align-middle text-xs">
+                          {hasSnippet ? (
+                            <span className="line-clamp-1 inline">
+                              <RichTextInline value={q.text} />
+                            </span>
+                          ) : (
+                            "(sin enunciado)"
+                          )}
                         </span>
                       </td>
                       <td className="px-4 py-2 text-center align-top">
