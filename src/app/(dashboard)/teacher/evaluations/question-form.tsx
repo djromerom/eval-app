@@ -193,6 +193,7 @@ export function QuestionForm({
   extraActionsLeft,
   hideSubmit,
   overrideAction,
+  validateContexto,
   formRef,
   clearCorrectAfterSave = false,
 }: {
@@ -273,6 +274,21 @@ export function QuestionForm({
    *  en el mismo click). El callback recibe el FormData del form y debe
    *  retornar el AdminFormState que se reflejará en `state`. */
   overrideAction?: (formData: FormData) => Promise<AdminFormState>;
+  /** Callback opcional que se invoca en el `onSubmit` del form
+   *  DESPUÉS de las validaciones internas (clave + enunciado) y ANTES
+   *  de `onWillClose`. Si retorna un string, se interpreta como error:
+   *  `preventDefault`, `setClientError(msg)` y el submit se aborta — la
+   *  card NO se cierra, y el docente puede corregir el problema.
+   *  Si retorna null/undefined, sigue el flujo normal.
+   *
+   *  Lo usa el editor unificado para validar que el bloque Contexto
+   *  tenga título Y descripción cuando el docente está en modo "Con
+   *  contexto" (ago 2026, pedido del docente: "validar si el usuario
+   *  ingreso titulo y descripcion del contexto"). Sin este prop, la
+   *  validación vivía en `overrideAction` que corre DESPUÉS del
+   *  `onWillClose` — la card se cerraba antes de mostrar el error.
+   */
+  validateContexto?: () => string | null;
   /** Ref externo al <form>. Si viene, el padre puede disparar
    *  `formRef.current?.requestSubmit()` programáticamente (p.ej. el botón
    *  "Nuevo contexto" del editor unificado, que está en otro <form> y
@@ -454,6 +470,22 @@ export function QuestionForm({
             return;
           }
           setClientError(null);
+
+          // Validación opcional de Contexto (solo la pasa el editor
+          // unificado). Se ejecuta DESPUÉS de las validaciones internas
+          // (clave + enunciado) y ANTES de `onWillClose`, para que la
+          // card NO se cierre si el contexto está incompleto. Si la
+          // validación retorna un mensaje, bloqueamos el submit y lo
+          // mostramos vía `setClientError` (que ya se renderiza inline
+          // debajo del form). (ago 2026, pedido del docente).
+          if (validateContexto) {
+            const contextoError = validateContexto();
+            if (contextoError) {
+              e.preventDefault();
+              setClientError(contextoError);
+              return;
+            }
+          }
 
           // Cierre optimista del card cuando el botón trae
           // `data-close-on-save="true"` (p.ej. "Guardar" del editor
