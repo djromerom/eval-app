@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Info, Plus, Send, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { EvaluationStatus } from "@/modules/evaluations/domain/evaluation-status";
@@ -1116,6 +1116,41 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
   const showEditContextButton =
     data.editable && !editingContext && (editingQuestionId !== null || contextSaved);
 
+  // HOIST DE `hideContextoEditor` (ago 2026): antes vivía dentro del IIFE
+  // que pinta el bloque Contexto. Lo subimos al top-level del componente
+  // para poder derivar desde acá los booleanos de `autoFocus` (el cursor
+  // debe caer al enunciado si el bloque está oculto). `contextLabel` es
+  // un lookup puro, así que el `useMemo` solo aporta estabilidad de
+  // referencia entre renders.
+  const hideContextoEditor = useMemo(
+    () =>
+      editingQuestionId !== null &&
+      contextLabel({ id: editingQuestionId, sectionId: targetSectionId ?? "" }, data.sections)
+        .kind === "Ninguno",
+    [editingQuestionId, targetSectionId, data.sections],
+  );
+
+  // BOOLEANOS DE autoFocus AL ABRIR EL FORM (ago 2026, pedido del
+  // docente: "abrir dar click en con sin contexto el cursor debe estar
+  // posicionado en tip tap de enunciado, abrir dar click en con con
+  // contexto el cursor debe estar posicionado en el input del titulo
+  // del contexto y si esta desahabilitado porque es contexto comun
+  // ubicarse en el tip tap de enunciado").
+  //
+  // `contextoTitleEditable` es el espejo De Morgan'd de la expresión
+  // `disabled` del Input del título (líneas ~1425-1428 más abajo). Si
+  // esa expresión cambia, hay que cambiar esta — por eso viven juntas
+  // semánticamente aunque estén lejos en el archivo.
+  const contextoTitleEditable =
+    data.editable && (editingContext || (!contextSaved && editingQuestionId === null));
+
+  // El cursor aterriza en el Input del título SOLO si el bloque Contexto
+  // está visible Y el Input está habilitado. Si cualquier condición
+  // falla → cae al enunciado. La negación es exhaustiva y mutuamente
+  // excluyente — uno y solo uno es true.
+  const focusContextoTitle = !noContextMode && !hideContextoEditor && contextoTitleEditable;
+  const focusEnunciadoOnMount = !focusContextoTitle;
+
   return (
     <div className="space-y-6">
       {/* SWITCHER DE MODO */}
@@ -1293,12 +1328,10 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                 actual). En creación, "Nuevo contexto" sigue apareciendo
                 como antes para que el docente pueda poblar el bloque. */}
             {(() => {
-              const hideContextoEditor =
-                editingQuestionId !== null &&
-                contextLabel(
-                  { id: editingQuestionId, sectionId: targetSectionId ?? "" },
-                  data.sections,
-                ).kind === "Ninguno";
+              // `hideContextoEditor` ya está hoisteado al top-level del
+              // componente (cerca de `showEditContextButton`) para que los
+              // booleanos de autoFocus puedan leerlo. Ver bloque de
+              // comentarios arriba.
               // "Nuevo contexto" solo aparece cuando NO estamos editando
               // un ítem con contexto "Comun"/"Especifico". En edición de
               // un ítem sin contexto (`hideContextoEditor=true`) el botón
@@ -1309,6 +1342,9 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
               return !noContextMode && !hideContextoEditor ? (
                 <section className="space-y-2 border-b pb-4">
                   <h3 className="font-display flex items-center gap-1.5 text-sm font-semibold">
+                    <span className="text-destructive" aria-hidden="true">
+                      *
+                    </span>
                     Contexto
                     <span ref={contextInfoRef} className="relative inline-block">
                       <button
@@ -1326,11 +1362,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                           className="bg-popover text-popover-foreground absolute top-full left-0 z-20 mt-2 w-72 rounded-md border p-3 text-xs leading-relaxed shadow-md"
                         >
                           <p>
-                            Este campo es opcional, siempre y cuando no haya diligenciado el campo
-                            anterior de título. Ingrese aquí un texto, gráfica, tabla, formula y/o
-                            diagrama, en caso que se requiera de esta información previa para
+                            En esta ventana el componente de CONTEXTO es obligatorio. Ingrese aquí
+                            un texto, imagen, tabla, formula y/o diagrama, con el propósito de
                             enmarcar la evaluación del ítem. Este componente garantiza que el ítem
-                            evalúe el saber-hacer en contexto y no la simple memorización.
+                            evalúe el saber-hacer en contexto y no la simple
+                            memorización.Implementar una ruta que permita reordenar la numeración de
+                            un ítem, para casos en el que se agrega un item y se desea que este
+                            salga arriba
                           </p>
                         </div>
                       ) : null}
@@ -1384,6 +1422,18 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       name="title"
                       placeholder="Título de contexto"
                       defaultValue={draftSectionTitle}
+                      // autoFocus nativo: el cursor cae al Input del título
+                      // cuando el docente abre el form con "Con Contexto" y
+                      // el Input está habilitado (caso "Contexto editable",
+                      // no bloqueado). En "Sin contexto" o con título
+                      // disabled el bloque está oculto / el cursor va al
+                      // enunciado vía `autoFocusEnunciado` del QuestionForm.
+                      // React aplica `autoFocus` solo en el mount inicial
+                      // del <input> (one-shot); como la `key` de este
+                      // Input no depende de `targetSectionId`, los re-
+                      // renders del sync effect no re-disparan el foco.
+                      // (ago 2026, pedido del docente).
+                      autoFocus={focusContextoTitle}
                       // Mantenemos `draftSectionTitle` en sync para que el banner de
                       // edición y la validación lean el valor actual; pero el form
                       // nativo usa `name="title"` y el DOM como fuente de verdad al
@@ -1437,9 +1487,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       )}
                     />
                     <div className="mt-2">
-                      <label className="text-muted-foreground mb-1 block text-xs font-medium">
-                        Contenido del contexto
-                      </label>
+                      <span className="text-destructive" aria-hidden="true">
+                        *
+                      </span>
+
+                      <label className="text-xs font-medium">Contenido del contexto</label>
                       <RichTextEditor
                         // Key dependiente del modo: cuando entramos a editar un
                         // ítem (startEdit), draftSectionContent pasa de null al
@@ -1904,6 +1956,16 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     // guardado. Solo aplica en modo creación: en edición
                     // el form no se resetea tras guardar.
                     clearCorrectAfterSave={!editingQuestionId}
+                    // Foco automático al enunciado al montar el form. Es
+                    // el espejo de `autoFocus={focusContextoTitle}` del
+                    // Input del título: uno y solo uno es true. El
+                    // enunciado recibe foco cuando NO se cumple la
+                    // condición del título — modo "Sin contexto", o
+                    // "Con Contexto" con el Input disabled (post-guardado,
+                    // edición de ítem existente, contexto "Comun", o
+                    // `hideContextoEditor=true`). (ago 2026, pedido del
+                    // docente).
+                    autoFocusEnunciado={focusEnunciadoOnMount}
                     // ORQUESTACIÓN CONTEXTO + PREGUNTA EN UN SOLO CLICK.
                     // Antes el "Agregar enunciado" solo disparaba
                     // addQuestionAction → la pregunta se guardaba en la
