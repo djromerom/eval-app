@@ -3,7 +3,7 @@
 import type { RefObject } from "react";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Info, Maximize2, Minimize2 } from "lucide-react";
+import { ImagePlus, Info, Minimize2 } from "lucide-react";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -116,7 +116,7 @@ function OptionInput({
           onClick={() => setMode("rich")}
           className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors"
         >
-          <Maximize2 className="h-3.5 w-3.5" />
+          <ImagePlus className="h-3.5 w-3.5" />
         </button>
       </div>
     );
