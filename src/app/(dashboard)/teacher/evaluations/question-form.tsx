@@ -574,13 +574,17 @@ export function QuestionForm({
             name="text"
             minHeightClass="min-h-16"
             defaultValue={initial?.text}
-            // Tras un guardado exitoso queremos que el cursor aterrice
-            // en el enunciado listo para tipear la siguiente pregunta
-            // (sin tener que volver a hacer click). `key={resetKey}`
-            // fuerza el remount del editor; `state.success` se queda
-            // en true hasta la próxima mutación del padre, así que cada
-            // nuevo instance consume el autoFocus una vez. (ago 2026)
-            autoFocus={state.success}
+            // Foco automático en dos casos:
+            //   1. Tras un guardado exitoso (state.success=true).
+            //      `key={resetKey}` fuerza el remount del editor;
+            //      `state` se queda en { success: true } hasta la próxima
+            //      mutación del padre, así que cada nuevo instance consume
+            //      el autoFocus una vez. (ago 2026)
+            //   2. Al montar, si el padre pidió foco en enunciado vía
+            //      `autoFocusEnunciado` ("Sin contexto", o contexto con
+            //      título bloqueado / disabled). Se consume una vez por
+            //      instancia vía `hasFocusedRef` dentro de RichTextEditor.
+            autoFocus={Boolean(state.success) || autoFocusEnunciado}
             // Highlight azul marca + ring cuando el cursor aterriza acá;
             // se desvanece al empezar a escribir. Solo el enunciado lo
             // activa (las opciones y el contexto del editor unificado
