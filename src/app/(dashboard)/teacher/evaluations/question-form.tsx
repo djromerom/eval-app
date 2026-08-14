@@ -196,6 +196,7 @@ export function QuestionForm({
   validateContexto,
   formRef,
   clearCorrectAfterSave = false,
+  autoFocusEnunciado = false,
 }: {
   evaluationId: string;
   /** Puede ser vacío cuando la evaluación aún no tiene secciones: el
@@ -304,6 +305,12 @@ export function QuestionForm({
    *  obligue a pensar la CLAVE de nuevo". En edición no aplica (el form
    *  no se resetea tras guardar). */
   clearCorrectAfterSave?: boolean;
+  /** Si `true`, el RichTextEditor del enunciado recibe foco al montar.
+   *  Lo pasa el editor unificado cuando el cursor debe caer ahí en vez del
+   *  Input del título (caso "Sin contexto" o contexto con título bloqueado).
+   *  Se consume una vez por instancia vía `hasFocusedRef` dentro de
+   *  RichTextEditor (mismo patrón que el `autoFocus` nativo). (ago 2026) */
+  autoFocusEnunciado?: boolean;
 }) {
   const editing = initial !== undefined;
   // Si el padre pasó un overrideAction (p.ej. el editor unificado) lo
