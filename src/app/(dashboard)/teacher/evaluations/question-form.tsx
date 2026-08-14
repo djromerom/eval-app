@@ -3,7 +3,7 @@
 import type { RefObject } from "react";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Info, Maximize2, Minimize2 } from "lucide-react";
+import { ImagePlus, Info, Minimize2 } from "lucide-react";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -116,7 +116,7 @@ function OptionInput({
           onClick={() => setMode("rich")}
           className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors"
         >
-          <Maximize2 className="h-3.5 w-3.5" />
+          <ImagePlus className="h-3.5 w-3.5" />
         </button>
       </div>
     );
@@ -196,6 +196,7 @@ export function QuestionForm({
   validateContexto,
   formRef,
   clearCorrectAfterSave = false,
+  autoFocusEnunciado = false,
 }: {
   evaluationId: string;
   /** Puede ser vacío cuando la evaluación aún no tiene secciones: el
@@ -304,6 +305,12 @@ export function QuestionForm({
    *  obligue a pensar la CLAVE de nuevo". En edición no aplica (el form
    *  no se resetea tras guardar). */
   clearCorrectAfterSave?: boolean;
+  /** Si `true`, el RichTextEditor del enunciado recibe foco al montar.
+   *  Lo pasa el editor unificado cuando el cursor debe caer ahí en vez del
+   *  Input del título (caso "Sin contexto" o contexto con título bloqueado).
+   *  Se consume una vez por instancia vía `hasFocusedRef` dentro de
+   *  RichTextEditor (mismo patrón que el `autoFocus` nativo). (ago 2026) */
+  autoFocusEnunciado?: boolean;
 }) {
   const editing = initial !== undefined;
   // Si el padre pasó un overrideAction (p.ej. el editor unificado) lo
@@ -567,13 +574,17 @@ export function QuestionForm({
             name="text"
             minHeightClass="min-h-16"
             defaultValue={initial?.text}
-            // Tras un guardado exitoso queremos que el cursor aterrice
-            // en el enunciado listo para tipear la siguiente pregunta
-            // (sin tener que volver a hacer click). `key={resetKey}`
-            // fuerza el remount del editor; `state.success` se queda
-            // en true hasta la próxima mutación del padre, así que cada
-            // nuevo instance consume el autoFocus una vez. (ago 2026)
-            autoFocus={state.success}
+            // Foco automático en dos casos:
+            //   1. Tras un guardado exitoso (state.success=true).
+            //      `key={resetKey}` fuerza el remount del editor;
+            //      `state` se queda en { success: true } hasta la próxima
+            //      mutación del padre, así que cada nuevo instance consume
+            //      el autoFocus una vez. (ago 2026)
+            //   2. Al montar, si el padre pidió foco en enunciado vía
+            //      `autoFocusEnunciado` ("Sin contexto", o contexto con
+            //      título bloqueado / disabled). Se consume una vez por
+            //      instancia vía `hasFocusedRef` dentro de RichTextEditor.
+            autoFocus={Boolean(state.success) || autoFocusEnunciado}
             // Highlight azul marca + ring cuando el cursor aterriza acá;
             // se desvanece al empezar a escribir. Solo el enunciado lo
             // activa (las opciones y el contexto del editor unificado
