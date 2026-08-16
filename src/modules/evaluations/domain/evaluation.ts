@@ -315,10 +315,11 @@ export interface EvaluationRepository {
    * `periodId` es `null`, se compara solo con formulaciones sin periodo
    * asignado en ese año académico y asignatura-curso.
    */
-  existsByCourseSubjectPeriodYear(
+  existsByCourseSubjectPeriodBookletTypeYear(
     institutionId: string,
     courseSubjectId: string,
     periodId: string | null,
+    bookletTypeId: string | null,
     academicYearId: string,
   ): Promise<boolean>;
 }

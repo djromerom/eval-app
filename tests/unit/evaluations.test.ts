@@ -177,10 +177,11 @@ class FakeEvaluations implements EvaluationRepository {
   async createNewVersion(): Promise<Evaluation> {
     throw new Error("no usado");
   }
-  async existsByCourseSubjectPeriodYear(
+  async existsByCourseSubjectPeriodBookletTypeYear(
     institutionId: string,
     courseSubjectId: string,
     periodId: string | null,
+    bookletTypeId: string | null,
     academicYearId: string,
   ): Promise<boolean> {
     return this.items.some(
@@ -188,6 +189,7 @@ class FakeEvaluations implements EvaluationRepository {
         e.institutionId === institutionId &&
         e.courseSubjectId === courseSubjectId &&
         e.periodId === periodId &&
+        e.bookletTypeId === bookletTypeId &&
         e.academicYearId === academicYearId,
     );
   }
@@ -565,12 +567,13 @@ describe("CreateEvaluation", () => {
 });
 
 /**
- * Regla de unicidad de formulaciones (mismo asignatura-curso + periodo + año):
- * el `CreateEvaluation` debe rechazar el duplicado y dejar pasar variaciones
- * legítimas (distinto periodo, distinto asignatura-curso, distinto año
- * académico, o formulación previa eliminada lógicamente).
+ * Regla de unicidad de formulaciones (mismo asignatura-curso + periodo +
+ * tipo de cuadernillo + año): el `CreateEvaluation` debe rechazar el duplicado
+ * y dejar pasar variaciones legítimas (distinto periodo, distinto asignatura-
+ * curso, distinto año académico, distinto bookletType, o formulación previa
+ * eliminada lógicamente).
  */
-describe("CreateEvaluation — unicidad (asignatura-curso + periodo + año)", () => {
+describe("CreateEvaluation — unicidad (asignatura-curso + periodo + tipo de cuadernillo + año)", () => {
   const makeUc = () => {
     const repo = new FakeEvaluations();
     const cs = new FakeCourseSubjects([
@@ -589,7 +592,7 @@ describe("CreateEvaluation — unicidad (asignatura-curso + periodo + año)", ()
     return { repo, uc };
   };
 
-  it("bloquea crear dos formulaciones con misma (cs1, p1, ay1)", async () => {
+  it("bloquea crear dos formulaciones con misma (cs1, p1, ay1) y bookletType null", async () => {
     const { uc } = makeUc();
     const first = await uc.execute({
       actor: teacher,
@@ -603,7 +606,7 @@ describe("CreateEvaluation — unicidad (asignatura-curso + periodo + año)", ()
     expect(second.ok).toBe(false);
     if (!second.ok) {
       expect(second.error.code).toBe("VALIDATION");
-      expect(second.error.message).toMatch(/asignatura-curso, periodo y año/i);
+      expect(second.error.message).toMatch(/asignatura-curso, periodo, tipo de cuadernillo y año/i);
     }
   });
 

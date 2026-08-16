@@ -642,10 +642,11 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
     });
   }
 
-  async existsByCourseSubjectPeriodYear(
+  async existsByCourseSubjectPeriodBookletTypeYear(
     institutionId: string,
     courseSubjectId: string,
     periodId: string | null,
+    bookletTypeId: string | null,
     academicYearId: string,
   ): Promise<boolean> {
     const row = await prisma.evaluation.findFirst({
@@ -653,6 +654,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         institutionId,
         courseSubjectId,
         periodId,
+        bookletTypeId,
         academicYearId,
         deletedAt: null,
       },
