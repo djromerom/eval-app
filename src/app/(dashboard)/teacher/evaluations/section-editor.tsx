@@ -81,6 +81,17 @@ export function SectionEditor({
           name="title"
           defaultValue={title ?? ""}
           placeholder="Título del contexto (opcional)"
+          // Ago 2026 — pedido del docente: el título del contexto debe
+          // salir en MAYÚSCULAS en el cuadernillo (Reglamento de Aula). El
+          // input fuerza la conversión en tiempo real tanto al tipear como
+          // al pegar (paste dispara onChange con el valor pegado). Mutamos
+          // el DOM directamente para que el form nativo (`name="title"`)
+          // someta el texto en mayúsculas — el DOM es la fuente de verdad
+          // al enviar.
+          onChange={(e) => {
+            const upper = e.target.value.toUpperCase();
+            if (e.target.value !== upper) e.target.value = upper;
+          }}
           className="border-input bg-background focus-visible:ring-ring h-9 w-full max-w-md rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
         />
         <div>
