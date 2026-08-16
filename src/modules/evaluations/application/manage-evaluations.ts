@@ -38,12 +38,21 @@ export interface CreateEvaluationInput {
 /** Crea una formulación en BORRADOR (docente o coordinador). §3.3
  *
  * Regla de unicidad: no pueden coexistir dos formulaciones con la misma
- * combinación `(asignatura-curso, periodo, año académico)` en la misma
- * institución. Si ya existe, devolvemos `ValidationError` con un mensaje
- * claro para que el docente decida si archivar la anterior o ajustar
+ * combinación `(asignatura-curso, periodo, tipo de cuadernillo, año académico)`
+ * en la misma institución. Si ya existe, devolvemos `ValidationError` con un
+ * mensaje claro para que el docente decida si archivar la anterior o ajustar
  * el periodo. La BD no enforce esta regla (constraint no agregado a
- * propósito — ver docstring en `existsByCourseSubjectPeriodYear`); la
- * validación es solo de aplicación. */
+ * propósito — ver docstring en `existsByCourseSubjectPeriodBookletTypeYear`);
+ * la validación es solo de aplicación.
+ *
+ * Tipos de cuadernillo ortogonales al periodo: dos formulaciones con el mismo
+ * `(asignatura-curso, periodo, año)` PUEDEN coexistir si tienen bookletTypeId
+ * distinto (p.ej. "Estándar" y "Especial" para la misma Prueba). Por eso la
+ * regla incluye `bookletTypeId` — el docente puede crear hasta N formulaciones
+ * por Prueba (una por cada tipo configurado) sin chocar con las existentes.
+ * `bookletTypeId` puede ser `null` (formulaciones sin tipo asignado, ej.
+ * diagnósticos), y el check de unicidad respeta la nulabilidad: `(cs, p,
+ * null, ay)` y `(cs, p, btX, ay)` se tratan como claves distintas. */
 export class CreateEvaluation implements UseCase<CreateEvaluationInput, Evaluation> {
   constructor(
     private readonly evaluations: EvaluationRepository,
@@ -96,19 +105,23 @@ export class CreateEvaluation implements UseCase<CreateEvaluationInput, Evaluati
       }
     }
 
-    // Unicidad: bloquea dos formulaciones con misma (asignatura-curso, periodo, año).
-    const duplicate = await this.evaluations.existsByCourseSubjectPeriodYear(
+    // Unicidad: bloquea dos formulaciones con misma (asignatura-curso, periodo,
+    // tipo de cuadernillo, año). El bookletTypeId entra en la clave para que
+    // un mismo docente pueda crear N formulaciones por Prueba (una por cada
+    // tipo configurado), en vez de chocar con la primera que ya tenga.
+    const duplicate = await this.evaluations.existsByCourseSubjectPeriodBookletTypeYear(
       actor.institutionId,
       data.courseSubjectId,
       data.periodId ?? null,
+      data.bookletTypeId ?? null,
       course.academicYearId,
     );
     if (duplicate) {
       return fail(
         new ValidationError(
           data.periodId
-            ? "Ya existe una formulación para esta asignatura-curso, periodo y año académico."
-            : "Ya existe una formulación para esta asignatura-curso y año académico (sin periodo).",
+            ? "Ya existe una formulación para esta asignatura-curso, periodo, tipo de cuadernillo y año académico."
+            : "Ya existe una formulación para esta asignatura-curso, tipo de cuadernillo y año académico (sin periodo).",
         ),
       );
     }

@@ -69,11 +69,12 @@ export function CreateEvaluationForm({
   csYearMap: Record<string, string>;
   /** Periodos con `isCurrent` y `academicYearId`. */
   periods: PeriodRow[];
-  /** Mapa (courseSubjectId|periodId) → { id, title } de formulaciones ya
-   *  existentes para el docente. Si la combinación seleccionada tiene match,
-   *  se renderiza un link directo a esa formulación en lugar del botón
-   *  "Formular" (ago 2026). Clave compuesta: `courseSubjectId|periodId` con
-   *  `""` como sentinel de "sin periodo". */
+  /** Mapa (`courseSubjectId|periodId|bookletTypeId`) → { id, title } de
+   *  formulaciones ya existentes para el docente. Si la combinación
+   *  seleccionada tiene match, se renderiza un link directo a esa formulación
+   *  en lugar del botón "Formular" (ago 2026). Clave compuesta con `""` como
+   *  sentinel de "sin periodo" / "sin tipo" para mantener 1:1 con la regla
+   *  del repo. */
   existingMap: Record<string, ExistingEntry>;
 }) {
   const [state, formAction] = useActionState<AdminFormState, FormData>(action, {});
@@ -133,16 +134,19 @@ export function CreateEvaluationForm({
   const periodLocked = !!currentPeriod;
 
   // Detección client-side de duplicados (ago 2026). Cuando el docente
-  // selecciona una combinación (courseSubjectId, periodId) para la que ya
-  // existe una formulación, en lugar de mostrar el botón "Formular"
+  // selecciona una combinación (courseSubjectId, periodId, bookletTypeId) para
+  // la que ya existe una formulación, en lugar de mostrar el botón "Formular"
   // enseñamos un link directo a la existente para que el docente entre
-  // directamente. La clave compuesta usa "" como sentinel de "sin periodo"
-  // (mismo shape que en el repo: `periodId ?? null`).
+  // directamente. La clave compuesta usa "" como sentinel de "sin periodo" /
+  // "sin tipo" (mismo shape que en el repo: `periodId ?? null`,
+  // `bookletTypeId ?? null`). ago 2026: la clave incluye bookletTypeId para
+  // que un docente con una formulación "Estándar" pueda crear la "Con Ajuste"
+  // sin que el form lo redirija a la "Estándar".
   const existing = useMemo<ExistingEntry | null>(() => {
     if (!courseSubjectId) return null;
-    const key = `${courseSubjectId}|${periodId || ""}`;
+    const key = `${courseSubjectId}|${periodId || ""}|${bookletTypeId || ""}`;
     return existingMap[key] ?? null;
-  }, [courseSubjectId, periodId, existingMap]);
+  }, [courseSubjectId, periodId, bookletTypeId, existingMap]);
 
   // Cuando cambia la asignatura, resincronizamos periodId con el periodo
   // actual del año del curso asociado (sigue siendo el mismo currentPeriod
