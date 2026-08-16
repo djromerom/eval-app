@@ -736,6 +736,119 @@ describe("CreateEvaluation — unicidad (asignatura-curso + periodo + tipo de cu
   });
 });
 
+/**
+ * Permutaciones con bookletTypeId no nulo (ago 2026). El describe anterior
+ * cubre el caso null/null — los tests de acá confirman que dos formulaciones
+ * con misma (cs, p, ay) pero distinto bookletTypeId PUEDEN coexistir, y que
+ * (cs, p, btX, ay) bloquea crear otro (cs, p, btX, ay).
+ *
+ * El setup inyecta un BookletTypeRepository mock con dos tipos (btX, btY)
+ * en `p1`. FakeEvaluations ya persiste `bookletTypeId` (commit 1 de este
+ * PR), así que la regla de unicidad opera sobre la clave completa.
+ */
+describe("CreateEvaluation — unicidad con bookletTypeId", () => {
+  const twoBookletTypes: BookletTypeRepository = {
+    async findById(_i, id) {
+      if (id === "btX") {
+        return {
+          id: "btX",
+          institutionId: "i1",
+          periodId: "p1",
+          name: "Estándar",
+          description: null,
+          order: 0,
+        };
+      }
+      if (id === "btY") {
+        return {
+          id: "btY",
+          institutionId: "i1",
+          periodId: "p1",
+          name: "Especial",
+          description: null,
+          order: 1,
+        };
+      }
+      return null;
+    },
+    async listByPeriod() {
+      return [];
+    },
+    async listByInstitution() {
+      return [];
+    },
+    async create() {
+      throw new Error("no usado");
+    },
+    async update() {
+      return null;
+    },
+    async delete() {
+      // no-op
+    },
+  };
+
+  const makeUc = () => {
+    const repo = new FakeEvaluations();
+    const cs = new FakeCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
+    const periods: PeriodRepository = {
+      ...noPeriods,
+      async findById(_i, id) {
+        return { id, institutionId: "i1", academicYearId: "ay1" } as Period;
+      },
+    };
+    const uc = new CreateEvaluation(repo, cs, periods, fakeCourses(), twoBookletTypes);
+    return { repo, uc };
+  };
+
+  it("permite (cs1, p1, btX, ay1) coexistir con (cs1, p1, btY, ay1)", async () => {
+    const { uc } = makeUc();
+    const first = await uc.execute({
+      actor: teacher,
+      data: { title: "P1", courseSubjectId: "cs1", periodId: "p1", bookletTypeId: "btX" },
+    });
+    expect(first.ok).toBe(true);
+    const second = await uc.execute({
+      actor: teacher,
+      data: { title: "P2", courseSubjectId: "cs1", periodId: "p1", bookletTypeId: "btY" },
+    });
+    expect(second.ok).toBe(true);
+  });
+
+  it("permite (cs1, p1, btX, ay1) coexistir con (cs1, p1, null, ay1) (sin tipo)", async () => {
+    const { uc } = makeUc();
+    const conTipo = await uc.execute({
+      actor: teacher,
+      data: { title: "P1", courseSubjectId: "cs1", periodId: "p1", bookletTypeId: "btX" },
+    });
+    expect(conTipo.ok).toBe(true);
+    // bookletTypeId omitido → cae al slot "null" en la clave de unicidad.
+    const sinTipo = await uc.execute({
+      actor: teacher,
+      data: { title: "P2", courseSubjectId: "cs1", periodId: "p1" },
+    });
+    expect(sinTipo.ok).toBe(true);
+  });
+
+  it("bloquea crear dos formulaciones con misma (cs1, p1, btX, ay1)", async () => {
+    const { uc } = makeUc();
+    const first = await uc.execute({
+      actor: teacher,
+      data: { title: "P1", courseSubjectId: "cs1", periodId: "p1", bookletTypeId: "btX" },
+    });
+    expect(first.ok).toBe(true);
+    const second = await uc.execute({
+      actor: teacher,
+      data: { title: "P2", courseSubjectId: "cs1", periodId: "p1", bookletTypeId: "btX" },
+    });
+    expect(second.ok).toBe(false);
+    if (!second.ok) {
+      expect(second.error.code).toBe("VALIDATION");
+      expect(second.error.message).toMatch(/asignatura-curso, periodo, tipo de cuadernillo y año/i);
+    }
+  });
+});
+
 describe("Flujo de aprobación", () => {
   let repo: FakeEvaluations;
   let sender: SpySender;
