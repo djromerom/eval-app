@@ -93,7 +93,9 @@ export default async function PrintEvaluationPage({
                         : ""}
                     </p>
                   )}
-                  {section.title ? <p className="block-text-title">«{section.title}»</p> : null}
+                  {section.title ? (
+                    <p className="block-text-title">«{section.title.toUpperCase()}»</p>
+                  ) : null}
                   {hasContext ? (
                     <RichText value={section.content} className="context-paragraph" />
                   ) : null}
