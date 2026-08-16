@@ -107,14 +107,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex min-h-screen">
-      <aside className="bg-card flex w-60 shrink-0 flex-col border-r">
+      <aside className="bg-card sticky top-0 flex h-screen w-60 shrink-0 flex-col overflow-hidden border-r">
         <div className="px-5 py-5">
           <Link href="/" aria-label="ecognIA — inicio">
             <Logo markClassName="h-8" wordmarkClassName="text-xl" />
           </Link>
         </div>
         <NavLinks items={items} />
-        <div className="border-t p-2">
+        <div className="shrink-0 border-t p-2">
           <Link
             href="/notifications"
             className="text-muted-foreground hover:bg-accent/60 hover:text-accent-foreground relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"

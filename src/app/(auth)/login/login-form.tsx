@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 import { signIn } from "@/auth";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { PasswordInput } from "@/components/auth/password-input";
 
 async function loginWithCredentials(formData: FormData) {
   "use server";
@@ -41,10 +42,9 @@ export function LoginForm() {
         <label htmlFor="password" className="text-foreground text-sm font-medium">
           Contraseña
         </label>
-        <input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           required
           autoComplete="current-password"
           placeholder="••••••••••"

@@ -22,6 +22,12 @@ export interface Column<T> extends SortableColumn<T> {
    *  data — no tiene sentido ordenarlos). Default: `true` salvo que la
    *  columna no tenga accessorKey ni accessor (puramente decorativa). */
   sortable?: boolean;
+  /** Alineación del header y de las celdas. Ago 2026 — pedido del docente
+   *  para "Mis formulaciones": centrar todas las columnas EXCEPTO la de
+   *  Asignatura, que queda a la izquierda. Default: "left". Cuando es
+   *  "center", el botón de orden y el contenido de la celda se centran
+   *  (text-center en th/td + justify-center en el botón del header). */
+  align?: "left" | "center";
   /** Clases aplicadas tanto al `<th>` como a los `<td>` de la columna. */
   className?: string;
   /** Clases adicionales SOLO en el `<th>` (p.ej. alinear a la derecha). */
@@ -162,12 +168,17 @@ export function DataTable<T>({
                   ? "ascending"
                   : "descending"
                 : "none";
+              const isCenter = col.align === "center";
               return (
                 <th
                   key={col.header}
                   scope="col"
                   aria-sort={ariaSort}
-                  className={cn("px-4 py-3 font-medium", col.headerClassName ?? col.className)}
+                  className={cn(
+                    "px-4 py-3 font-medium",
+                    isCenter && "text-center",
+                    col.headerClassName ?? col.className,
+                  )}
                 >
                   {sortable ? (
                     <button
@@ -177,7 +188,13 @@ export function DataTable<T>({
                       // hover:bg-muted/60 explicita el affordance "clickeable"
                       // cuando el docente pasa el mouse — sin esto el <th>
                       // no muestra nada que diga "esto ordena la columna".
-                      className="hover:bg-muted/60 -mx-1 flex w-full cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-left font-medium transition-colors"
+                      // align="center" → justify-center + text-center para
+                      // centrar el texto Y el ícono de sort dentro del botón
+                      // (sin esto, el contenido queda pegado a la izquierda).
+                      className={cn(
+                        "hover:bg-muted/60 -mx-1 flex w-full cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 font-medium transition-colors",
+                        isCenter ? "justify-center text-center" : "text-left",
+                      )}
                     >
                       <span>{col.header}</span>
                       <SortIcon
@@ -204,7 +221,14 @@ export function DataTable<T>({
             sorted.map((row, idx) => (
               <tr key={resolveKey(row, idx)} className={rowClassName}>
                 {columns.map((col) => (
-                  <td key={col.header} className={cn("px-4 py-3", col.className)}>
+                  <td
+                    key={col.header}
+                    className={cn(
+                      "px-4 py-3",
+                      col.align === "center" && "text-center",
+                      col.className,
+                    )}
+                  >
                     {col.cell ? col.cell(row) : defaultCellValue(row, col)}
                   </td>
                 ))}

@@ -50,6 +50,13 @@ export function EvaluationsTable({ data }: { data: EvaluationListItem[] }) {
             // p.ej. '10-1') en lugar del título propio de la formulación.
             // El link al editor sigue siendo la fila, solo cambia lo que
             // se muestra.
+            //
+            // Ago 2026 — pedido del docente: esta columna queda
+            // ALINEADA A LA IZQUIERDA. El resto de columnas se centran
+            // (align: "center") — la Asignatura es la única referencia
+            // textual que se lee de izquierda a derecha y debe arrancar
+            // desde el margen para que el ojo del docente la encuentre
+            // rápido al escanear la tabla.
             header: "Asignatura",
             accessor: (e) => `${e.subjectName} ${e.courseName}`,
             cell: (e) => (
@@ -65,23 +72,27 @@ export function EvaluationsTable({ data }: { data: EvaluationListItem[] }) {
           {
             header: "Año",
             accessorKey: "academicYearYear",
+            align: "center",
             className: "text-muted-foreground px-4 py-3",
           },
           {
             header: "Prueba",
             accessorKey: "periodName",
+            align: "center",
             cell: (e) => e.periodName ?? "—",
             className: "text-muted-foreground px-4 py-3",
           },
           {
             header: "Tipo de cuadernillo",
             accessorKey: "bookletTypeName",
+            align: "center",
             cell: (e) => e.bookletTypeName ?? "—",
             className: "text-muted-foreground px-4 py-3",
           },
           {
             header: "Estado",
             accessorKey: "status",
+            align: "center",
             cell: (e) => <StatusBadge status={e.status} />,
             // Orden de workflow (no alfabético). Definido arriba en
             // `workflowOrder` para mantener el column def legible.
@@ -90,11 +101,13 @@ export function EvaluationsTable({ data }: { data: EvaluationListItem[] }) {
           {
             header: "Ítems.",
             accessorKey: "totalQuestions",
+            align: "center",
             className: "text-muted-foreground px-4 py-3",
           },
           {
             header: "Actualizada",
             accessorKey: "updatedAt",
+            align: "center",
             cell: (e) => df.format(e.updatedAt),
             className: "text-muted-foreground px-4 py-3",
           },
