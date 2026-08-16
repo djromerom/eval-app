@@ -1441,7 +1441,18 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       // remount y que el `defaultValue` se aplique al precargar
                       // el contexto de la pregunta editada.
                       onChange={(e) => {
-                        setDraftSectionTitle(e.target.value);
+                        // Ago 2026 — pedido del docente: el título del
+                        // contexto debe salir en MAYÚSCULAS en el cuadernillo
+                        // (Reglamento de Aula). Convertimos en tiempo real al
+                        // tipear Y al pegar (paste dispara onChange con el
+                        // valor pegado). Mutamos el DOM directamente para que
+                        // el form nativo someta en mayúsculas — el DOM es la
+                        // fuente de verdad al enviar. El banner/validación
+                        // también ven el valor en mayúsculas vía
+                        // `draftSectionTitle`.
+                        const upper = e.target.value.toUpperCase();
+                        if (e.target.value !== upper) e.target.value = upper;
+                        setDraftSectionTitle(upper);
                         // El docente volvió a tipear tras un "Nuevo contexto":
                         // re-habilitamos la lógica normal de asignación de
                         // targetSectionId en el effect. Si NO limpiáramos el
@@ -1627,20 +1638,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                           // "Editar contexto" (showEditContextButton) y mismo
                           // handler `handleNewContextWithQuestion`.
                           <div className="mt-2 flex flex-wrap items-center gap-2">
-                            {showNewContextButton ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="default"
-                                disabled={!data.editable || actionStatus === "saving"}
-                                title="Crea un nuevo contexto y guarda aquí el enunciado + opciones que estés escribiendo"
-                                onClick={() => {
-                                  void handleNewContextWithQuestion();
-                                }}
-                              >
-                                Nuevo contexto
-                              </Button>
-                            ) : null}
                             <Button
                               type="button"
                               size="sm"
@@ -1688,6 +1685,20 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                                 </div>
                               ) : null}
                             </span>
+                            {showNewContextButton ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="default"
+                                disabled={!data.editable || actionStatus === "saving"}
+                                title="Crea un nuevo contexto y guarda aquí el enunciado + opciones que estés escribiendo"
+                                onClick={() => {
+                                  void handleNewContextWithQuestion();
+                                }}
+                              >
+                                Nuevo contexto
+                              </Button>
+                            ) : null}
                           </div>
                         );
                       }
