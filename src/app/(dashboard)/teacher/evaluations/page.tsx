@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
-import { StatusBadge } from "@/components/evaluations/status-badge";
 import { makeListEvaluations } from "@/modules/evaluations/infrastructure/container";
 import {
   makeListCourseSubjects,
@@ -12,10 +10,9 @@ import {
 import { makeListBookletTypesByInstitution } from "@/modules/booklet-types/infrastructure/container";
 import { CreateEvaluationForm } from "./create-evaluation-form";
 import { createEvaluationAction } from "./actions";
+import { EvaluationsTable } from "./evaluations-table";
 
 export const metadata: Metadata = { title: "Formulaciones" };
-
-const df = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
 
 export default async function EvaluationsPage() {
   const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
@@ -132,62 +129,7 @@ export default async function EvaluationsPage() {
         />
       </section>
 
-      <div className="mt-8 overflow-x-auto rounded-xl border-2 border-black dark:border-white">
-        <table className="w-full text-sm">
-          <thead className="text-foreground border-b-2 border-slate-300 bg-slate-200 text-left font-bold dark:border-slate-600 dark:bg-slate-700 dark:text-white">
-            <tr>
-              <th className="px-4 py-3 font-medium">Asignatura</th>
-              <th className="px-4 py-3 font-medium">Año</th>
-              <th className="px-4 py-3 font-medium">Prueba</th>
-              <th className="px-4 py-3 font-medium">Tipo de cuadernillo</th>
-              <th className="px-4 py-3 font-medium">Estado</th>
-
-              <th className="px-4 py-3 font-medium">Ítems.</th>
-              <th className="px-4 py-3 font-medium">Actualizada</th>
-            </tr>
-          </thead>
-          <tbody>
-            {evaluations.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="text-muted-foreground px-4 py-8 text-center">
-                  Aún no hay formulaciones.
-                </td>
-              </tr>
-            ) : (
-              evaluations.map((e) => (
-                <tr
-                  key={e.id}
-                  className="hover:bg-muted/30 even:bg-muted/30 border-b last:border-0 odd:bg-white"
-                >
-                  {/* Asignatura + grado concatenados (ago 2026): el docente
-                      pidió ver '<subjectName> <courseName>' (courseName es el
-                      grado, p.ej. '10-1') en lugar del título propio de la
-                      formulación. El link al editor sigue siendo la fila, solo
-                      cambia lo que se muestra. */}
-                  <td className="px-4 py-3 font-medium">
-                    <Link
-                      href={`/teacher/evaluations/${e.id}/unified?from=list`}
-                      className="hover:underline"
-                    >
-                      {e.subjectName} {e.courseName}
-                    </Link>
-                  </td>
-
-                  <td className="text-muted-foreground px-4 py-3">{e.academicYearYear}</td>
-                  <td className="text-muted-foreground px-4 py-3">{e.periodName ?? "—"}</td>
-                  <td className="text-muted-foreground px-4 py-3">{e.bookletTypeName ?? "—"}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={e.status} />
-                  </td>
-
-                  <td className="text-muted-foreground px-4 py-3">{e.totalQuestions}</td>
-                  <td className="text-muted-foreground px-4 py-3">{df.format(e.updatedAt)}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <EvaluationsTable data={evaluations} />
     </>
   );
 }
