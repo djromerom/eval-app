@@ -53,15 +53,19 @@ export default async function EvaluationsPage() {
   }));
   const periodOptions = periods.map((p) => ({ value: p.id, label: p.name }));
 
-  // Mapa de duplicados (courseSubjectId|periodId → evaluación existente) —
-  // se consume en el wrapper client para que el form de creación, en vez de
-  // fallar con "Ya existe una formulación…", muestre un link directo a la
-  // formulación que ya está en el sistema. La clave compuesta usa el string
-  // vacío como sentinel de "sin periodo" para mantener 1:1 con la regla del
-  // repo (`periodId === null` ⇒ formulaciones sin periodo).
+  // Mapa de duplicados (`courseSubjectId|periodId|bookletTypeId` → evaluación
+  // existente) — se consume en el wrapper client para que el form de creación,
+  // en vez de fallar con "Ya existe una formulación…", muestre un link
+  // directo a la formulación que ya está en el sistema. La clave compuesta
+  // usa el string vacío como sentinel de "sin periodo" / "sin tipo" para
+  // mantener 1:1 con la regla del repo (`periodId === null` ⇒
+  // formulaciones sin periodo, `bookletTypeId === null` ⇒ sin tipo).
+  // ago 2026: la clave incluye bookletTypeId para que un docente con una
+  // formulación "Estándar" pueda crear la "Con Ajuste" sin que el form lo
+  // redirija a la "Estándar".
   const existingMap: Record<string, { id: string; title: string }> = {};
   for (const e of evaluations) {
-    const key = `${e.courseSubjectId}|${e.periodId ?? ""}`;
+    const key = `${e.courseSubjectId}|${e.periodId ?? ""}|${e.bookletTypeId ?? ""}`;
     // Si hay múltiples evaluaciones con la misma combinación (no debería
     // gracias al constraint del use case, pero defensivo), gana la más
     // reciente porque la query ya viene ordenada por updatedAt desc.
@@ -94,7 +98,6 @@ export default async function EvaluationsPage() {
               label: "Prueba",
               type: "select",
               options: periodOptions,
-             
             },
             {
               name: "courseSubjectId",

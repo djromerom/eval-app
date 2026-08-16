@@ -85,7 +85,7 @@ export default async function TeacherDashboardPage() {
       ) : null}
 
       <div className="mb-8 flex flex-wrap items-center gap-3">
-        <Link href="/teacher/evaluations/new">
+        <Link href="/teacher/evaluations">
           <Button size="sm">+ Nueva formulación</Button>
         </Link>
       </div>

@@ -153,7 +153,7 @@ class FakeEvaluations implements EvaluationRepository {
   async createNewVersion(): Promise<Evaluation> {
     throw new Error("no usado");
   }
-  async existsByCourseSubjectPeriodYear(): Promise<boolean> {
+  async existsByCourseSubjectPeriodBookletTypeYear(): Promise<boolean> {
     return false;
   }
 }
