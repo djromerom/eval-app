@@ -862,33 +862,88 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
    * QuestionForm, porque este botón no pasa por él).
    */
   async function handleNewContextWithQuestion() {
-    if (editingQuestionId) return; // solo modo creación
+    console.log("[Nuevo-contexto+pregunta] handler entered", {
+      editingQuestionId,
+      actionStatus,
+      submitting: submittingRef.current,
+      hasQuestionForm: !!questionFormRef.current,
+      hasSectionForm: !!newSectionFormRef.current,
+    });
     if (submittingRef.current) {
       console.warn("[Nuevo-contexto+pregunta] BLOQUEADO por doble-submit");
       return;
     }
     const questionForm = questionFormRef.current;
     const sectionForm = newSectionFormRef.current;
-    if (!questionForm || !sectionForm) return;
+    if (!questionForm || !sectionForm) {
+      console.warn("[Nuevo-contexto+pregunta] early return: missing form ref");
+      return;
+    }
 
-    // FormData del QuestionForm: ya trae `sectionId` = targetSectionId
-    // actual desde el <input type="hidden">. La pregunta se guarda en
-    // esa sección — la del contexto al que el docente la estaba
-    // escribiendo semánticamente —, NO en la sección recién creada.
+    // === MODO EDICIÓN (ago 2026) — DESCARTAR EDICIÓN Y VOLVER A CREACIÓN ===
+    // El docente está editando un ítem con contexto y hace click en
+    // "Nuevo contexto". En este estado, "Nuevo contexto" significa
+    // DESCARTAR la edición actual y arrancar un contexto + enunciado
+    // nuevos desde cero (no move-to-section — el botón no muda el
+    // ítem existente, lo abandona).
     //
-    // NO sobreescribimos el `sectionId` en cliente. La fuente de
-    // verdad es el servidor: tras `addQuestionAction`, leemos
-    // `qRes.sectionId` del response y sincronizamos `targetSectionId`
-    // con esa id (más abajo, en el PASO 1.5). Esto evita el desfase
-    // entre el state del cliente y la sección real persistida. (ago
-    // 2026, pedido del docente: usar el id de sección real del
-    // response, no del cliente).
+    // El input del título en el bloque Contexto está `disabled`
+    // cuando `editingQuestionId !== null` (línea 1634-1637, por
+    // seguridad al editar una pregunta existente). HTML5 excluye los
+    // inputs `disabled` del FormData → no podemos leer el título
+    // actual ni validar uno nuevo. Por eso este check se hace ANTES de
+    // las validaciones de `hasTitle`/`hasContent`: el reset es
+    // incondicional en modo edición, sin importar el contenido del
+    // form. Después del reset, un SEGUNDO click en "Nuevo contexto"
+    // (esta vez en modo creación con los inputs habilitados)
+    // ejecuta el flujo normal. (ago 2026, pedido del docente:
+    // "debe limpiar el contexto y el enunciado").
+    if (editingQuestionId) {
+      console.log(
+        "[Nuevo-contexto+pregunta] EDIT-MODE: descartando edición, volviendo a CREACIÓN limpio",
+        { editingQuestionId, targetSectionId },
+      );
+      // 1. Reset del state de edición: el QuestionForm pasa a modo
+      //    CREACIÓN con placeholder vacío, los botones
+      //    "Editar/Nuevo contexto" se re-evalúan desde
+      //    `editingQuestionId === null`.
+      setEditingQuestionId(null);
+      setShowEditingBanner(false);
+      setEditingContext(false);
+      editingOriginalSectionIdRef.current = null;
+      // 2. Vaciamos los drafts del Contexto: el `defaultValue` del
+      //    Input del título y del RichTextEditor del contenido
+      //    arrancan vacíos en el próximo render.
+      setDraftSectionTitle("");
+      setDraftSectionContent(null);
+      setContextSaved(false);
+      setTargetSectionId(null);
+      // 3. Bumpeamos la key para remontar los inputs no-controlados
+      //    con `defaultValue` vacío. Sin esto, el "C1" viejo quedaría
+      //    visible aunque el state React ya esté limpio. (ago 2026,
+      //    mismo patrón que el reset post-"Nuevo contexto" exitoso).
+      setNewSectionRenderKey((k) => k + 1);
+      // 4. Limpiamos los formularios nativos en el DOM por si el
+      //    docente tipeó algo en el enunciado que no llegó al state.
+      questionForm.reset();
+      sectionForm.reset();
+      setActionStatus("idle");
+      setFormError(null);
+      return;
+    }
+
     const formData = new FormData(questionForm);
     const sectionFd = new FormData(sectionForm);
     const title = String(sectionFd.get("title") ?? "").trim();
     const contentRaw = String(sectionFd.get("content") ?? "");
     const hasTitle = title.length > 0;
     const hasContent = contentRaw.length > 0;
+    console.log("[Nuevo-contexto+pregunta] form values", {
+      hasTitle,
+      hasContent,
+      titlePreview: title.slice(0, 40),
+      contentPreviewLen: contentRaw.length,
+    });
 
     // Validamos primero el enunciado. Si está vacío, interpretamos que
     // el docente se arrepintió y descartamos TODO en silencio — no
@@ -905,6 +960,10 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       parsed = textRaw;
     }
     if (isTipTapEmpty(parsed)) {
+      console.log("[Nuevo-contexto+pregunta] early return: enunciado vacío", {
+        editingQuestionId,
+        isTipTapEmpty: true,
+      });
       setFormError(null);
       setDraftSectionTitle("");
       setDraftSectionContent(null);
@@ -927,6 +986,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     }
 
     if (!hasTitle || !hasContent) {
+      console.log("[Nuevo-contexto+pregunta] early return: title/content faltante", {
+        editingQuestionId,
+        hasTitle,
+        hasContent,
+      });
       setFormError("Ingresa el título y la descripción del contexto antes de crearlo.");
       return;
     }
@@ -935,6 +999,10 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     submittingRef.current = true;
     lastSubmitTsRef.current = Date.now();
     try {
+      // (El reset de EDIT-MODE vive ARRIBA de las validaciones —
+      // ver bloque `if (editingQuestionId)` antes de `new FormData`.
+      // Acá ya solo queda el flujo de CREACIÓN.)
+      // === MODO CREACIÓN (flujo original) ===
       // PASO 1: persistir la pregunta ACTUAL en la sección ACTUAL
       // (targetSectionId). El formData del QuestionForm ya trae ese
       // sectionId desde el <input type="hidden">, así que NO lo
@@ -1191,6 +1259,25 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                 onClick={() => {
                   setShowForm(true);
                   setNoContextMode(false);
+                  // Defensivo: si el docente llegó al handler sin
+                  // pasar por `cancelEdit` (p.ej. cerró el card con la
+                  // X o por otro path), podría tener `editingQuestionId`
+                  // todavía seteado. Sin este reset, el QuestionForm
+                  // entra al modo EDICIÓN del ítem previo en vez de
+                  // abrir en modo CREACIÓN, "como si estuviera editando
+                  // el item anterior" (ago 2026, pedido del docente).
+                  //
+                  // NO limpiamos los drafts del Contexto
+                  // (`draftSectionTitle`, `draftSectionContent`,
+                  // `contextSaved`, `newSectionRenderKey`): el código
+                  // los persiste a propósito entre cierres del card
+                  // para que el docente no pierda el contexto
+                  // específico o común que iba a ponerle al ítem.
+                  // Solo reseteamos el state de EDICIÓN.
+                  setEditingQuestionId(null);
+                  setShowEditingBanner(false);
+                  setEditingContext(false);
+                  editingOriginalSectionIdRef.current = null;
                 }}
               >
                 <Plus className="mr-1 h-3.5 w-3.5" /> Con Contexto
@@ -1242,6 +1329,18 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   // "Con contexto". Mismo rationale que
                   // handleAddOrRenameSection línea 615.
                   setContextSaved(false);
+                  // Defensivo: si el docente llegó al handler sin
+                  // pasar por `cancelEdit` (p.ej. cerró el card con la
+                  // X o por otro path), podría tener `editingQuestionId`
+                  // todavía seteado. Limpiamos el state de edición
+                  // para que el form abra en modo CREACIÓN, no en modo
+                  // EDICIÓN del ítem previo. (ago 2026, pedido del
+                  // docente: "ahora lo mismo sucede cuando le doy click
+                  // en sin contexto se trae el que ya edité").
+                  setEditingQuestionId(null);
+                  setShowEditingBanner(false);
+                  setEditingContext(false);
+                  editingOriginalSectionIdRef.current = null;
                 }}
               >
                 <Plus className="mr-1 h-3.5 w-3.5" /> Sin contexto
@@ -1321,24 +1420,36 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                 se retira del DOM y no se serializa vacío al submit.
 
                 Adicional (ago 2026, pedido del docente): cuando se edita
-                un ítem con contexto "Comun"/"Especifico", ocultamos el
-                botón "Nuevo contexto". La bifurcación a un contexto
-                paralelo no aplica sobre un ítem existente que ya tiene
-                contexto — sería contradictorio (se descarta el contexto
-                actual). En creación, "Nuevo contexto" sigue apareciendo
-                como antes para que el docente pueda poblar el bloque. */}
+                un ítem con contexto "Comun"/"Especifico", el docente
+                puede decidir entre modificar el contexto actual
+                ("Editar contexto") o arrancar uno fresco ("Nuevo
+                contexto" — `handleNewContextWithQuestion` descarta el
+                contexto actual). Ambos botones aparecen juntos (la
+                guarda anterior los hacía mutuamente excluyentes). En
+                creación, ambos siguen apareciendo como antes para que
+                el docente pueda poblar el bloque. */}
             {(() => {
               // `hideContextoEditor` ya está hoisteado al top-level del
               // componente (cerca de `showEditContextButton`) para que los
               // booleanos de autoFocus puedan leerlo. Ver bloque de
               // comentarios arriba.
-              // "Nuevo contexto" solo aparece cuando NO estamos editando
-              // un ítem con contexto "Comun"/"Especifico". En edición de
-              // un ítem sin contexto (`hideContextoEditor=true`) el botón
-              // también "aparecería" pero el bloque entero está oculto
-              // por la condición de arriba, así que es irrelevante.
-              const showNewContextButton =
-                showEditContextButton && (editingQuestionId === null || hideContextoEditor);
+              // "Nuevo contexto" aparece siempre que aparezca "Editar
+              // contexto" (mismo flag `showEditContextButton`). En
+              // creación y tras un guardado, el docente puede poblar el
+              // bloque con un nuevo contexto. En EDICIÓN de un ítem con
+              // contexto "Comun"/"Especifico", el docente puede decidir
+              // entre modificar el contexto actual ("Editar contexto") o
+              // arrancar uno fresco ("Nuevo contexto" — descarta el
+              // actual). (ago 2026, pedido del docente: "cuando le doy
+              // click en editar un item con contexto especifico y comun
+              // debe aparecer el boton editar contexto y nuevo contexto").
+              // El bloque Contexto entero ya está oculto cuando
+              // `noContextMode=true` o `hideContextoEditor=true`
+              // (condición de arriba), así que "Nuevo contexto" no se
+              // muestra en esos casos — la guarda anterior
+              // `editingQuestionId === null || hideContextoEditor` ya
+              // no es necesaria.
+              const showNewContextButton = showEditContextButton;
               return !noContextMode && !hideContextoEditor ? (
                 <section className="space-y-2 border-b pb-4">
                   <h3 className="font-display flex items-center gap-1.5 text-sm font-semibold">
