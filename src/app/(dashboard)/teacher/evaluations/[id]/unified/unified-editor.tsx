@@ -1867,30 +1867,13 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                         }
                         const hasTitle = Boolean(section.title && section.title.trim().length > 0);
                         const hasContent = hasUnsavedContexto(null, section.content);
-                        // (ago 2026, pedido del docente: "Cuando intentas
-                        // editar un Ítem que fue creado SIN CONTEXTO, no
-                        // deja guardar la modificación, porque te pide
-                        // TITULO y CONTEXTO, aunque el Ítem que estabas
-                        // intentando modificar sea SIN CONTEXTO").
-                        // Distinguimos dos casos:
-                        //   (a) Sección persistida COMPLETAMENTE VACÍA
-                        //       (sin título y sin contenido) → el ítem
-                        //       fue creado con el toggle "Sin contexto",
-                        //       que materializa una sección placeholder
-                        //       vacía. `startEdit` resetea noContextMode
-                        //       a false, pero la verdad sobre si el ítem
-                        //       tiene contexto vive en la BD: si está
-                        //       vacía, no lo tiene. Permitimos editar.
-                        //   (b) Sección persistida con título PERO sin
-                        //       contenido, o al revés → caso raro (contexto
-                        //       creado antes de que se endureciera la
-                        //       validación). Bloqueamos.
-                        if (!hasTitle && !hasContent) {
-                          setContextValidationError(null);
-                          return null;
-                        }
                         if (!hasTitle || !hasContent) {
-                          if (!hasTitle) {
+                          // El contexto persistido está incompleto.
+                          // (Caso raro: contexto creado antes de que
+                          // se endureciera la validación.) Bloqueamos.
+                          if (!hasTitle && !hasContent) {
+                            setContextValidationError("both");
+                          } else if (!hasTitle) {
                             setContextValidationError("title");
                           } else {
                             setContextValidationError("content");
