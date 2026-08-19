@@ -21,19 +21,30 @@ describe("can (Sprint 8C — capability-based menu)", () => {
     });
   });
 
-  describe("manage-users / manage-academic-structure / manage-institutional-theme / manage-bundles", () => {
+  describe("manage-users / manage-academic-structure / manage-institutional-theme", () => {
     it("solo ECU_MASTER (no SUPER_ADMIN por sí solo)", () => {
       for (const cap of [
         "manage-users",
         "manage-academic-structure",
         "manage-institutional-theme",
-        "manage-bundles",
       ] as const) {
         expect(can(cap, SA)).toBe(false);
         expect(can(cap, EM)).toBe(true);
         expect(can(cap, CO)).toBe(false);
         expect(can(cap, TE)).toBe(false);
       }
+    });
+  });
+
+  describe("manage-bundles", () => {
+    it("ECU_MASTER y ECU_LIDER editan cuadernillos", () => {
+      // ECU_LIDER gana acceso al módulo en Commit 2 del feat/lider-ecu
+      // (ago 2026). El filtro por курсо asignado se aplica dentro del use
+      // case ListBundles; la capability solo refleja "puede abrir el módulo".
+      expect(can("manage-bundles", EM)).toBe(true);
+      expect(can("manage-bundles", CO)).toBe(true);
+      expect(can("manage-bundles", SA)).toBe(false);
+      expect(can("manage-bundles", TE)).toBe(false);
     });
   });
 

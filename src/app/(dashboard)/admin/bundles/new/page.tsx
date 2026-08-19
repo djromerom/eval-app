@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
  * armar la selección, asignar nombre y bookletNumber.
  */
 export default async function NewBundlePage() {
-  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  const actor = await requireAuthenticatedUser("ECU_MASTER", "ECU_LIDER");
 
   const [approved, published, coursesRes] = await Promise.all([
     makeListEvaluations().execute({ actor, status: "APPROVED" }),

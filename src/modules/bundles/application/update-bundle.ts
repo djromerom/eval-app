@@ -42,7 +42,7 @@ export class UpdateBundle implements UseCase<UpdateBundleInput, Bundle> {
   ) {}
 
   async execute({ actor, bundleId, data }: UpdateBundleInput): Promise<Result<Bundle>> {
-    const authorized = requireRole(actor, "ECU_MASTER");
+    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     const existing = await this.bundles.findById(actor.institutionId, bundleId);

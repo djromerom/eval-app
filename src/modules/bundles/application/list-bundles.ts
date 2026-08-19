@@ -9,7 +9,8 @@ export interface ListBundlesInput {
 
 /**
  * Lista los bundles de la institución del actor. Cualquier rol puede ver
- * (ADMIN/COORDINATOR/TEACHER en read-only; SUPER_ADMIN también edita).
+ * (SUPER_ADMIN/TEACHER en read-only; ECU_MASTER y ECU_LIDER también editan
+ * — el filtro por cursos asignados del líder se aplica aquí).
  */
 export class ListBundles implements UseCase<ListBundlesInput, Bundle[]> {
   constructor(private readonly bundles: BundleRepository) {}

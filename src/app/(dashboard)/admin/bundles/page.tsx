@@ -16,7 +16,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default async function BundlesListPage() {
-  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  const actor = await requireAuthenticatedUser("ECU_MASTER", "ECU_LIDER");
   const result = await makeListBundles().execute({ actor });
   const bundles = result.ok ? result.value : [];
 

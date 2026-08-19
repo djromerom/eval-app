@@ -37,7 +37,7 @@ export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
   ) {}
 
   async execute({ actor, data }: CreateBundleInput): Promise<Result<Bundle>> {
-    const authorized = requireRole(actor, "ECU_MASTER");
+    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     if (!isValidBundleName(data.name)) {

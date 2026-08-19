@@ -18,7 +18,7 @@ export const metadata: Metadata = { title: "Detalle del cuadernillo" };
 const dateFmt = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
 
 export default async function BundleDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  const actor = await requireAuthenticatedUser("ECU_MASTER", "ECU_LIDER");
   const { id } = await params;
 
   const result = await makeGetBundle().execute({ actor, bundleId: id });
