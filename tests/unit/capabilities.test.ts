@@ -5,7 +5,7 @@ import type { Role } from "@/shared/application/authenticated-user";
 describe("can (Sprint 8C — capability-based menu)", () => {
   const SA: Role[] = ["SUPER_ADMIN"];
   const EM: Role[] = ["ECU_MASTER"];
-  const CO: Role[] = ["COORDINATOR"];
+  const CO: Role[] = ["ECU_LIDER"];
   const TE: Role[] = ["TEACHER"];
   const SA_EM: Role[] = ["SUPER_ADMIN", "ECU_MASTER"];
 
@@ -61,7 +61,7 @@ describe("can (Sprint 8C — capability-based menu)", () => {
     const matrix: Array<[Role[], string]> = [
       [SA, "SUPER_ADMIN"],
       [EM, "ECU_MASTER"],
-      [CO, "COORDINATOR"],
+      [CO, "ECU_LIDER"],
       [TE, "TEACHER"],
     ];
     for (const [roles, name] of matrix) {

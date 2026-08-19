@@ -63,7 +63,7 @@ export class CreateEvaluation implements UseCase<CreateEvaluationInput, Evaluati
   ) {}
 
   async execute({ actor, data }: CreateEvaluationInput): Promise<Result<Evaluation>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     if (!data.title.trim()) return fail(new ValidationError("El título es obligatorio."));
@@ -143,10 +143,10 @@ export class ListEvaluations implements UseCase<ListEvaluationsInput, Evaluation
   constructor(private readonly evaluations: EvaluationRepository) {}
 
   async execute({ actor, status }: ListEvaluationsInput): Promise<Result<EvaluationListItem[]>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR", "ECU_MASTER");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER", "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
-    if (hasRole(actor, "COORDINATOR", "ECU_MASTER")) {
+    if (hasRole(actor, "ECU_LIDER", "ECU_MASTER")) {
       return ok(await this.evaluations.findByInstitution(actor.institutionId, status));
     }
     return ok(await this.evaluations.findByTeacher(actor.institutionId, actor.userId));
@@ -162,14 +162,14 @@ export class GetEvaluation implements UseCase<GetEvaluationInput, EvaluationDeta
   constructor(private readonly evaluations: EvaluationRepository) {}
 
   async execute({ actor, id }: GetEvaluationInput): Promise<Result<EvaluationDetail>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR", "ECU_MASTER");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER", "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     const detail = await this.evaluations.getDetail(actor.institutionId, id);
     if (!detail) return fail(new NotFoundError("Formulación", id));
 
     // El docente solo ve las suyas; coordinador/admin ven todas.
-    if (!hasRole(actor, "COORDINATOR", "ECU_MASTER") && detail.teacherId !== actor.userId) {
+    if (!hasRole(actor, "ECU_LIDER", "ECU_MASTER") && detail.teacherId !== actor.userId) {
       return fail(new NotFoundError("Formulación", id));
     }
     return ok(detail);
@@ -208,7 +208,7 @@ export class AddSection implements UseCase<AddSectionInput, EvaluationSection> {
     evaluationId,
     data,
   }: AddSectionInput): Promise<Result<EvaluationSection>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
@@ -233,7 +233,7 @@ export class UpdateSection implements UseCase<UpdateSectionInput, EvaluationSect
     sectionId,
     data,
   }: UpdateSectionInput): Promise<Result<EvaluationSection>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
@@ -258,7 +258,7 @@ export class DeleteSection implements UseCase<DeleteSectionInput, void> {
   constructor(private readonly evaluations: EvaluationRepository) {}
 
   async execute({ actor, evaluationId, sectionId }: DeleteSectionInput): Promise<Result<void>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
@@ -283,7 +283,7 @@ export class AddQuestion implements UseCase<AddQuestionInput, Question> {
     sectionId,
     data,
   }: AddQuestionInput): Promise<Result<Question>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
@@ -323,7 +323,7 @@ export class UpdateQuestion implements UseCase<UpdateQuestionInput, Question> {
     questionId,
     data,
   }: UpdateQuestionInput): Promise<Result<Question>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
@@ -384,7 +384,7 @@ export class DeleteQuestion implements UseCase<DeleteQuestionInput, void> {
   constructor(private readonly evaluations: EvaluationRepository) {}
 
   async execute({ actor, evaluationId, questionId }: DeleteQuestionInput): Promise<Result<void>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
@@ -437,7 +437,7 @@ export class DuplicateQuestion implements UseCase<DuplicateQuestionInput, void> 
     evaluationId,
     questionId,
   }: DuplicateQuestionInput): Promise<Result<void>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
@@ -479,7 +479,7 @@ export class UpdateEvaluationSettings implements UseCase<
     evaluationId,
     data,
   }: UpdateEvaluationSettingsInput): Promise<Result<Evaluation>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR", "ECU_MASTER");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER", "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     const evaluation = await this.evaluations.findById(actor.institutionId, evaluationId);
@@ -487,7 +487,7 @@ export class UpdateEvaluationSettings implements UseCase<
 
     // COORDINATOR/ADMIN pueden editar settings de cualquier evaluation de su
     // institución; TEACHER solo las suyas.
-    const isPrivileged = hasRole(actor, "COORDINATOR", "ECU_MASTER");
+    const isPrivileged = hasRole(actor, "ECU_LIDER", "ECU_MASTER");
     if (!isPrivileged && evaluation.teacherId !== actor.userId) {
       return fail(new NotFoundError("Formulación", evaluationId));
     }
@@ -536,7 +536,7 @@ export class ReorderQuestions implements UseCase<ReorderQuestionsInput, void> {
     sectionId,
     orderedQuestionIds,
   }: ReorderQuestionsInput): Promise<Result<void>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     if (orderedQuestionIds.length === 0) {

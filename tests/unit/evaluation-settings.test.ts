@@ -121,7 +121,7 @@ const otherTeacher: AuthenticatedUser = {
 const coordinator: AuthenticatedUser = {
   userId: "c1",
   institutionId: "i1",
-  roles: ["COORDINATOR"],
+  roles: ["ECU_LIDER"],
 };
 
 describe("validateDurationMinutes (Sprint 7)", () => {

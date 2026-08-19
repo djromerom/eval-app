@@ -15,7 +15,7 @@ interface PageProps {
 
 export default async function SheetDetailPage({ params }: PageProps) {
   const { batchId, sheetId } = await params;
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   // Multi-tenant: el sheet debe pertenecer a la institución del actor y a
   // un lote que sea del docente actual (evaluation) o de la institución

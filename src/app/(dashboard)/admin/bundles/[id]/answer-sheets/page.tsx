@@ -26,7 +26,7 @@ export default async function BundleAnswerSheetsPage({
 }) {
   const actor = await requireAuthenticatedUser(
     "TEACHER",
-    "COORDINATOR",
+    "ECU_LIDER",
     "ECU_MASTER",
     "SUPER_ADMIN",
   );

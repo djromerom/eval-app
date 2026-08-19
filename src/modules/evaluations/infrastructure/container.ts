@@ -41,7 +41,7 @@ const bookletTypes = new PrismaBookletTypeRepository();
 const users = new PrismaUserRepository();
 
 const coordinatorDirectory: CoordinatorDirectory = {
-  coordinatorIds: (institutionId) => users.findIdsByRole(institutionId, "COORDINATOR"),
+  coordinatorIds: (institutionId) => users.findIdsByRole(institutionId, "ECU_LIDER"),
 };
 
 export const makeCreateEvaluation = () =>

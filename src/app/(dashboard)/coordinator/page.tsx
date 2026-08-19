@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Panel de coordinación" };
 const df = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short" });
 
 export default async function CoordinatorDashboardPage() {
-  const actor = await requireAuthenticatedUser("COORDINATOR");
+  const actor = await requireAuthenticatedUser("ECU_LIDER");
 
   const [inReview, approved, teachersCount, studentsCount] = await Promise.all([
     prisma.evaluation.findMany({

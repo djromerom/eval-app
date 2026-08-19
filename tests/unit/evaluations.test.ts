@@ -291,7 +291,7 @@ const teacher: AuthenticatedUser = { userId: "t1", institutionId: "i1", roles: [
 const coordinator: AuthenticatedUser = {
   userId: "c1",
   institutionId: "i1",
-  roles: ["COORDINATOR"],
+  roles: ["ECU_LIDER"],
 };
 
 const question = (over: Partial<CreateQuestionData> = {}): CreateQuestionData => ({

@@ -19,7 +19,7 @@ interface Props {
 
 export default async function TemplateDetailPage({ params }: Props) {
   const { id } = await params;
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const [tplRes, csRes, evalRes] = await Promise.all([
     makeGetTemplate().execute({ actor, id }),

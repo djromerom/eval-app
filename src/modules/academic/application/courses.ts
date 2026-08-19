@@ -53,7 +53,7 @@ export class ListCourses implements UseCase<ListCoursesInput, Course[]> {
     // del año del docente (ago 2026). Sin este permiso el filtro
     // client-side de Asignaturas filtraba 0 resultados para roles no
     // admin.
-    const authorized = requireRole(actor, "ECU_MASTER", "COORDINATOR", "TEACHER");
+    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER", "TEACHER");
     if (!authorized.ok) return authorized;
     return ok(await this.courses.findAll(actor.institutionId, academicYearId));
   }

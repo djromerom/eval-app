@@ -23,7 +23,7 @@ export class CreateBankQuestion implements UseCase<CreateBankQuestionInput, Bank
   constructor(private readonly bank: BankQuestionRepository) {}
 
   async execute({ actor, data }: CreateBankQuestionInput): Promise<Result<BankQuestion>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     if (!data.subjectId) return fail(new ValidationError("La asignatura es obligatoria."));
@@ -43,7 +43,7 @@ export class SearchBankQuestions implements UseCase<SearchBankQuestionsInput, Ba
   constructor(private readonly bank: BankQuestionRepository) {}
 
   async execute({ actor, filters }: SearchBankQuestionsInput): Promise<Result<BankQuestion[]>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
     return ok(await this.bank.search(actor.institutionId, actor.userId, filters));
   }
@@ -72,7 +72,7 @@ export class ImportBankQuestion implements UseCase<ImportBankQuestionInput, Ques
     evaluationId,
     sectionId,
   }: ImportBankQuestionInput): Promise<Result<Question>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     const evaluation = await this.evaluations.findById(actor.institutionId, evaluationId);
@@ -125,7 +125,7 @@ export class ExportQuestionToBank implements UseCase<ExportQuestionToBankInput, 
 
   async execute(input: ExportQuestionToBankInput): Promise<Result<BankQuestion>> {
     const { actor, evaluationId, questionId, subjectId, isPersonal, tags, difficulty } = input;
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     const detail = await this.evaluations.getDetail(actor.institutionId, evaluationId);

@@ -51,8 +51,8 @@ export function can(capability: Capability, roles: Role[]): boolean {
     case "manage-bundles":
       return hasRole(actor, "ECU_MASTER");
     case "review-evaluations":
-      return hasRole(actor, "COORDINATOR", "ECU_MASTER");
+      return hasRole(actor, "ECU_LIDER", "ECU_MASTER");
     case "create-evaluations":
-      return hasRole(actor, "TEACHER", "COORDINATOR");
+      return hasRole(actor, "TEACHER", "ECU_LIDER");
   }
 }

@@ -14,7 +14,7 @@ interface Props {
 
 export default async function SheetDetailPage({ params }: Props) {
   const { id: evaluationId, sheetId } = await params;
-  await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const sheet = await getSheetDetailAction(evaluationId, sheetId);
   if (!sheet) notFound();

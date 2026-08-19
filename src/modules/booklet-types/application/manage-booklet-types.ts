@@ -137,7 +137,7 @@ export class ListBookletTypesByPeriod implements UseCase<
     actor,
     periodId,
   }: ListBookletTypesByPeriodInput): Promise<Result<BookletType[]>> {
-    const authorized = requireRole(actor, "ECU_MASTER", "COORDINATOR", "TEACHER");
+    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER", "TEACHER");
     if (!authorized.ok) return authorized;
 
     const list = await this.bookletTypes.listByPeriod(actor.institutionId, periodId);
@@ -160,7 +160,7 @@ export class ListBookletTypesByInstitution implements UseCase<
   constructor(private readonly bookletTypes: BookletTypeRepository) {}
 
   async execute({ actor }: ListBookletTypesByInstitutionInput): Promise<Result<BookletType[]>> {
-    const authorized = requireRole(actor, "ECU_MASTER", "COORDINATOR", "TEACHER");
+    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER", "TEACHER");
     if (!authorized.ok) return authorized;
 
     const list = await this.bookletTypes.listByInstitution(actor.institutionId);

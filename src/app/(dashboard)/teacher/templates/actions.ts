@@ -22,7 +22,7 @@ export async function createTemplateAction(
   _prev: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const sections: { title: string; numQuestions: number; order: number }[] = [];
   const count = num(formData, "sectionCount");
@@ -50,13 +50,13 @@ export async function createTemplateAction(
 }
 
 export async function deleteTemplateAction(formData: FormData) {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
   await makeDeleteTemplate().execute({ actor, id: str(formData, "templateId") });
   revalidatePath("/teacher/templates");
 }
 
 export async function applyTemplateAction(formData: FormData) {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
   const templateId = str(formData, "templateId");
   const evaluationId = str(formData, "evaluationId");
   if (!templateId || !evaluationId) return;

@@ -26,13 +26,13 @@ export async function resolvePrintActor(
       return {
         userId: "pdf-worker",
         institutionId: access.institutionId,
-        roles: ["ECU_MASTER", "COORDINATOR", "TEACHER"],
+        roles: ["ECU_MASTER", "ECU_LIDER", "TEACHER"],
       };
     } else if ("bundleId" in expected && access.bundleId === expected.bundleId) {
       return {
         userId: "pdf-worker",
         institutionId: access.institutionId,
-        roles: ["ECU_MASTER", "COORDINATOR", "TEACHER"],
+        roles: ["ECU_MASTER", "ECU_LIDER", "TEACHER"],
       };
     }
   }

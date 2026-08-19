@@ -116,7 +116,7 @@ model UserRole {
 enum RoleType {
   SUPER_ADMIN
   ECU_MASTER
-  COORDINATOR
+  ECU_LIDER
   TEACHER
 }
 

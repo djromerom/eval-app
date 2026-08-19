@@ -17,7 +17,7 @@ import { institutionIdFromPath } from "@/modules/uploads/domain/upload";
  * inline-content-images.ts) en lugar de apuntar aquí.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ path: string[] }> }) {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR", "ECU_MASTER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const { path } = await params;
   const relative = path.join("/");
 

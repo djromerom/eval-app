@@ -27,7 +27,7 @@ export async function GET(
   if (!actor) {
     return NextResponse.json({ error: "No autenticado." }, { status: 401 });
   }
-  if (!actor.roles.includes("TEACHER") && !actor.roles.includes("COORDINATOR")) {
+  if (!actor.roles.includes("TEACHER") && !actor.roles.includes("ECU_LIDER")) {
     return NextResponse.json({ error: "Rol requerido." }, { status: 403 });
   }
 

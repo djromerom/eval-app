@@ -39,7 +39,7 @@ export async function commitImportAction(
   _prev: CommitImportState | null,
   formData: FormData,
 ): Promise<CommitImportState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const destinationKind = String(formData.get("destinationKind") ?? "");
   const destinationId = String(formData.get("destinationId") ?? "").trim();
@@ -141,7 +141,7 @@ export type LoadSourceInput =
   { kind: "evaluation"; evaluationId: string } | { kind: "csv"; content: string };
 
 export async function loadSourceAction(input: LoadSourceInput): Promise<LoadSourceState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   if (input.kind === "evaluation") {
     const result = await makeQuestionsFromEvaluation().execute({
@@ -170,7 +170,7 @@ export async function loadSourceAction(input: LoadSourceInput): Promise<LoadSour
  * (que serializa el payload en JSON para evitar serializar el DOCX).
  */
 export async function loadDocxSourceAction(formData: FormData): Promise<LoadSourceState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const file = formData.get("file");
   if (!(file instanceof File)) {
@@ -213,7 +213,7 @@ export interface EnqueueAiImportState {
  * cerrar el job. Eso permite mostrar progreso real (no solo spinner).
  */
 export async function enqueueAiImportAction(formData: FormData): Promise<EnqueueAiImportState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const file = formData.get("file");
   if (!(file instanceof File)) {
@@ -267,7 +267,7 @@ export async function enqueueAiImportAction(formData: FormData): Promise<Enqueue
  * El resultado pasa por la misma pantalla de revisión que CSV/DOCX.
  */
 export async function loadAiSourceAction(formData: FormData): Promise<LoadSourceState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const file = formData.get("file");
   if (!(file instanceof File)) {

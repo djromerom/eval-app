@@ -70,7 +70,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     href: "/teacher/templates",
     label: "Plantillas",
     requires: "create-evaluations",
-    roles: ["COORDINATOR", "ECU_MASTER"],
+    roles: ["ECU_LIDER", "ECU_MASTER"],
   },
   {
     href: "/teacher/question-bank",
@@ -82,7 +82,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     href: "/teacher/scan",
     label: "Escanear",
     requires: "create-evaluations",
-    roles: ["COORDINATOR", "ECU_MASTER"],
+    roles: ["ECU_LIDER", "ECU_MASTER"],
   },
 ] as const;
 

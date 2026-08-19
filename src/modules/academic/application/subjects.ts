@@ -45,7 +45,7 @@ export class ListSubjects implements UseCase<ListSubjectsInput, Subject[]> {
   constructor(private readonly subjects: SubjectRepository) {}
 
   async execute({ actor }: ListSubjectsInput): Promise<Result<Subject[]>> {
-    const authorized = requireRole(actor, "ECU_MASTER", "COORDINATOR", "TEACHER");
+    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER", "TEACHER");
     if (!authorized.ok) return authorized;
     return ok(await this.subjects.findAllForInstitution(actor.institutionId));
   }

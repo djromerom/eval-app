@@ -15,7 +15,7 @@ import { EvaluationsTable } from "./evaluations-table";
 export const metadata: Metadata = { title: "Formulaciones" };
 
 export default async function EvaluationsPage() {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
   const [listRes, csRes, periodsRes, bookletTypesRes, coursesRes] = await Promise.all([
     makeListEvaluations().execute({ actor }),
     makeListCourseSubjects().execute({ actor }),

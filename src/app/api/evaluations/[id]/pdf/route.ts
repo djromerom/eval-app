@@ -23,7 +23,7 @@ const WAIT_MS = 90_000;
  * el archivo. Requiere el worker PDF corriendo (pnpm worker:pdf).
  */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR", "ECU_MASTER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const { id } = await params;
 
   const kindParam = new URL(request.url).searchParams.get("kind") ?? "booklet";

@@ -23,7 +23,7 @@ const WAIT_MS = 120_000;
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await requireAuthenticatedUser(
     "TEACHER",
-    "COORDINATOR",
+    "ECU_LIDER",
     "ECU_MASTER",
     "SUPER_ADMIN",
   );

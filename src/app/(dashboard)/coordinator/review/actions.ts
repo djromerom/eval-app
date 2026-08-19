@@ -8,7 +8,7 @@ import { makeChangeEvaluationStatus } from "@/modules/evaluations/infrastructure
 const PATH = "/coordinator/review";
 
 async function transition(evaluationId: string, to: "APPROVED" | "PUBLISHED") {
-  const actor = await requireAuthenticatedUser("COORDINATOR");
+  const actor = await requireAuthenticatedUser("ECU_LIDER");
   const result = await makeChangeEvaluationStatus().execute({ actor, evaluationId, to });
   if (!result.ok) throw new Error(result.error.message);
   revalidatePath(PATH);
@@ -26,7 +26,7 @@ export async function rejectAction(
   _prev: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("COORDINATOR");
+  const actor = await requireAuthenticatedUser("ECU_LIDER");
   const result = await makeChangeEvaluationStatus().execute({
     actor,
     evaluationId: String(formData.get("evaluationId") ?? ""),

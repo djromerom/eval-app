@@ -31,7 +31,7 @@ export default async function UnifiedEditorPage({
 }) {
   const { id } = await params;
   const { from } = await searchParams;
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
   const result = await makeGetEvaluation().execute({ actor, id });
   if (!result.ok) notFound();
   const evaluation = result.value;

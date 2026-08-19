@@ -339,7 +339,7 @@ export const teacher: AuthenticatedUser = {
 export const coordinator: AuthenticatedUser = {
   userId: "u-coord",
   institutionId: "inst-1",
-  roles: ["COORDINATOR"],
+  roles: ["ECU_LIDER"],
 };
 
 export const adminOtherInstitution: AuthenticatedUser = {

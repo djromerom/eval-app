@@ -11,7 +11,7 @@ describe("máquina de estados de evaluación", () => {
   });
 
   it("solo el coordinador aprueba (IN_REVIEW → APPROVED)", () => {
-    expect(canTransition("IN_REVIEW", "APPROVED", ["COORDINATOR"])).toBe(true);
+    expect(canTransition("IN_REVIEW", "APPROVED", ["ECU_LIDER"])).toBe(true);
     expect(canTransition("IN_REVIEW", "APPROVED", ["TEACHER"])).toBe(false);
   });
 
@@ -33,7 +33,7 @@ describe("máquina de estados de evaluación", () => {
     // use case) o COORDINATOR. ECU_MASTER no — la transición la dispara
     // el docente, no el master.
     expect(canTransition("DRAFT", "PUBLISHED", ["TEACHER"])).toBe(true);
-    expect(canTransition("DRAFT", "PUBLISHED", ["COORDINATOR"])).toBe(true);
+    expect(canTransition("DRAFT", "PUBLISHED", ["ECU_LIDER"])).toBe(true);
     expect(canTransition("DRAFT", "PUBLISHED", ["ECU_MASTER"])).toBe(false);
     // No exige comentario (es la versión final, no un rechazo).
     expect(findTransition("DRAFT", "PUBLISHED")?.requiresComment).toBe(false);
@@ -42,7 +42,7 @@ describe("máquina de estados de evaluación", () => {
   it("el flujo canónico PUBLISHED sigue pasando por APPROVED", () => {
     // APPROVED → PUBLISHED (canónico) debe seguir funcionando.
     expect(canTransition("APPROVED", "PUBLISHED", ["TEACHER"])).toBe(true);
-    expect(canTransition("APPROVED", "PUBLISHED", ["COORDINATOR"])).toBe(true);
+    expect(canTransition("APPROVED", "PUBLISHED", ["ECU_LIDER"])).toBe(true);
   });
 
   it("solo las evaluaciones publicadas se imprimen", () => {
