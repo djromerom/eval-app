@@ -53,6 +53,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: "/admin/users", label: "Usuarios", requires: "manage-users" },
   { href: "/admin/academic", label: "Estructura académica", requires: "manage-academic-structure" },
   { href: "/admin/teachers", label: "Docentes", requires: "manage-users" },
+  { href: "/admin/leader-assignments", label: "Asignación de Líderes ECU", requires: "manage-users" },
   { href: "/admin/students", label: "Estudiantes", requires: "manage-users" },
   { href: "/admin/theme", label: "Tema institucional", requires: "manage-institutional-theme" },
   // Cuadernillos: hoy ECU_MASTER. Si SUPER_ADMIN debe poder gestionarlos

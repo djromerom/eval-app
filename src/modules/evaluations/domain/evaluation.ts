@@ -122,6 +122,10 @@ export interface EvaluationListItem {
    *  distinga formulaciones del año actual vs. años anteriores sin tener que
    *  entrar a cada una. */
   academicYearYear: number;
+  /** Nombre del docente autor (denormalizado para que el panel del líder
+   *  no necesite un join extra). Ago 2026: /coordinator lo muestra en
+   *  "Formulaciones pendientes de revisión". */
+  teacherName: string;
   updatedAt: Date;
 }
 
@@ -205,6 +209,17 @@ export interface EvaluationRepository {
   findByTeacher(institutionId: string, teacherId: string): Promise<EvaluationListItem[]>;
   findByInstitution(
     institutionId: string,
+    status?: EvaluationStatus,
+  ): Promise<EvaluationListItem[]>;
+  /**
+   * Lista las evaluaciones cuyo `courseSubject.courseId` está en `courseIds`.
+   * Usado por el scope filter del Líder ECU: solo ve evaluaciones de los
+   * cursos que lidera (todas las asignaturas de esos cursos). Si `courseIds`
+   * está vacío, devuelve `[]` sin pegarle a la BD.
+   */
+  findByCourseIds(
+    institutionId: string,
+    courseIds: string[],
     status?: EvaluationStatus,
   ): Promise<EvaluationListItem[]>;
   addSection(

@@ -179,6 +179,13 @@ export class InMemoryBundleRepository implements BundleRepository {
     return Array.from(this.bundles.values()).filter((b) => b.institutionId === institutionId);
   }
 
+  async findByCourseIds(institutionId: string, courseIds: string[]): Promise<Bundle[]> {
+    if (courseIds.length === 0) return [];
+    return Array.from(this.bundles.values()).filter(
+      (b) => b.institutionId === institutionId && b.courseId !== null && courseIds.includes(b.courseId),
+    );
+  }
+
   async update(institutionId: string, id: string, data: UpdateBundleData): Promise<Bundle> {
     const b = await this.findById(institutionId, id);
     if (!b) throw new Error(`Bundle ${id} no encontrado`);

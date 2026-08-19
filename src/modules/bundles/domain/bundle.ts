@@ -152,6 +152,12 @@ export interface BundleRepository {
   findById(institutionId: string, id: string): Promise<Bundle | null>;
   findDetail(institutionId: string, id: string): Promise<BundleDetail | null>;
   findAll(institutionId: string): Promise<Bundle[]>;
+  /**
+   * Lista los bundles cuyo `courseId` está en `courseIds`. Los bundles
+   * cross-course (courseId null) NO se incluyen — el líder solo ve los
+   * bundles de los cursos que lidera. Si `courseIds` está vacío, devuelve [].
+   */
+  findByCourseIds(institutionId: string, courseIds: string[]): Promise<Bundle[]>;
 
   /** Edita solo si el bundle está en DRAFT. */
   update(institutionId: string, id: string, data: UpdateBundleData): Promise<Bundle>;

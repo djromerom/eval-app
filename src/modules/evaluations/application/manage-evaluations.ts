@@ -11,6 +11,7 @@ import type {
   PeriodRepository,
 } from "@/modules/academic/domain/types";
 import type { BookletTypeRepository } from "@/modules/booklet-types/domain/booklet-type";
+import type { LeaderAssignmentRepository } from "@/modules/leader-assignments/domain/leader-assignment";
 import type { EvaluationStatus } from "../domain/evaluation-status";
 import {
   type CreateEvaluationData,
@@ -137,16 +138,29 @@ export interface ListEvaluationsInput {
 
 /**
  * Docente ve las suyas; coordinador/admin ven todas las de la institución
- * (opcionalmente filtradas por estado).
+ * (opcionalmente filtradas por estado). El ECU_LIDER ve solo las de los
+ * cursos donde está asignado (todas las asignaturas de esos cursos).
  */
 export class ListEvaluations implements UseCase<ListEvaluationsInput, EvaluationListItem[]> {
-  constructor(private readonly evaluations: EvaluationRepository) {}
+  constructor(
+    private readonly evaluations: EvaluationRepository,
+    private readonly leaderAssignments: LeaderAssignmentRepository,
+  ) {}
 
   async execute({ actor, status }: ListEvaluationsInput): Promise<Result<EvaluationListItem[]>> {
     const authorized = requireRole(actor, "TEACHER", "ECU_LIDER", "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
-    if (hasRole(actor, "ECU_LIDER", "ECU_MASTER")) {
+    if (hasRole(actor, "ECU_LIDER") && !hasRole(actor, "ECU_MASTER")) {
+      // Scope filter del líder: solo cursos asignados (todas las asignaturas
+      // de esos cursos). Sin asignaciones → lista vacía.
+      const courseIds = await this.leaderAssignments.listAssignedCourseIds(
+        actor.institutionId,
+        actor.userId,
+      );
+      return ok(await this.evaluations.findByCourseIds(actor.institutionId, courseIds, status));
+    }
+    if (hasRole(actor, "ECU_MASTER")) {
       return ok(await this.evaluations.findByInstitution(actor.institutionId, status));
     }
     return ok(await this.evaluations.findByTeacher(actor.institutionId, actor.userId));

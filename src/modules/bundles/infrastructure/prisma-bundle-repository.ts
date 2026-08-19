@@ -176,6 +176,16 @@ export class PrismaBundleRepository implements BundleRepository {
     return rows.map(toBundle);
   }
 
+  async findByCourseIds(institutionId: string, courseIds: string[]): Promise<Bundle[]> {
+    if (courseIds.length === 0) return [];
+    const rows = await prisma.evaluationBundle.findMany({
+      where: { institutionId, courseId: { in: courseIds } },
+      orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+      include: { course: { select: { name: true } } },
+    });
+    return rows.map(toBundle);
+  }
+
   async update(institutionId: string, id: string, data: UpdateBundleData): Promise<Bundle> {
     const row = await prisma.evaluationBundle.update({
       where: { id },

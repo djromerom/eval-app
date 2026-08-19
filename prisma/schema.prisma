@@ -68,16 +68,17 @@ model User {
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
-  roles          UserRole[]
-  accounts       Account[]
-  teacherProfile Teacher?
-  evaluations    Evaluation[]
-  questionBank   QuestionBank[]
-  templates      EvaluationTemplate[]
-  scanBatches    ScanBatch[]
-  bundlesCreated EvaluationBundle[]   @relation("BundleCreatedBy")
-  auditLogs      AuditLog[]
-  notifications  Notification[]
+  roles             UserRole[]
+  accounts          Account[]
+  teacherProfile    Teacher?
+  evaluations       Evaluation[]
+  questionBank      QuestionBank[]
+  templates         EvaluationTemplate[]
+  scanBatches       ScanBatch[]
+  bundlesCreated    EvaluationBundle[]      @relation("BundleCreatedBy")
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  leaderAssignments LeaderCourseAssignment[]
 
   @@index([institutionId])
 }
@@ -162,9 +163,10 @@ model Course {
   institution    Institution  @relation(fields: [institutionId], references: [id])
   createdAt      DateTime     @default(now())
 
-  subjects CourseSubject[]
-  groups   Group[]
-  bundles  EvaluationBundle[]
+  subjects          CourseSubject[]
+  groups            Group[]
+  bundles           EvaluationBundle[]
+  leaderAssignments LeaderCourseAssignment[]
 
   @@index([institutionId, academicYearId])
 }
@@ -220,6 +222,23 @@ model TeacherSubjectAssignment {
   @@unique([teacherId, courseSubjectId])
   @@index([teacherId])
   @@index([courseSubjectId])
+}
+
+/// Asignación de un Líder ECU a un курсо entero (todas sus asignaturas).
+/// Multi-tenant via User.institutionId — esta tabla NO duplica el institutionId
+/// para evitar drift; la tenancy viaja por la FK User. Created por un ECU_MASTER
+/// desde /admin/leader-assignments (ago 2026, feat/lider-ecu).
+model LeaderCourseAssignment {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId  String   @db.Uuid
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
 }
 
 model Group {
