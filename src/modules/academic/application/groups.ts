@@ -28,7 +28,7 @@ export class CreateGroup implements UseCase<CreateGroupInput, Group> {
 
     const course = await this.courses.findById(actor.institutionId, data.courseId);
     if (!course) {
-      return fail(new ValidationError("El curso indicado no existe en tu institución."));
+      return fail(new ValidationError("El grado indicado no existe en tu institución."));
     }
 
     return ok(await this.groups.create(actor.institutionId, data));

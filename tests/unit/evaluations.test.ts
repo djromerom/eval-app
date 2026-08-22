@@ -611,7 +611,7 @@ describe("CreateEvaluation — unicidad (asignatura-curso + periodo + tipo de cu
     expect(second.ok).toBe(false);
     if (!second.ok) {
       expect(second.error.code).toBe("VALIDATION");
-      expect(second.error.message).toMatch(/asignatura-curso, periodo, tipo de cuadernillo y año/i);
+      expect(second.error.message).toMatch(/asignatura-grado, periodo, tipo de cuadernillo y año/i);
     }
   });
 
@@ -849,7 +849,7 @@ describe("CreateEvaluation — unicidad con bookletTypeId", () => {
     expect(second.ok).toBe(false);
     if (!second.ok) {
       expect(second.error.code).toBe("VALIDATION");
-      expect(second.error.message).toMatch(/asignatura-curso, periodo, tipo de cuadernillo y año/i);
+      expect(second.error.message).toMatch(/asignatura-grado, periodo, tipo de cuadernillo y año/i);
     }
   });
 });

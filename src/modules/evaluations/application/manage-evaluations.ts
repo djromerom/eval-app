@@ -77,13 +77,13 @@ export class CreateEvaluation implements UseCase<CreateEvaluationInput, Evaluati
     }
 
     const cs = await this.courseSubjects.findById(actor.institutionId, data.courseSubjectId);
-    if (!cs) return fail(new ValidationError("La asignatura-curso no existe en tu institución."));
+    if (!cs) return fail(new ValidationError("La asignatura-grado no existe en tu institución."));
 
     // Necesitamos el año académico del curso para la validación de unicidad.
     // (El repo deriva `academicYearId = courseSubject.course.academicYearId`
     // al persistir; hacemos lo mismo aquí para mantener la regla consistente.)
     const course = await this.courses.findById(actor.institutionId, cs.courseId);
-    if (!course) return fail(new ValidationError("El curso no existe en tu institución."));
+    if (!course) return fail(new ValidationError("El grado no existe en tu institución."));
 
     if (data.periodId) {
       const period = await this.periods.findById(actor.institutionId, data.periodId);
@@ -121,8 +121,8 @@ export class CreateEvaluation implements UseCase<CreateEvaluationInput, Evaluati
       return fail(
         new ValidationError(
           data.periodId
-            ? "Ya existe una formulación para esta asignatura-curso, periodo, tipo de cuadernillo y año académico."
-            : "Ya existe una formulación para esta asignatura-curso, tipo de cuadernillo y año académico (sin periodo).",
+            ? "Ya existe una formulación para esta asignatura-grado, periodo, tipo de cuadernillo y año académico."
+            : "Ya existe una formulación para esta asignatura-grado, tipo de cuadernillo y año académico (sin periodo).",
         ),
       );
     }

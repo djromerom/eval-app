@@ -66,9 +66,9 @@ export default async function CoordinatorDashboardPage() {
           al admin. (ago 2026, feat/lider-ecu §3.6) */}
       {hasNoAssignments && (
         <p className="bg-muted/40 mb-6 rounded-lg border px-4 py-3 text-sm">
-          Aún no tienes cursos asignados. Pide al administrador que te asigne
-          uno en <span className="font-medium">/admin/leader-assignments</span>{" "}
-          para ver aquí las formulaciones de tus cursos.
+          Aún no tienes grados asignados. Pide al administrador que te asigne uno en{" "}
+          <span className="font-medium">/admin/leader-assignments</span> para ver aquí las
+          formulaciones de tus grados.
         </p>
       )}
 
@@ -92,8 +92,7 @@ export default async function CoordinatorDashboardPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{e.title}</p>
                   <p className="text-muted-foreground text-xs">
-                    {e.teacherName} · {e.courseName} · {e.subjectName} · v
-                    {e.version}
+                    {e.teacherName} · {e.courseName} · {e.subjectName} · v{e.version}
                   </p>
                 </div>
                 <span className="text-muted-foreground shrink-0 text-xs">

@@ -24,12 +24,7 @@ export default async function BundleAnswerSheetsPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const actor = await requireAuthenticatedUser(
-    "TEACHER",
-    "ECU_LIDER",
-    "ECU_MASTER",
-    "SUPER_ADMIN",
-  );
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER", "SUPER_ADMIN");
   const { id } = await params;
 
   const bundleRes = await makeGetBundle().execute({ actor, bundleId: id });
@@ -110,7 +105,7 @@ export default async function BundleAnswerSheetsPage({
                   <div className="flex-1">
                     <div className="font-medium">{s.name}</div>
                     <div className="text-muted-foreground text-xs">
-                      {s.code} · {s.group?.name ?? "Sin curso"}
+                      {s.code} · {s.group?.name ?? "Sin grado"}
                     </div>
                   </div>
                 </label>

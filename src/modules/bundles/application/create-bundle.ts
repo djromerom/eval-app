@@ -63,7 +63,7 @@ export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
     if (courseId !== null) {
       const course = await this.courses.findById(actor.institutionId, courseId);
       if (!course) {
-        return fail(new ValidationError("El curso no existe en tu institución."));
+        return fail(new ValidationError("El grado no existe en tu institución."));
       }
     }
 

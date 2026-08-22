@@ -44,7 +44,7 @@ export default async function LeaderAssignmentsPage() {
     <>
       <PageHeader
         title="Asignación de Líderes ECU"
-        description="Asigna cursos enteros a cada Líder ECU. Verán en revisión y cuadernillos solo las formulaciones de los cursos que lideran."
+        description="Asigna grados enteros a cada Líder ECU. Verán en revisión y cuadernillos solo las formulaciones de los grados que lideran."
       />
 
       <div className="space-y-6">
@@ -57,7 +57,7 @@ export default async function LeaderAssignmentsPage() {
               leaders.length === 0
                 ? "No hay usuarios con rol Líder ECU. Crea uno en /admin/users."
                 : courseOptions.length === 0
-                  ? "No hay cursos en la institución."
+                  ? "No hay grados en la institución."
                   : undefined
             }
             fields={[
@@ -70,7 +70,7 @@ export default async function LeaderAssignmentsPage() {
               },
               {
                 name: "courseId",
-                label: "Curso",
+                label: "Grado",
                 type: "select",
                 required: true,
                 options: courseOptions,
@@ -93,7 +93,7 @@ export default async function LeaderAssignmentsPage() {
                   <div key={u.id} className="rounded-lg border p-4">
                     <p className="font-medium">{u.name}</p>
                     <p className="text-muted-foreground mb-2 text-xs">
-                      {byLeader.get(u.id)!.length} curso(s) asignado(s)
+                      {byLeader.get(u.id)!.length} grado(s) asignado(s)
                     </p>
                     <ul className="space-y-2">
                       {byLeader.get(u.id)!.map((a) => (

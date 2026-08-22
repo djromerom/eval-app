@@ -103,7 +103,7 @@ export async function createEvaluationAction(
 
   const cs = courseSubjects.find((c) => c.id === courseSubjectId);
   if (!cs) {
-    return { error: "La asignatura-curso no existe en tu institución." };
+    return { error: "La asignatura-grado no existe en tu institución." };
   }
 
   let year = new Date().getFullYear();

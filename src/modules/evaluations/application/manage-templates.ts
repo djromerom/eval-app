@@ -54,7 +54,7 @@ export class CreateTemplate implements UseCase<CreateTemplateInput, EvaluationTe
     }
 
     const cs = await this.courseSubjects.findById(actor.institutionId, data.courseSubjectId);
-    if (!cs) return fail(new ValidationError("La asignatura-curso no existe en tu institución."));
+    if (!cs) return fail(new ValidationError("La asignatura-grado no existe en tu institución."));
 
     return ok(await this.templates.create(actor.institutionId, actor.userId, data));
   }

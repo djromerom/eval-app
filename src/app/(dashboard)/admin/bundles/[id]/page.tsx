@@ -91,8 +91,8 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
               <h2 className="font-semibold">Metadatos</h2>
               <p className="text-muted-foreground text-sm">
                 <strong>{bundle.name}</strong> — cuadernillo{" "}
-                <strong>{bundle.bookletNumber ?? "—"}</strong> — curso{" "}
-                <strong>{bundle.courseName ?? "sin curso específico"}</strong>
+                <strong>{bundle.bookletNumber ?? "—"}</strong> — grado{" "}
+                <strong>{bundle.courseName ?? "sin grado específico"}</strong>
               </p>
               <p className="text-muted-foreground text-xs">
                 El cuadernillo está sellado (READY). Desmárcate para editarlo.

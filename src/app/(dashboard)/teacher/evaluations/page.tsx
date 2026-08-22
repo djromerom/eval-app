@@ -86,7 +86,7 @@ export default async function EvaluationsPage() {
           submitLabel="Formular"
           disabledReason={
             courseSubjects.length === 0
-              ? "Un administrador debe enlazar asignaturas a cursos primero."
+              ? "Un administrador debe enlazar asignaturas a grados primero."
               : undefined
           }
           fields={[

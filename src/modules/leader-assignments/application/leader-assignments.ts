@@ -34,15 +34,13 @@ export class AssignLeader implements UseCase<AssignLeaderInput, void> {
 
     const course = await this.courses.findById(actor.institutionId, courseId);
     if (!course) {
-      return fail(new ValidationError("El curso no existe en tu institución."));
+      return fail(new ValidationError("El grado no existe en tu institución."));
     }
     if (!(await this.userHasEcuLiderRole(actor.institutionId, userId))) {
-      return fail(
-        new ValidationError("El usuario no tiene rol Líder ECU en esta institución."),
-      );
+      return fail(new ValidationError("El usuario no tiene rol Líder ECU en esta institución."));
     }
     if (await this.assignments.isAssigned(userId, courseId)) {
-      return fail(new ValidationError("El líder ya está asignado a ese curso."));
+      return fail(new ValidationError("El líder ya está asignado a ese grado."));
     }
     await this.assignments.assign(userId, courseId);
     return ok(undefined);

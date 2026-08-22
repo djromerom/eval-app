@@ -29,7 +29,7 @@ export class CreateCourseSubject implements UseCase<CreateCourseSubjectInput, Co
     if (!authorized.ok) return authorized;
 
     const course = await this.courses.findById(actor.institutionId, data.courseId);
-    if (!course) return fail(new ValidationError("El curso no existe en tu institución."));
+    if (!course) return fail(new ValidationError("El grado no existe en tu institución."));
 
     const subject = await this.subjects.findById(data.subjectId);
     const visible =
@@ -40,7 +40,7 @@ export class CreateCourseSubject implements UseCase<CreateCourseSubjectInput, Co
       );
 
     if (await this.courseSubjects.exists(data.courseId, data.subjectId)) {
-      return fail(new ValidationError("Esa asignatura ya está enlazada a ese curso."));
+      return fail(new ValidationError("Esa asignatura ya está enlazada a ese grado."));
     }
 
     return ok(await this.courseSubjects.create(data));

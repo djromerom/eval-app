@@ -25,8 +25,8 @@ export class CreateCourse implements UseCase<CreateCourseInput, Course> {
     const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
-    if (!data.name.trim()) return fail(new ValidationError("El nombre del curso es obligatorio."));
-    if (!isValidCode(data.code)) return fail(new ValidationError("Código de curso inválido."));
+    if (!data.name.trim()) return fail(new ValidationError("El nombre del grado es obligatorio."));
+    if (!isValidCode(data.code)) return fail(new ValidationError("Código de grado inválido."));
 
     const year = await this.years.findById(actor.institutionId, data.academicYearId);
     if (!year) {
