@@ -1,14 +1,29 @@
 /**
- * Tests del parser defensivo de CoverContent (PR 1).
+ * Tests del parser defensivo y del merge de CoverContent (PR 1 + PR 2).
  *
  * El JSONB que llega de Prisma puede tener campos mal formados (el admin
  * edita a mano, copia JSON de otra institución, etc.). El parser NUNCA
  * debe descartar el objeto entero por un campo malo — solo descarta
  * ESE campo y deja que el resto sobreviva para que en runtime `mergeCoverContent`
  * lo rellene con defaults.
+ *
+ * El merge aplica la precedencia bundle > institución > DEFAULT_* sin
+ * combinar arrays profundo.
  */
 import { describe, expect, it } from "vitest";
-import { parseCoverContent } from "@/modules/bundle-cover/domain/cover-content";
+import { mergeCoverContent, parseCoverContent } from "@/modules/bundle-cover/domain/cover-content";
+import {
+  DEFAULT_CALLOUT_TEXT,
+  DEFAULT_HOW_TO_MARK_EXAMPLE,
+  DEFAULT_HOW_TO_MARK_LABEL,
+  DEFAULT_HOW_TO_MARK_QUESTION,
+  DEFAULT_INSTRUCTIONS_ITEMS_AFTER,
+  DEFAULT_INSTRUCTIONS_ITEMS_BEFORE,
+  DEFAULT_INSTRUCTIONS_TITLE,
+  DEFAULT_LEGAL_FOOTER,
+  DEFAULT_PROHIBITED_BODY,
+  DEFAULT_PROHIBITED_TITLE,
+} from "@/modules/bundle-cover/application/cover-defaults";
 
 describe("parseCoverContent", () => {
   describe("casos felices", () => {
@@ -169,5 +184,89 @@ describe("parseCoverContent", () => {
         800,
       );
     });
+  });
+
+  describe("howToMarkExample (añadido en PR 2)", () => {
+    it("parsea el campo cuando es string válido", () => {
+      expect(parseCoverContent({ howToMarkExample: "Por ejemplo, si B" }).howToMarkExample).toBe(
+        "Por ejemplo, si B",
+      );
+    });
+
+    it("descarta strings que exceden 200 chars", () => {
+      const tooLong = "x".repeat(201);
+      expect(parseCoverContent({ howToMarkExample: tooLong }).howToMarkExample).toBeUndefined();
+    });
+
+    it("descarta si no es string", () => {
+      expect(parseCoverContent({ howToMarkExample: 42 }).howToMarkExample).toBeUndefined();
+    });
+  });
+});
+
+// ===========================================================================
+// mergeCoverContent (PR 2)
+// ===========================================================================
+
+describe("mergeCoverContent", () => {
+  it("devuelve todos los DEFAULTs cuando ambos lados están vacíos", () => {
+    expect(mergeCoverContent({}, {})).toEqual({
+      legalFooter: DEFAULT_LEGAL_FOOTER,
+      instructionsTitle: DEFAULT_INSTRUCTIONS_TITLE,
+      itemsBefore: DEFAULT_INSTRUCTIONS_ITEMS_BEFORE,
+      calloutText: DEFAULT_CALLOUT_TEXT,
+      howToMarkQuestion: DEFAULT_HOW_TO_MARK_QUESTION,
+      howToMarkExample: DEFAULT_HOW_TO_MARK_EXAMPLE,
+      howToMarkExampleLabel: DEFAULT_HOW_TO_MARK_LABEL,
+      itemsAfter: DEFAULT_INSTRUCTIONS_ITEMS_AFTER,
+      prohibitedTitle: DEFAULT_PROHIBITED_TITLE,
+      prohibitedBody: DEFAULT_PROHIBITED_BODY,
+    });
+  });
+
+  it("el bundle gana sobre la institución", () => {
+    const institutional = {
+      legalFooter: "Institucional",
+      calloutText: "Callout institucional",
+      itemsBefore: ["a1", "a2"],
+    };
+    const bundle = {
+      calloutText: "Callout del bundle",
+    };
+    const out = mergeCoverContent(institutional, bundle);
+    expect(out.calloutText).toBe("Callout del bundle"); // bundle gana
+    expect(out.legalFooter).toBe("Institucional"); // solo institucional
+    expect(out.itemsBefore).toEqual(["a1", "a2"]); // solo institucional
+    // resto: defaults
+    expect(out.howToMarkQuestion).toBe(DEFAULT_HOW_TO_MARK_QUESTION);
+  });
+
+  it("si la institución trae un campo y el bundle NO, usa el institucional", () => {
+    const institutional = { prohibitedBody: "No usar teléfonos institucionales" };
+    const bundle = { calloutText: "Bundle callout" };
+    const out = mergeCoverContent(institutional, bundle);
+    expect(out.prohibitedBody).toBe("No usar teléfonos institucionales");
+    expect(out.calloutText).toBe("Bundle callout");
+  });
+
+  it("el bundle SOBREESCRIBE el array completo de la institución (no concatena)", () => {
+    const institutional = { itemsBefore: ["a", "b"] };
+    const bundle = { itemsBefore: ["x", "y", "z"] };
+    expect(mergeCoverContent(institutional, bundle).itemsBefore).toEqual(["x", "y", "z"]);
+  });
+
+  it("maneja null/undefined en ambos lados tratándolos como {}", () => {
+    expect(mergeCoverContent(null as never, null as never).calloutText).toBe(DEFAULT_CALLOUT_TEXT);
+    expect(mergeCoverContent(undefined as never, undefined as never).howToMarkExample).toBe(
+      DEFAULT_HOW_TO_MARK_EXAMPLE,
+    );
+  });
+
+  it("howToMarkExample: bundle gana; si no, institucional; si no, default", () => {
+    expect(mergeCoverContent({}, {}).howToMarkExample).toBe(DEFAULT_HOW_TO_MARK_EXAMPLE);
+    expect(mergeCoverContent({ howToMarkExample: "Ins" }, {}).howToMarkExample).toBe("Ins");
+    expect(
+      mergeCoverContent({ howToMarkExample: "Ins" }, { howToMarkExample: "Bun" }).howToMarkExample,
+    ).toBe("Bun");
   });
 });

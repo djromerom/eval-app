@@ -41,6 +41,18 @@
  * migraciones de schema.
  */
 import { z } from "zod";
+import {
+  DEFAULT_CALLOUT_TEXT,
+  DEFAULT_HOW_TO_MARK_EXAMPLE,
+  DEFAULT_HOW_TO_MARK_LABEL,
+  DEFAULT_HOW_TO_MARK_QUESTION,
+  DEFAULT_INSTRUCTIONS_ITEMS_AFTER,
+  DEFAULT_INSTRUCTIONS_ITEMS_BEFORE,
+  DEFAULT_INSTRUCTIONS_TITLE,
+  DEFAULT_LEGAL_FOOTER,
+  DEFAULT_PROHIBITED_BODY,
+  DEFAULT_PROHIBITED_TITLE,
+} from "../application/cover-defaults";
 
 // ===== Schemas =====
 
@@ -68,6 +80,10 @@ export const CoverContentSchema = z.object({
   /** Pregunta + ejemplo del bloque "¿CÓMO MARCAR EN SU HOJA DE
    *  RESPUESTAS?". Puede llevar saltos de línea (la plantilla usa `<br>`). */
   howToMarkQuestion: z.string().max(400).optional(),
+
+  /** Texto del ejemplo ("Por ejemplo, si la opción correcta es B").
+   *  Aparece después de `howToMarkQuestion` en la plantilla. */
+  howToMarkExample: z.string().max(200).optional(),
 
   /** Etiqueta pequeña del rectángulo de burbujas (la caja con el ejemplo
    *  visual). Default: "MARQUE ASÍ". */
@@ -150,6 +166,9 @@ export function parseCoverContent(raw: unknown): Partial<CoverContent> {
   const hmq = pickString(o, "howToMarkQuestion", STR_400);
   if (hmq !== undefined) out.howToMarkQuestion = hmq;
 
+  const hme = pickString(o, "howToMarkExample", STR_200);
+  if (hme !== undefined) out.howToMarkExample = hme;
+
   const hmel = pickString(o, "howToMarkExampleLabel", STR_80);
   if (hmel !== undefined) out.howToMarkExampleLabel = hmel;
 
@@ -172,10 +191,6 @@ export function parseCoverContent(raw: unknown): Partial<CoverContent> {
  * Todos los campos son strings/arrays no-undefined. Es el input que
  * consume `BuildCoverContext` para armar la sección `cover.*` del
  * CoverContext que se le pasa a Mustache.
- *
- * (Definido aquí para tener un único punto de verdad sobre los tipos;
- * la función `mergeCoverContent` se añade en PR 2 cuando se enchufa con
- * `BuildCoverContext`.)
  */
 export interface ResolvedCoverContent {
   legalFooter: string;
@@ -183,8 +198,44 @@ export interface ResolvedCoverContent {
   itemsBefore: readonly string[];
   calloutText: string;
   howToMarkQuestion: string;
+  howToMarkExample: string;
   howToMarkExampleLabel: string;
   itemsAfter: readonly string[];
   prohibitedTitle: string;
   prohibitedBody: string;
+}
+
+/**
+ * Colapsa (institutional, bundle) en un objeto resuelto, aplicando la
+ * precedencia bundle > institución > DEFAULT_*. Pura — sin I/O.
+ *
+ * Si AMBOS lados traen un campo, gana el bundle. Si NINGUNO lo trae,
+ * cae al DEFAULT exportado por `./cover-defaults.ts`. Es la función
+ * inversa de los campos opcionales: el JSONB guarda SOLO overrides
+ * (null = "no configurar"), y esta función rellena con defaults.
+ *
+ * Los strings y arrays NO se mergean profundo: si el bundle trae un
+ * array, gana entero (no concatena con el institucional). Es coherente
+ * con `mergeTheme()` en `@/modules/theme/domain/theme.ts`.
+ */
+export function mergeCoverContent(
+  institutional: Partial<CoverContent>,
+  bundle: Partial<CoverContent>,
+): ResolvedCoverContent {
+  const ins = institutional ?? {};
+  const bud = bundle ?? {};
+  return {
+    legalFooter: bud.legalFooter ?? ins.legalFooter ?? DEFAULT_LEGAL_FOOTER,
+    instructionsTitle: bud.instructionsTitle ?? ins.instructionsTitle ?? DEFAULT_INSTRUCTIONS_TITLE,
+    itemsBefore: bud.itemsBefore ?? ins.itemsBefore ?? DEFAULT_INSTRUCTIONS_ITEMS_BEFORE,
+    calloutText: bud.calloutText ?? ins.calloutText ?? DEFAULT_CALLOUT_TEXT,
+    howToMarkQuestion:
+      bud.howToMarkQuestion ?? ins.howToMarkQuestion ?? DEFAULT_HOW_TO_MARK_QUESTION,
+    howToMarkExample: bud.howToMarkExample ?? ins.howToMarkExample ?? DEFAULT_HOW_TO_MARK_EXAMPLE,
+    howToMarkExampleLabel:
+      bud.howToMarkExampleLabel ?? ins.howToMarkExampleLabel ?? DEFAULT_HOW_TO_MARK_LABEL,
+    itemsAfter: bud.itemsAfter ?? ins.itemsAfter ?? DEFAULT_INSTRUCTIONS_ITEMS_AFTER,
+    prohibitedTitle: bud.prohibitedTitle ?? ins.prohibitedTitle ?? DEFAULT_PROHIBITED_TITLE,
+    prohibitedBody: bud.prohibitedBody ?? ins.prohibitedBody ?? DEFAULT_PROHIBITED_BODY,
+  };
 }
