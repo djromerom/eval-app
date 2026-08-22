@@ -9,6 +9,8 @@ import { PreviewCover } from "../application/preview-cover";
 import { RenderCover } from "../application/render-cover";
 import { ResetCoverTemplate } from "../application/reset-cover-template";
 import { SaveCoverTemplate } from "../application/save-cover-template";
+import { UpdateBundleCoverContent } from "../application/update-bundle-cover-content";
+import { UpdateInstitutionCoverContent } from "../application/update-institution-cover-content";
 import { FsCoverTemplateLoader } from "./fs-cover-template-loader";
 import { LocalCoverAssetResolver } from "./local-cover-asset-resolver";
 import { PrismaCoverTemplateRepository } from "./prisma-cover-template-repository";
@@ -36,6 +38,12 @@ const coverAssets = new LocalCoverAssetResolver(localStorage);
 const buildContext = new BuildCoverContext(bundles, institutions, getResolvedCoverContent);
 const renderCover = new RenderCover();
 
+// --- Use cases de write del contenido de portada (PR 3, ago 2026) ---
+// UpdateInstitutionCoverContent delega en InstitutionRepository.setCoverContent
+// (la capa application/ no importa Prisma por regla del ESLint config).
+const updateInstitutionCoverContent = new UpdateInstitutionCoverContent(institutions);
+const updateBundleCoverContent = new UpdateBundleCoverContent(bundles);
+
 // --- Use cases públicos ---
 export const makePreviewCover = () =>
   new PreviewCover(states, loader, buildContext, renderCover, coverAssets);
@@ -51,3 +59,7 @@ export const makeChangeCoverTemplateKey = () =>
     const keys = await loader.listAvailableKeys();
     return keys.includes(key);
   });
+
+export const makeUpdateBundleCoverContent = () => updateBundleCoverContent;
+
+export const makeUpdateInstitutionCoverContent = () => updateInstitutionCoverContent;

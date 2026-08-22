@@ -139,6 +139,7 @@ export class InMemoryBundleRepository implements BundleRepository {
       courseName: data.courseId ? courseNameOf(data.courseId) : null,
       status: "DRAFT",
       theme: data.theme ?? null,
+      coverContent: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -200,6 +201,7 @@ export class InMemoryBundleRepository implements BundleRepository {
           }
         : {}),
       ...(data.theme !== undefined ? { theme: data.theme } : {}),
+      ...(data.coverContent !== undefined ? { coverContent: data.coverContent } : {}),
       updatedAt: new Date(),
     };
     this.bundles.set(id, updated);

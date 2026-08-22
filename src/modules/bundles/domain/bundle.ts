@@ -45,6 +45,14 @@ export interface Bundle {
    * por consistencia con `Evaluation.theme`.
    */
   theme: unknown;
+  /**
+   * Override del copy de la portada (cover) por compendio. JSONB crudo: la
+   * capa de aplicación no lo estructura — `getResolvedCoverContent()` lo
+   * valida con `parseCoverContent()` antes de mergearlo con el institucional.
+   * Tipado como `unknown` por consistencia con `theme`. Lo configuran los
+   * lideres/docentes en /admin/bundles/:id/cover-designer. PR 3 (ago 2026).
+   */
+  coverContent: unknown;
   createdById: string;
   createdAt: Date;
   updatedAt: Date;
@@ -115,6 +123,14 @@ export interface UpdateBundleData {
    */
   courseId?: string | null;
   theme?: Partial<BundleTheme> | null;
+  /**
+   * Override del copy de la portada. `undefined` = no tocar; `null` = limpiar
+   * (cae al institucional); objeto = override parcial — `parseCoverContent()`
+   * descarta campo por campo lo inválido. Tipado como `unknown` por
+   * consistencia con `Bundle.coverContent` (el dominio no estructura el JSON).
+   * PR 3 (ago 2026).
+   */
+  coverContent?: unknown | null;
 }
 
 export interface AddItemInput {

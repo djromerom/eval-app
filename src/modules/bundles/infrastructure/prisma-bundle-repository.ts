@@ -54,6 +54,7 @@ function toBundle(row: BundleRow): Bundle {
     courseName: row.course?.name ?? null,
     status: row.status as BundleStatus,
     theme: row.theme,
+    coverContent: row.coverContent,
     createdById: row.createdById,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -195,6 +196,9 @@ export class PrismaBundleRepository implements BundleRepository {
         ...(data.courseId !== undefined ? { courseId: data.courseId } : {}),
         ...(data.theme !== undefined
           ? { theme: (data.theme ?? null) as Prisma.InputJsonValue }
+          : {}),
+        ...(data.coverContent !== undefined
+          ? { coverContent: (data.coverContent ?? null) as Prisma.InputJsonValue }
           : {}),
       },
       include: { course: { select: { name: true } } },

@@ -191,6 +191,10 @@ class InMemoryInstitutionRepository implements InstitutionRepository {
     throw new Error("create() no usado en bundle-cover tests");
   }
   async setActive() {}
+  async setCoverContent(id: string, coverContent: Record<string, unknown> | null) {
+    const inst = this.items.get(id);
+    if (inst) inst.coverContent = coverContent;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -216,6 +220,7 @@ const institution: Institution = {
   code: "DEMO",
   logo: "/logo.png",
   theme: null,
+  coverContent: null,
   isActive: true,
   createdAt: new Date(),
 };
@@ -257,6 +262,7 @@ const bundle: BundleDetail = {
   courseName: "6°",
   status: "DRAFT",
   theme: null,
+  coverContent: null,
   createdById: ecuMaster.userId,
   createdAt: new Date(),
   updatedAt: new Date(),
