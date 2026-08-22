@@ -48,12 +48,15 @@ function BellIcon() {
 
 const NAV_ITEMS: readonly NavItem[] = [
   // Sección admin (SUPER_ADMIN y ECU_MASTER).
-  { href: "/admin", label: "Panel", requires: "manage-users" },
   { href: "/admin/institutions", label: "Instituciones", requires: "manage-institutions" },
   { href: "/admin/users", label: "Usuarios", requires: "manage-users" },
   { href: "/admin/academic", label: "Estructura académica", requires: "manage-academic-structure" },
   { href: "/admin/teachers", label: "Docentes", requires: "manage-users" },
-  { href: "/admin/leader-assignments", label: "Asignación de Líderes ECU", requires: "manage-users" },
+  {
+    href: "/admin/leader-assignments",
+    label: "Asignación de Líderes ECU",
+    requires: "manage-users",
+  },
   { href: "/admin/students", label: "Estudiantes", requires: "manage-users" },
   { href: "/admin/theme", label: "Tema institucional", requires: "manage-institutional-theme" },
   // Cuadernillos: hoy ECU_MASTER. Si SUPER_ADMIN debe poder gestionarlos
@@ -61,17 +64,15 @@ const NAV_ITEMS: readonly NavItem[] = [
   // capabilities.ts — NO se toca este menú.
   { href: "/admin/bundles", label: "Cuadernillos", requires: "manage-bundles" },
   // Sección coordinador.
-  { href: "/coordinator", label: "Panel", requires: "review-evaluations" },
   { href: "/coordinator/review", label: "Revisión", requires: "review-evaluations" },
   // Sección docente.
-  { href: "/teacher", label: "Panel", requires: "create-evaluations" },
   { href: "/teacher/evaluations", label: "Mis Formulaciones", requires: "create-evaluations" },
   // Plantillas y escaneo: ocultos al TEACHER (solo COORDINATOR y superiores).
   {
     href: "/teacher/templates",
     label: "Plantillas",
     requires: "create-evaluations",
-    roles: ["ECU_LIDER", "ECU_MASTER"],
+    roles: ["ECU_MASTER"],
   },
   {
     href: "/teacher/question-bank",
