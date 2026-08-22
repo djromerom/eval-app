@@ -23,6 +23,11 @@ model Institution {
   // src/modules/theme/domain/theme.ts (zod schema) y el helper mergeTheme()
   // que combina este JSON con el de Evaluation.theme (override por eval).
   theme     Json?
+  // Override textual del contenido de la portada (copy institucional:
+  // legalFooter, cuerpo del bloque prohibido). Se combina en runtime con
+  // EvaluationBundle.coverContent (PR 2 vía getResolvedCoverContent).
+  // Ver src/modules/bundle-cover/domain/cover-content.ts.
+  coverContent Json?
   address   String?
   phone     String?
   email     String?
@@ -563,6 +568,11 @@ model EvaluationBundle {
   // Override del tema institucional. Mismo shape que Evaluation.theme; se
   // combina con Institution.theme en runtime. Ver src/modules/theme/.
   theme           Json?
+  // Override textual del contenido de la portada (instrucciones, callout,
+  // cómo marcar, bullets, prohibido). Se combina en runtime con
+  // Institution.coverContent (PR 2 vía getResolvedCoverContent).
+  // Ver src/modules/bundle-cover/domain/cover-content.ts.
+  coverContent    Json?
   // Geometría OMR de la hoja de respuestas, MEDIDA del render real
   // (ver modules/printing/domain/sheet-template.ts). Se captura de forma
   // perezosa la primera vez que se escanea una hoja del compendio y se
@@ -579,6 +589,17 @@ model EvaluationBundle {
   sheetTemplate   Json?
   // Cuándo se capturó `sheetTemplate`, para poder invalidarla a mano.
   sheetTemplateAt DateTime?
+  // --- Cover designer (ago 2026) ---
+  // Variante de plantilla de portada seleccionada: ej. "secundaria-v1",
+  // "primaria-v1". Si null, se usa DEFAULT_COVER_TEMPLATE_KEY.
+  coverTemplateKey String?
+  // HTML con variables Mustache que reemplaza al built-in de la misma key.
+  // Si null, se carga el archivo templates/cover/{key}.html. Se borra (≠ key)
+  // para restablecer el built-in sin cambiar de variante.
+  coverTemplateBody String?
+  // Última vez que se guardó el body (override). Null si nunca se editó o
+  // si está cayendo al built-in.
+  coverTemplateUpdatedAt DateTime?
   createdById     String       @db.Uuid
   createdBy       User         @relation("BundleCreatedBy", fields: [createdById], references: [id])
   createdAt       DateTime     @default(now())
