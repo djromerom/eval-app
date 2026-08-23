@@ -1,0 +1,41 @@
+-- Sprint "coverVisualProject" — tercera fuente de HTML de portada (ago 2026).
+--
+-- Hasta ahora la portada tenía dos fuentes:
+--   • coverTemplateBody (override HTML crudo en /cover-designer)
+--   • Built-in de la key (secundaria-v1.html, etc.)
+--
+-- Este sprint introduce una TERCERA fuente: el proyecto GrapesJS persistido
+-- por compendio. Vive en /admin/bundles/:id/cover-visual y permite al
+-- docente arrastrar componentes (los mismos 6 bloques del Cover Studio +
+-- 4 genéricos) sin tocar HTML.
+--
+-- Modelo:
+--   • EvaluationBundle.coverVisualProject    — JSON serializado del proyecto
+--                                              GrapesJS (pages, components,
+--                                              styles, assets). Si está set,
+--                                              GANA sobre coverTemplateBody en
+--                                              el render (ver
+--                                              application/preview-cover.ts).
+--   • EvaluationBundle.coverVisualUpdatedAt  — cuándo se guardó por última
+--                                              vez.
+--
+-- Precedencia de render (en application/preview-cover.ts):
+--   1. coverVisualProject  (esta columna)   → renderiza vía RenderCoverVisual
+--   2. coverTemplateBody   (override HTML)   → renderiza vía RenderCover
+--   3. built-in de la key                    → renderiza vía RenderCover
+--
+-- Ambos pueden coexistir: el docente puede tener un override HTML en
+-- /cover-designer y un proyecto visual en /cover-visual simultáneamente. El
+-- visual gana, y las otras dos vistas muestran un banner no-bloqueante
+-- avisando. Resetear el visual lo devuelve al HTML/built-in.
+--
+-- El campo es Json? (nullable) — null = el bundle no ha sido editado en
+-- cover-visual todavía, así que cae a la siguiente fuente. Mismo shape que
+-- coverContent (JSONB en Postgres).
+--
+-- No seed update: los bundles existentes arrancan con coverVisualProject=null
+-- y heredan el comportamiento previo (caen a coverTemplateBody o built-in).
+
+ALTER TABLE "EvaluationBundle"
+  ADD COLUMN "coverVisualProject"   JSONB,
+  ADD COLUMN "coverVisualUpdatedAt" TIMESTAMP(3);

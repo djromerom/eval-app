@@ -600,6 +600,14 @@ model EvaluationBundle {
   // Última vez que se guardó el body (override). Null si nunca se editó o
   // si está cayendo al built-in.
   coverTemplateUpdatedAt DateTime?
+  // --- Cover Visual (ago 2026, PR 1 de la tercera vista) ---
+  // Proyecto GrapesJS persistido como JSON. Si está set, gana sobre
+  // coverTemplateBody en el render (precedencia: visual → HTML → built-in).
+  // Ver src/modules/bundle-cover/domain/cover-visual.ts y
+  // application/render-cover-visual.ts. Null = el bundle no ha sido editado
+  // en /cover-visual todavía y cae a coverTemplateBody o al built-in.
+  coverVisualProject    Json?
+  coverVisualUpdatedAt  DateTime?
   createdById     String       @db.Uuid
   createdBy       User         @relation("BundleCreatedBy", fields: [createdById], references: [id])
   createdAt       DateTime     @default(now())
