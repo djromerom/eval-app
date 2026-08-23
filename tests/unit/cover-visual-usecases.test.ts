@@ -12,7 +12,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { type AuthenticatedUser } from "@/shared/application/authenticated-user";
 import { NotFoundError, ValidationError } from "@/shared/domain/result";
-import { type Bundle, type BundleRepository } from "@/modules/bundles/domain/bundle";
+import {
+  type Bundle,
+  type BundleDetail,
+  type BundleItem,
+  type BundleItemDetail,
+  type BundleRepository,
+} from "@/modules/bundles/domain/bundle";
 import {
   type CoverVisualProject,
   type CoverVisualRepository,
@@ -83,8 +89,9 @@ class InMemoryCoverVisualRepository implements CoverVisualRepository {
   }
 }
 
-/** Stub mínimo de BundleRepository — solo necesitamos findById y update. */
-class InMemoryBundleRepository implements Pick<BundleRepository, "findById" | "update"> {
+/** Stub de BundleRepository. Solo se usan `findById` y `update` en estos
+ *  tests; los demás métodos lanzan para detectar usos accidentales. */
+class InMemoryBundleRepository implements BundleRepository {
   private readonly bundles = new Map<string, Bundle>();
 
   seed(bundle: Bundle) {
@@ -104,6 +111,42 @@ class InMemoryBundleRepository implements Pick<BundleRepository, "findById" | "u
     this.bundles.set(id, updated);
     return updated;
   }
+
+  // Métodos no usados en estos tests — implementados para satisfacer el
+  // contrato `BundleRepository`. Lanzan si el test los invoca por error.
+  async create(): Promise<Bundle> {
+    throw new Error("not used in cover-visual tests");
+  }
+  async findDetail(): Promise<BundleDetail | null> {
+    throw new Error("not used");
+  }
+  async findAll(): Promise<Bundle[]> {
+    throw new Error("not used");
+  }
+  async findByCourseIds(): Promise<Bundle[]> {
+    throw new Error("not used");
+  }
+  async delete(): Promise<void> {
+    throw new Error("not used");
+  }
+  async listItemsOrdered(): Promise<BundleItemDetail[]> {
+    throw new Error("not used");
+  }
+  async addItem(): Promise<BundleItem> {
+    throw new Error("not used");
+  }
+  async removeItem(): Promise<boolean> {
+    throw new Error("not used");
+  }
+  async reorderItems(): Promise<void> {
+    throw new Error("not used");
+  }
+  async setStatus(): Promise<void> {
+    throw new Error("not used");
+  }
+  async findEvaluationsByIds(): Promise<never[]> {
+    throw new Error("not used");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -111,24 +154,21 @@ class InMemoryBundleRepository implements Pick<BundleRepository, "findById" | "u
 // ---------------------------------------------------------------------------
 
 const ecuMaster: AuthenticatedUser = {
-  id: "user-1",
+  userId: "user-1",
   institutionId: "inst-A",
   roles: ["ECU_MASTER"],
-  permissions: ["manage-bundles"],
 };
 
 const ecuLider: AuthenticatedUser = {
-  id: "user-2",
+  userId: "user-2",
   institutionId: "inst-A",
   roles: ["ECU_LIDER"],
-  permissions: ["manage-bundles"],
 };
 
 const teacher: AuthenticatedUser = {
-  id: "user-3",
+  userId: "user-3",
   institutionId: "inst-A",
   roles: ["TEACHER"],
-  permissions: [],
 };
 
 const draftBundle: Bundle = {
@@ -137,20 +177,16 @@ const draftBundle: Bundle = {
   name: "Test",
   bookletNumber: 1,
   courseId: null,
+  courseName: null,
   status: "DRAFT",
   theme: {},
   coverContent: null,
-  sheetTemplate: null,
-  sheetTemplateAt: null,
-  coverTemplateKey: "secundaria-v1",
-  coverTemplateBody: null,
-  coverTemplateUpdatedAt: null,
   createdById: "user-1",
   createdAt: new Date(),
   updatedAt: new Date(),
-} as Bundle;
+};
 
-const readyBundle: Bundle = { ...draftBundle, id: "b2", status: "READY" } as Bundle;
+const readyBundle: Bundle = { ...draftBundle, id: "b2", status: "READY" };
 
 /** Proyecto GrapesJS mínimo válido: 1 página, 1 frame, 1 componente callout. */
 function validProject(): CoverVisualProject {
