@@ -17,6 +17,12 @@ import { ResetCoverTemplate } from "@/modules/bundle-cover/application/reset-cov
 import { SaveCoverTemplate } from "@/modules/bundle-cover/application/save-cover-template";
 import { BuildCoverContext } from "@/modules/bundle-cover/application/cover-context";
 import { RenderCover } from "@/modules/bundle-cover/application/render-cover";
+import { RenderCoverVisual } from "@/modules/bundle-cover/application/render-cover-visual";
+import type {
+  CoverVisualProject,
+  CoverVisualRepository,
+  CoverVisualState,
+} from "@/modules/bundle-cover/domain/cover-visual";
 import type {
   Bundle,
   BundleDetail,
@@ -115,6 +121,66 @@ class InMemoryCoverTemplateLoader implements CoverTemplateLoader {
 
   async listAvailableKeys(): Promise<CoverTemplateKey[]> {
     return [...this.store.keys()].sort();
+  }
+}
+
+/**
+ * Stub minimalista del CoverVisualRepository para los tests de
+ * PreviewCover en este archivo. Por defecto no hay proyecto visual
+ * (loadProject → null), así que PreviewCover cae al camino tradicional
+ * (built-in / HTML override). Si un test quiere probar el branch del
+ * visual, hace `visualStates.seed(...)` con un JSON.
+ */
+class InMemoryCoverVisualRepository implements CoverVisualRepository {
+  private readonly rows = new Map<
+    string,
+    { project: CoverVisualProject | null; updatedAt: Date | null }
+  >();
+
+  seed(bundleId: string, project: CoverVisualProject | null, updatedAt: Date | null = null) {
+    this.rows.set(bundleId, { project, updatedAt });
+  }
+
+  async loadState(institutionId: string, bundleId: string): Promise<CoverVisualState> {
+    const row = this.rows.get(bundleId);
+    if (!row) {
+      // Estado "vacío" sin sembrar = hasProject=false.
+      return {
+        bundleId,
+        hasProject: false,
+        updatedAt: null,
+        fallbackKey: DEFAULT_COVER_TEMPLATE_KEY,
+        fallbackSource: "BUILT_IN",
+      };
+    }
+    return {
+      bundleId,
+      hasProject: row.project != null,
+      updatedAt: row.updatedAt,
+      fallbackKey: DEFAULT_COVER_TEMPLATE_KEY,
+      fallbackSource: "BUILT_IN",
+    };
+  }
+
+  async loadProject(institutionId: string, bundleId: string): Promise<CoverVisualProject | null> {
+    return this.rows.get(bundleId)?.project ?? null;
+  }
+
+  async saveProject(
+    institutionId: string,
+    bundleId: string,
+    project: CoverVisualProject,
+  ): Promise<CoverVisualState> {
+    const row = this.rows.get(bundleId) ?? { project: null, updatedAt: null };
+    row.project = project;
+    row.updatedAt = new Date();
+    this.rows.set(bundleId, row);
+    return this.loadState(institutionId, bundleId);
+  }
+
+  async resetProject(institutionId: string, bundleId: string): Promise<CoverVisualState> {
+    this.rows.set(bundleId, { project: null, updatedAt: null });
+    return this.loadState(institutionId, bundleId);
   }
 }
 
@@ -664,14 +730,21 @@ describe("bundle-cover", () => {
     },
   };
 
+  // Stub del visual repository: vacío por defecto → PreviewCover cae al
+  // camino tradicional. Si un test quiere probar el branch del visual,
+  // hace `visualStates.seed(...)` con un JSON.
+  const visualStates = new InMemoryCoverVisualRepository();
+
   describe("PreviewCover", () => {
-    it("renderiza built-in cuando no hay override", async () => {
+    it("renderiza built-in cuando no hay override ni visual", async () => {
       states.seed("b1", null, null);
       const uc = new PreviewCover(
         states,
+        visualStates,
         loader,
         new BuildCoverContext(bundles, institutionsRepo),
         new RenderCover(),
+        new RenderCoverVisual(new RenderCover()),
         noopAssets,
       );
       const res = await uc.execute({ actor: ecuMaster, bundleId: "b1" });
@@ -682,14 +755,16 @@ describe("bundle-cover", () => {
       expect(res.value.html).toContain("ECU 6°");
     });
 
-    it("renderiza override cuando hay body guardado", async () => {
+    it("renderiza override cuando hay body guardado y no hay visual", async () => {
       const customBody = `<html><body><h1>PERSONALIZADO</h1><p>{{bundle.name}}</p></body></html>`;
       states.seed("b1", null, customBody, new Date());
       const uc = new PreviewCover(
         states,
+        visualStates,
         loader,
         new BuildCoverContext(bundles, institutionsRepo),
         new RenderCover(),
+        new RenderCoverVisual(new RenderCover()),
         noopAssets,
       );
       const res = await uc.execute({ actor: ecuMaster, bundleId: "b1" });
@@ -703,9 +778,11 @@ describe("bundle-cover", () => {
     it("rechaza a un TEACHER (solo manage-bundles)", async () => {
       const uc = new PreviewCover(
         states,
+        visualStates,
         loader,
         new BuildCoverContext(bundles, institutionsRepo),
         new RenderCover(),
+        new RenderCoverVisual(new RenderCover()),
         noopAssets,
       );
       const res = await uc.execute({ actor: teacher, bundleId: "b1" });
