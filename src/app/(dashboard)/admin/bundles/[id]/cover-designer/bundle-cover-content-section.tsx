@@ -9,6 +9,12 @@ import {
   type ResolvedCoverContent,
 } from "@/modules/bundle-cover/domain/cover-content";
 import {
+  type CoverContentField,
+  type ExtractedFields,
+  FIELD_META,
+  groupFieldsByBlock,
+} from "@/modules/bundle-cover/domain/template-fields";
+import {
   resetBundleCoverContentAction,
   saveBundleCoverContentAction,
   type BundleCoverContentFormState,
@@ -23,37 +29,43 @@ interface Props {
   resolved: ResolvedCoverContent;
   /** False si el cuadernillo no está en DRAFT (no se puede editar). */
   editable: boolean;
+  /**
+   * Campos del schema que la plantilla activa realmente referencia (PR 5).
+   * El form se genera dinámicamente a partir de este set: si la plantilla
+   * no usa `{{cover.callout.text}}`, no aparece un textarea para
+   * `calloutText` (lo que el docente escriba no se renderizaría en el PDF).
+   * `hasAny=false` muestra un mensaje de "plantilla sin contenido editable"
+   * en lugar del form.
+   */
+  fields: ExtractedFields;
 }
 
-// Límites del schema (CoverContentSchema en domain/cover-content.ts).
-// Si los subimos también allí, hay que actualizar aquí.
-const ITEMS_BEFORE_MAX = 10;
-const ITEMS_AFTER_MAX = 15;
-const STRING_MAX = 200;
-
-/**
- * Sección "Contenido de portada" embebida en cover-designer (PR 4, ago 2026).
- *
- * Persiste `EvaluationBundle.coverContent` vía `saveBundleCoverContentAction`.
- * Mismo patrón que `BundleThemeSection`: strings vacíos caen al valor
- * `resolved` (que ya está colapsado a institución → DEFAULT_*), bullets
- * vacíos se filtran antes de enviar al action.
- *
- * Campos (mismo orden que en `cover-content.ts` para facilitar el review):
- *   • Texto del callout destacado
- *   • Título del bloque de instrucciones
- *   • Bullets ANTES del callout (máx 10)
- *   • Pregunta + ejemplo del bloque "¿CÓMO MARCAR?"
- *   • Etiqueta del rectángulo de ejemplo ("MARQUE ASÍ")
- *   • Bullets DESPUÉS del bloque cómo-marcar (máx 15)
- *   • Título + cuerpo del bloque "Prohibido"
- *   • Pie legal al pie de portada
- *
- * Limitación conocida: el preview iframe del cover-designer NO se actualiza
- * en tiempo real con estos cambios — el cover-context se reconstruye
- * server-side tras Guardar + reload (mismo comportamiento que el theme).
- */
-export function BundleCoverContentSection({ bundleId, initial, resolved, editable }: Props) {
+// ===========================================================================
+// Sección "Contenido de portada" embebida en cover-designer (PR 4, ago 2026).
+//
+// Persiste `EvaluationBundle.coverContent` vía `saveBundleCoverContentAction`.
+// Mismo patrón que `BundleThemeSection`: strings vacíos caen al valor
+// `resolved` (que ya está colapsado a institución → DEFAULT_*), bullets
+// vacíos se filtran antes de enviar al action.
+//
+// Desde PR 5 (ago 2026) el form es template-driven: los inputs que pinta
+// son solo los que la plantilla activa efectivamente referencia. Si la
+// plantilla activa es `primaria-v1` (que solo usa `institution.legalFooter`
+// del schema), solo aparece el bloque "Pie legal". Si el docente cambia
+// a `secundaria-v1`, aparecen los bloques de instrucciones, ¿cómo marcar?
+// y prohibido.
+//
+// Limitación conocida: el preview iframe del cover-designer NO se actualiza
+// en tiempo real con estos cambios — el cover-context se reconstruye
+// server-side tras Guardar + reload (mismo comportamiento que el theme).
+// ===========================================================================
+export function BundleCoverContentSection({
+  bundleId,
+  initial,
+  resolved,
+  editable,
+  fields,
+}: Props) {
   const [state, formAction] = useActionState<BundleCoverContentFormState, FormData>(
     (prev, fd) => saveBundleCoverContentAction(bundleId, prev, fd),
     {},
@@ -64,39 +76,40 @@ export function BundleCoverContentSection({ bundleId, initial, resolved, editabl
   );
 
   // --- Estado local ---
-  // Para los strings: estado inicial = override del bundle si existe, si
-  // no el valor `resolved` (lo que el usuario vería hoy). Cadena vacía
-  // significa "sin override" y cae al resolved en runtime.
-  const [calloutText, setCalloutText] = useState(initial.calloutText ?? resolved.calloutText);
-  const [instructionsTitle, setInstructionsTitle] = useState(
-    initial.instructionsTitle ?? resolved.instructionsTitle,
+  // Strings: por cada campo que la plantilla usa, guardamos el override
+  // actual del bundle o el valor `resolved` (lo que el usuario vería hoy).
+  // Cadena vacía = "sin override" y cae al resolved en runtime.
+  const [strings, setStrings] = useState<Record<string, string>>(() =>
+    Object.fromEntries(fields.strings.map((f) => [f, initialStringFor(f, initial, resolved)])),
   );
-  const [howToMarkQuestion, setHowToMarkQuestion] = useState(
-    initial.howToMarkQuestion ?? resolved.howToMarkQuestion,
+  // Arrays: por cada campo array que la plantilla usa, el editor de bullets
+  // controlado (un string[] con al menos un slot vacío para "+ Añadir").
+  const [arrays, setArrays] = useState<Record<string, string[]>>(() =>
+    Object.fromEntries(
+      fields.arrays.map((f) => {
+        const meta = FIELD_META[f];
+        return [f, arrayFromBullets(initialArrayFor(f, initial, resolved), meta.arrayMax ?? 10)];
+      }),
+    ),
   );
-  const [howToMarkExample, setHowToMarkExample] = useState(
-    initial.howToMarkExample ?? resolved.howToMarkExample,
-  );
-  const [howToMarkExampleLabel, setHowToMarkExampleLabel] = useState(
-    initial.howToMarkExampleLabel ?? resolved.howToMarkExampleLabel,
-  );
-  const [prohibitedTitle, setProhibitedTitle] = useState(
-    initial.prohibitedTitle ?? resolved.prohibitedTitle,
-  );
-  const [prohibitedBody, setProhibitedBody] = useState(
-    initial.prohibitedBody ?? resolved.prohibitedBody,
-  );
-  const [legalFooter, setLegalFooter] = useState(initial.legalFooter ?? resolved.legalFooter);
 
-  // Para los bullets: estado es `string[]` (inputs controlados).
-  // Vacío = fila vacía que se filtra al enviar. Longitud inicial =
-  // max(initial.length, 1) para que siempre haya al menos una fila visible.
-  const [itemsBefore, setItemsBefore] = useState<string[]>(() =>
-    arrayFromBullets(initial.itemsBefore ?? resolved.itemsBefore, ITEMS_BEFORE_MAX),
-  );
-  const [itemsAfter, setItemsAfter] = useState<string[]>(() =>
-    arrayFromBullets(initial.itemsAfter ?? resolved.itemsAfter, ITEMS_AFTER_MAX),
-  );
+  if (!fields.hasAny) {
+    return (
+      <div className="bg-card space-y-3 rounded-xl border p-5">
+        <div>
+          <h2 className="font-semibold">Contenido de portada</h2>
+          <p className="text-muted-foreground text-xs">
+            Esta plantilla no usa contenido de portada editable. Para personalizar los textos
+            (callout, instrucciones, ¿cómo marcar?, etc.) cambia a una variante como{" "}
+            <span className="font-mono">secundaria-v1</span> o sube tu propio HTML que referencie
+            variables <code>{`{{cover.*}}`}</code>.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const blocks = groupFieldsByBlock(fields);
 
   return (
     <form action={formAction} className="bg-card space-y-4 rounded-xl border p-5">
@@ -104,181 +117,47 @@ export function BundleCoverContentSection({ bundleId, initial, resolved, editabl
         <h2 className="font-semibold">Contenido de portada</h2>
         <p className="text-muted-foreground text-xs">
           Sobreescribe el texto institucional de la portada. Solo aplica a este cuadernillo. En
-          blanco = hereda del colegio o, si el colegio no lo configuró, del DEFAULT de la
-          plantilla.
+          blanco = hereda del colegio o, si el colegio no lo configuró, del DEFAULT de la plantilla.
         </p>
       </div>
 
       <fieldset className="space-y-4" disabled={!editable}>
-        {/* === Bloque Instrucciones === */}
-        <Section title="Bloque de instrucciones">
-          <Field label="Título del bloque" hint="Si lo dejas en blanco se usa el título por defecto.">
-            <Input
-              name="instructionsTitle"
-              value={instructionsTitle}
-              onChange={(e) => setInstructionsTitle(e.target.value)}
-              maxLength={80}
-              placeholder={resolved.instructionsTitle}
-            />
-            <HeredarRow
-              onClick={() => setInstructionsTitle(resolved.instructionsTitle)}
-              empty={!instructionsTitle}
-            />
-          </Field>
-
-          <Field
-            label={`Indicaciones iniciales (máx ${ITEMS_BEFORE_MAX})`}
-            hint="Aparecen ANTES del callout destacado."
-          >
-            <BulletsEditor
-              name="itemsBefore"
-              max={ITEMS_BEFORE_MAX}
-              value={itemsBefore}
-              onChange={setItemsBefore}
-              resolved={resolved.itemsBefore}
-              placeholder="Ej. Lea cada pregunta antes de responder."
-            />
-          </Field>
-
-          <Field
-            label="Callout destacado"
-            hint="Caja con borde redondeado entre los bullets iniciales y el bloque ¿cómo marcar?."
-          >
-            <textarea
-              name="calloutText"
-              value={calloutText}
-              onChange={(e) => setCalloutText(e.target.value)}
-              maxLength={400}
-              rows={2}
-              className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm"
-              placeholder={resolved.calloutText}
-            />
-            <HeredarRow
-              onClick={() => setCalloutText(resolved.calloutText)}
-              empty={!calloutText}
-            />
-          </Field>
-        </Section>
-
-        {/* === Bloque ¿Cómo marcar? === */}
-        <Section title='Bloque "¿Cómo marcar en su hoja de respuestas?"'>
-          <Field label="Pregunta + ejemplo" hint="Puede llevar saltos de línea.">
-            <textarea
-              name="howToMarkQuestion"
-              value={howToMarkQuestion}
-              onChange={(e) => setHowToMarkQuestion(e.target.value)}
-              maxLength={400}
-              rows={2}
-              className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm"
-              placeholder={resolved.howToMarkQuestion}
-            />
-            <HeredarRow
-              onClick={() => setHowToMarkQuestion(resolved.howToMarkQuestion)}
-              empty={!howToMarkQuestion}
-            />
-          </Field>
-
-          <Field
-            label='Etiqueta del rectángulo de ejemplo ("MARQUE ASÍ")'
-            hint="Texto corto en la parte superior del rectángulo con burbujas."
-          >
-            <Input
-              name="howToMarkExampleLabel"
-              value={howToMarkExampleLabel}
-              onChange={(e) => setHowToMarkExampleLabel(e.target.value)}
-              maxLength={80}
-              placeholder={resolved.howToMarkExampleLabel}
-            />
-            <HeredarRow
-              onClick={() => setHowToMarkExampleLabel(resolved.howToMarkExampleLabel)}
-              empty={!howToMarkExampleLabel}
-            />
-          </Field>
-
-          <Field label='Texto del ejemplo ("Por ejemplo, si la opción correcta es B…")'>
-            <Input
-              name="howToMarkExample"
-              value={howToMarkExample}
-              onChange={(e) => setHowToMarkExample(e.target.value)}
-              maxLength={200}
-              placeholder={resolved.howToMarkExample}
-            />
-            <HeredarRow
-              onClick={() => setHowToMarkExample(resolved.howToMarkExample)}
-              empty={!howToMarkExample}
-            />
-          </Field>
-
-          <Field
-            label={`Indicaciones finales (máx ${ITEMS_AFTER_MAX})`}
-            hint="Aparecen DESPUÉS del bloque ¿cómo marcar? (verificación, firma, entrega del material)."
-          >
-            <BulletsEditor
-              name="itemsAfter"
-              max={ITEMS_AFTER_MAX}
-              value={itemsAfter}
-              onChange={setItemsAfter}
-              resolved={resolved.itemsAfter}
-              placeholder="Ej. Verifique sus respuestas antes de entregar la hoja."
-            />
-          </Field>
-        </Section>
-
-        {/* === Bloque Prohibido === */}
-        <Section title='Bloque "Prohibido"'>
-          <Field label="Título">
-            <Input
-              name="prohibitedTitle"
-              value={prohibitedTitle}
-              onChange={(e) => setProhibitedTitle(e.target.value)}
-              maxLength={80}
-              placeholder={resolved.prohibitedTitle}
-            />
-            <HeredarRow
-              onClick={() => setProhibitedTitle(resolved.prohibitedTitle)}
-              empty={!prohibitedTitle}
-            />
-          </Field>
-
-          <Field
-            label="Cuerpo"
-            hint="Justificación legal de los elementos prohibidos (dispositivos electrónicos, consultas, etc.)."
-          >
-            <textarea
-              name="prohibitedBody"
-              value={prohibitedBody}
-              onChange={(e) => setProhibitedBody(e.target.value)}
-              maxLength={800}
-              rows={3}
-              className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm"
-              placeholder={resolved.prohibitedBody}
-            />
-            <HeredarRow
-              onClick={() => setProhibitedBody(resolved.prohibitedBody)}
-              empty={!prohibitedBody}
-            />
-          </Field>
-        </Section>
-
-        {/* === Pie legal === */}
-        <Section title="Pie legal">
-          <Field
-            label="Pie de página"
-            hint="Resolución rectoral, código DANE, etc. Aparece al pie de la portada."
-          >
-            <Input
-              name="legalFooter"
-              value={legalFooter}
-              onChange={(e) => setLegalFooter(e.target.value)}
-              maxLength={300}
-              placeholder={resolved.legalFooter}
-            />
-            <HeredarRow
-              onClick={() => setLegalFooter(resolved.legalFooter)}
-              empty={!legalFooter}
-            />
-          </Field>
-        </Section>
+        {blocks.map((block) => (
+          <Section key={block.block} title={block.label}>
+            {block.fields.map((field) => {
+              const meta = FIELD_META[field];
+              if (fields.arrays.includes(field)) {
+                return (
+                  <Field
+                    key={field}
+                    label={`${meta.label} (máx ${meta.arrayMax ?? 10})`}
+                    hint={meta.hint}
+                  >
+                    <BulletsEditor
+                      name={field}
+                      max={meta.arrayMax ?? 10}
+                      maxLength={meta.maxLength}
+                      value={arrays[field] ?? [""]}
+                      onChange={(next) => setArrays({ ...arrays, [field]: next })}
+                      placeholder={meta.placeholder ?? ""}
+                    />
+                  </Field>
+                );
+              }
+              return (
+                <Field key={field} label={meta.label} hint={meta.hint}>
+                  <DynamicInput
+                    field={field}
+                    meta={meta}
+                    value={strings[field] ?? ""}
+                    resolvedValue={initialStringFor(field, {}, resolved)}
+                    onChange={(v) => setStrings({ ...strings, [field]: v })}
+                  />
+                </Field>
+              );
+            })}
+          </Section>
+        ))}
       </fieldset>
 
       {!editable ? (
@@ -292,9 +171,7 @@ export function BundleCoverContentSection({ bundleId, initial, resolved, editabl
       {state.success ? (
         <p className="text-success text-sm">Contenido guardado. Vista previa actualizada.</p>
       ) : null}
-      {resetState.error ? (
-        <p className="text-destructive text-sm">{resetState.error}</p>
-      ) : null}
+      {resetState.error ? <p className="text-destructive text-sm">{resetState.error}</p> : null}
       {resetState.success ? (
         <p className="text-success text-sm">Override eliminado. Vuelve al institucional.</p>
       ) : null}
@@ -310,6 +187,30 @@ export function BundleCoverContentSection({ bundleId, initial, resolved, editabl
 // ===========================================================================
 // Helpers
 // ===========================================================================
+
+/** Lee el override del bundle para un campo string; si no, el resolved. */
+function initialStringFor(
+  f: CoverContentField,
+  initial: Partial<CoverContent>,
+  resolved: ResolvedCoverContent,
+): string {
+  const v = initial[f];
+  if (typeof v === "string") return v;
+  const r = resolved[f];
+  return typeof r === "string" ? r : "";
+}
+
+/** Lee el override del bundle para un campo array; si no, el resolved. */
+function initialArrayFor(
+  f: CoverContentField,
+  initial: Partial<CoverContent>,
+  resolved: ResolvedCoverContent,
+): readonly string[] {
+  const v = initial[f];
+  if (Array.isArray(v)) return v;
+  const r = resolved[f];
+  return Array.isArray(r) ? r : [];
+}
 
 /**
  * Convierte un array de bullets (potencialmente readonly) en un array mutable
@@ -349,6 +250,55 @@ function Field({
   );
 }
 
+/**
+ * Render del input controlado para un campo string — usa `<textarea>` si la
+ * metadata marca `multiline`, o `<Input>` si no. Incluye el botón Heredar
+ * (PR 4): si el docente escribió algo custom, le permite volver al valor
+ * resuelto (institucional / DEFAULT).
+ */
+function DynamicInput({
+  field,
+  meta,
+  value,
+  resolvedValue,
+  onChange,
+}: {
+  field: CoverContentField;
+  meta: (typeof FIELD_META)[CoverContentField];
+  value: string;
+  resolvedValue: string;
+  onChange: (v: string) => void;
+}) {
+  if (meta.multiline) {
+    return (
+      <>
+        <textarea
+          name={field}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          maxLength={meta.maxLength}
+          rows={meta.maxLength > 400 ? 3 : 2}
+          className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm"
+          placeholder={resolvedValue}
+        />
+        <HeredarRow onClick={() => onChange(resolvedValue)} empty={!value} />
+      </>
+    );
+  }
+  return (
+    <>
+      <Input
+        name={field}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={meta.maxLength}
+        placeholder={resolvedValue}
+      />
+      <HeredarRow onClick={() => onChange(resolvedValue)} empty={!value} />
+    </>
+  );
+}
+
 function HeredarRow({ onClick, empty }: { onClick: () => void; empty: boolean }) {
   return (
     <div className="text-muted-foreground flex items-center gap-2 text-xs">
@@ -365,9 +315,9 @@ function HeredarRow({ onClick, empty }: { onClick: () => void; empty: boolean })
 interface BulletsEditorProps {
   name: string;
   max: number;
+  maxLength: number;
   value: string[];
   onChange: (next: string[]) => void;
-  resolved: readonly string[];
   placeholder: string;
 }
 
@@ -378,10 +328,10 @@ interface BulletsEditorProps {
  *
  * Si el docente llega al `max`, el botón "Añadir" se desactiva.
  */
-function BulletsEditor({ name, max, value, onChange, placeholder }: BulletsEditorProps) {
+function BulletsEditor({ name, max, maxLength, value, onChange, placeholder }: BulletsEditorProps) {
   const updateRow = (i: number, v: string) => {
     const next = [...value];
-    next[i] = v.slice(0, STRING_MAX);
+    next[i] = v.slice(0, maxLength);
     onChange(next);
   };
   const removeRow = (i: number) => {
@@ -402,7 +352,7 @@ function BulletsEditor({ name, max, value, onChange, placeholder }: BulletsEdito
             name={`${name}[]`}
             value={row}
             onChange={(e) => updateRow(i, e.target.value)}
-            maxLength={STRING_MAX}
+            maxLength={maxLength}
             placeholder={placeholder}
             aria-label={`Indicación ${i + 1}`}
           />
@@ -449,7 +399,13 @@ function SubmitButton({ disabled }: { disabled: boolean }) {
  * anidar forms (HTML no permite forms anidadas). El caller lo conecta al
  * `resetAction` del `useActionState` de `resetBundleCoverContentAction`.
  */
-function ResetButton({ disabled, formAction }: { disabled: boolean; formAction: (fd: FormData) => void }) {
+function ResetButton({
+  disabled,
+  formAction,
+}: {
+  disabled: boolean;
+  formAction: (fd: FormData) => void;
+}) {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" variant="outline" disabled={disabled || pending} formAction={formAction}>

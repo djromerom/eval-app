@@ -132,10 +132,36 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
               tipografía y bloque intro.
             </p>
             <Link
-              href={`/admin/bundles/${bundle.id}/designer`}
+              href={`/admin/bundles/${bundle.id}/cover-designer`}
               className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "w-full")}
             >
               Diseñar portada →
+            </Link>
+          </div>
+          <div className="bg-card space-y-2 rounded-xl border p-6">
+            <h2 className="font-semibold">Cover Studio</h2>
+            <p className="text-muted-foreground text-xs">
+              Aplica un tema visual, ajusta el contenido de portada y prende o apaga bloques sin
+              tocar el HTML.
+            </p>
+            <Link
+              href={`/admin/bundles/${bundle.id}/cover-studio`}
+              className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "w-full")}
+            >
+              Diseñar estilos →
+            </Link>
+          </div>
+          <div className="bg-accent/30 border-accent/40 space-y-2 rounded-xl border-2 border-dashed p-6">
+            <h2 className="font-semibold">HTML Live</h2>
+            <p className="text-muted-foreground text-xs">
+              Editor HTML directo con toolbar (negrita, encabezados, pegar, muestra, exportar). Para
+              portadas con texto libre que no encajan en un preset.
+            </p>
+            <Link
+              href={`/admin/bundles/${bundle.id}/cover-html`}
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full")}
+            >
+              Editar HTML live →
             </Link>
           </div>
           <BundleActionPanel bundleId={bundle.id} isDraft={isDraft} />

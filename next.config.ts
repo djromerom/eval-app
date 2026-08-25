@@ -9,7 +9,20 @@ const nextConfig: NextConfig = {
   // sharp y bullmq son dependencias nativas/de servidor, no deben empaquetarse
   // pdfjs-dist rompe al ser empaquetado por Next (Object.defineProperty en
   // non-object); pdf-parse lo arrastra.
-  serverExternalPackages: ["sharp", "bullmq", "ioredis", "pino", "pdfjs-dist", "pdf-parse"],
+  // jsdom + dompurify: isomorphic-dompurify los importa eager; si Webpack los
+  // bundlea, las rutas internas de jsdom (browser/default-stylesheet.css) se
+  // rompen porque resuelve desde el project root, no desde node_modules.
+  serverExternalPackages: [
+    "sharp",
+    "bullmq",
+    "ioredis",
+    "pino",
+    "pdfjs-dist",
+    "pdf-parse",
+    "jsdom",
+    "dompurify",
+    "isomorphic-dompurify",
+  ],
   experimental: {
     // Server Actions 20MB permiten upload de imágenes escaneadas (típico
     // 1-2MB pero dejamos holgura). En Next 15 estable, esto pasa a top-level

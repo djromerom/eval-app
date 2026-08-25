@@ -17,12 +17,13 @@ import { ResetCoverTemplate } from "@/modules/bundle-cover/application/reset-cov
 import { SaveCoverTemplate } from "@/modules/bundle-cover/application/save-cover-template";
 import { BuildCoverContext } from "@/modules/bundle-cover/application/cover-context";
 import { RenderCover } from "@/modules/bundle-cover/application/render-cover";
-import { RenderCoverVisual } from "@/modules/bundle-cover/application/render-cover-visual";
 import type {
-  CoverVisualProject,
-  CoverVisualRepository,
-  CoverVisualState,
-} from "@/modules/bundle-cover/domain/cover-visual";
+  CoverLiveProject,
+  CoverLiveRepository,
+  CoverLiveState,
+} from "@/modules/cover-html/domain/cover-html";
+import { RenderCoverHtml } from "@/modules/cover-html/application/render-cover-html";
+import type { ReadUpload } from "@/modules/cover-html/application/inline-html-images";
 import type {
   Bundle,
   BundleDetail,
@@ -125,26 +126,24 @@ class InMemoryCoverTemplateLoader implements CoverTemplateLoader {
 }
 
 /**
- * Stub minimalista del CoverVisualRepository para los tests de
- * PreviewCover en este archivo. Por defecto no hay proyecto visual
- * (loadProject → null), así que PreviewCover cae al camino tradicional
- * (built-in / HTML override). Si un test quiere probar el branch del
- * visual, hace `visualStates.seed(...)` con un JSON.
+ * Doble en memoria del `CoverLiveRepository` (ago 2026). Vacío por default
+ * (loadProject → null), así que PreviewCover cae al branch del HTML /
+ * built-in. Si un test quiere probar el branch del live, hace
+ * `liveStates.seed(...)` con un `{ html, previewMode? }`.
  */
-class InMemoryCoverVisualRepository implements CoverVisualRepository {
+class InMemoryCoverLiveRepository implements CoverLiveRepository {
   private readonly rows = new Map<
     string,
-    { project: CoverVisualProject | null; updatedAt: Date | null }
+    { project: CoverLiveProject | null; updatedAt: Date | null }
   >();
 
-  seed(bundleId: string, project: CoverVisualProject | null, updatedAt: Date | null = null) {
+  seed(bundleId: string, project: CoverLiveProject | null, updatedAt: Date | null = null) {
     this.rows.set(bundleId, { project, updatedAt });
   }
 
-  async loadState(institutionId: string, bundleId: string): Promise<CoverVisualState> {
+  async loadState(institutionId: string, bundleId: string): Promise<CoverLiveState> {
     const row = this.rows.get(bundleId);
     if (!row) {
-      // Estado "vacío" sin sembrar = hasProject=false.
       return {
         bundleId,
         hasProject: false,
@@ -162,15 +161,15 @@ class InMemoryCoverVisualRepository implements CoverVisualRepository {
     };
   }
 
-  async loadProject(institutionId: string, bundleId: string): Promise<CoverVisualProject | null> {
+  async loadProject(institutionId: string, bundleId: string): Promise<CoverLiveProject | null> {
     return this.rows.get(bundleId)?.project ?? null;
   }
 
   async saveProject(
     institutionId: string,
     bundleId: string,
-    project: CoverVisualProject,
-  ): Promise<CoverVisualState> {
+    project: CoverLiveProject,
+  ): Promise<CoverLiveState> {
     const row = this.rows.get(bundleId) ?? { project: null, updatedAt: null };
     row.project = project;
     row.updatedAt = new Date();
@@ -178,7 +177,7 @@ class InMemoryCoverVisualRepository implements CoverVisualRepository {
     return this.loadState(institutionId, bundleId);
   }
 
-  async resetProject(institutionId: string, bundleId: string): Promise<CoverVisualState> {
+  async resetProject(institutionId: string, bundleId: string): Promise<CoverLiveState> {
     this.rows.set(bundleId, { project: null, updatedAt: null });
     return this.loadState(institutionId, bundleId);
   }
@@ -730,22 +729,28 @@ describe("bundle-cover", () => {
     },
   };
 
-  // Stub del visual repository: vacío por defecto → PreviewCover cae al
-  // camino tradicional. Si un test quiere probar el branch del visual,
-  // hace `visualStates.seed(...)` con un JSON.
-  const visualStates = new InMemoryCoverVisualRepository();
+  // Reader no-op para `inlineHtmlImages` (10º arg del PreviewCover, ago
+  // 2026). Devuelve un Buffer vacío — los tests de este archivo no
+  // cubren el camino del inlining (viven en `inline-html-images.test.ts`).
+  const noopRead: ReadUpload = async () => Buffer.alloc(0);
+
+  // Stub del live repository: vacío por defecto → PreviewCover cae al
+  // branch del HTML / built-in. Si un test quiere probar el branch del
+  // live, hace `liveStates.seed(...)` con un `{ html }`.
+  const liveStates = new InMemoryCoverLiveRepository();
 
   describe("PreviewCover", () => {
-    it("renderiza built-in cuando no hay override ni visual", async () => {
+    it("renderiza built-in cuando no hay override ni live", async () => {
       states.seed("b1", null, null);
       const uc = new PreviewCover(
         states,
-        visualStates,
+        liveStates,
         loader,
         new BuildCoverContext(bundles, institutionsRepo),
         new RenderCover(),
-        new RenderCoverVisual(new RenderCover()),
+        new RenderCoverHtml(new RenderCover()),
         noopAssets,
+        noopRead,
       );
       const res = await uc.execute({ actor: ecuMaster, bundleId: "b1" });
       expect(res.ok).toBe(true);
@@ -755,17 +760,18 @@ describe("bundle-cover", () => {
       expect(res.value.html).toContain("ECU 6°");
     });
 
-    it("renderiza override cuando hay body guardado y no hay visual", async () => {
+    it("renderiza override cuando hay body guardado y no hay live", async () => {
       const customBody = `<html><body><h1>PERSONALIZADO</h1><p>{{bundle.name}}</p></body></html>`;
       states.seed("b1", null, customBody, new Date());
       const uc = new PreviewCover(
         states,
-        visualStates,
+        liveStates,
         loader,
         new BuildCoverContext(bundles, institutionsRepo),
         new RenderCover(),
-        new RenderCoverVisual(new RenderCover()),
+        new RenderCoverHtml(new RenderCover()),
         noopAssets,
+        noopRead,
       );
       const res = await uc.execute({ actor: ecuMaster, bundleId: "b1" });
       expect(res.ok).toBe(true);
@@ -778,17 +784,41 @@ describe("bundle-cover", () => {
     it("rechaza a un TEACHER (solo manage-bundles)", async () => {
       const uc = new PreviewCover(
         states,
-        visualStates,
+        liveStates,
         loader,
         new BuildCoverContext(bundles, institutionsRepo),
         new RenderCover(),
-        new RenderCoverVisual(new RenderCover()),
+        new RenderCoverHtml(new RenderCover()),
         noopAssets,
+        noopRead,
       );
       const res = await uc.execute({ actor: teacher, bundleId: "b1" });
       expect(res.ok).toBe(false);
       if (res.ok) return;
       expect(res.error.code).toBe("FORBIDDEN");
+    });
+
+    it("renderiza live cuando hay HTML live guardado (precedencia sobre override)", async () => {
+      const liveHtml = `<html><body><h1>PORTADA LIVE</h1><p>{{bundle.name}}</p></body></html>`;
+      states.seed("b1", null, "<html>OVERRIDE</html>", new Date());
+      liveStates.seed("b1", { html: liveHtml, previewMode: false } as unknown as CoverLiveProject);
+      const uc = new PreviewCover(
+        states,
+        liveStates,
+        loader,
+        new BuildCoverContext(bundles, institutionsRepo),
+        new RenderCover(),
+        new RenderCoverHtml(new RenderCover()),
+        noopAssets,
+        noopRead,
+      );
+      const res = await uc.execute({ actor: ecuMaster, bundleId: "b1" });
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      expect(res.value.source).toBe("BUILT_IN");
+      expect(res.value.html).toContain("PORTADA LIVE");
+      expect(res.value.html).not.toContain("OVERRIDE");
+      expect(res.value.html).toContain("ECU 6°");
     });
   });
 

@@ -9,6 +9,7 @@ import {
 } from "@/modules/bundle-cover/infrastructure/container";
 import { parseCoverContent } from "@/modules/bundle-cover/domain/cover-content";
 import { getResolvedCoverContent } from "@/modules/bundle-cover/application/get-resolved-cover-content";
+import { extractCoverContentFields } from "@/modules/bundle-cover/domain/template-fields";
 import { getResolvedBundleTheme } from "@/modules/theme/application/get-resolved-bundle-theme";
 import { parseEvaluationTheme } from "@/modules/theme/domain/theme";
 import { CoverDesignerForm } from "./cover-designer-form";
@@ -60,10 +61,12 @@ export default async function BundleCoverDesignerPage({
   // "Contenido de portada" del form). `parseCoverContent` es defensivo —
   // si el JSONB está corrupto, devuelve {} y la UI parte de los defaults.
   const initialCoverContent = parseCoverContent(bundle.coverContent);
-  const resolvedCoverContent = await getResolvedCoverContent(
-    actor.institutionId,
-    bundle.id,
-  );
+  const resolvedCoverContent = await getResolvedCoverContent(actor.institutionId, bundle.id);
+
+  // PR 5: extraer del HTML activo (built-in si no hay override, override si
+  // existe) las variables Mustache del schema que esta plantilla usa — la
+  // sección "Contenido de portada" genera inputs solo para esos campos.
+  const coverContentFields = extractCoverContentFields(initial.editorBody);
 
   return (
     <>
@@ -80,6 +83,7 @@ export default async function BundleCoverDesignerPage({
         resolvedTheme={resolvedTheme}
         initialCoverContent={initialCoverContent}
         resolvedCoverContent={resolvedCoverContent}
+        coverContentFields={coverContentFields}
         editable={editable}
       />
     </>

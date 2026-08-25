@@ -5,10 +5,12 @@ import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import {
-  type CoverDesignerData,
-} from "@/modules/bundle-cover/application/load-cover-designer";
-import type { CoverContent, ResolvedCoverContent } from "@/modules/bundle-cover/domain/cover-content";
+import { type CoverDesignerData } from "@/modules/bundle-cover/application/load-cover-designer";
+import type {
+  CoverContent,
+  ResolvedCoverContent,
+} from "@/modules/bundle-cover/domain/cover-content";
+import type { ExtractedFields } from "@/modules/bundle-cover/domain/template-fields";
 import type { CoverTemplateKey } from "@/modules/bundle-cover/domain/cover-template";
 import type { EvaluationTheme, ResolvedTheme } from "@/modules/theme/domain/theme";
 import {
@@ -21,17 +23,14 @@ import { BundleCoverContentSection } from "./bundle-cover-content-section";
 import { BundleThemeSection } from "./bundle-theme-section";
 
 // Monaco usa workers/window — no se puede SSR. Carga perezosa.
-const MonacoEditor = dynamic(
-  () => import("@monaco-editor/react").then((m) => m.Editor),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="text-muted-foreground flex h-[500px] items-center justify-center rounded border bg-white text-sm">
-        Cargando editor…
-      </div>
-    ),
-  },
-);
+const MonacoEditor = dynamic(() => import("@monaco-editor/react").then((m) => m.Editor), {
+  ssr: false,
+  loading: () => (
+    <div className="text-muted-foreground flex h-[500px] items-center justify-center rounded border bg-white text-sm">
+      Cargando editor…
+    </div>
+  ),
+});
 
 interface Props {
   bundleId: string;
@@ -44,6 +43,9 @@ interface Props {
   initialCoverContent: Partial<CoverContent>;
   /** coverContent colapsado bundle ⊕ institucional ⊕ DEFAULT. PR 4. */
   resolvedCoverContent: ResolvedCoverContent;
+  /** Campos del schema que la plantilla activa referencia. PR 5: la sección
+   *  "Contenido de portada" genera inputs solo para esos campos. */
+  coverContentFields: ExtractedFields;
   editable: boolean;
 }
 
@@ -76,6 +78,7 @@ export function CoverDesignerForm({
   resolvedTheme,
   initialCoverContent,
   resolvedCoverContent,
+  coverContentFields,
   editable,
 }: Props) {
   const [body, setBody] = useState(initial.editorBody);
@@ -136,10 +139,7 @@ export function CoverDesignerForm({
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
-        <Link
-          href={`/admin/bundles/${bundleId}`}
-          className="text-muted-foreground hover:underline"
-        >
+        <Link href={`/admin/bundles/${bundleId}`} className="text-muted-foreground hover:underline">
           ← Volver al cuadernillo
         </Link>
         <Link
@@ -171,15 +171,12 @@ export function CoverDesignerForm({
         {/* ===== Columna izquierda: forms ===== */}
         <div className="space-y-4">
           {/* Form 1: variante */}
-          <form
-            action={guardedKeyAction}
-            className="bg-card space-y-3 rounded-xl border p-5"
-          >
+          <form action={guardedKeyAction} className="bg-card space-y-3 rounded-xl border p-5">
             <div>
               <h2 className="font-semibold">Variante de plantilla</h2>
               <p className="text-muted-foreground text-xs">
-                Cambia el punto de partida del HTML. Tu override actual (si lo
-                hay) NO se borra al cambiar de variante.
+                Cambia el punto de partida del HTML. Tu override actual (si lo hay) NO se borra al
+                cambiar de variante.
               </p>
             </div>
 
@@ -199,26 +196,19 @@ export function CoverDesignerForm({
               </select>
             </label>
 
-            {keyState.error ? (
-              <p className="text-destructive text-sm">{keyState.error}</p>
-            ) : null}
+            {keyState.error ? <p className="text-destructive text-sm">{keyState.error}</p> : null}
 
             <ApplyVariantButton />
           </form>
 
           {/* Form 2: editor */}
-          <form
-            action={saveAction}
-            className="bg-card space-y-3 rounded-xl border p-5"
-          >
+          <form action={saveAction} className="bg-card space-y-3 rounded-xl border p-5">
             <div>
               <h2 className="font-semibold">HTML de la portada</h2>
               <p className="text-muted-foreground text-xs">
-                Edita el HTML renderizado por Mustache. Soporta{" "}
-                <code>{`{{bundle.name}}`}</code>,{" "}
-                <code>{`{{institution.name}}`}</code> y{" "}
-                <code>{`{{areas}}`}</code>. El servidor sanitiza el contenido
-                antes de guardarlo (sin scripts ni iframes).
+                Edita el HTML renderizado por Mustache. Soporta <code>{`{{bundle.name}}`}</code>,{" "}
+                <code>{`{{institution.name}}`}</code> y <code>{`{{areas}}`}</code>. El servidor
+                sanitiza el contenido antes de guardarlo (sin scripts ni iframes).
               </p>
             </div>
 
@@ -246,9 +236,7 @@ export function CoverDesignerForm({
               <span className="text-muted-foreground ml-auto text-xs">
                 {sizeKb} KB
                 {dirty ? (
-                  <span className="text-amber-700 ml-2 font-medium">
-                    · Cambios sin guardar
-                  </span>
+                  <span className="ml-2 font-medium text-amber-700">· Cambios sin guardar</span>
                 ) : null}
               </span>
             </div>
@@ -270,13 +258,9 @@ export function CoverDesignerForm({
 
             <input type="hidden" name="body" value={body} />
 
-            {saveState.error ? (
-              <p className="text-destructive text-sm">{saveState.error}</p>
-            ) : null}
+            {saveState.error ? <p className="text-destructive text-sm">{saveState.error}</p> : null}
             {saveState.success ? (
-              <p className="text-success text-sm">
-                Portada guardada. Vista previa actualizada.
-              </p>
+              <p className="text-success text-sm">Portada guardada. Vista previa actualizada.</p>
             ) : null}
 
             <div className="flex flex-wrap gap-2 pt-1">
@@ -298,6 +282,7 @@ export function CoverDesignerForm({
             initial={initialCoverContent}
             resolved={resolvedCoverContent}
             editable={editable}
+            fields={coverContentFields}
           />
 
           {/* Form 3: reset — separado, no se puede anidar */}
@@ -315,11 +300,7 @@ export function CoverDesignerForm({
             {resetState.success ? (
               <p className="text-success text-sm">Override eliminado.</p>
             ) : null}
-            <Button
-              type="submit"
-              variant="outline"
-              disabled={initial.state.source !== "OVERRIDE"}
-            >
+            <Button type="submit" variant="outline" disabled={initial.state.source !== "OVERRIDE"}>
               Restablecer built-in
             </Button>
           </form>
@@ -334,8 +315,7 @@ export function CoverDesignerForm({
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Vista previa de la portada</h3>
             <span className="text-muted-foreground text-xs">
-              Renderizada con Mustache + DOMPurify · fuente:{" "}
-              {initial.state.source}
+              Renderizada con Mustache + DOMPurify · fuente: {initial.state.source}
             </span>
           </div>
           <iframe
@@ -357,9 +337,7 @@ function SourceBadge({ source }: { source: "BUILT_IN" | "OVERRIDE" }) {
     ? "bg-amber-100 text-amber-900 border-amber-200"
     : "bg-slate-100 text-slate-700 border-slate-200";
   return (
-    <span
-      className={`rounded-md border px-2 py-0.5 text-xs font-medium ${className}`}
-    >
+    <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${className}`}>
       {label}
     </span>
   );
