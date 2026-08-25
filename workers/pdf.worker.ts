@@ -45,6 +45,7 @@ const ROUTE_BY_KIND: Record<PrintKind, string> = {
   bundle: "/print/bundle",
   "answer-sheets-bundle": "/print/answer-sheets/bundle", // Sprint 2
   "answer-key-bundle": "/print/answer-key/bundle", // Sprint 3
+  "cover-bundle": "/print/cover/bundle", // ago 2026: solo portada (1 página)
 };
 
 /**
@@ -117,20 +118,30 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
     const linear = await renderLinearPdf(url);
     log.info({ jobId: job.id, linearBytes: linear.length }, "PDF lineal generado");
 
-    // Paso 2: imposition saddle-stitch a doble carta. Los compendios
-    // preservan la primera página (portada institucional) sin imposition
-    // para no desperdiciar media hoja tabloid; el resto del cuerpo sí se
-    // impone. Los cuadernillos de una sola evaluación se imponen enteros
-    // (comportamiento legacy): portada y contraportada comparten pliego.
-    const imposed = await imposeBooklet(linear, {
-      coverPages: isBundleKind ? 1 : 0,
-    });
-    log.info({ jobId: job.id, imposedBytes: imposed.length }, "Imposición aplicada");
+    // Cover-only (kind = "cover-bundle"): el PDF lineal YA es la salida
+    // final — 1 página carta con la portada. Saltamos imposeBooklet porque
+    // imponer un PDF de 1 página lo convertiría en un pliego tabloid
+    // desperdiciando media hoja. Mismo motivo que `coverPages: 0` pero sin
+    // construir un output con imposition solo para descartar el resultado.
+    // Para los demás kinds se aplica imposition saddle-stitch a doble carta.
+    // Los compendios preservan la primera página (portada institucional)
+    // sin imposition; el resto del cuerpo sí se impone. Los cuadernillos
+    // de una sola evaluación se imponen enteros (comportamiento legacy).
+    const isCoverKind = kind === "cover-bundle";
+    const out: Uint8Array = isCoverKind
+      ? linear
+      : await imposeBooklet(linear, {
+          coverPages: isBundleKind ? 1 : 0,
+        });
+    log.info(
+      { jobId: job.id, bytes: out.length, imposed: !isCoverKind },
+      isCoverKind ? "PDF cover generado" : "Imposición aplicada",
+    );
 
     const dir = path.join(env.STORAGE_DIR, "pdf", institutionId);
     await mkdir(dir, { recursive: true });
     const filePath = path.join(dir, `${targetId}-${kind}.pdf`);
-    await writeFile(filePath, imposed);
+    await writeFile(filePath, out);
 
     return { evaluationId, bundleId, institutionId, kind, path: filePath };
   },

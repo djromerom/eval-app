@@ -77,6 +77,24 @@ export function CoverHtmlForm({
       {/* Editor (incluye save button + estado en su toolbar) */}
       <HtmlLiveEditor bundleId={bundleId} initialHtml={initialHtml ?? ""} editable={editable} />
 
+      {/* Descarga PDF de 1 página con la portada actual (carta portrait, sin
+          imposition). Funciona en DRAFT, READY y PUBLISHED — el endpoint
+          /api/bundles/[id]/cover/pdf encola un job al worker de PDF y
+          devuelve el archivo inline. El target="_blank" deja la pestaña
+          del editor intacta; el navegador maneja el download. */}
+      <div className="flex justify-end">
+        <Button asChild variant="outline" size="sm">
+          <a
+            href={`/api/bundles/${bundleId}/cover/pdf`}
+            target="_blank"
+            rel="noopener"
+            title="Descargar la portada actual como PDF"
+          >
+            Descargar PDF
+          </a>
+        </Button>
+      </div>
+
       {!editable && (
         <p className="text-destructive text-xs">
           El cuadernillo está sellado. No puedes editar la portada.
