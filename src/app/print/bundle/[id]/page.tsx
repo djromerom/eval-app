@@ -7,6 +7,9 @@ import { resolvePrintActor } from "@/lib/print-access";
 import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
 import { makeGetMyInstitution } from "@/modules/institutions/infrastructure/container";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
+import { makePreviewCover } from "@/modules/bundle-cover/infrastructure/container";
+import { fitCoverToIframe } from "@/modules/bundle-cover/application/fit-cover-to-iframe";
+import { makeLoadCoverHtml } from "@/modules/cover-html/infrastructure/container";
 import { inlineSectionsImages } from "@/modules/uploads/application/inline-content-images";
 import { isWideQuestion } from "@/modules/printing/domain/wide-question";
 import { localStorage } from "@/shared/infrastructure/storage/local-storage";
@@ -180,6 +183,33 @@ export default async function PrintBundlePage({
   const logoSrc = await readLogoIfNeeded(institution?.logo, theme.showLogo);
   const cssVars = themeToCssVars(theme) as Record<string, string>;
 
+  // Detección de cover custom (ago 2026): si el admin configuró el cover
+  // en cualquiera de las 3 vistas (/cover-html live, /cover-designer Monaco
+  // override, o /cover-studio), el HTML renderizado por `PreviewCover`
+  // debe ganar sobre el JSX hardcoded de abajo. Si NO hay cover custom,
+  // conservamos el JSX actual para no introducir un cambio visual a los
+  // cuadernillos ya impresos.
+  //
+  // Se inyecta como `<iframe srcdoc>` (no `dangerouslySetInnerHTML`) para
+  // preservar el contexto de documento del usuario: sus selectores `body`
+  // y sus `<style>` del `<head>` siguen funcionando tal cual — si los
+  // inyectáramos en un div perderíamos esos estilos. El HTML ya pasó por
+  // DOMPurify en `RenderCover` (WHOLE_DOCUMENT), así que es seguro.
+  //
+  // `fitCoverToIframe` prepende un `<style>` que neutraliza los anchos
+  // fijos (ej. `.cover { width: 215.9mm }`) y márgenes auto — el cover
+  // queda alineado al área imprimible del iframe en lugar de centrado
+  // con franjas blancas laterales.
+  const [liveStateRes, previewCoverRes] = await Promise.all([
+    makeLoadCoverHtml().execute({ actor, bundleId: id }),
+    makePreviewCover().execute({ actor, bundleId: id }),
+  ]);
+  const hasLiveHtml = liveStateRes.ok && liveStateRes.value.state.hasProject;
+  const hasMonacoOverride = previewCoverRes.ok && previewCoverRes.value.source === "OVERRIDE";
+  const hasCustomCover = hasLiveHtml || hasMonacoOverride;
+  const customCoverHtml =
+    hasCustomCover && previewCoverRes.ok ? fitCoverToIframe(previewCoverRes.value.html) : null;
+
   return (
     <div className="booklet" style={cssVars}>
       <div className="no-print bg-card sticky top-0 z-10 flex w-full max-w-[900px] items-center gap-3 rounded-lg border p-3 text-sm">
@@ -190,99 +220,118 @@ export default async function PrintBundlePage({
         <PrintButton />
       </div>
 
-      {/* ===== Página 1: portada del cuadernillo ===== */}
+      {/* ===== Página 1: portada del cuadernillo =====
+       *
+       * Branch ago 2026: si el bundle tiene un cover custom (live /
+       * override HTML de Monaco), inyectamos el HTML sanitizado que devuelve
+       * `PreviewCover` dentro de un iframe (preserva el contexto de
+       * documento del usuario: sus `body` y `<style>` siguen funcionando).
+       * Si NO, conservamos el JSX hardcoded de abajo para no introducir
+       * un cambio visual a cuadernillos ya impresos.
+       */}
       <section className="sheet cover">
-        {logoSrc ? <img src={logoSrc} alt="" className="cover-logo" /> : null}
-        <p className="cover-institution print-accent">{institutionName}</p>
-        <p className="cover-test-title">{bundle.name}</p>
+        {customCoverHtml ? (
+          <iframe
+            className="cover-custom"
+            title="Portada del cuadernillo"
+            sandbox=""
+            srcDoc={customCoverHtml}
+          />
+        ) : (
+          <>
+            {logoSrc ? <img src={logoSrc} alt="" className="cover-logo" /> : null}
+            <p className="cover-institution print-accent">{institutionName}</p>
+            <p className="cover-test-title">{bundle.name}</p>
 
-        {/* Tabla de áreas agrupadas por parentSubject — el "tabla de áreas" del
-            ejemplo real. Caso N=1: una sola área con un solo subject. */}
-        {coverTable.areas.length > 0 && (
-          <div className="competencies-section">
-            <p className="competencies-title">Tabla de áreas</p>
-            <table className="competencies-table">
-              <thead>
-                <tr>
-                  <th>Área</th>
-                  <th>Asignatura</th>
-                  <th>Preguntas</th>
-                  <th>Tiempo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {coverTable.areas.flatMap((area) =>
-                  area.subjects.map((subj, i) => (
-                    <tr key={`${area.name}-${subj.name}`}>
-                      <td>{i === 0 ? area.name : ""}</td>
-                      <td>{subj.name}</td>
-                      <td className="text-center">{subj.questions}</td>
-                      <td className="text-center">{formatDuration(subj.minutes)}</td>
+            {/* Tabla de áreas agrupadas por parentSubject — el "tabla de áreas" del
+                ejemplo real. Caso N=1: una sola área con un solo subject. */}
+            {coverTable.areas.length > 0 && (
+              <div className="competencies-section">
+                <p className="competencies-title">Tabla de áreas</p>
+                <table className="competencies-table">
+                  <thead>
+                    <tr>
+                      <th>Área</th>
+                      <th>Asignatura</th>
+                      <th>Preguntas</th>
+                      <th>Tiempo</th>
                     </tr>
-                  )),
-                )}
-                <tr>
-                  <td colSpan={2}>
-                    <strong>Total</strong>
-                  </td>
-                  <td className="text-center">
-                    <strong>{coverTable.totalQuestions}</strong>
-                  </td>
-                  <td className="text-center">
-                    <strong>{formatDuration(coverTable.totalMinutes)}</strong>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <p className="cover-booklet-number">{bookletLabel}</p>
-
-        <p className="cover-greeting">¡Hola!</p>
-
-        <p className="cover-instructions-title">Instrucciones</p>
-        <p className="cover-instructions-intro">
-          A continuación encontrarás una serie de preguntas de selección múltiple con única
-          respuesta. Lee con atención cada pregunta y responde en la hoja de respuestas.
-        </p>
-        <ul className="cover-instructions-list">
-          {INSTRUCTIONS.map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ul>
-
-        <div className="mark-example">
-          <span>Marca así:</span>
-          {KEYS.map((k) => (
-            <span key={k} className={`omr-bubble ${k === "A" ? "filled" : ""}`}>
-              {k}
-            </span>
-          ))}
-        </div>
-
-        <div className="student-fields">
-          <div className="student-field">
-            <span className="student-field-label">Nombres y apellidos:</span>
-            <span className="student-field-line" />
-          </div>
-          <div className="student-field">
-            <span className="student-field-label">Grado:</span>
-            {/* Si el cuadernillo es de un curso concreto, el grado va preimpreso;
-                si es cross-course, el estudiante lo escribe sobre la línea. */}
-            {bundle.courseName ? (
-              <span className="student-field-value">{bundle.courseName}</span>
-            ) : (
-              <span className="student-field-line" />
+                  </thead>
+                  <tbody>
+                    {coverTable.areas.flatMap((area) =>
+                      area.subjects.map((subj, i) => (
+                        <tr key={`${area.name}-${subj.name}`}>
+                          <td>{i === 0 ? area.name : ""}</td>
+                          <td>{subj.name}</td>
+                          <td className="text-center">{subj.questions}</td>
+                          <td className="text-center">{formatDuration(subj.minutes)}</td>
+                        </tr>
+                      )),
+                    )}
+                    <tr>
+                      <td colSpan={2}>
+                        <strong>Total</strong>
+                      </td>
+                      <td className="text-center">
+                        <strong>{coverTable.totalQuestions}</strong>
+                      </td>
+                      <td className="text-center">
+                        <strong>{formatDuration(coverTable.totalMinutes)}</strong>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             )}
-          </div>
-          <div className="student-field">
-            <span className="student-field-label">Fecha:</span>
-            <span className="student-field-line" />
-          </div>
-        </div>
 
-        <div className="fold-line" />
+            <p className="cover-booklet-number">{bookletLabel}</p>
+
+            <p className="cover-greeting">¡Hola!</p>
+
+            <p className="cover-instructions-title">Instrucciones</p>
+            <p className="cover-instructions-intro">
+              A continuación encontrarás una serie de preguntas de selección múltiple con única
+              respuesta. Lee con atención cada pregunta y responde en la hoja de respuestas.
+            </p>
+            <ul className="cover-instructions-list">
+              {INSTRUCTIONS.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+
+            <div className="mark-example">
+              <span>Marca así:</span>
+              {KEYS.map((k) => (
+                <span key={k} className={`omr-bubble ${k === "A" ? "filled" : ""}`}>
+                  {k}
+                </span>
+              ))}
+            </div>
+
+            <div className="student-fields">
+              <div className="student-field">
+                <span className="student-field-label">Nombres y apellidos:</span>
+                <span className="student-field-line" />
+              </div>
+              <div className="student-field">
+                <span className="student-field-label">Grado:</span>
+                {/* Si el cuadernillo es de un curso concreto, el grado va preimpreso;
+                    si es cross-course, el estudiante lo escribe sobre la línea. */}
+                {bundle.courseName ? (
+                  <span className="student-field-value">{bundle.courseName}</span>
+                ) : (
+                  <span className="student-field-line" />
+                )}
+              </div>
+              <div className="student-field">
+                <span className="student-field-label">Fecha:</span>
+                <span className="student-field-line" />
+              </div>
+            </div>
+
+            <div className="fold-line" />
+          </>
+        )}
       </section>
 
       {/* ===== Páginas 2+: booklet de cada evaluation ===== */}
