@@ -40,7 +40,7 @@ export default async function TeachersPage() {
     <>
       <PageHeader
         title="Docentes"
-        description="Registra docentes (crea su cuenta inactiva) y asígnalos a asignaturas-curso. §3.2"
+        description="Registra docentes (crea su cuenta inactiva) y asígnalos a asignaturas-grado. §3.2"
       />
 
       <TeachersPageChrome />
@@ -80,7 +80,7 @@ export default async function TeachersPage() {
         </section>
 
         <section className="bg-card space-y-4 rounded-xl border p-6">
-          <h2 className="font-semibold">Asignar a asignatura-curso</h2>
+          <h2 className="font-semibold">Asignar a asignatura-grado</h2>
           <EntityForm
             action={assignTeacherAction}
             submitLabel="Asignar"
@@ -88,7 +88,7 @@ export default async function TeachersPage() {
               teachers.length === 0
                 ? "Registra primero un docente."
                 : courseSubjects.length === 0
-                  ? "Enlaza asignaturas a cursos en Estructura académica."
+                  ? "Enlaza asignaturas a grados en Estructura académica."
                   : undefined
             }
             fields={[
@@ -101,7 +101,7 @@ export default async function TeachersPage() {
               },
               {
                 name: "courseSubjectId",
-                label: "Asignatura-curso",
+                label: "Asignatura-grado",
                 type: "select",
                 required: true,
                 options: csOptions,
@@ -118,7 +118,7 @@ export default async function TeachersPage() {
                 <th className="px-4 py-3 font-medium">Correo</th>
                 <th className="px-4 py-3 font-medium">Documento</th>
                 <th className="px-4 py-3 font-medium">Estado</th>
-                <th className="px-4 py-3 font-medium">Asignaturas-curso</th>
+                <th className="px-4 py-3 font-medium">Asignaturas-grado</th>
                 <th className="px-4 py-3 font-medium">Acciones</th>
               </tr>
             </thead>

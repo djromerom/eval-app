@@ -4,6 +4,7 @@ import {
   PrismaPeriodRepository,
 } from "@/modules/academic/infrastructure/prisma-academic-repositories";
 import { PrismaBookletTypeRepository } from "@/modules/booklet-types/infrastructure/prisma-booklet-type-repository";
+import { PrismaLeaderAssignmentRepository } from "@/modules/leader-assignments/infrastructure/prisma-leader-assignment-repository";
 import { notificationSender } from "@/modules/notifications/infrastructure/container";
 import { PrismaUserRepository } from "@/modules/users/infrastructure/prisma-user-repository";
 import { ChangeEvaluationStatus, type CoordinatorDirectory } from "../application/change-status";
@@ -39,14 +40,15 @@ const courses = new PrismaCourseRepository();
 const periods = new PrismaPeriodRepository();
 const bookletTypes = new PrismaBookletTypeRepository();
 const users = new PrismaUserRepository();
+const leaderAssignments = new PrismaLeaderAssignmentRepository();
 
 const coordinatorDirectory: CoordinatorDirectory = {
-  coordinatorIds: (institutionId) => users.findIdsByRole(institutionId, "COORDINATOR"),
+  coordinatorIds: (institutionId) => users.findIdsByRole(institutionId, "ECU_LIDER"),
 };
 
 export const makeCreateEvaluation = () =>
   new CreateEvaluation(evaluations, courseSubjects, periods, courses, bookletTypes);
-export const makeListEvaluations = () => new ListEvaluations(evaluations);
+export const makeListEvaluations = () => new ListEvaluations(evaluations, leaderAssignments);
 export const makeGetEvaluation = () => new GetEvaluation(evaluations);
 export const makeAddSection = () => new AddSection(evaluations);
 export const makeUpdateSection = () => new UpdateSection(evaluations);

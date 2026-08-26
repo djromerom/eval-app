@@ -18,7 +18,7 @@ import { MAX_UPLOAD_BYTES, UPLOAD_MIME, uploadRelativePath } from "@/modules/upl
  * lleva el tenant y el GET puede comprobar que quien lee pertenece a él.
  */
 export async function POST(request: Request) {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR", "ECU_MASTER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
 
   const form = await request.formData().catch(() => null);
   const file = form?.get("file");

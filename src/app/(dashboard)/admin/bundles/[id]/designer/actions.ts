@@ -27,7 +27,7 @@ export async function saveBundleThemeAction(
   _prev: BundleDesignerFormState,
   formData: FormData,
 ): Promise<BundleDesignerFormState> {
-  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  const actor = await requireAuthenticatedUser("ECU_MASTER", "ECU_LIDER");
 
   const theme: Partial<BundleTheme> = {
     primary: String(formData.get("primary") ?? "").trim() || undefined,
@@ -83,7 +83,7 @@ export async function saveBundleThemeAction(
  * `theme = null` en la fila.
  */
 export async function resetBundleThemeAction(bundleId: string): Promise<BundleDesignerFormState> {
-  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  const actor = await requireAuthenticatedUser("ECU_MASTER", "ECU_LIDER");
   const result = await makeUpdateBundleTheme().execute({
     actor,
     bundleId,

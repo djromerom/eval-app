@@ -227,6 +227,20 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
     });
   }
 
+  async findByCourseIds(
+    institutionId: string,
+    courseIds: string[],
+    status?: EvaluationStatus,
+  ): Promise<EvaluationListItem[]> {
+    if (courseIds.length === 0) return [];
+    return this.listWhere({
+      institutionId,
+      deletedAt: null,
+      courseSubject: { courseId: { in: courseIds } },
+      ...(status ? { status: status as DraftStatus } : {}),
+    });
+  }
+
   private async listWhere(where: Prisma.EvaluationWhereInput): Promise<EvaluationListItem[]> {
     const rows = await prisma.evaluation.findMany({
       where,
@@ -238,6 +252,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         period: { select: { id: true, name: true } },
         bookletType: { select: { id: true, name: true } },
         academicYear: { select: { year: true } },
+        teacher: { select: { name: true } },
       },
     });
     return rows.map((r) => ({
@@ -256,6 +271,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
       bookletTypeId: r.bookletTypeId,
       bookletTypeName: r.bookletType?.name ?? null,
       academicYearYear: r.academicYear.year,
+      teacherName: r.teacher.name,
       updatedAt: r.updatedAt,
     }));
   }

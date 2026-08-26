@@ -1,0 +1,401 @@
+/* Dark theme del editor HTML Live (cover-html).
+ *
+ * Mantiene la identidad visual del editor que el docente cargó como
+ * referencia — header oscuro, botones accent, status bar minimal.
+ *
+ * Estilos del CONTENIDO EDITABLE (los marcadores contenteditable) viven
+ * dentro del iframe y se inyectan desde el propio componente (`hle-editor-style`).
+ */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  border: 1px solid #cbd5e1;
+  background: #0b1020;
+  color: #e6e9f2;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  min-height: 85vh;
+}
+
+.header {
+  background: #131a2e;
+  border-bottom: 1px solid #2a3554;
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.logo {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  background: #6366f1;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #6366f1;
+}
+
+.toolbar {
+  display: flex;
+  gap: 6px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* Form de "Guardar HTML live" en el toolbar — vive a la derecha del header.
+ * `inline-flex` para que el form se comporte como un hijo flex más del
+ * header y sus children (botón + mensajes de estado) se alineen en fila. */
+.saveForm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+.saveStatus {
+  font-size: 11.5px;
+  color: #10b981;
+  white-space: nowrap;
+}
+
+.saveError {
+  font-size: 11.5px;
+  color: #f87171;
+  white-space: nowrap;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn {
+  background: #6366f1;
+  color: white;
+  border: 1px solid transparent;
+  padding: 7px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    transform 0.05s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: #4f46e5;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btnGhost {
+  background: transparent;
+  border-color: #2a3554;
+  color: #e6e9f2;
+}
+
+.btnGhost:hover {
+  background: #1a2238;
+  border-color: #3a4670;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn:disabled:hover {
+  background: #6366f1;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #8a93ad;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.paneBar {
+  background: #131a2e;
+  padding: 7px 14px;
+  border-bottom: 1px solid #2a3554;
+  font-size: 12px;
+  color: #8a93ad;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.badge {
+  background: #0b1020;
+  border: 1px solid #2a3554;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: #8a93ad;
+}
+
+.filename {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  color: #e6e9f2;
+}
+
+.editorArea {
+  flex: 1;
+  position: relative;
+  overflow: auto;
+  background: #f1f3f7;
+  min-height: 0;
+}
+
+.editorArea iframe {
+  width: 100%;
+  height: 100%;
+  /* Una portada ICFES mide ~11in (~1056px). Forzamos al iframe a
+   * crecer al menos hasta aquí para que la página completa quepa sin
+   * scroll interno; si la portada es aún más alta, el editorArea hace
+   * scroll. */
+  min-height: 1100px;
+  border: none;
+  background: white;
+  display: block;
+}
+
+.dragOver {
+  background: #dbeafe;
+  outline: 3px dashed #6366f1;
+  outline-offset: -10px;
+}
+
+.empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  color: #475569;
+  gap: 14px;
+  padding: 30px;
+  text-align: center;
+  overflow: auto;
+}
+
+.empty .icon {
+  font-size: 52px;
+  opacity: 0.5;
+}
+
+.empty h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.empty p {
+  max-width: 460px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.emptyActions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.emptyBtn {
+  background: #6366f1;
+  color: white;
+  border: 1px solid transparent;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+}
+
+.emptyBtn:hover {
+  background: #4f46e5;
+}
+
+.emptyBtnGhost {
+  background: transparent;
+  border-color: #2a3554;
+  color: #e6e9f2;
+}
+
+.emptyBtnGhost:hover {
+  background: #1a2238;
+}
+
+.emptyHelp {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-top: 14px;
+  max-width: 520px;
+  text-align: left;
+  font-size: 12.5px;
+  color: #475569;
+  line-height: 1.7;
+}
+
+.emptyHelp strong {
+  color: #0f172a;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.statusBar {
+  background: #131a2e;
+  border-top: 1px solid #2a3554;
+  padding: 6px 14px;
+  font-size: 11.5px;
+  color: #8a93ad;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.statusOk {
+  color: #10b981;
+}
+
+.statusWarn {
+  color: #f59e0b;
+}
+
+.sandboxStatus {
+  color: #8a93ad;
+}
+
+/* Modal de pegado */
+.dialogBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.dialog {
+  background: #1a2238;
+  color: #e6e9f2;
+  border: 1px solid #2a3554;
+  border-radius: 10px;
+  max-width: 720px;
+  width: 92%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.dialogHead {
+  padding: 14px 18px;
+  border-bottom: 1px solid #2a3554;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dialogBody {
+  padding: 18px;
+}
+
+.dialogFoot {
+  padding: 12px 18px;
+  border-top: 1px solid #2a3554;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialogTextarea {
+  width: 100%;
+  height: 320px;
+  background: #0a0f1f;
+  color: #e6e9f2;
+  border: 1px solid #2a3554;
+  border-radius: 6px;
+  padding: 12px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  resize: vertical;
+  outline: none;
+}
+
+.dialogTextarea:focus {
+  border-color: #6366f1;
+}
+
+.dialogHint {
+  font-size: 12px;
+  color: #8a93ad;
+  margin-top: 6px;
+}
+
+.dialogClose {
+  background: transparent;
+  border: none;
+  color: #8a93ad;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  font-family: inherit;
+}
+
+.dialogClose:hover {
+  color: #e6e9f2;
+  background: #0b1020;
+}
+
+@media (max-width: 700px) {
+  .header {
+    flex-wrap: wrap;
+  }
+  .toolbar {
+    flex-wrap: wrap;
+  }
+  .empty h2 {
+    font-size: 17px;
+  }
+}

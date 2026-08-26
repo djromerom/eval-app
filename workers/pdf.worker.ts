@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Worker } from "bullmq";
 import puppeteer from "puppeteer";
+import { PDFDocument } from "pdf-lib";
 import { env } from "@/config/env";
 import { type PrintKind, signPrintToken } from "@/shared/infrastructure/crypto/print-token";
 import { imposeBooklet } from "@/shared/imposition/booklet-pdf";
@@ -45,6 +46,7 @@ const ROUTE_BY_KIND: Record<PrintKind, string> = {
   bundle: "/print/bundle",
   "answer-sheets-bundle": "/print/answer-sheets/bundle", // Sprint 2
   "answer-key-bundle": "/print/answer-key/bundle", // Sprint 3
+  "cover-bundle": "/print/cover/bundle", // ago 2026: solo portada (1 página)
 };
 
 /**
@@ -72,6 +74,9 @@ async function renderLinearPdf(url: string): Promise<Uint8Array> {
       throw new Error("Acceso a /print rechazado (token inválido)");
     }
     return await page.pdf({
+      // Siempre carta portrait: el worker compone el pliego apaisado
+      // manualmente con pdf-lib (Chromium no respeta `@page { size: ... }`
+      // para apaisado ni con `@page :first` ni con named pages).
       format: "letter",
       printBackground: true,
       preferCSSPageSize: false,
@@ -113,24 +118,113 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
     const queryString = extraQuery ? `&${extraQuery}` : "";
     const url = `${baseUrl}${ROUTE_BY_KIND[kind]}/${targetId}?t=${encodeURIComponent(token)}${queryString}`;
 
-    // Paso 1: PDF lineal en carta.
-    const linear = await renderLinearPdf(url);
-    log.info({ jobId: job.id, linearBytes: linear.length }, "PDF lineal generado");
+    // Caso `bundle` (compendio con portada apaisada + booklet en carta):
+    //
+    //   Chrome NO permite mezclar tamaños de página dentro de un mismo PDF.
+    //   `@page :first { size: ... }` y named pages (`page: foo`) solo
+    //   aplican márgenes/contenido — el `size:` se ignora. La única vía
+    //   fiable es renderizar la portada en su PROPIO PDF (un solo tamaño
+    //   de hoja: tabloid landscape) y el cuerpo del booklet en otro (un
+    //   solo tamaño: letter portrait), y unirlos con pdf-lib.
+    //
+    //   Para `cover-bundle` (descargar solo la portada) basta un render
+    //   directo de `/print/cover/bundle/[id]` que ya tiene su `@page`
+    //   dedicado a tabloid landscape (ver `print-cover.css` co-localizado).
+    //
+    //   Para los demás kinds (booklet de 1 evaluación, answer-sheets,
+    //   answer-key, answer-sheets-bundle, answer-key-bundle) el flujo
+    //   legacy sigue funcionando: 1 render + imposeBooklet.
+    const isCoverOnlyKind = kind === "cover-bundle";
+    const isBundleFullKind = kind === "bundle";
 
-    // Paso 2: imposition saddle-stitch a doble carta. Los compendios
-    // preservan la primera página (portada institucional) sin imposition
-    // para no desperdiciar media hoja tabloid; el resto del cuerpo sí se
-    // impone. Los cuadernillos de una sola evaluación se imponen enteros
-    // (comportamiento legacy): portada y contraportada comparten pliego.
-    const imposed = await imposeBooklet(linear, {
-      coverPages: isBundleKind ? 1 : 0,
-    });
-    log.info({ jobId: job.id, imposedBytes: imposed.length }, "Imposición aplicada");
+    let out: Uint8Array;
+
+    if (isBundleFullKind) {
+      // Portada apaisada. Puppeteer/Chromium NO pueden emitir una página
+      // apaisada con `@page { size: tabloid landscape }` (ni con named
+      // pages ni con `@page :first`); siempre sale portrait. Por eso
+      // rendereamos la portada en carta (8.5×11) y luego la incrustamos
+      // como MITAD DERECHA de un pliego doble carta apaisado (17×11).
+      // La mitad izquierda queda en blanco — al doblar el pliego, queda
+      // como interior de la portada del cuadernillo.
+      const coverToken = signPrintToken({
+        bundleId: targetId,
+        institutionId,
+        kind: "cover-bundle",
+      });
+      const coverUrl = `${baseUrl}/print/cover/bundle/${targetId}?t=${encodeURIComponent(coverToken)}`;
+      const coverBytes = await renderLinearPdf(coverUrl);
+      log.info({ jobId: job.id, coverBytes: coverBytes.length }, "PDF cover (carta) generado");
+
+      // Cuerpo del booklet (letter portrait, N páginas). Render sin portada.
+      const bodyToken = signPrintToken({
+        bundleId: targetId,
+        institutionId,
+        kind: "bundle",
+      });
+      const bodyUrl = `${baseUrl}/print/bundle/${targetId}?t=${encodeURIComponent(bodyToken)}&bodyOnly=1`;
+      const bodyLinear = await renderLinearPdf(bodyUrl);
+      log.info({ jobId: job.id, bodyBytes: bodyLinear.length }, "PDF body (letter) generado");
+
+      // Imponer solo el cuerpo (coverPages: 0 — la portada va aparte).
+      const imposedBody = await imposeBooklet(bodyLinear, { coverPages: 0 });
+      log.info({ jobId: job.id, imposedBytes: imposedBody.length }, "Cuerpo impuesto");
+
+      // Componer el pliego portada: 17×11 apaisado (1224×792 pt) con la
+      // portada original (8.5×11 = 612×792 pt) embebida en la mitad
+      // DERECHA. La izquierda queda en blanco.
+      const coverDoc = await PDFDocument.load(coverBytes);
+      const coverSrcPage = coverDoc.getPages()[0];
+      if (!coverSrcPage) throw new Error("Cover PDF sin páginas");
+
+      const merged = await PDFDocument.create();
+      const TABLOID_W = 17 * 72; // 1224 pt
+      const TABLOID_H = 11 * 72; // 792 pt
+      const HALF_W = 8.5 * 72; // 612 pt (carta portrait width)
+      const HALF_H = 11 * 72; // 792 pt (carta portrait height)
+
+      const tabloidPage = merged.addPage([TABLOID_W, TABLOID_H]);
+      const embeddedCover = await merged.embedPage(coverSrcPage);
+      // Embed a 8.5×11, posicionada en x = 8.5in (mitad derecha), y = 0 (full bleed vertical).
+      tabloidPage.drawPage(embeddedCover, {
+        x: HALF_W,
+        y: 0,
+        width: HALF_W,
+        height: HALF_H,
+      });
+      log.info({ jobId: job.id, tabloidBytes: tabloidPage.getSize() }, "Pliego portada compuesto");
+
+      // Merge: pliego portada (tabloid apaisado) + cuerpo impuesto (tabloid
+      // imposed con medias cartas dentro).
+      const bodyDoc = await PDFDocument.load(imposedBody);
+      const bodyCopies = await merged.copyPages(bodyDoc, bodyDoc.getPageIndices());
+      for (const p of bodyCopies) merged.addPage(p);
+      out = await merged.save();
+      log.info(
+        { jobId: job.id, totalPages: merged.getPageCount(), bytes: out.length },
+        "Portada apaisada + cuerpo impuesto mergeados",
+      );
+    } else if (isCoverOnlyKind) {
+      // Descargar solo la portada. 1 render a carta portrait (8.5×11).
+      // El docente la previsualiza para validar antes de marcar el bundle
+      // como READY. Si quiere la versión apaisada del cuadernillo
+      // completo, usa el botón "Descargar cuadernillo (PDF)" (kind=bundle)
+      // que sí produce el pliego apaisado.
+      out = await renderLinearPdf(url);
+      log.info({ jobId: job.id, bytes: out.length }, "PDF cover-only generado");
+    } else {
+      // Flujo legacy: booklet / answer-sheets / answer-key / sus -bundle.
+      // 1 render + imposeBooklet (coverPages: 0 — toda la página es body).
+      const linear = await renderLinearPdf(url);
+      log.info({ jobId: job.id, linearBytes: linear.length }, "PDF lineal generado");
+      out = await imposeBooklet(linear, { coverPages: 0 });
+      log.info({ jobId: job.id, bytes: out.length }, "Imposición aplicada");
+    }
 
     const dir = path.join(env.STORAGE_DIR, "pdf", institutionId);
     await mkdir(dir, { recursive: true });
     const filePath = path.join(dir, `${targetId}-${kind}.pdf`);
-    await writeFile(filePath, imposed);
+    await writeFile(filePath, out);
 
     return { evaluationId, bundleId, institutionId, kind, path: filePath };
   },

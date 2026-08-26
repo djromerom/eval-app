@@ -42,7 +42,7 @@ export class UpdateBundle implements UseCase<UpdateBundleInput, Bundle> {
   ) {}
 
   async execute({ actor, bundleId, data }: UpdateBundleInput): Promise<Result<Bundle>> {
-    const authorized = requireRole(actor, "ECU_MASTER");
+    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     const existing = await this.bundles.findById(actor.institutionId, bundleId);
@@ -82,7 +82,7 @@ export class UpdateBundle implements UseCase<UpdateBundleInput, Bundle> {
     if (data.courseId !== undefined && data.courseId !== null) {
       const course = await this.courses.findById(actor.institutionId, data.courseId);
       if (!course) {
-        return fail(new ValidationError("El curso no existe en tu institución."));
+        return fail(new ValidationError("El grado no existe en tu institución."));
       }
 
       const items = await this.bundles.listItemsOrdered(bundleId);

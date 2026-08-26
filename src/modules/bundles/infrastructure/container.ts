@@ -1,4 +1,5 @@
 import { PrismaCourseRepository } from "@/modules/academic/infrastructure/prisma-academic-repositories";
+import { PrismaLeaderAssignmentRepository } from "@/modules/leader-assignments/infrastructure/prisma-leader-assignment-repository";
 import { AddEvaluationToBundle } from "../application/add-evaluation-to-bundle";
 import { CreateBundle } from "../application/create-bundle";
 import { DeleteBundle } from "../application/delete-bundle";
@@ -21,9 +22,11 @@ const repository = new PrismaBundleRepository();
 // Sprint 9: CreateBundle/UpdateBundle validan que el `courseId` del
 // cuadernillo exista en la institución del actor.
 const courses = new PrismaCourseRepository();
+// feat/lider-ecu: scope filter del ECU_LIDER.
+const leaderAssignments = new PrismaLeaderAssignmentRepository();
 
 export const makeCreateBundle = () => new CreateBundle(repository, courses);
-export const makeListBundles = () => new ListBundles(repository);
+export const makeListBundles = () => new ListBundles(repository, leaderAssignments);
 export const makeGetBundle = () => new GetBundle(repository);
 export const makeUpdateBundle = () => new UpdateBundle(repository, courses);
 export const makeDeleteBundle = () => new DeleteBundle(repository);

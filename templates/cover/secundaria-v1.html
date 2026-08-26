@@ -1,0 +1,401 @@
+<!doctype html>
+<!--
+  Plantilla de portada — variante "secundaria-v1".
+  ==================================================
+  Estilo ICFES institucional real. Layout de 3 filas:
+
+    1. HEADER   — top rule + escudo + divisor + "ECU <grado>"
+    2. HERO     — ilustración full-width con esquinas superiores redondeadas
+    3. BODY     — grid 2-col: izquierda = story | derecha = instrucciones
+    4. SESSION  — grid 2-col: izquierda = periodo + sesión + asignaturas
+                                derecha = info-boxes (preguntas + tiempo + código)
+    5. PROHIBIDO — tag + banda gris con cuerpo + pie legal
+
+  Paleta: tinta negra + grises (sin color de acento institucional — más fiel
+  al material ICFES real). Fuente Arial del sistema (no Google Fonts).
+
+  Esta plantilla es GENÉRICA — ningún texto institucional está hardcoded.
+  Todos los textos vienen por variables Mustache.
+
+  Variables (ver `src/modules/bundle-cover/application/cover-context.ts`):
+
+    institution.{name, logo, legalFooter}              ← primaryColor no se usa
+    bundle.{name, grade, bookletCode, periodLabel, totalQuestions, totalTime}
+    session.{name, labelShort}
+    story.{title, description, illustration}
+    subjects[].{name}
+    cover.instructions.title
+    cover.instructions.items[]       → bullets superiores
+    cover.callout.text               → "Conteste únicamente en su Hoja…"
+    cover.howToMark.question         → "¿CÓMO MARCAR EN SU HOJA…?"
+    cover.howToMark.example          → "Por ejemplo, si la opción correcta es B"
+    cover.howToMark.exampleLabel     → "MARQUE ASÍ"
+    cover.howToMark.circles[]        → [{letter:"A",filled:false},
+                                         {letter:"B",filled:true},
+                                         {letter:"C",filled:false},
+                                         {letter:"D",filled:false}]
+    cover.instructions.itemsAfter[]  → bullets posteriores (firma, entrega)
+    cover.prohibited.title           → "Prohibido"
+    cover.prohibited.body            → "Está prohibido manipular…"
+-->
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>{{bundle.name}}</title>
+  <style>
+    /* ============================================================
+       PAGE — tabloid 11in × 17in, sin margen.
+       ============================================================ */
+    @page { size: 11in 17in; margin: 0; }
+    @media screen {
+      html, body { background: #f2f2f2; }
+      body { padding: 0.2in 0.3in; }
+    }
+
+    :root {
+      --ink:            #1c1c1c;
+      --gray-line:      #c9cdd2;
+      --gray-fill:      #e7ebee;
+      --gray-fill-dark: #e2e6e9;
+      --prohibido-bg:   #e9ecef;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 11in; height: 17in;
+      background: #f2f2f2;
+      font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+      color: var(--ink);
+    }
+
+    .page {
+      width: 10.6in; height: 16.7in;
+      background: #fff;
+      margin: 0 auto;
+      border: 0.01in solid #d8d8d8;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ============================================================
+       HEADER
+       ============================================================ */
+    .top-rule {
+      border-top: 0.031in solid var(--ink);
+      margin: 0 0.33in;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 0.21in;
+      padding: 0.23in 0.33in 0.10in 0.33in;
+    }
+    .logo {
+      width: 0.78in; height: 0.78in;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+    .logo-fallback {
+      width: 0.78in; height: 0.78in;
+      display: flex; align-items: center; justify-content: center;
+      background: #f2f2f2; color: #6b7280;
+      font-size: 7pt; text-align: center;
+      border: 0.02in dashed #9ca3af;
+    }
+    .header-divider {
+      width: 0.021in;
+      align-self: stretch;
+      background: var(--ink);
+    }
+    .header-title {
+      font-size: 0.48in; font-weight: 800;
+      letter-spacing: 0.005in;
+    }
+    .header-title .grade { font-weight: 400; }
+
+    /* ============================================================
+       HERO — ilustración full-width, esquinas superiores redondeadas.
+       ============================================================ */
+    .hero-wrap { padding: 0 0.33in; }
+    .hero {
+      width: 100%;
+      display: block;
+      border-top-left-radius: 0.63in;
+      border-top-right-radius: 0.63in;
+    }
+    .hero-fallback {
+      width: 100%; height: 6.3in;
+      background: #d1d5db;
+      border-top-left-radius: 0.63in;
+      border-top-right-radius: 0.63in;
+      display: flex; align-items: center; justify-content: center;
+      color: #6b7280; font-size: 11pt;
+    }
+
+    /* ============================================================
+       BODY 2-COL — story | instrucciones
+       ============================================================ */
+    .body-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.29in;
+      padding: 0.23in 0.33in 0 0.33in;
+    }
+
+    .story h2 {
+      font-size: 0.20in;
+      margin-bottom: 0.08in;
+    }
+    .story p {
+      font-size: 0.13in;
+      line-height: 1.5;
+      margin-bottom: 0.13in;
+      color: #2a2a2a;
+    }
+
+    .instrucciones h2 {
+      font-size: 0.27in;
+      margin-bottom: 0.10in;
+    }
+    .instrucciones ul {
+      margin: 0 0 0.15in 0;
+      padding-left: 0.17in;
+      font-size: 0.13in;
+      line-height: 1.55;
+    }
+    .instrucciones li { margin-bottom: 0.06in; }
+
+    .callout {
+      border: 0.021in solid var(--ink);
+      border-radius: 0.063in;
+      padding: 0.13in 0.17in;
+      font-weight: 700;
+      text-align: center;
+      font-size: 0.14in;
+      margin-bottom: 0.15in;
+    }
+
+    .mark-row {
+      display: flex;
+      align-items: center;
+      gap: 0.19in;
+      margin-bottom: 0.15in;
+    }
+    .mark-text {
+      font-weight: 700;
+      font-size: 0.13in;
+      line-height: 1.45;
+      max-width: 2.6in;
+    }
+    .mark-example {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.06in;
+    }
+    .mark-example .label {
+      font-weight: 700;
+      font-size: 0.13in;
+    }
+    .bubbles { display: flex; gap: 0.08in; }
+    .bubble {
+      width: 0.31in; height: 0.31in;
+      border-radius: 50%;
+      border: 0.016in solid var(--ink);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.13in;
+      font-weight: 700;
+      background: #fff;
+      color: var(--ink);
+    }
+    .bubble.filled {
+      background: var(--ink);
+      color: #fff;
+    }
+
+    /* ============================================================
+       SESSION 2-COL — period/tag/subjects | info-boxes
+       ============================================================ */
+    .session-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.29in;
+      padding: 0.08in 0.33in 0 0.33in;
+      align-items: start;
+    }
+
+    .session-tag {
+      display: inline-block;
+      background: var(--gray-fill);
+      border: 0.01in solid var(--gray-line);
+      border-radius: 0.042in;
+      padding: 0.08in 0.21in;
+      font-size: 0.23in; font-weight: 800;
+      margin-bottom: 0.06in;
+    }
+    .session-title {
+      font-size: 0.40in; font-weight: 800;
+      margin: 0.06in 0 0.15in 0;
+    }
+    .subjects {
+      list-style: none;
+      margin: 0; padding: 0;
+      font-size: 0.20in; font-weight: 700;
+    }
+    .subjects li { margin-bottom: 0.06in; }
+    .subjects li::before { content: "• "; }
+
+    .info-boxes {
+      display: flex; flex-direction: column;
+      gap: 0.10in;
+      margin-top: 0.04in;
+    }
+    .info-box {
+      border: 0.016in solid var(--ink);
+      border-radius: 0.083in;
+      text-align: center;
+      padding: 0.10in 0.15in;
+    }
+    .info-box .label { font-size: 0.16in; font-weight: 700; }
+    .info-box .value { font-size: 0.21in; font-weight: 800; margin-top: 0.02in; }
+    .info-box.small {
+      width: fit-content;
+      padding: 0.06in 0.23in;
+    }
+    .info-box.small .value { font-size: 0.17in; }
+
+    /* ============================================================
+       PROHIBIDO — tag + banda gris.
+       ============================================================ */
+    .prohibido-tag {
+      display: inline-block;
+      background: var(--gray-fill);
+      border: 0.01in solid var(--gray-line);
+      border-radius: 0.042in;
+      padding: 0.08in 0.21in;
+      font-size: 0.31in; font-weight: 800;
+      margin: 0.27in 0 0 0.33in;
+    }
+    .prohibido-band {
+      background: var(--prohibido-bg);
+      margin-top: 0.15in;
+      padding: 0.23in 0.33in 0.27in 0.33in;
+    }
+    .prohibido-band p {
+      font-size: 0.15in;
+      line-height: 1.5;
+      margin: 0 0 0.15in 0;
+    }
+    .prohibido-band p.bold {
+      font-weight: 800;
+      margin-bottom: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <div class="top-rule"></div>
+
+    <header class="header">
+      {{#institution.logo}}
+        <img class="logo" src="{{institution.logo}}" alt="Escudo de {{institution.name}}" />
+      {{/institution.logo}}
+      {{^institution.logo}}
+        <div class="logo-fallback">Escudo<br/>institucional</div>
+      {{/institution.logo}}
+      <div class="header-divider"></div>
+      <div class="header-title">ECU <span class="grade">{{bundle.grade}}</span></div>
+    </header>
+
+    <div class="hero-wrap">
+      {{#story.illustration}}
+        <img class="hero" src="{{story.illustration}}" alt="Ilustración: {{story.title}}" />
+      {{/story.illustration}}
+      {{^story.illustration}}
+        <div class="hero-fallback">Ilustración institucional</div>
+      {{/story.illustration}}
+    </div>
+
+    <div class="body-grid">
+      <div class="story">
+        <h2>{{story.title}}</h2>
+        {{#story.description}}<p>{{.}}</p>{{/story.description}}
+      </div>
+
+      <div class="instrucciones">
+        <h2>{{cover.instructions.title}}</h2>
+        <ul>
+          {{#cover.instructions.items}}<li>{{.}}</li>{{/cover.instructions.items}}
+        </ul>
+
+        {{#cover.callout.text}}
+          <div class="callout">{{cover.callout.text}}</div>
+        {{/cover.callout.text}}
+
+        <!--STUDIO-BLOCK:howToMark:START-->
+        <div class="mark-row">
+          <div class="mark-text">
+            {{cover.howToMark.question}}<br/>
+            {{cover.howToMark.example}}
+          </div>
+          <div class="mark-example">
+            <div class="label">{{cover.howToMark.exampleLabel}}</div>
+            <div class="bubbles">
+              {{#cover.howToMark.circles}}
+                <div class="bubble{{#filled}} filled{{/filled}}">{{letter}}</div>
+              {{/cover.howToMark.circles}}
+            </div>
+          </div>
+        </div>
+        <!--STUDIO-BLOCK:howToMark:END-->
+
+        {{#cover.instructions.itemsAfter}}
+          <ul>
+            {{#cover.instructions.itemsAfter}}<li>{{.}}</li>{{/cover.instructions.itemsAfter}}
+          </ul>
+        {{/cover.instructions.itemsAfter}}
+      </div>
+    </div>
+
+    <div class="session-row">
+      <div>
+        <div class="session-tag">{{bundle.periodLabel}}</div>
+        <div class="session-title">{{session.name}}</div>
+        <ul class="subjects">
+          {{#subjects}}<li>{{name}}</li>{{/subjects}}
+        </ul>
+      </div>
+
+      <div class="info-boxes">
+        <div class="info-box">
+          <div class="label">N.° total de preguntas</div>
+          <div class="value">{{bundle.totalQuestions}}</div>
+        </div>
+        <div class="info-box">
+          <div class="label">Tiempo total</div>
+          <div class="value">{{bundle.totalTime}}</div>
+        </div>
+        {{#bundle.bookletCode}}
+          <div class="info-box small">
+            <div class="value">{{bundle.bookletCode}}</div>
+          </div>
+        {{/bundle.bookletCode}}
+      </div>
+    </div>
+
+    <!--STUDIO-BLOCK:prohibited:START-->
+    <div class="prohibido-tag">{{cover.prohibited.title}}</div>
+    <div class="prohibido-band">
+      <p>{{cover.prohibited.body}}</p>
+      <!--STUDIO-BLOCK:legalFooter:START-->
+      <p class="bold">{{institution.legalFooter}}</p>
+      <!--STUDIO-BLOCK:legalFooter:END-->
+    </div>
+    <!--STUDIO-BLOCK:prohibited:END-->
+
+  </div>
+</body>
+</html>

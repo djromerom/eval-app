@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function DesignerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const result = await makeGetEvaluation().execute({ actor, id });
   if (!result.ok) notFound();

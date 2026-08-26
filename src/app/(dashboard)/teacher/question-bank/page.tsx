@@ -19,7 +19,7 @@ export default async function QuestionBankPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
   const sp = await searchParams;
 
   const subjectsRes = await makeListSubjects().execute({ actor });

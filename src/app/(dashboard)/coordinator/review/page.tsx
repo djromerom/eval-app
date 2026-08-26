@@ -28,7 +28,7 @@ function Row({ e, children }: { e: EvaluationListItem; children: React.ReactNode
 }
 
 export default async function ReviewPage() {
-  const actor = await requireAuthenticatedUser("COORDINATOR");
+  const actor = await requireAuthenticatedUser("ECU_LIDER");
   const [inReviewRes, approvedRes] = await Promise.all([
     makeListEvaluations().execute({ actor, status: "IN_REVIEW" }),
     makeListEvaluations().execute({ actor, status: "APPROVED" }),

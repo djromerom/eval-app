@@ -77,7 +77,7 @@ export function BundleEditForm({
 
       <div className="space-y-1">
         <label htmlFor="courseId" className="text-sm font-medium">
-          Curso
+          Grado
         </label>
         <select
           id="courseId"
@@ -85,7 +85,7 @@ export function BundleEditForm({
           defaultValue={initialCourseId ?? ""}
           className="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
         >
-          <option value="">Sin curso específico (varios grados)</option>
+          <option value="">Sin grado específico (varios grados)</option>
           {courses.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -93,7 +93,7 @@ export function BundleEditForm({
           ))}
         </select>
         <p className="text-muted-foreground text-xs">
-          Para asignar un curso, todas las formulaciones del cuadernillo deben ser de ese curso.
+          Para asignar un grado, todas las formulaciones del cuadernillo deben ser de ese grado.
         </p>
       </div>
 

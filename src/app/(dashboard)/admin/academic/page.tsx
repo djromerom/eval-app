@@ -116,7 +116,7 @@ export default async function AcademicPage() {
     <>
       <PageHeader
         title="Estructura académica"
-        description="Años, pruebas, cursos, asignaturas y grupos de tu institución (ADMIN)."
+        description="Años, pruebas, grados, asignaturas y grupos de tu institución (ADMIN)."
       />
 
       {/* ===== Pencil: Setup banner cuando no hay nada configurado ===== */}
@@ -193,7 +193,7 @@ export default async function AcademicPage() {
         </summary>
         <p className="text-muted-foreground mb-4 text-xs">
           Formularios directos para crear cada entidad. Como alternativa, puedes usar las acciones
-          &ldquo;Agregar prueba&rdquo; / &ldquo;Agregar curso&rdquo; dentro de cada año arriba.
+          &ldquo;Agregar prueba&rdquo; / &ldquo;Agregar grado&rdquo; dentro de cada año arriba.
         </p>
 
         <div className="space-y-6">
@@ -254,10 +254,10 @@ export default async function AcademicPage() {
             />
           </CrudSection>
 
-          <CrudSection title="Cursos">
+          <CrudSection title="Grados">
             <EntityForm
               action={createCourseAction}
-              submitLabel="Agregar curso"
+              submitLabel="Agregar grado"
               disabledReason={years.length === 0 ? "Crea primero un año académico." : undefined}
               fields={[
                 {
@@ -290,19 +290,19 @@ export default async function AcademicPage() {
             />
           </CrudSection>
 
-          <CrudSection title="Asignaturas por curso">
+          <CrudSection title="Asignaturas por grado">
             <EntityForm
               action={createCourseSubjectAction}
               submitLabel="Enlazar"
               disabledReason={
                 courses.length === 0 || subjects.length === 0
-                  ? "Necesitas al menos un curso y una asignatura."
+                  ? "Necesitas al menos un grado y una asignatura."
                   : undefined
               }
               fields={[
                 {
                   name: "courseId",
-                  label: "Curso",
+                  label: "Grado",
                   type: "select",
                   required: true,
                   options: courseOptions,
@@ -322,11 +322,11 @@ export default async function AcademicPage() {
             <EntityForm
               action={createGroupAction}
               submitLabel="Agregar grupo"
-              disabledReason={courses.length === 0 ? "Crea primero un curso." : undefined}
+              disabledReason={courses.length === 0 ? "Crea primero un grado." : undefined}
               fields={[
                 {
                   name: "courseId",
-                  label: "Curso",
+                  label: "Grado",
                   type: "select",
                   required: true,
                   options: courseOptions,

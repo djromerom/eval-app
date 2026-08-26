@@ -1,0 +1,356 @@
+<!doctype html>
+<!--
+  PREVIEW MOCK — secundaria-v1.html con datos del ECU 6° Maleiwa.
+  Generada manualmente para evaluación visual.
+  Abrir con: open secundaria-v1.mock.html
+-->
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>ECU 6° Primera sesión — preview</title>
+  <style>
+    :root {
+      --ink:            #1c1c1c;
+      --gray-line:      #c9cdd2;
+      --gray-fill:      #e7ebee;
+      --gray-fill-dark: #e2e6e9;
+      --prohibido-bg:   #e9ecef;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #f2f2f2;
+      font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+      color: var(--ink);
+      display: flex;
+      justify-content: center;
+      padding: 24px 0;
+    }
+
+    .page {
+      width: 1000px;
+      max-width: 100%;
+      background: #fff;
+      border: 1px solid #d8d8d8;
+    }
+
+    .top-rule {
+      border-top: 3px solid var(--ink);
+      margin: 0 32px;
+    }
+
+    /* HEADER */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 22px 32px 10px 32px;
+    }
+    .logo {
+      width: 74px;
+      height: 74px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+    .header-divider {
+      width: 2px;
+      align-self: stretch;
+      background: var(--ink);
+    }
+    .header-title {
+      font-size: 46px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+    .header-title .grade {
+      font-weight: 400;
+    }
+
+    /* HERO */
+    .hero-wrap {
+      padding: 0 32px;
+    }
+    .hero {
+      width: 100%;
+      display: block;
+      border-top-left-radius: 60px;
+      border-top-right-radius: 60px;
+    }
+
+    /* BODY 2-COL */
+    .body-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      padding: 22px 32px 0 32px;
+    }
+    .story h2 {
+      font-size: 19px;
+      margin: 0 0 8px 0;
+    }
+    .story p {
+      font-size: 12.5px;
+      line-height: 1.5;
+      margin: 0 0 12px 0;
+      color: #2a2a2a;
+    }
+    .instrucciones h2 {
+      font-size: 26px;
+      margin: 0 0 10px 0;
+    }
+    .instrucciones ul {
+      margin: 0 0 14px 0;
+      padding-left: 16px;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .instrucciones li {
+      margin-bottom: 6px;
+    }
+
+    .callout {
+      border: 2px solid var(--ink);
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-weight: 700;
+      text-align: center;
+      font-size: 13.5px;
+      margin-bottom: 14px;
+    }
+
+    .mark-row {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-bottom: 14px;
+    }
+    .mark-text {
+      font-weight: 700;
+      font-size: 12.5px;
+      line-height: 1.45;
+      max-width: 250px;
+    }
+    .mark-example {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .mark-example .label {
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .bubbles {
+      display: flex;
+      gap: 8px;
+    }
+    .bubble {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 1.5px solid var(--ink);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      background: #fff;
+    }
+    .bubble.filled {
+      background: var(--ink);
+      color: #fff;
+    }
+
+    /* SESSION 2-COL */
+    .session-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      padding: 8px 32px 0 32px;
+      align-items: start;
+    }
+    .session-tag {
+      display: inline-block;
+      background: var(--gray-fill);
+      border: 1px solid var(--gray-line);
+      border-radius: 4px;
+      padding: 8px 20px;
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+    .session-title {
+      font-size: 38px;
+      font-weight: 800;
+      margin: 6px 0 14px 0;
+    }
+    .subjects {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      font-size: 19px;
+      font-weight: 700;
+    }
+    .subjects li {
+      margin-bottom: 6px;
+    }
+    .subjects li::before {
+      content: "• ";
+    }
+
+    .info-boxes {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .info-box {
+      border: 1.5px solid var(--ink);
+      border-radius: 8px;
+      text-align: center;
+      padding: 10px 14px;
+    }
+    .info-box .label {
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .info-box .value {
+      font-size: 20px;
+      font-weight: 800;
+      margin-top: 2px;
+    }
+    .info-box.small {
+      width: fit-content;
+      padding: 6px 22px;
+    }
+    .info-box.small .value {
+      font-size: 16px;
+    }
+
+    /* PROHIBIDO */
+    .prohibido-tag {
+      display: inline-block;
+      background: var(--gray-fill);
+      border: 1px solid var(--gray-line);
+      border-radius: 4px;
+      padding: 8px 20px;
+      font-size: 30px;
+      font-weight: 800;
+      margin: 26px 0 0 32px;
+    }
+    .prohibido-band {
+      background: var(--prohibido-bg);
+      margin-top: 14px;
+      padding: 22px 32px 26px 32px;
+    }
+    .prohibido-band p {
+      font-size: 14px;
+      line-height: 1.5;
+      margin: 0 0 14px 0;
+    }
+    .prohibido-band p.bold {
+      font-weight: 800;
+      margin-bottom: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <div class="top-rule"></div>
+
+    <header class="header">
+      <img class="logo" src="assets/logo.png" alt="Escudo de INSTITUCIÓN EDUCATIVA MARÍA DORALIZA LÓPEZ DE MEJÍA" />
+      <div class="header-divider"></div>
+      <div class="header-title">ECU <span class="grade">6°</span></div>
+    </header>
+
+    <div class="hero-wrap">
+      <img class="hero" src="assets/malewa.png" alt="Ilustración Maleiwa ordena el mundo, cultura Wayuu" />
+    </div>
+
+    <div class="body-grid">
+
+      <div class="story">
+        <h2>Maleiwa ordena el mundo</h2>
+        <p>Según la tradición ancestral, antes de la presencia humana el mundo existía, pero todavía no tenía el orden de la vida comunitaria. Maleiwa convocó al sol, la luna, la lluvia, el viento, los animales y las plantas para que cada elemento ocupara un lugar dentro del territorio. Después creó al pueblo Wayuu y le entregó principios para vivir en comunidad: pertenecer a un clan, proteger a la familia, respetar la palabra y cuidar la tierra.</p>
+        <p>Maleiwa no solo creó seres humanos, sino una forma de comprender la existencia. Desde esta visión, el territorio no es un objeto que pueda utilizarse sin límites, sino un espacio vivo que conserva la memoria de los ancestros y sostiene a las futuras generaciones.</p>
+      </div>
+
+      <div class="instrucciones">
+        <h2>Instrucciones</h2>
+        <ul>
+          <li>El Cuadernillo contiene la prueba de preguntas cerradas, la Hoja de respuestas y una Hoja para operaciones.</li>
+          <li>Desprenda la Hoja de respuestas, teniendo cuidado de no rasgarla o dañarla.</li>
+          <li>Las preguntas de este examen constan de un enunciado y múltiples opciones de respuesta, entre las cuales usted debe escoger la que considere correcta.</li>
+          <li>Lea cuidadosamente cada pregunta antes de responder y verifique que está marcando correctamente en su Hoja de respuestas.</li>
+        </ul>
+
+        <div class="callout">
+          Conteste únicamente en su Hoja de respuestas,<br>
+          rellenando los círculos con lápiz negro número 2.
+        </div>
+
+        <div class="mark-row">
+          <div class="mark-text">¿CÓMO MARCAR EN SU HOJA DE RESPUESTAS?<br>Por ejemplo, si la opción correcta es <strong>B</strong></div>
+          <div class="mark-example">
+            <div class="label">MARQUE ASÍ</div>
+            <div class="bubbles">
+              <div class="bubble">A</div>
+              <div class="bubble filled"></div>
+              <div class="bubble">C</div>
+              <div class="bubble">D</div>
+            </div>
+          </div>
+        </div>
+
+        <ul>
+          <li>No haga señales ni marcas adicionales; no maltrate ni doble esta Hoja.</li>
+          <li>No marque más de una respuesta por pregunta porque le será anulada.</li>
+          <li>Verifique que el número de la respuesta coincida con el número de la pregunta.</li>
+          <li>Borre totalmente la respuesta que desee cambiar, teniendo cuidado de no dañar la Hoja de respuestas.</li>
+          <li>Firme al respaldo de su Hoja de respuestas con esfero, cuando el jefe de salón se lo indique.</li>
+          <li>Al finalizar la sesión, entréguele TODO el material al jefe de salón.</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <div class="session-row">
+      <div>
+        <div class="session-tag">2026 - 2</div>
+        <div class="session-title">Primera sesión</div>
+        <ul class="subjects">
+          <li>Biología</li>
+          <li>Física</li>
+          <li>Química</li>
+          <li>Inglés</li>
+          <li>Informática</li>
+        </ul>
+      </div>
+
+      <div class="info-boxes">
+        <div class="info-box">
+          <div class="label">N.° total de preguntas</div>
+          <div class="value">147</div>
+        </div>
+        <div class="info-box">
+          <div class="label">Tiempo total</div>
+          <div class="value">4 horas 30 minutos</div>
+        </div>
+        <div class="info-box small">
+          <div class="value">ABR2</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="prohibido-tag">Prohibido</div>
+    <div class="prohibido-band">
+      <p>Está prohibido manipular teléfonos, equipos celulares, relojes, gafas inteligentes o cualquier dispositivo de comunicación, entre otros, dentro de cualquier lugar del sitio de aplicación.</p>
+      <p class="bold">Material de uso exclusivo de INEMADOL - FEDUPAIS. Prohibida su reproducción parcial o total.</p>
+    </div>
+
+  </div>
+</body>
+</html>

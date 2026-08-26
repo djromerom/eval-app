@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function BundleDesignerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  const actor = await requireAuthenticatedUser("ECU_MASTER", "ECU_LIDER");
 
   const result = await makeGetBundle().execute({ actor, bundleId: id });
   if (!result.ok) notFound();

@@ -97,7 +97,7 @@ export class ListPeriods implements UseCase<ListPeriodsInput, Period[]> {
   constructor(private readonly periods: PeriodRepository) {}
 
   async execute({ actor, academicYearId }: ListPeriodsInput): Promise<Result<Period[]>> {
-    const authorized = requireRole(actor, "ECU_MASTER", "COORDINATOR", "TEACHER");
+    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER", "TEACHER");
     if (!authorized.ok) return authorized;
     return ok(await this.periods.findAll(actor.institutionId, academicYearId));
   }
@@ -112,7 +112,7 @@ export class GetPeriod implements UseCase<GetPeriodInput, Period> {
   constructor(private readonly periods: PeriodRepository) {}
 
   async execute({ actor, periodId }: GetPeriodInput): Promise<Result<Period>> {
-    const authorized = requireRole(actor, "ECU_MASTER", "COORDINATOR", "TEACHER");
+    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER", "TEACHER");
     if (!authorized.ok) return authorized;
     const period = await this.periods.findById(actor.institutionId, periodId);
     if (!period) return fail(new NotFoundError("Periodo", periodId));

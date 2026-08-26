@@ -29,7 +29,7 @@ export class CreateCourseSubject implements UseCase<CreateCourseSubjectInput, Co
     if (!authorized.ok) return authorized;
 
     const course = await this.courses.findById(actor.institutionId, data.courseId);
-    if (!course) return fail(new ValidationError("El curso no existe en tu institución."));
+    if (!course) return fail(new ValidationError("El grado no existe en tu institución."));
 
     const subject = await this.subjects.findById(data.subjectId);
     const visible =
@@ -40,7 +40,7 @@ export class CreateCourseSubject implements UseCase<CreateCourseSubjectInput, Co
       );
 
     if (await this.courseSubjects.exists(data.courseId, data.subjectId)) {
-      return fail(new ValidationError("Esa asignatura ya está enlazada a ese curso."));
+      return fail(new ValidationError("Esa asignatura ya está enlazada a ese grado."));
     }
 
     return ok(await this.courseSubjects.create(data));
@@ -71,13 +71,13 @@ export class ListCourseSubjects implements UseCase<ListCourseSubjectsInput, Cour
   ) {}
 
   async execute({ actor }: ListCourseSubjectsInput): Promise<Result<CourseSubjectView[]>> {
-    const authorized = requireRole(actor, "ECU_MASTER", "COORDINATOR", "TEACHER");
+    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER", "TEACHER");
     if (!authorized.ok) return authorized;
 
     const all = await this.courseSubjects.findAll(actor.institutionId);
 
     // Los roles administrativos ven el listado completo.
-    if (actor.roles.includes("ECU_MASTER") || actor.roles.includes("COORDINATOR")) {
+    if (actor.roles.includes("ECU_MASTER") || actor.roles.includes("ECU_LIDER")) {
       return ok(all);
     }
 

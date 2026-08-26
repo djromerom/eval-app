@@ -394,11 +394,11 @@ export class AssignTeacher implements UseCase<AssignTeacherInput, void> {
 
     const courseSubject = await this.courseSubjects.findById(actor.institutionId, courseSubjectId);
     if (!courseSubject) {
-      return fail(new ValidationError("La asignatura-curso no existe en tu institución."));
+      return fail(new ValidationError("La asignatura-grado no existe en tu institución."));
     }
 
     if (await this.teachers.isAssigned(teacherId, courseSubjectId)) {
-      return fail(new ValidationError("El docente ya está asignado a esa asignatura-curso."));
+      return fail(new ValidationError("El docente ya está asignado a esa asignatura-grado."));
     }
 
     await this.teachers.assign(teacherId, courseSubjectId);

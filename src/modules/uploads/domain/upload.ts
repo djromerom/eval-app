@@ -38,9 +38,19 @@ export function storagePathFromUploadUrl(src: unknown): string | null {
 /**
  * `institutionId` al que pertenece una ruta de subida, según su primer
  * segmento. Permite comprobar el tenant sin consultar la base de datos.
+ *
+ * Acepta dos namespaces (jul 2026):
+ *   • `evaluations/{institutionId}/...` — imágenes de contenido TipTap
+ *     (`InlineContentImages` las persiste aquí).
+ *   • `institutions/{institutionId}/cover-html/{bundleId}/...` — SVGs +
+ *     imágenes raster extraídos por `extractInlineAssets` al guardar
+ *     un cover HTML live (ago 2026).
+ *
+ * Cualquier otro prefijo devuelve `null` (no asumimos tenant).
  */
 export function institutionIdFromPath(relative: string): string | null {
   const parts = relative.split("/");
-  if (parts.length < 3 || parts[0] !== "evaluations") return null;
+  if (parts.length < 3) return null;
+  if (parts[0] !== "evaluations" && parts[0] !== "institutions") return null;
   return parts[1] ?? null;
 }

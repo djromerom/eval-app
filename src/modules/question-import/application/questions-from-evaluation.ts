@@ -33,7 +33,7 @@ export class QuestionsFromEvaluation implements UseCase<QuestionsFromEvaluationI
     evaluationId,
     sectionId,
   }: QuestionsFromEvaluationInput): Promise<Result<ParseResult>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     // `getDetail` filtra por institución, así que no se pueden leer preguntas

@@ -33,7 +33,7 @@ interface Props {
 
 export default async function AnswerSheetPage({ params }: Props) {
   const { evaluationId } = await params;
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const [evalRes, instRes] = await Promise.all([
     makeGetEvaluation().execute({ actor, id: evaluationId }),

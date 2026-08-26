@@ -28,7 +28,7 @@ function ScoreBar({ score, max }: { score: number; max: number }) {
 
 export default async function ResultsPage({ params }: Props) {
   const { id } = await params;
-  await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const results = await getEvaluationResultsAction(id);
   if (!results) notFound();

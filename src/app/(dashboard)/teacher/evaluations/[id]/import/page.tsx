@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Importar preguntas" };
 
 export default async function ImportQuestionsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: targetId } = await params;
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   // La formulación destino tiene que existir y estar en BORRADOR (el use case
   // también lo comprueba, pero así evitamos mostrar el wizard si no va a

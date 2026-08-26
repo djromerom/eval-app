@@ -21,7 +21,7 @@ export class UnmarkBundleReady implements UseCase<UnmarkBundleReadyInput, Bundle
   constructor(private readonly bundles: BundleRepository) {}
 
   async execute({ actor, bundleId }: UnmarkBundleReadyInput): Promise<Result<Bundle>> {
-    const authorized = requireRole(actor, "ECU_MASTER");
+    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     const bundle = await this.bundles.findById(actor.institutionId, bundleId);

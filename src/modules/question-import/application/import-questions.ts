@@ -85,7 +85,7 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
     questions,
     destination,
   }: ImportQuestionsInput): Promise<Result<ImportQuestionsResult>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     if (questions.length === 0) {

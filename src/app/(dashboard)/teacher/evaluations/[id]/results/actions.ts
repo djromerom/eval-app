@@ -39,7 +39,7 @@ export interface QuestionStat {
 export async function getEvaluationResultsAction(
   evaluationId: string,
 ): Promise<EvaluationResults | null> {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const evaluation = await prisma.evaluation.findFirst({
     where: { id: evaluationId, institutionId: actor.institutionId, deletedAt: null },
@@ -152,7 +152,7 @@ export async function getSheetDetailAction(
   evaluationId: string,
   sheetId: string,
 ): Promise<SheetDetail | null> {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const sheet = await prisma.answerSheet.findFirst({
     where: { id: sheetId, evaluationId, evaluation: { institutionId: actor.institutionId } },

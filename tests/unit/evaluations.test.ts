@@ -74,6 +74,11 @@ class FakeEvaluations implements EvaluationRepository {
   async findByTeacher(): Promise<EvaluationListItem[]> {
     return [];
   }
+  async findByCourseIds(_i: string, courseIds: string[]): Promise<EvaluationListItem[]> {
+    if (courseIds.length === 0) return [];
+    return [];
+  }
+
   async findByInstitution(): Promise<EvaluationListItem[]> {
     return [];
   }
@@ -291,7 +296,7 @@ const teacher: AuthenticatedUser = { userId: "t1", institutionId: "i1", roles: [
 const coordinator: AuthenticatedUser = {
   userId: "c1",
   institutionId: "i1",
-  roles: ["COORDINATOR"],
+  roles: ["ECU_LIDER"],
 };
 
 const question = (over: Partial<CreateQuestionData> = {}): CreateQuestionData => ({
@@ -606,7 +611,7 @@ describe("CreateEvaluation — unicidad (asignatura-curso + periodo + tipo de cu
     expect(second.ok).toBe(false);
     if (!second.ok) {
       expect(second.error.code).toBe("VALIDATION");
-      expect(second.error.message).toMatch(/asignatura-curso, periodo, tipo de cuadernillo y año/i);
+      expect(second.error.message).toMatch(/asignatura-grado, periodo, tipo de cuadernillo y año/i);
     }
   });
 
@@ -844,7 +849,7 @@ describe("CreateEvaluation — unicidad con bookletTypeId", () => {
     expect(second.ok).toBe(false);
     if (!second.ok) {
       expect(second.error.code).toBe("VALIDATION");
-      expect(second.error.message).toMatch(/asignatura-curso, periodo, tipo de cuadernillo y año/i);
+      expect(second.error.message).toMatch(/asignatura-grado, periodo, tipo de cuadernillo y año/i);
     }
   });
 });

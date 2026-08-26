@@ -33,9 +33,9 @@ export function KpiStrip({
       />
       <KpiCard
         icon={<GraduationCap className="text-muted-foreground h-4 w-4" />}
-        label="Cursos"
+        label="Grados"
         value={coursesCount}
-        hint={coursesCount === 0 ? "Sin cursos todavía" : `${coursesCount} cursos`}
+        hint={coursesCount === 0 ? "Sin grados todavía" : `${coursesCount} grados`}
       />
       <KpiCard
         icon={<BookOpen className="text-muted-foreground h-4 w-4" />}

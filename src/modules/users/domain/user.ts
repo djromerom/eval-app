@@ -34,7 +34,7 @@ export function isValidEmail(email: string): boolean {
  * Roles que un ADMIN puede asignar dentro de su institución (§2).
  * SUPER_ADMIN queda fuera: solo el dueño de la plataforma lo posee.
  */
-export const ADMIN_ASSIGNABLE_ROLES: Role[] = ["ECU_MASTER", "COORDINATOR", "TEACHER"];
+export const ADMIN_ASSIGNABLE_ROLES: Role[] = ["ECU_MASTER", "ECU_LIDER", "TEACHER"];
 
 export function areAssignableRoles(roles: Role[]): boolean {
   return roles.length > 0 && roles.every((r) => ADMIN_ASSIGNABLE_ROLES.includes(r));

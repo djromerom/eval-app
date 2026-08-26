@@ -139,6 +139,7 @@ export class InMemoryBundleRepository implements BundleRepository {
       courseName: data.courseId ? courseNameOf(data.courseId) : null,
       status: "DRAFT",
       theme: data.theme ?? null,
+      coverContent: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -179,6 +180,13 @@ export class InMemoryBundleRepository implements BundleRepository {
     return Array.from(this.bundles.values()).filter((b) => b.institutionId === institutionId);
   }
 
+  async findByCourseIds(institutionId: string, courseIds: string[]): Promise<Bundle[]> {
+    if (courseIds.length === 0) return [];
+    return Array.from(this.bundles.values()).filter(
+      (b) => b.institutionId === institutionId && b.courseId !== null && courseIds.includes(b.courseId),
+    );
+  }
+
   async update(institutionId: string, id: string, data: UpdateBundleData): Promise<Bundle> {
     const b = await this.findById(institutionId, id);
     if (!b) throw new Error(`Bundle ${id} no encontrado`);
@@ -193,6 +201,7 @@ export class InMemoryBundleRepository implements BundleRepository {
           }
         : {}),
       ...(data.theme !== undefined ? { theme: data.theme } : {}),
+      ...(data.coverContent !== undefined ? { coverContent: data.coverContent } : {}),
       updatedAt: new Date(),
     };
     this.bundles.set(id, updated);
@@ -339,7 +348,7 @@ export const teacher: AuthenticatedUser = {
 export const coordinator: AuthenticatedUser = {
   userId: "u-coord",
   institutionId: "inst-1",
-  roles: ["COORDINATOR"],
+  roles: ["ECU_LIDER"],
 };
 
 export const adminOtherInstitution: AuthenticatedUser = {

@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Escanear hojas" };
 const df = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short" });
 
 export default async function ScanPage() {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
   const [listRes, bundlesRes] = await Promise.all([
     makeListEvaluations().execute({ actor }),
     makeListBundles().execute({ actor }),

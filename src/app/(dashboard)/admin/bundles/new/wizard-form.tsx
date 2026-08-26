@@ -126,7 +126,7 @@ export function CreateBundleWizard({
         </div>
         <div className="space-y-1">
           <label htmlFor="courseId" className="text-sm font-medium">
-            Curso (opcional)
+            Grado (opcional)
           </label>
           <select
             id="courseId"
@@ -135,7 +135,7 @@ export function CreateBundleWizard({
             onChange={(e) => changeCourse(e.target.value)}
             className="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
           >
-            <option value="">Sin curso específico (varios grados)</option>
+            <option value="">Sin grado específico (varios grados)</option>
             {courses.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -144,8 +144,8 @@ export function CreateBundleWizard({
           </select>
           <p className="text-muted-foreground text-xs">
             {courseId
-              ? "Solo se listan formulaciones de este curso, y el grado se preimprime en la portada."
-              : "Sin curso, el cuadernillo admite formulaciones de cualquier grado y el estudiante escribe el suyo."}
+              ? "Solo se listan formulaciones de este grado, y el grado se preimprime en la portada."
+              : "Sin grado, el cuadernillo admite formulaciones de cualquier grado y el estudiante escribe el suyo."}
           </p>
         </div>
       </section>
@@ -173,7 +173,7 @@ export function CreateBundleWizard({
             {filtered.length === 0 ? (
               <li className="text-muted-foreground p-4 text-center text-sm">
                 {courseId
-                  ? "No hay formulaciones de este curso. Elige otro o quita el filtro de curso."
+                  ? "No hay formulaciones de este grado. Elige otro o quita el filtro de grado."
                   : "Sin coincidencias."}
               </li>
             ) : (

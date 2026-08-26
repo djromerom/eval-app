@@ -15,7 +15,7 @@ import { EvaluationsTable } from "./evaluations-table";
 export const metadata: Metadata = { title: "Formulaciones" };
 
 export default async function EvaluationsPage() {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
   const [listRes, csRes, periodsRes, bookletTypesRes, coursesRes] = await Promise.all([
     makeListEvaluations().execute({ actor }),
     makeListCourseSubjects().execute({ actor }),
@@ -86,7 +86,7 @@ export default async function EvaluationsPage() {
           submitLabel="Formular"
           disabledReason={
             courseSubjects.length === 0
-              ? "Un administrador debe enlazar asignaturas a cursos primero."
+              ? "Un administrador debe enlazar asignaturas a grados primero."
               : undefined
           }
           fields={[

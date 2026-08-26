@@ -7,6 +7,6 @@ import type { Role } from "@/shared/application/authenticated-user";
  */
 export const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: "ECU_MASTER", label: "Administrador" },
-  { value: "COORDINATOR", label: "Coordinador" },
+  { value: "ECU_LIDER", label: "Líder ECU" },
   { value: "TEACHER", label: "Profesor" },
 ];
