@@ -1,0 +1,22 @@
+/*
+ * Override de impresión para SOLO la portada del cuadernillo.
+ *
+ * Cuando el worker PDF compone el cuadernillo completo (`kind=bundle`),
+ * primero renderiza la portada sola en `/print/cover/bundle/[id]` y luego
+ * la incrusta en la mitad derecha de un pliego tabloid apaisado (17×11in).
+ * El PDF cover-only debe ocupar el área imprimible COMPLETA (8.5×11in
+ * letter portrait, full bleed) — cualquier margen del `@page` se traduce
+ * en franjas blancas visibles al incrustarlo en el pliego.
+ *
+ * El `@page` por defecto de `print.css` reserva `margin: 2cm` para el
+ * método primario de impresión desde el navegador. Aquí no aplica:
+ * el worker es el único consumidor de esta ruta, y necesita full bleed.
+ *
+ * Se importa DESPUÉS de `print.css` desde `src/app/print/cover/bundle/[id]/
+ * page.tsx`. Misma specificity (selector universal de @page), gana el
+ * último declarado.
+ */
+@page {
+  size: letter portrait;
+  margin: 0;
+}

@@ -112,10 +112,17 @@ export default async function PrintBundlePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ t?: string }>;
+  searchParams: Promise<{ t?: string; bodyOnly?: string }>;
 }) {
   const { id } = await params;
-  const { t } = await searchParams;
+  const { t, bodyOnly } = await searchParams;
+  // `?bodyOnly=1` lo usa el worker de PDF para renderizar el booklet sin
+  // la portada: la portada apaisada se genera por separado en
+  // /print/cover/bundle/[id] (otro PDF) y se une con pdf-lib. Chrome no
+  // permite mezclar tamaños de página en un mismo PDF (`@page :first`
+  // y named pages ignoran `size:`), así que la única vía fiable es
+  // renderizar dos PDFs y mergear. Ver `workers/pdf.worker.ts`.
+  const isBodyOnly = bodyOnly === "1";
   const actor = await resolvePrintActor(t, { bundleId: id, kind: "bundle" });
 
   const [bundleRes, instRes] = await Promise.all([
@@ -229,110 +236,115 @@ export default async function PrintBundlePage({
        * Si NO, conservamos el JSX hardcoded de abajo para no introducir
        * un cambio visual a cuadernillos ya impresos.
        */}
-      <section className="sheet cover">
-        {customCoverHtml ? (
-          <iframe
-            className="cover-custom"
-            title="Portada del cuadernillo"
-            sandbox=""
-            srcDoc={customCoverHtml}
-          />
-        ) : (
-          <>
-            {logoSrc ? <img src={logoSrc} alt="" className="cover-logo" /> : null}
-            <p className="cover-institution print-accent">{institutionName}</p>
-            <p className="cover-test-title">{bundle.name}</p>
+      {!isBodyOnly && (
+        <section className="sheet cover-sheet">
+          <div className="cover-blank-half" aria-hidden="true" />
+          <div className="cover-half">
+            {customCoverHtml ? (
+              <iframe
+                className="cover-custom"
+                title="Portada del cuadernillo"
+                sandbox=""
+                srcDoc={customCoverHtml}
+              />
+            ) : (
+              <>
+                {logoSrc ? <img src={logoSrc} alt="" className="cover-logo" /> : null}
+                <p className="cover-institution print-accent">{institutionName}</p>
+                <p className="cover-test-title">{bundle.name}</p>
 
-            {/* Tabla de áreas agrupadas por parentSubject — el "tabla de áreas" del
+                {/* Tabla de áreas agrupadas por parentSubject — el "tabla de áreas" del
                 ejemplo real. Caso N=1: una sola área con un solo subject. */}
-            {coverTable.areas.length > 0 && (
-              <div className="competencies-section">
-                <p className="competencies-title">Tabla de áreas</p>
-                <table className="competencies-table">
-                  <thead>
-                    <tr>
-                      <th>Área</th>
-                      <th>Asignatura</th>
-                      <th>Preguntas</th>
-                      <th>Tiempo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {coverTable.areas.flatMap((area) =>
-                      area.subjects.map((subj, i) => (
-                        <tr key={`${area.name}-${subj.name}`}>
-                          <td>{i === 0 ? area.name : ""}</td>
-                          <td>{subj.name}</td>
-                          <td className="text-center">{subj.questions}</td>
-                          <td className="text-center">{formatDuration(subj.minutes)}</td>
+                {coverTable.areas.length > 0 && (
+                  <div className="competencies-section">
+                    <p className="competencies-title">Tabla de áreas</p>
+                    <table className="competencies-table">
+                      <thead>
+                        <tr>
+                          <th>Área</th>
+                          <th>Asignatura</th>
+                          <th>Preguntas</th>
+                          <th>Tiempo</th>
                         </tr>
-                      )),
-                    )}
-                    <tr>
-                      <td colSpan={2}>
-                        <strong>Total</strong>
-                      </td>
-                      <td className="text-center">
-                        <strong>{coverTable.totalQuestions}</strong>
-                      </td>
-                      <td className="text-center">
-                        <strong>{formatDuration(coverTable.totalMinutes)}</strong>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            <p className="cover-booklet-number">{bookletLabel}</p>
-
-            <p className="cover-greeting">¡Hola!</p>
-
-            <p className="cover-instructions-title">Instrucciones</p>
-            <p className="cover-instructions-intro">
-              A continuación encontrarás una serie de preguntas de selección múltiple con única
-              respuesta. Lee con atención cada pregunta y responde en la hoja de respuestas.
-            </p>
-            <ul className="cover-instructions-list">
-              {INSTRUCTIONS.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-
-            <div className="mark-example">
-              <span>Marca así:</span>
-              {KEYS.map((k) => (
-                <span key={k} className={`omr-bubble ${k === "A" ? "filled" : ""}`}>
-                  {k}
-                </span>
-              ))}
-            </div>
-
-            <div className="student-fields">
-              <div className="student-field">
-                <span className="student-field-label">Nombres y apellidos:</span>
-                <span className="student-field-line" />
-              </div>
-              <div className="student-field">
-                <span className="student-field-label">Grado:</span>
-                {/* Si el cuadernillo es de un curso concreto, el grado va preimpreso;
-                    si es cross-course, el estudiante lo escribe sobre la línea. */}
-                {bundle.courseName ? (
-                  <span className="student-field-value">{bundle.courseName}</span>
-                ) : (
-                  <span className="student-field-line" />
+                      </thead>
+                      <tbody>
+                        {coverTable.areas.flatMap((area) =>
+                          area.subjects.map((subj, i) => (
+                            <tr key={`${area.name}-${subj.name}`}>
+                              <td>{i === 0 ? area.name : ""}</td>
+                              <td>{subj.name}</td>
+                              <td className="text-center">{subj.questions}</td>
+                              <td className="text-center">{formatDuration(subj.minutes)}</td>
+                            </tr>
+                          )),
+                        )}
+                        <tr>
+                          <td colSpan={2}>
+                            <strong>Total</strong>
+                          </td>
+                          <td className="text-center">
+                            <strong>{coverTable.totalQuestions}</strong>
+                          </td>
+                          <td className="text-center">
+                            <strong>{formatDuration(coverTable.totalMinutes)}</strong>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 )}
-              </div>
-              <div className="student-field">
-                <span className="student-field-label">Fecha:</span>
-                <span className="student-field-line" />
-              </div>
-            </div>
 
-            <div className="fold-line" />
-          </>
-        )}
-      </section>
+                <p className="cover-booklet-number">{bookletLabel}</p>
+
+                <p className="cover-greeting">¡Hola!</p>
+
+                <p className="cover-instructions-title">Instrucciones</p>
+                <p className="cover-instructions-intro">
+                  A continuación encontrarás una serie de preguntas de selección múltiple con única
+                  respuesta. Lee con atención cada pregunta y responde en la hoja de respuestas.
+                </p>
+                <ul className="cover-instructions-list">
+                  {INSTRUCTIONS.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+
+                <div className="mark-example">
+                  <span>Marca así:</span>
+                  {KEYS.map((k) => (
+                    <span key={k} className={`omr-bubble ${k === "A" ? "filled" : ""}`}>
+                      {k}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="student-fields">
+                  <div className="student-field">
+                    <span className="student-field-label">Nombres y apellidos:</span>
+                    <span className="student-field-line" />
+                  </div>
+                  <div className="student-field">
+                    <span className="student-field-label">Grado:</span>
+                    {/* Si el cuadernillo es de un curso concreto, el grado va preimpreso;
+                    si es cross-course, el estudiante lo escribe sobre la línea. */}
+                    {bundle.courseName ? (
+                      <span className="student-field-value">{bundle.courseName}</span>
+                    ) : (
+                      <span className="student-field-line" />
+                    )}
+                  </div>
+                  <div className="student-field">
+                    <span className="student-field-label">Fecha:</span>
+                    <span className="student-field-line" />
+                  </div>
+                </div>
+
+                <div className="fold-line" />
+              </>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* ===== Páginas 2+: booklet de cada evaluation ===== */}
       {validEvaluations.map(({ item, evaluation }, evalIdx) => {

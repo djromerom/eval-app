@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
 import "@/styles/print.css";
+// Override del @page para esta ruta: la portada debe imprimirse full bleed
+// (sin margen de 2cm del print.css), porque el worker la incrusta como
+// mitad derecha de un pliego tabloid apaisado y cualquier margen se ve
+// como franja blanca dentro del pliego. Se importa DESPUÉS de print.css
+// para ganar por orden en el cascade de @page rules.
+import "../../print-cover.css";
 import { readFile } from "node:fs/promises";
 import { notFound } from "next/navigation";
 import { resolvePrintActor } from "@/lib/print-access";
@@ -92,7 +98,14 @@ export default async function PrintCoverBundlePage({
         <PrintButton />
       </div>
 
-      {/* ===== Página única: portada del cuadernillo ===== */}
+      {/* ===== Página única: portada del cuadernillo =====
+       *
+       * Esta ruta renderiza SOLO la portada (1 página carta 8.5×11in) para
+       * previsualizar / descargar la portada actual. NO usa `.cover-sheet`
+       * (la estructura flex de dos mitades que vive en `/print/bundle/[id]`)
+       * porque aquí la portada va sola — el worker de PDF es quien decide
+       * dónde ponerla (mitad derecha de un pliego tabloid apaisado) cuando
+       * se compone el cuadernillo completo. Ver `workers/pdf.worker.ts`. */}
       <section className="sheet cover">
         {customCoverHtml ? (
           <iframe
