@@ -1,4 +1,4 @@
-import type { Institution as PrismaInstitution } from "@prisma/client";
+import type { Prisma, Institution as PrismaInstitution } from "@prisma/client";
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import type {
   CreateInstitutionData,
@@ -18,6 +18,8 @@ function toInstitution(row: PrismaInstitution): Institution {
     slug: row.slug,
     code: row.code,
     logo: row.logo,
+    theme: row.theme,
+    coverContent: row.coverContent,
     isActive: row.isActive,
     createdAt: row.createdAt,
   };
@@ -51,5 +53,21 @@ export class PrismaInstitutionRepository implements InstitutionRepository {
 
   async setActive(id: string, isActive: boolean): Promise<void> {
     await prisma.institution.update({ where: { id }, data: { isActive } });
+  }
+
+  /**
+   * Persiste el override institucional de `coverContent`. PR 3 (ago 2026).
+   * Acepta `null` para limpiar el override (DB NULL — el merge cae al
+   * DEFAULT_*), o un objeto `Partial<...>` para escribir overrides
+   * parciales. Si se pasa `undefined` no toca la fila.
+   */
+  async setCoverContent(
+    id: string,
+    coverContent: Record<string, unknown> | null,
+  ): Promise<void> {
+    await prisma.institution.update({
+      where: { id },
+      data: { coverContent: (coverContent ?? null) as Prisma.InputJsonValue },
+    });
   }
 }

@@ -27,7 +27,7 @@ export default async function AdminDashboardPage() {
     <>
       <PageHeader
         title="Panel de administración"
-        description="Gestiona instituciones, usuarios, cursos y asignaturas."
+        description="Gestiona instituciones, usuarios, grados y asignaturas."
       />
 
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -66,7 +66,7 @@ export default async function AdminDashboardPage() {
           {
             href: "/admin/academic",
             title: "Estructura académica",
-            desc: "Gestiona cursos, asignaturas, grupos y pruebas.",
+            desc: "Gestiona grados, asignaturas, grupos y pruebas.",
           },
           {
             href: "/admin/students",
@@ -76,7 +76,7 @@ export default async function AdminDashboardPage() {
           {
             href: "/admin/teachers",
             title: "Asignar docentes",
-            desc: "Crea usuarios docentes y asígnalos a cursos.",
+            desc: "Crea usuarios docentes y asígnalos a grados.",
           },
         ].map((c) => (
           <Link

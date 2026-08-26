@@ -11,7 +11,7 @@ import { requireAuthenticatedUser } from "@/lib/session";
 export type ScanTargetKind = "evaluation" | "bundle";
 
 export async function createScanBatchAction(formData: FormData) {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const kind = formData.get("kind") as ScanTargetKind | null;
   const targetId = formData.get("id") as string | null;
@@ -186,7 +186,7 @@ export interface BatchWithSheets {
 }
 
 export async function getBatchesAction(): Promise<BatchWithSheets[]> {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   // Filtro multi-target: el batch pertenece a la institución y:
   //   - es de una formulación del docente actual, o

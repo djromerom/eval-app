@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Plantillas" };
 const df = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
 
 export default async function TemplatesPage() {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const [tplRes, csRes] = await Promise.all([
     makeListTemplates().execute({ actor }),

@@ -16,7 +16,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default async function BundlesListPage() {
-  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  const actor = await requireAuthenticatedUser("ECU_MASTER", "ECU_LIDER");
   const result = await makeListBundles().execute({ actor });
   const bundles = result.ok ? result.value : [];
 
@@ -38,7 +38,7 @@ export default async function BundlesListPage() {
           <thead className="bg-muted/40 text-muted-foreground border-b text-left">
             <tr>
               <th className="px-4 py-3 font-medium">Nombre</th>
-              <th className="px-4 py-3 font-medium">Curso</th>
+              <th className="px-4 py-3 font-medium">Grado</th>
               <th className="px-4 py-3 font-medium">N° cuadernillo</th>
               <th className="px-4 py-3 font-medium">Estado</th>
               <th className="px-4 py-3 font-medium">Creado</th>

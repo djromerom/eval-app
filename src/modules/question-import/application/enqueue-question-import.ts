@@ -66,7 +66,7 @@ export class EnqueueQuestionImport
     fileName,
     evaluationId,
   }: EnqueueQuestionImportInput): Promise<Result<EnqueueQuestionImportResult>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     const ext = fileName.split(".").pop()?.toLowerCase() ?? "";

@@ -107,12 +107,12 @@ export class UpdateEvaluationTheme implements UseCase<
     reset,
     theme,
   }: UpdateEvaluationThemeInput): Promise<Result<EvaluationTheme | null>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     const evalRow = await this.evaluations.getDetail(actor.institutionId, evaluationId);
     if (!evalRow) return fail(new ValidationError("Formulación no encontrada."));
-    if (evalRow.teacherId !== actor.userId && !actor.roles.includes("COORDINATOR")) {
+    if (evalRow.teacherId !== actor.userId && !actor.roles.includes("ECU_LIDER")) {
       return fail(new ValidationError("Solo el docente dueño puede editar el tema."));
     }
     if (evalRow.status !== "DRAFT") {

@@ -78,13 +78,13 @@ describe("InviteUser", () => {
       actor: admin,
       email: "Nuevo@Colegio.edu.co",
       name: "Nuevo",
-      roles: ["TEACHER", "COORDINATOR"],
+      roles: ["TEACHER", "ECU_LIDER"],
     });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.value.email).toBe("nuevo@colegio.edu.co"); // normalizado
       expect(r.value.isActive).toBe(false);
-      expect(r.value.roles).toEqual(["TEACHER", "COORDINATOR"]);
+      expect(r.value.roles).toEqual(["TEACHER", "ECU_LIDER"]);
       expect(r.value.institutionId).toBe("i1"); // cae a institución del actor
     }
   });
@@ -100,7 +100,7 @@ describe("InviteUser", () => {
       actor: admin,
       email: "nuevo@colegio.edu.co",
       name: "Nuevo",
-      roles: ["COORDINATOR"],
+      roles: ["ECU_LIDER"],
       institutionName: "Colegio Test",
     });
     expect(r.ok).toBe(true);
@@ -120,7 +120,7 @@ describe("InviteUser", () => {
       actor: admin,
       email: "x@colegio.edu.co",
       name: "X",
-      roles: ["COORDINATOR"],
+      roles: ["ECU_LIDER"],
       institutionName: "Colegio Test",
     });
     expect(r.ok).toBe(true);
@@ -188,7 +188,7 @@ describe("InviteUser", () => {
         actor: superAdmin,
         email: "x@y.com",
         name: "X",
-        roles: ["COORDINATOR"],
+        roles: ["ECU_LIDER"],
         targetInstitutionId: "ghost",
       });
       expect(r.ok).toBe(false);
@@ -212,7 +212,7 @@ describe("ResendUserInvitation", () => {
   let repo: InMemoryUsers;
   beforeEach(async () => {
     repo = new InMemoryUsers();
-    await repo.invite("i1", "invitado@c.co", "Invitado", ["COORDINATOR"]);
+    await repo.invite("i1", "invitado@c.co", "Invitado", ["ECU_LIDER"]);
   });
 
   it("reenvía la invitación a un usuario inactivo", async () => {
@@ -286,10 +286,10 @@ describe("SetUserRoles / SetUserActive", () => {
     const r = await new SetUserRoles(repo).execute({
       actor: admin,
       userId: invited.value.id,
-      roles: ["COORDINATOR", "TEACHER"],
+      roles: ["ECU_LIDER", "TEACHER"],
     });
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value.roles).toEqual(["COORDINATOR", "TEACHER"]);
+    if (r.ok) expect(r.value.roles).toEqual(["ECU_LIDER", "TEACHER"]);
   });
 
   it("no permite desactivar la propia cuenta", async () => {

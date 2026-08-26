@@ -16,7 +16,7 @@ export default async function EvaluationSettingsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
   const result = await makeGetEvaluation().execute({ actor, id });
   if (!result.ok) notFound();
   const evaluation = result.value;

@@ -19,7 +19,7 @@ export async function createBankQuestionAction(
   _prev: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
   const tags = str(formData, "tags")
     .split(",")
     .map((t) => t.trim())
@@ -49,7 +49,7 @@ export async function createBankQuestionAction(
 }
 
 export async function importBankQuestionAction(formData: FormData): Promise<void> {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
   const evaluationId = String(formData.get("evaluationId") ?? "");
   const result = await makeImportBankQuestion().execute({
     actor,
@@ -62,7 +62,7 @@ export async function importBankQuestionAction(formData: FormData): Promise<void
 }
 
 export async function exportQuestionToBankAction(formData: FormData): Promise<void> {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
   const evaluationId = String(formData.get("evaluationId") ?? "");
   const result = await makeExportQuestionToBank().execute({
     actor,

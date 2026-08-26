@@ -4,8 +4,14 @@ import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import { institutionIdFromPath } from "@/modules/uploads/domain/upload";
 
 /**
- * GET /api/uploads/evaluations/{institutionId}/{id}.jpg — sirve una imagen
- * subida al contenido de una formulación.
+ * GET /api/uploads/{namespace}/{institutionId}/{...path} — sirve una imagen
+ * subida al contenido de una formulación o a un cover HTML live.
+ *
+ * Namespaces aceptados (ver `institutionIdFromPath`):
+ *   • `evaluations/{institutionId}/...` — imágenes de contenido TipTap
+ *     (`InlineContentImages` las persiste aquí).
+ *   • `institutions/{institutionId}/cover-html/{bundleId}/...` — assets
+ *     extraídos por `extractInlineAssets` (ago 2026).
  *
  * Requiere sesión y que la imagen pertenezca a la institución del usuario:
  * la ruta lleva el `institutionId`, así que basta compararlo sin ir a la BD.
@@ -14,10 +20,24 @@ import { institutionIdFromPath } from "@/modules/uploads/domain/upload";
  * `/print/...` con un token firmado en la query string, y las peticiones de
  * las imágenes serían aparte, sin sesión ni token. Por eso el print page
  * incrusta las imágenes como `data:` URI (ver modules/uploads/application/
- * inline-content-images.ts) en lugar de apuntar aquí.
+ * inline-content-images.ts y modules/cover-html/application/inline-html-images.ts)
+ * en lugar de apuntar aquí.
  */
+
+/** MIME por extensión —agnóstico al namespace. Cubre los formatos que
+ *  `extractInlineAssets` y `InlineContentImages` pueden guardar. */
+function mimeForPath(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".gif")) return "image/gif";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".svg")) return "image/svg+xml";
+  return "application/octet-stream";
+}
+
 export async function GET(_request: Request, { params }: { params: Promise<{ path: string[] }> }) {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR", "ECU_MASTER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const { path } = await params;
   const relative = path.join("/");
 
@@ -32,7 +52,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pat
     const buf = await localStorage.read(relative);
     return new NextResponse(new Uint8Array(buf), {
       headers: {
-        "Content-Type": "image/jpeg",
+        "Content-Type": mimeForPath(relative),
         // Inmutable: el nombre es un UUID, una imagen editada es otra subida.
         "Cache-Control": "private, max-age=31536000, immutable",
       },

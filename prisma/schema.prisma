@@ -23,6 +23,11 @@ model Institution {
   // src/modules/theme/domain/theme.ts (zod schema) y el helper mergeTheme()
   // que combina este JSON con el de Evaluation.theme (override por eval).
   theme     Json?
+  // Override textual del contenido de la portada (copy institucional:
+  // legalFooter, cuerpo del bloque prohibido). Se combina en runtime con
+  // EvaluationBundle.coverContent (PR 2 vía getResolvedCoverContent).
+  // Ver src/modules/bundle-cover/domain/cover-content.ts.
+  coverContent Json?
   address   String?
   phone     String?
   email     String?
@@ -68,16 +73,17 @@ model User {
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
-  roles          UserRole[]
-  accounts       Account[]
-  teacherProfile Teacher?
-  evaluations    Evaluation[]
-  questionBank   QuestionBank[]
-  templates      EvaluationTemplate[]
-  scanBatches    ScanBatch[]
-  bundlesCreated EvaluationBundle[]   @relation("BundleCreatedBy")
-  auditLogs      AuditLog[]
-  notifications  Notification[]
+  roles             UserRole[]
+  accounts          Account[]
+  teacherProfile    Teacher?
+  evaluations       Evaluation[]
+  questionBank      QuestionBank[]
+  templates         EvaluationTemplate[]
+  scanBatches       ScanBatch[]
+  bundlesCreated    EvaluationBundle[]      @relation("BundleCreatedBy")
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  leaderAssignments LeaderCourseAssignment[]
 
   @@index([institutionId])
 }
@@ -116,7 +122,7 @@ model UserRole {
 enum RoleType {
   SUPER_ADMIN
   ECU_MASTER
-  COORDINATOR
+  ECU_LIDER
   TEACHER
 }
 
@@ -162,9 +168,10 @@ model Course {
   institution    Institution  @relation(fields: [institutionId], references: [id])
   createdAt      DateTime     @default(now())
 
-  subjects CourseSubject[]
-  groups   Group[]
-  bundles  EvaluationBundle[]
+  subjects          CourseSubject[]
+  groups            Group[]
+  bundles           EvaluationBundle[]
+  leaderAssignments LeaderCourseAssignment[]
 
   @@index([institutionId, academicYearId])
 }
@@ -220,6 +227,23 @@ model TeacherSubjectAssignment {
   @@unique([teacherId, courseSubjectId])
   @@index([teacherId])
   @@index([courseSubjectId])
+}
+
+/// Asignación de un Líder ECU a un курсо entero (todas sus asignaturas).
+/// Multi-tenant via User.institutionId — esta tabla NO duplica el institutionId
+/// para evitar drift; la tenancy viaja por la FK User. Created por un ECU_MASTER
+/// desde /admin/leader-assignments (ago 2026, feat/lider-ecu).
+model LeaderCourseAssignment {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId  String   @db.Uuid
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
 }
 
 model Group {
@@ -544,6 +568,11 @@ model EvaluationBundle {
   // Override del tema institucional. Mismo shape que Evaluation.theme; se
   // combina con Institution.theme en runtime. Ver src/modules/theme/.
   theme           Json?
+  // Override textual del contenido de la portada (instrucciones, callout,
+  // cómo marcar, bullets, prohibido). Se combina en runtime con
+  // Institution.coverContent (PR 2 vía getResolvedCoverContent).
+  // Ver src/modules/bundle-cover/domain/cover-content.ts.
+  coverContent    Json?
   // Geometría OMR de la hoja de respuestas, MEDIDA del render real
   // (ver modules/printing/domain/sheet-template.ts). Se captura de forma
   // perezosa la primera vez que se escanea una hoja del compendio y se
@@ -560,6 +589,25 @@ model EvaluationBundle {
   sheetTemplate   Json?
   // Cuándo se capturó `sheetTemplate`, para poder invalidarla a mano.
   sheetTemplateAt DateTime?
+  // --- Cover designer (ago 2026) ---
+  // Variante de plantilla de portada seleccionada: ej. "secundaria-v1",
+  // "primaria-v1". Si null, se usa DEFAULT_COVER_TEMPLATE_KEY.
+  coverTemplateKey String?
+  // HTML con variables Mustache que reemplaza al built-in de la misma key.
+  // Si null, se carga el archivo templates/cover/{key}.html. Se borra (≠ key)
+  // para restablecer el built-in sin cambiar de variante.
+  coverTemplateBody String?
+  // Última vez que se guardó el body (override). Null si nunca se editó o
+  // si está cayendo al built-in.
+  coverTemplateUpdatedAt DateTime?
+  // --- Cover HTML (ago 2026) — 4ª vista ---
+  // HTML string editable via el componente <HtmlLiveEditor> (iframe sandbox
+  // + contenteditable). Shape: `{ html: string, previewMode?: boolean }`.
+  // Si está set, gana sobre coverTemplateBody
+  // (precedencia: live → HTML → built-in).
+  // Ver src/modules/cover-html/ y src/app/(dashboard)/admin/bundles/[id]/cover-html/.
+  coverLiveProject       Json?
+  coverLiveUpdatedAt     DateTime?
   createdById     String       @db.Uuid
   createdBy       User         @relation("BundleCreatedBy", fields: [createdById], references: [id])
   createdAt       DateTime     @default(now())

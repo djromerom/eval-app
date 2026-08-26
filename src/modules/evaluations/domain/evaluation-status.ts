@@ -20,7 +20,7 @@ const TRANSITIONS: StatusTransition[] = [
   {
     from: "DRAFT",
     to: "IN_REVIEW",
-    allowedRoles: ["TEACHER", "COORDINATOR"],
+    allowedRoles: ["TEACHER", "ECU_LIDER"],
     requiresComment: false,
   },
   // ATAJO de "Publicar con un click" desde el editor unificado (ago 2026).
@@ -31,15 +31,15 @@ const TRANSITIONS: StatusTransition[] = [
   {
     from: "DRAFT",
     to: "PUBLISHED",
-    allowedRoles: ["TEACHER", "COORDINATOR"],
+    allowedRoles: ["TEACHER", "ECU_LIDER"],
     requiresComment: false,
   },
-  { from: "IN_REVIEW", to: "APPROVED", allowedRoles: ["COORDINATOR"], requiresComment: false },
-  { from: "IN_REVIEW", to: "DRAFT", allowedRoles: ["COORDINATOR"], requiresComment: true },
+  { from: "IN_REVIEW", to: "APPROVED", allowedRoles: ["ECU_LIDER"], requiresComment: false },
+  { from: "IN_REVIEW", to: "DRAFT", allowedRoles: ["ECU_LIDER"], requiresComment: true },
   {
     from: "APPROVED",
     to: "PUBLISHED",
-    allowedRoles: ["COORDINATOR", "TEACHER"],
+    allowedRoles: ["ECU_LIDER", "TEACHER"],
     requiresComment: false,
   },
   // Editar una formulación publicada la regresa a borrador y notifica al coordinador

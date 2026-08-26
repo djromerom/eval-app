@@ -22,7 +22,7 @@ import { errorResponse, unauthorizedResponse, validationResponse } from "@/app/a
 export async function POST(request: Request) {
   const actor = await getAuthenticatedUser();
   if (!actor) return unauthorizedResponse();
-  if (!actor.roles.includes("TEACHER") && !actor.roles.includes("COORDINATOR")) {
+  if (!actor.roles.includes("TEACHER") && !actor.roles.includes("ECU_LIDER")) {
     return NextResponse.json(
       { error: { code: "FORBIDDEN", message: "Rol requerido: TEACHER o COORDINATOR." } },
       { status: 403 },

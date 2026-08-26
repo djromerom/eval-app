@@ -21,7 +21,7 @@ export async function saveEvaluationThemeAction(
   _prev: DesignerFormState,
   formData: FormData,
 ): Promise<DesignerFormState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const theme: Partial<EvaluationTheme> = {
     primary: String(formData.get("primary") ?? "").trim() || undefined,
@@ -73,7 +73,7 @@ export async function saveEvaluationThemeAction(
 
 /** Limpia el override y vuelve al tema institucional. */
 export async function resetEvaluationThemeAction(evaluationId: string): Promise<DesignerFormState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
   const result = await makeUpdateEvaluationTheme().execute({
     actor,
     evaluationId,

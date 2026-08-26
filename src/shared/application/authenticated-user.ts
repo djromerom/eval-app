@@ -1,6 +1,6 @@
 import { ForbiddenError, type Result, fail, ok } from "@/shared/domain/result";
 
-export type Role = "SUPER_ADMIN" | "ECU_MASTER" | "COORDINATOR" | "TEACHER";
+export type Role = "SUPER_ADMIN" | "ECU_MASTER" | "ECU_LIDER" | "TEACHER";
 
 /**
  * Identidad del actor que ejecuta un caso de uso.

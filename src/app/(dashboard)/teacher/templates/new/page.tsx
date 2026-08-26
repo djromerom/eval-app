@@ -7,7 +7,7 @@ import { TemplateForm } from "./template-form";
 export const metadata: Metadata = { title: "Nueva plantilla" };
 
 export default async function NewTemplatePage() {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
   const csRes = await makeListCourseSubjects().execute({ actor });
   const subjects = csRes.ok ? csRes.value : [];
 

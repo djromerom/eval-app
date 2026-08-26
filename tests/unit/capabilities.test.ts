@@ -5,7 +5,7 @@ import type { Role } from "@/shared/application/authenticated-user";
 describe("can (Sprint 8C — capability-based menu)", () => {
   const SA: Role[] = ["SUPER_ADMIN"];
   const EM: Role[] = ["ECU_MASTER"];
-  const CO: Role[] = ["COORDINATOR"];
+  const CO: Role[] = ["ECU_LIDER"];
   const TE: Role[] = ["TEACHER"];
   const SA_EM: Role[] = ["SUPER_ADMIN", "ECU_MASTER"];
 
@@ -21,19 +21,30 @@ describe("can (Sprint 8C — capability-based menu)", () => {
     });
   });
 
-  describe("manage-users / manage-academic-structure / manage-institutional-theme / manage-bundles", () => {
+  describe("manage-users / manage-academic-structure / manage-institutional-theme", () => {
     it("solo ECU_MASTER (no SUPER_ADMIN por sí solo)", () => {
       for (const cap of [
         "manage-users",
         "manage-academic-structure",
         "manage-institutional-theme",
-        "manage-bundles",
       ] as const) {
         expect(can(cap, SA)).toBe(false);
         expect(can(cap, EM)).toBe(true);
         expect(can(cap, CO)).toBe(false);
         expect(can(cap, TE)).toBe(false);
       }
+    });
+  });
+
+  describe("manage-bundles", () => {
+    it("ECU_MASTER y ECU_LIDER editan cuadernillos", () => {
+      // ECU_LIDER gana acceso al módulo en Commit 2 del feat/lider-ecu
+      // (ago 2026). El filtro por курсо asignado se aplica dentro del use
+      // case ListBundles; la capability solo refleja "puede abrir el módulo".
+      expect(can("manage-bundles", EM)).toBe(true);
+      expect(can("manage-bundles", CO)).toBe(true);
+      expect(can("manage-bundles", SA)).toBe(false);
+      expect(can("manage-bundles", TE)).toBe(false);
     });
   });
 
@@ -61,7 +72,7 @@ describe("can (Sprint 8C — capability-based menu)", () => {
     const matrix: Array<[Role[], string]> = [
       [SA, "SUPER_ADMIN"],
       [EM, "ECU_MASTER"],
-      [CO, "COORDINATOR"],
+      [CO, "ECU_LIDER"],
       [TE, "TEACHER"],
     ];
     for (const [roles, name] of matrix) {

@@ -97,6 +97,20 @@
   position: relative;
 }
 
+/* Cover custom inyectado como iframe (ago 2026) cuando el bundle tiene
+ * cover-live / cover-visual / cover-designer override. La portada se
+ * imprime full-bleed (sin márgenes del @page general) para que el
+ * contenido del docente (diseñado para carta completa 8.5×11in) quepa
+ * exacto en 1 página sin recortes ni franjas laterales blancas. Ver
+ * `@page cover-bleed` más abajo. */
+.cover-custom {
+  display: block;
+  width: 100%;
+  height: 11in;
+  border: none;
+  background: #fff;
+}
+
 /* ===== PORTADA ===== */
 .cover-institution {
   font-size: 14pt;
@@ -457,7 +471,16 @@
 }
 
 /* ===== Número de página (solo en impresión) ===== */
+/* La primera página de la impresión (la portada del cuadernillo) va
+ * full-bleed (sin márgenes del @page general) para que el iframe con
+ * el HTML del docente — diseñado para una carta completa 8.5×11in sin
+ * márgenes — quepa exacto en 1 página. Las páginas 2+ vuelven al @page
+ * por defecto (2cm márgenes) que es el contrato del booklet/questions.
+ * En `/print/cover/bundle/[id]` solo hay 1 página → toda la salida es
+ * full-bleed (correcto: la portada es 1 hoja). */
 @page :first {
+  size: letter portrait;
+  margin: 0;
   @bottom-center {
     content: none;
   }

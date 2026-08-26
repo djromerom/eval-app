@@ -72,6 +72,8 @@ describe("institutionIdFromPath", () => {
   it("devuelve el tenant de una ruta bien formada", () => {
     expect(institutionIdFromPath("evaluations/inst-1/foto.jpg")).toBe("inst-1");
     expect(institutionIdFromPath(uploadRelativePath("inst-9", "abc"))).toBe("inst-9");
+    // Cover-HTML namespace (ago 2026): instituciones/{id}/cover-html/{bundleId}/{uuid}.png
+    expect(institutionIdFromPath("institutions/inst-7/cover-html/bundle-3/abc.png")).toBe("inst-7");
   });
 
   it("devuelve null si la ruta no tiene la forma esperada", () => {

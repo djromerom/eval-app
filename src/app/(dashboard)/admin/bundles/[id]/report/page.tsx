@@ -34,7 +34,7 @@ const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%
 export default async function BundleReportPage({ params }: { params: Promise<{ id: string }> }) {
   const actor = await requireAuthenticatedUser(
     "TEACHER",
-    "COORDINATOR",
+    "ECU_LIDER",
     "ECU_MASTER",
     "SUPER_ADMIN",
   );

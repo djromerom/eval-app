@@ -35,7 +35,7 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
     to,
     comment,
   }: ChangeEvaluationStatusInput): Promise<Result<Evaluation>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     const evaluation = await this.evaluations.findById(actor.institutionId, evaluationId);
@@ -54,7 +54,7 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
     if (
       (to === "IN_REVIEW" || to === "PUBLISHED") &&
       actor.roles.includes("TEACHER") &&
-      !actor.roles.includes("COORDINATOR") &&
+      !actor.roles.includes("ECU_LIDER") &&
       evaluation.teacherId !== actor.userId
     ) {
       return fail(

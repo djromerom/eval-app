@@ -4,14 +4,19 @@ import { signPayload, verifySignature } from "./hmac";
 /** Tipo de documento imprimible; alineado con PdfGenerationJob.
  *  Sprint 1 del módulo cuadernillos: agrega "bundle" para el booklet combinado.
  *  Sprint 2: "answer-sheets-bundle" para la hoja unificada.
- *  Sprint 3: "answer-key-bundle" para la clave de respuestas unificada. */
+ *  Sprint 3: "answer-key-bundle" para la clave de respuestas unificada.
+ *  "cover-bundle" (ago 2026): PDF de 1 página con SOLO la portada del
+ *  cuadernillo — sirve al botón "Descargar PDF" del editor /cover-html
+ *  para que el docente previsualice la portada actual sin necesidad de
+ *  marcar el bundle como READY ni esperar al cuadernillo completo. */
 export type PrintKind =
   | "booklet"
   | "answer-sheets"
   | "answer-key"
   | "bundle"
   | "answer-sheets-bundle"
-  | "answer-key-bundle";
+  | "answer-key-bundle"
+  | "cover-bundle";
 
 export interface PrintAccess {
   /** evaluationId para booklet/answer-sheets/answer-key. */

@@ -37,7 +37,7 @@ export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
   ) {}
 
   async execute({ actor, data }: CreateBundleInput): Promise<Result<Bundle>> {
-    const authorized = requireRole(actor, "ECU_MASTER");
+    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     if (!isValidBundleName(data.name)) {
@@ -63,7 +63,7 @@ export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
     if (courseId !== null) {
       const course = await this.courses.findById(actor.institutionId, courseId);
       if (!course) {
-        return fail(new ValidationError("El curso no existe en tu institución."));
+        return fail(new ValidationError("El grado no existe en tu institución."));
       }
     }
 

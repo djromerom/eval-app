@@ -38,7 +38,7 @@ export async function GET(
       headers: { "Content-Type": "application/json" },
     });
   }
-  if (!actor.roles.includes("TEACHER") && !actor.roles.includes("COORDINATOR")) {
+  if (!actor.roles.includes("TEACHER") && !actor.roles.includes("ECU_LIDER")) {
     return new Response(JSON.stringify({ error: "Rol requerido." }), {
       status: 403,
       headers: { "Content-Type": "application/json" },

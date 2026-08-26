@@ -30,7 +30,7 @@ const adminActor: AuthenticatedUser = {
 const coordinatorActor: AuthenticatedUser = {
   userId: "u-coord",
   institutionId: "i1",
-  roles: ["COORDINATOR"],
+  roles: ["ECU_LIDER"],
 };
 
 const teacherActor: AuthenticatedUser = {

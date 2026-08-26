@@ -25,8 +25,8 @@ export class CreateCourse implements UseCase<CreateCourseInput, Course> {
     const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
-    if (!data.name.trim()) return fail(new ValidationError("El nombre del curso es obligatorio."));
-    if (!isValidCode(data.code)) return fail(new ValidationError("Código de curso inválido."));
+    if (!data.name.trim()) return fail(new ValidationError("El nombre del grado es obligatorio."));
+    if (!isValidCode(data.code)) return fail(new ValidationError("Código de grado inválido."));
 
     const year = await this.years.findById(actor.institutionId, data.academicYearId);
     if (!year) {
@@ -53,7 +53,7 @@ export class ListCourses implements UseCase<ListCoursesInput, Course[]> {
     // del año del docente (ago 2026). Sin este permiso el filtro
     // client-side de Asignaturas filtraba 0 resultados para roles no
     // admin.
-    const authorized = requireRole(actor, "ECU_MASTER", "COORDINATOR", "TEACHER");
+    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER", "TEACHER");
     if (!authorized.ok) return authorized;
     return ok(await this.courses.findAll(actor.institutionId, academicYearId));
   }

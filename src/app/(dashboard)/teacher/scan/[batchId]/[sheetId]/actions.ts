@@ -15,7 +15,7 @@ import { requireAuthenticatedUser } from "@/lib/session";
  *  siendo procesada (carrera cliente doble-click o pestaña duplicada).
  */
 export async function reprocessSheetAction(input: { sheetId: string; batchId: string }) {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const sheet = await prisma.answerSheet.findFirst({
     where: {

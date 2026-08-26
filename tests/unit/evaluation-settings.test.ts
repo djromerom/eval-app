@@ -53,6 +53,11 @@ class FakeEvaluations implements EvaluationRepository {
   async findByTeacher(): Promise<EvaluationListItem[]> {
     return [];
   }
+  async findByCourseIds(_i: string, courseIds: string[]): Promise<EvaluationListItem[]> {
+    if (courseIds.length === 0) return [];
+    return [];
+  }
+
   async findByInstitution(): Promise<EvaluationListItem[]> {
     return [];
   }
@@ -121,7 +126,7 @@ const otherTeacher: AuthenticatedUser = {
 const coordinator: AuthenticatedUser = {
   userId: "c1",
   institutionId: "i1",
-  roles: ["COORDINATOR"],
+  roles: ["ECU_LIDER"],
 };
 
 describe("validateDurationMinutes (Sprint 7)", () => {

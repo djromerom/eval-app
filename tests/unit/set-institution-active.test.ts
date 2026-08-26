@@ -30,6 +30,8 @@ class InMemoryInstitutionRepository implements InstitutionRepository {
       slug: data.slug,
       code: data.code,
       logo: data.logo ?? null,
+      theme: null,
+      coverContent: null,
       isActive: true,
       createdAt: new Date(),
     };
@@ -39,6 +41,10 @@ class InMemoryInstitutionRepository implements InstitutionRepository {
   async setActive(id: string, isActive: boolean) {
     const item = this.items.find((i) => i.id === id);
     if (item) item.isActive = isActive;
+  }
+  async setCoverContent(id: string, coverContent: Record<string, unknown> | null) {
+    const item = this.items.find((i) => i.id === id);
+    if (item) item.coverContent = coverContent;
   }
 }
 

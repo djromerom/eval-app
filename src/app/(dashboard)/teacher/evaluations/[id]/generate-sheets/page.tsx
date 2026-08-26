@@ -16,7 +16,7 @@ interface Props {
 
 async function submitAction(formData: FormData) {
   "use server";
-  await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
   const evaluationId = formData.get("evaluationId") as string;
   const selected = formData.getAll("studentIds") as string[];
   if (selected.length === 0 || !evaluationId) return;
@@ -25,7 +25,7 @@ async function submitAction(formData: FormData) {
 
 export default async function GenerateSheetsPage({ params }: Props) {
   const { id } = await params;
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   const evalRes = await makeGetEvaluation().execute({ actor, id });
   if (!evalRes.ok) notFound();

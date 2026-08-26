@@ -42,7 +42,7 @@ export class CreateTemplate implements UseCase<CreateTemplateInput, EvaluationTe
   ) {}
 
   async execute({ actor, data }: CreateTemplateInput): Promise<Result<EvaluationTemplate>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     if (!data.name.trim()) return fail(new ValidationError("El nombre es obligatorio."));
@@ -54,7 +54,7 @@ export class CreateTemplate implements UseCase<CreateTemplateInput, EvaluationTe
     }
 
     const cs = await this.courseSubjects.findById(actor.institutionId, data.courseSubjectId);
-    if (!cs) return fail(new ValidationError("La asignatura-curso no existe en tu institución."));
+    if (!cs) return fail(new ValidationError("La asignatura-grado no existe en tu institución."));
 
     return ok(await this.templates.create(actor.institutionId, actor.userId, data));
   }
@@ -64,7 +64,7 @@ export class ListTemplates implements UseCase<ListTemplatesInput, EvaluationTemp
   constructor(private readonly templates: TemplateRepository) {}
 
   async execute({ actor }: ListTemplatesInput): Promise<Result<EvaluationTemplate[]>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
     return ok(await this.templates.findByInstitution(actor.institutionId));
   }
@@ -74,7 +74,7 @@ export class GetTemplate implements UseCase<GetTemplateInput, EvaluationTemplate
   constructor(private readonly templates: TemplateRepository) {}
 
   async execute({ actor, id }: GetTemplateInput): Promise<Result<EvaluationTemplate>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
     const tpl = await this.templates.findById(actor.institutionId, id);
     if (!tpl) return fail(new ValidationError("Plantilla no encontrada."));
@@ -86,7 +86,7 @@ export class DeleteTemplate implements UseCase<DeleteTemplateInput, void> {
   constructor(private readonly templates: TemplateRepository) {}
 
   async execute({ actor, id }: DeleteTemplateInput): Promise<Result<void>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
     const tpl = await this.templates.findById(actor.institutionId, id);
     if (!tpl) return fail(new ValidationError("Plantilla no encontrada."));
@@ -106,7 +106,7 @@ export class ApplyTemplate implements UseCase<ApplyTemplateInput, void> {
   ) {}
 
   async execute({ actor, templateId, evaluationId }: ApplyTemplateInput): Promise<Result<void>> {
-    const authorized = requireRole(actor, "TEACHER", "COORDINATOR");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
 
     const tpl = await this.templates.findById(actor.institutionId, templateId);

@@ -20,7 +20,7 @@ const settingsSchema = z.object({
  * que devuelve VALIDATION si la evaluation está APPROVED o PUBLISHED).
  */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const actor = await requireAuthenticatedUser("TEACHER", "COORDINATOR", "ECU_MASTER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const { id } = await params;
 
   const raw = await request.json().catch(() => null);
