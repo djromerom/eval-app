@@ -92,7 +92,14 @@ export default async function PrintCoverBundlePage({
         <PrintButton />
       </div>
 
-      {/* ===== Página única: portada del cuadernillo ===== */}
+      {/* ===== Página única: portada del cuadernillo =====
+       *
+       * Esta ruta renderiza SOLO la portada (1 página carta 8.5×11in) para
+       * previsualizar / descargar la portada actual. NO usa `.cover-sheet`
+       * (la estructura flex de dos mitades que vive en `/print/bundle/[id]`)
+       * porque aquí la portada va sola — el worker de PDF es quien decide
+       * dónde ponerla (mitad derecha de un pliego tabloid apaisado) cuando
+       * se compone el cuadernillo completo. Ver `workers/pdf.worker.ts`. */}
       <section className="sheet cover">
         {customCoverHtml ? (
           <iframe
