@@ -112,10 +112,16 @@ export default async function PrintBundlePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ t?: string; bodyOnly?: string }>;
+  searchParams: Promise<{ t?: string; bodyOnly?: string; linear?: string }>;
 }) {
   const { id } = await params;
-  const { t, bodyOnly } = await searchParams;
+  const { t, bodyOnly, linear } = await searchParams;
+  // `?linear=1` lo usa el worker de PDF (kind="bundle-linear") para generar
+  // el cuadernillo como páginas carta individuales (sin imposition). El
+  // driver de la impresora del usuario se encarga del booklet imposition
+  // sobre pliego tabloid. Cuando `linear=1`, la portada se renderiza como
+  // `.sheet.cover` (8.5×11 carta) en lugar de `.sheet.cover-sheet`
+  // (17×11 apaisado). No se puede combinar con `bodyOnly=1`.
   // `?bodyOnly=1` lo usa el worker de PDF para renderizar el booklet sin
   // la portada: la portada apaisada se genera por separado en
   // /print/cover/bundle/[id] (otro PDF) y se une con pdf-lib. Chrome no
@@ -123,6 +129,7 @@ export default async function PrintBundlePage({
   // y named pages ignoran `size:`), así que la única vía fiable es
   // renderizar dos PDFs y mergear. Ver `workers/pdf.worker.ts`.
   const isBodyOnly = bodyOnly === "1";
+  const isLinear = linear === "1";
   const actor = await resolvePrintActor(t, { bundleId: id, kind: "bundle" });
 
   const [bundleRes, instRes] = await Promise.all([
@@ -219,6 +226,15 @@ export default async function PrintBundlePage({
 
   return (
     <div className="booklet" style={cssVars}>
+      {/* Modo linear (kind=bundle-linear): cover full bleed en la primera
+        página. El `@page { margin: 2cm }` de print.css se aplica a TODAS
+        las páginas — para que la portada salga sin borde blanco hay que
+        anularlo SOLO en la primera página y SOLO en este modo. Las páginas
+        2+ (preguntas del booklet) conservan el `margin: 2cm` que las hace
+        legibles. NO aplica al modo imposed (kind=bundle) porque en ese
+        flujo la portada se renderiza aparte en /print/cover/bundle/[id] y
+        la página llega con bodyOnly=1 (sin cover). */}
+      {isLinear ? <style>{"@page :first { margin: 0; }"}</style> : null}
       <div className="no-print bg-card sticky top-0 z-10 flex w-full max-w-[900px] items-center gap-3 rounded-lg border p-3 text-sm">
         <span className="text-muted-foreground">
           Vista previa de impresión — Cuadernillo ({bundle.items.length} formulación
@@ -236,115 +252,130 @@ export default async function PrintBundlePage({
        * Si NO, conservamos el JSX hardcoded de abajo para no introducir
        * un cambio visual a cuadernillos ya impresos.
        */}
-      {!isBodyOnly && (
-        <section className="sheet cover-sheet">
-          <div className="cover-blank-half" aria-hidden="true" />
-          <div className="cover-half">
-            {customCoverHtml ? (
-              <iframe
-                className="cover-custom"
-                title="Portada del cuadernillo"
-                sandbox=""
-                srcDoc={customCoverHtml}
-              />
-            ) : (
-              <>
-                {logoSrc ? <img src={logoSrc} alt="" className="cover-logo" /> : null}
-                <p className="cover-institution print-accent">{institutionName}</p>
-                <p className="cover-test-title">{bundle.name}</p>
+      {/* Contenido del cover (iframe custom o JSX fallback). Se reutiliza
+        tanto en el modo imposed (`.sheet.cover-sheet` con la portada en la
+        mitad derecha + blanco a la izquierda) como en el modo linear
+        (`.sheet.cover` directa — el driver de la impresora se encarga del
+        imposition sobre pliego tabloid; ver `kind=bundle-linear`). */}
+      {(() => {
+        const coverContent = customCoverHtml ? (
+          <iframe
+            className="cover-custom"
+            title="Portada del cuadernillo"
+            sandbox=""
+            srcDoc={customCoverHtml}
+          />
+        ) : (
+          <>
+            {logoSrc ? <img src={logoSrc} alt="" className="cover-logo" /> : null}
+            <p className="cover-institution print-accent">{institutionName}</p>
+            <p className="cover-test-title">{bundle.name}</p>
 
-                {/* Tabla de áreas agrupadas por parentSubject — el "tabla de áreas" del
-                ejemplo real. Caso N=1: una sola área con un solo subject. */}
-                {coverTable.areas.length > 0 && (
-                  <div className="competencies-section">
-                    <p className="competencies-title">Tabla de áreas</p>
-                    <table className="competencies-table">
-                      <thead>
-                        <tr>
-                          <th>Área</th>
-                          <th>Asignatura</th>
-                          <th>Preguntas</th>
-                          <th>Tiempo</th>
+            {/* Tabla de áreas agrupadas por parentSubject — el "tabla de áreas" del
+            ejemplo real. Caso N=1: una sola área con un solo subject. */}
+            {coverTable.areas.length > 0 && (
+              <div className="competencies-section">
+                <p className="competencies-title">Tabla de áreas</p>
+                <table className="competencies-table">
+                  <thead>
+                    <tr>
+                      <th>Área</th>
+                      <th>Asignatura</th>
+                      <th>Preguntas</th>
+                      <th>Tiempo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {coverTable.areas.flatMap((area) =>
+                      area.subjects.map((subj, i) => (
+                        <tr key={`${area.name}-${subj.name}`}>
+                          <td>{i === 0 ? area.name : ""}</td>
+                          <td>{subj.name}</td>
+                          <td className="text-center">{subj.questions}</td>
+                          <td className="text-center">{formatDuration(subj.minutes)}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {coverTable.areas.flatMap((area) =>
-                          area.subjects.map((subj, i) => (
-                            <tr key={`${area.name}-${subj.name}`}>
-                              <td>{i === 0 ? area.name : ""}</td>
-                              <td>{subj.name}</td>
-                              <td className="text-center">{subj.questions}</td>
-                              <td className="text-center">{formatDuration(subj.minutes)}</td>
-                            </tr>
-                          )),
-                        )}
-                        <tr>
-                          <td colSpan={2}>
-                            <strong>Total</strong>
-                          </td>
-                          <td className="text-center">
-                            <strong>{coverTable.totalQuestions}</strong>
-                          </td>
-                          <td className="text-center">
-                            <strong>{formatDuration(coverTable.totalMinutes)}</strong>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                <p className="cover-booklet-number">{bookletLabel}</p>
-
-                <p className="cover-greeting">¡Hola!</p>
-
-                <p className="cover-instructions-title">Instrucciones</p>
-                <p className="cover-instructions-intro">
-                  A continuación encontrarás una serie de preguntas de selección múltiple con única
-                  respuesta. Lee con atención cada pregunta y responde en la hoja de respuestas.
-                </p>
-                <ul className="cover-instructions-list">
-                  {INSTRUCTIONS.map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-
-                <div className="mark-example">
-                  <span>Marca así:</span>
-                  {KEYS.map((k) => (
-                    <span key={k} className={`omr-bubble ${k === "A" ? "filled" : ""}`}>
-                      {k}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="student-fields">
-                  <div className="student-field">
-                    <span className="student-field-label">Nombres y apellidos:</span>
-                    <span className="student-field-line" />
-                  </div>
-                  <div className="student-field">
-                    <span className="student-field-label">Grado:</span>
-                    {/* Si el cuadernillo es de un curso concreto, el grado va preimpreso;
-                    si es cross-course, el estudiante lo escribe sobre la línea. */}
-                    {bundle.courseName ? (
-                      <span className="student-field-value">{bundle.courseName}</span>
-                    ) : (
-                      <span className="student-field-line" />
+                      )),
                     )}
-                  </div>
-                  <div className="student-field">
-                    <span className="student-field-label">Fecha:</span>
-                    <span className="student-field-line" />
-                  </div>
-                </div>
-
-                <div className="fold-line" />
-              </>
+                    <tr>
+                      <td colSpan={2}>
+                        <strong>Total</strong>
+                      </td>
+                      <td className="text-center">
+                        <strong>{coverTable.totalQuestions}</strong>
+                      </td>
+                      <td className="text-center">
+                        <strong>{formatDuration(coverTable.totalMinutes)}</strong>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             )}
-          </div>
-        </section>
-      )}
+
+            <p className="cover-booklet-number">{bookletLabel}</p>
+
+            <p className="cover-greeting">¡Hola!</p>
+
+            <p className="cover-instructions-title">Instrucciones</p>
+            <p className="cover-instructions-intro">
+              A continuación encontrarás una serie de preguntas de selección múltiple con única
+              respuesta. Lee con atención cada pregunta y responde en la hoja de respuestas.
+            </p>
+            <ul className="cover-instructions-list">
+              {INSTRUCTIONS.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+
+            <div className="mark-example">
+              <span>Marca así:</span>
+              {KEYS.map((k) => (
+                <span key={k} className={`omr-bubble ${k === "A" ? "filled" : ""}`}>
+                  {k}
+                </span>
+              ))}
+            </div>
+
+            <div className="student-fields">
+              <div className="student-field">
+                <span className="student-field-label">Nombres y apellidos:</span>
+                <span className="student-field-line" />
+              </div>
+              <div className="student-field">
+                <span className="student-field-label">Grado:</span>
+                {/* Si el cuadernillo es de un curso concreto, el grado va preimpreso;
+                si es cross-course, el estudiante lo escribe sobre la línea. */}
+                {bundle.courseName ? (
+                  <span className="student-field-value">{bundle.courseName}</span>
+                ) : (
+                  <span className="student-field-line" />
+                )}
+              </div>
+              <div className="student-field">
+                <span className="student-field-label">Fecha:</span>
+                <span className="student-field-line" />
+              </div>
+            </div>
+
+            <div className="fold-line" />
+          </>
+        );
+
+        if (isBodyOnly) return null;
+        // Modo linear: portada en 1 página carta directa. El usuario configura
+        // booklet imposition desde el driver de la impresora.
+        if (isLinear) {
+          return <section className="sheet cover">{coverContent}</section>;
+        }
+        // Modo imposed (default): pliego apaisado con la portada en la mitad
+        // derecha + blanco en la izquierda (interior portada al doblar).
+        return (
+          <section className="sheet cover-sheet">
+            <div className="cover-blank-half" aria-hidden="true" />
+            <div className="cover-half">{coverContent}</div>
+          </section>
+        );
+      })()}
 
       {/* ===== Páginas 2+: booklet de cada evaluation ===== */}
       {validEvaluations.map(({ item, evaluation }, evalIdx) => {
@@ -424,8 +455,12 @@ export default async function PrintBundlePage({
             </section>
             {/* Sin `sheet`: encadena tras las preguntas de su formulación en
                 lugar de abrir hoja nueva. `break-inside: avoid` en el CSS
-                evita que la tabla se parta por la mitad. */}
-            {competencyRows.length > 0 && (
+                evita que la tabla se parta por la mitad.
+                OCULTO del PDF por solicitud del docente (ago 2026). Para
+                reactivar la tabla "¿Qué competencias evaluamos?" cambiar
+                `false` por `true`. El cálculo de `competencyRows` se
+                preserva para no perder ese trabajo. */}
+            {false && competencyRows.length > 0 && (
               <div className="competencies-block">
                 <p className="competencies-title">¿Qué competencias evaluamos?</p>
                 <table className="competencies-table">
