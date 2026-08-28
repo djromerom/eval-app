@@ -47,6 +47,7 @@ const ROUTE_BY_KIND: Record<PrintKind, string> = {
   "answer-sheets-bundle": "/print/answer-sheets/bundle", // Sprint 2
   "answer-key-bundle": "/print/answer-key/bundle", // Sprint 3
   "cover-bundle": "/print/cover/bundle", // ago 2026: solo portada (1 página)
+  "bundle-linear": "/print/bundle", // ago 2026: cuadernillo page-by-page (sin imposition)
 };
 
 /**
@@ -102,9 +103,18 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
       );
     }
 
+    // El token que firma el worker debe coincidir con el `kind` que la
+    // página /print/* espera. La página /print/bundle/[id] solo conoce
+    // `kind: "bundle"`; el flag `?linear=1` controla el rendering, no la
+    // auth scope. Por eso cuando el job es `bundle-linear` firmamos el
+    // token como `"bundle"` (la página lo acepta). El `kind` original del
+    // job se sigue usando para el filename (`${targetId}-${kind}.pdf`).
+    const isBundleLinearKind = kind === "bundle-linear";
+    const tokenKind: PrintKind = isBundleLinearKind ? "bundle" : kind;
+
     const tokenAccess: Parameters<typeof signPrintToken>[0] = isBundleKind
-      ? { bundleId: targetId, institutionId, kind }
-      : { evaluationId: targetId, institutionId, kind };
+      ? { bundleId: targetId, institutionId, kind: tokenKind }
+      : { evaluationId: targetId, institutionId, kind: tokenKind };
 
     log.info({ jobId: job.id, targetId, kind }, "Generando PDF");
 
@@ -139,7 +149,15 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
 
     let out: Uint8Array;
 
-    if (isBundleFullKind) {
+    if (isBundleLinearKind) {
+      // Cuadernillo page-by-page: 1 render lineal con `?linear=1` (la ruta
+      // /print/bundle/[id] detecta la flag y renderiza la portada como
+      // `.sheet.cover` 8.5×11 en vez de `.sheet.cover-sheet` 17×11).
+      // Sin imposition saddle-stitch — el usuario configura booklet imposition
+      // desde el driver de su impresora sobre pliego tabloid apaisado.
+      out = await renderLinearPdf(url);
+      log.info({ jobId: job.id, bytes: out.length }, "PDF lineal (sin imposition) generado");
+    } else if (isBundleFullKind) {
       // Portada apaisada. Puppeteer/Chromium NO pueden emitir una página
       // apaisada con `@page { size: tabloid landscape }` (ni con named
       // pages ni con `@page :first`); siempre sale portrait. Por eso

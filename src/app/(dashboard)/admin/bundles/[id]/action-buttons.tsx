@@ -94,6 +94,12 @@ export function BundleActionPanel({ bundleId, isDraft }: { bundleId: string; isD
             Descargar cuadernillo (PDF)
           </Link>
           <Link
+            href={`/api/bundles/${bundleId}/pdf-linear`}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full")}
+          >
+            Descargar PDF
+          </Link>
+          <Link
             href={`/admin/bundles/${bundleId}/answer-sheets`}
             className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full")}
           >

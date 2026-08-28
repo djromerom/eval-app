@@ -8,7 +8,11 @@ import { signPayload, verifySignature } from "./hmac";
  *  "cover-bundle" (ago 2026): PDF de 1 página con SOLO la portada del
  *  cuadernillo — sirve al botón "Descargar PDF" del editor /cover-html
  *  para que el docente previsualice la portada actual sin necesidad de
- *  marcar el bundle como READY ni esperar al cuadernillo completo. */
+ *  marcar el bundle como READY ni esperar al cuadernillo completo.
+ *  "bundle-linear" (ago 2026): cuadernillo completo cover + body como
+ *  páginas carta individuales (sin imposition saddle-stitch). El usuario
+ *  configura el booklet imposition desde el driver de su impresora. Lo
+ *  usa el segundo botón "Descargar PDF" del panel del cuadernillo. */
 export type PrintKind =
   | "booklet"
   | "answer-sheets"
@@ -16,7 +20,8 @@ export type PrintKind =
   | "bundle"
   | "answer-sheets-bundle"
   | "answer-key-bundle"
-  | "cover-bundle";
+  | "cover-bundle"
+  | "bundle-linear";
 
 export interface PrintAccess {
   /** evaluationId para booklet/answer-sheets/answer-key. */
