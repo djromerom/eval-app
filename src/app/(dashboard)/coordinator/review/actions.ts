@@ -22,6 +22,22 @@ export async function publishAction(formData: FormData): Promise<void> {
   await transition(String(formData.get("evaluationId") ?? ""), "PUBLISHED");
 }
 
+/** Revierte una formulación PUBLICADA a DRAFT sin pedir comentario (rollback).
+ *  Sprint ago 2026: el coordinador usa este botón desde la sección
+ *  "Publicadas" del módulo de revisión cuando necesita hacer ajustes
+ *  posteriores. La transición `PUBLISHED → DRAFT` para ECU_LIDER no
+ *  requiere comentario (no es un rechazo formal). */
+export async function revertAction(formData: FormData): Promise<void> {
+  const actor = await requireAuthenticatedUser("ECU_LIDER");
+  const result = await makeChangeEvaluationStatus().execute({
+    actor,
+    evaluationId: String(formData.get("evaluationId") ?? ""),
+    to: "DRAFT",
+  });
+  if (!result.ok) throw new Error(result.error.message);
+  revalidatePath(PATH);
+}
+
 export async function rejectAction(
   _prev: AdminFormState,
   formData: FormData,
