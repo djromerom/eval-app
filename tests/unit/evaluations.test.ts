@@ -292,6 +292,37 @@ class SpySender implements NotificationSender {
   }
 }
 
+/**
+ * Stub mínimo de EvaluationRuleRepository para ChangeEvaluationStatus.
+ * Sprint ago 2026: los tests de flujo de aprobación existentes no
+ * configuran reglas — por defecto findForEvaluation devuelve null (modo
+ * libre). Tests específicos de enforcement se cubren en
+ * tests/unit/evaluation-rules-enforcement.test.ts (commit 5).
+ */
+class FakeEvaluationRules {
+  async findById() {
+    return null;
+  }
+  async listByPeriod() {
+    return [];
+  }
+  async listByInstitution() {
+    return [];
+  }
+  async create(): Promise<never> {
+    throw new Error("no usado");
+  }
+  async update() {
+    return null;
+  }
+  async delete(): Promise<void> {
+    /* noop */
+  }
+  async findForEvaluation() {
+    return null;
+  }
+}
+
 const teacher: AuthenticatedUser = { userId: "t1", institutionId: "i1", roles: ["TEACHER"] };
 const coordinator: AuthenticatedUser = {
   userId: "c1",
@@ -863,13 +894,18 @@ describe("Flujo de aprobación", () => {
   beforeEach(async () => {
     repo = new FakeEvaluations();
     sender = new SpySender();
-    workflow = new ChangeEvaluationStatus(repo, sender, {
-      coordinatorIds: async () => ["c1"],
-    });
+    workflow = new ChangeEvaluationStatus(
+      repo,
+      sender,
+      {
+        coordinatorIds: async () => ["c1"],
+      },
+      new FakeEvaluationRules(),
+    );
     const created = await repo.create("i1", "t1", { title: "P", courseSubjectId: "cs1" });
     evalId = created.id;
     // Necesita una pregunta para ser realista, pero el flujo no lo exige aquí.
-    await new AddQuestion(repo).execute({
+    await new AddQuestion(repo, new FakeEvaluationRules()).execute({
       actor: teacher,
       evaluationId: evalId,
       sectionId: "sec1",
@@ -1092,7 +1128,7 @@ describe("Edición de contextos y preguntas", () => {
       // borrado de la sección al eliminar q1.
       repo.seed("q1", "s1");
       repo.seed("q2", "s1");
-      const r = await new DeleteQuestion(repo).execute({
+      const r = await new DeleteQuestion(repo, new FakeEvaluationRules()).execute({
         actor: teacher,
         evaluationId: evalId,
         questionId: "q1",
@@ -1103,7 +1139,7 @@ describe("Edición de contextos y preguntas", () => {
 
     it("no borra fuera de BORRADOR (una evaluación publicada ya se imprimió)", async () => {
       await repo.updateStatus("i1", evalId, "PUBLISHED");
-      const r = await new DeleteQuestion(repo).execute({
+      const r = await new DeleteQuestion(repo, new FakeEvaluationRules()).execute({
         actor: teacher,
         evaluationId: evalId,
         questionId: "q1",
@@ -1115,7 +1151,7 @@ describe("Edición de contextos y preguntas", () => {
     it("cascada: borra la sección si la pregunta era la única de esa sección", async () => {
       // s1 contiene SOLO q1; al eliminarla, la cascada debe borrar s1 también.
       repo.seed("q1", "s1");
-      const r = await new DeleteQuestion(repo).execute({
+      const r = await new DeleteQuestion(repo, new FakeEvaluationRules()).execute({
         actor: teacher,
         evaluationId: evalId,
         questionId: "q1",
@@ -1132,7 +1168,7 @@ describe("Edición de contextos y preguntas", () => {
       // s1 tiene 2 preguntas (q1, q2); borrar q1 NO debe tocar s1.
       repo.seed("q1", "s1");
       repo.seed("q2", "s1");
-      const r = await new DeleteQuestion(repo).execute({
+      const r = await new DeleteQuestion(repo, new FakeEvaluationRules()).execute({
         actor: teacher,
         evaluationId: evalId,
         questionId: "q1",
@@ -1147,7 +1183,7 @@ describe("Edición de contextos y preguntas", () => {
       repo.seed("q1", "s1");
       repo.seed("q2", "s2");
       repo.seed("q3", "s2");
-      const r = await new DeleteQuestion(repo).execute({
+      const r = await new DeleteQuestion(repo, new FakeEvaluationRules()).execute({
         actor: teacher,
         evaluationId: evalId,
         questionId: "q1",
@@ -1161,7 +1197,7 @@ describe("Edición de contextos y preguntas", () => {
 
     it("rechaza si la pregunta no existe (findQuestionSectionId=null)", async () => {
       // q404 nunca fue sembrada → sectionId es null → NotFoundError.
-      const r = await new DeleteQuestion(repo).execute({
+      const r = await new DeleteQuestion(repo, new FakeEvaluationRules()).execute({
         actor: teacher,
         evaluationId: evalId,
         questionId: "q404",

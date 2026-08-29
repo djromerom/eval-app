@@ -4,6 +4,7 @@ import {
   PrismaPeriodRepository,
 } from "@/modules/academic/infrastructure/prisma-academic-repositories";
 import { PrismaBookletTypeRepository } from "@/modules/booklet-types/infrastructure/prisma-booklet-type-repository";
+import { evaluationRules } from "@/modules/evaluation-rules/infrastructure/container";
 import { PrismaLeaderAssignmentRepository } from "@/modules/leader-assignments/infrastructure/prisma-leader-assignment-repository";
 import { notificationSender } from "@/modules/notifications/infrastructure/container";
 import { PrismaUserRepository } from "@/modules/users/infrastructure/prisma-user-repository";
@@ -53,14 +54,19 @@ export const makeGetEvaluation = () => new GetEvaluation(evaluations);
 export const makeAddSection = () => new AddSection(evaluations);
 export const makeUpdateSection = () => new UpdateSection(evaluations);
 export const makeDeleteSection = () => new DeleteSection(evaluations);
-export const makeAddQuestion = () => new AddQuestion(evaluations);
+export const makeAddQuestion = () => new AddQuestion(evaluations, evaluationRules);
 export const makeUpdateQuestion = () => new UpdateQuestion(evaluations);
-export const makeDeleteQuestion = () => new DeleteQuestion(evaluations);
-export const makeDuplicateQuestion = () => new DuplicateQuestion(evaluations);
+export const makeDeleteQuestion = () => new DeleteQuestion(evaluations, evaluationRules);
+export const makeDuplicateQuestion = () => new DuplicateQuestion(evaluations, evaluationRules);
 export const makeReorderQuestions = () => new ReorderQuestions(evaluations);
 export const makeUpdateEvaluationSettings = () => new UpdateEvaluationSettings(evaluations);
 export const makeChangeEvaluationStatus = () =>
-  new ChangeEvaluationStatus(evaluations, notificationSender, coordinatorDirectory);
+  new ChangeEvaluationStatus(
+    evaluations,
+    notificationSender,
+    coordinatorDirectory,
+    evaluationRules,
+  );
 
 // Templates
 export const makeCreateTemplate = () => new CreateTemplate(templates, courseSubjects);
