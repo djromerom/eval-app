@@ -34,22 +34,13 @@ const coordinator: AuthenticatedUser = {
 // ---------------------------------------------------------------------------
 
 /**
- * Repo de evaluaciones minimalista: `findById`, `addQuestion`, `deleteQuestion`,
- * `duplicateQuestion` y `updateStatus`. El resto de la interfaz no se usa en
- * estos tests.
+ * Repo de evaluaciones MINIMALISTA que implementa la interfaz completa
+ * `EvaluationRepository`. Solo las operaciones que ejercitan las gates de
+ * reglas tienen comportamiento real; el resto son stubs tipados para que
+ * `tsc --noEmit` pase. Evita `as unknown as EvaluationRepository` en los
+ * callsites de los use cases.
  */
-class FakeEvaluations implements Pick<
-  EvaluationRepository,
-  | "findById"
-  | "addQuestion"
-  | "updateQuestion"
-  | "deleteQuestion"
-  | "duplicateQuestion"
-  | "findQuestionSectionId"
-  | "countQuestionsInSection"
-  | "deleteSection"
-  | "updateStatus"
-> {
+class FakeEvaluations implements EvaluationRepository {
   items: Evaluation[] = [];
   addQuestionCalls = 0;
   deleteQuestionCalls = 0;
@@ -65,8 +56,10 @@ class FakeEvaluations implements Pick<
     e.totalQuestions += 1;
     return {} as never;
   }
+  // Stubs tipados — los use cases de estos tests no inspeccionan el return,
+  // solo lo dejamos con la shape correcta para `tsc --noEmit strict`.
   async updateQuestion() {
-    return null;
+    return {} as never;
   }
   async deleteQuestion(_i: string, evaluationId: string, _qid: string) {
     this.deleteQuestionCalls += 1;
@@ -92,13 +85,77 @@ class FakeEvaluations implements Pick<
     e.status = status;
     this.statusUpdates.push(status);
   }
+
+  // Métodos de `EvaluationRepository` no ejercitados por estos tests.
+  // Stubs tipados con retornos neutrales; si un test futuro los necesita,
+  // basta con sobreescribirlos en el setup. Los `_` antes de los parámetros
+  // silencian "declared but never read" en cada stub.
+  async create(_i: string, _t: string, _d: never): Promise<Evaluation> {
+    throw new Error("noop");
+  }
+  async getDetail(_i: string, _id: string) {
+    return null;
+  }
+  async findByTeacher(_i: string, _t: string) {
+    return [];
+  }
+  async findByInstitution(_i: string) {
+    return [];
+  }
+  async findByCourseIds(_i: string, _courseIds: string[]) {
+    return [];
+  }
+  async addSection(_i: string, _eid: string, _d: never): Promise<never> {
+    return {} as never;
+  }
+  async updateSection(_i: string, _eid: string, _sid: string, _d: never): Promise<never> {
+    return {} as never;
+  }
+  async reorderQuestions(_i: string, _eid: string, _sid: string, _ids: string[]) {
+    /* noop */
+  }
+  async updateSettings(_i: string, _id: string, _d: never): Promise<never> {
+    return {} as never;
+  }
+  async createNewVersion(_i: string, _id: string): Promise<never> {
+    return {} as never;
+  }
+  async existsByCourseSubjectPeriodBookletTypeYear(
+    _i: string,
+    _cs: string,
+    _p: string | null,
+    _b: string | null,
+    _ay: string,
+  ) {
+    return false;
+  }
 }
 
 /** Repo de reglas con `findForEvaluation` configurable por test. */
-class FakeRules implements Pick<EvaluationRuleRepository, "findForEvaluation"> {
+class FakeRules implements EvaluationRuleRepository {
   rule: EvaluationRule | null = null;
   async findForEvaluation() {
     return this.rule;
+  }
+
+  // Métodos no ejercitados por estos tests — stubs tipados para `tsc strict`.
+  async findById() {
+    return null;
+  }
+  async listByPeriod() {
+    return [];
+  }
+  async listByInstitution() {
+    return [];
+  }
+  async create(): Promise<never> {
+    return {} as never;
+  }
+  async update(): Promise<never> {
+    return {} as never;
+  }
+  async delete() {
+    /* noop */
   }
 }
 
