@@ -241,13 +241,7 @@ async function checkExactCount(
       ),
     );
   }
-  if (delta === -1 && next < rule.exactQuestions) {
-    return fail(
-      new ValidationError(
-        `La regla exige exactamente ${rule.exactQuestions} preguntas para esta prueba y tipo de cuadernillo (tiene ${evaluation.totalQuestions}). No se puede eliminar más.`,
-      ),
-    );
-  }
+
   return ok(undefined);
 }
 
