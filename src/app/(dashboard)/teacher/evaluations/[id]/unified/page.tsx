@@ -8,7 +8,9 @@ import { richTextToPlain } from "@/components/editor/render";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
 import { makeListCourseSubjects } from "@/modules/academic/infrastructure/container";
 import { makeSearchBankQuestions } from "@/modules/question-bank/infrastructure/container";
+import { makeFindRuleForEvaluation } from "@/modules/evaluation-rules/infrastructure/container";
 import { env } from "@/config/env";
+import { EvaluationRuleBanner, type EvaluationRuleBannerData } from "./evaluation-rule-banner";
 import { UnifiedEditor, type UnifiedEditorData } from "./unified-editor";
 
 export const metadata: Metadata = { title: "Formulación unificada" };
@@ -59,6 +61,21 @@ export default async function UnifiedEditorPage({
       })
     : null;
   const bankQuestions = bankRes?.ok ? bankRes.value : [];
+
+  // Banner soft de regla de conteo exacto (ago 2026). Se calcula
+  // independientemente de `editable` para que el docente lo vea también en
+  // evaluaciones IN_REVIEW / APPROVED (saber que la regla existe, aunque
+  // ya no pueda editar).
+  const ruleRes = await makeFindRuleForEvaluation().execute({ actor, evaluationId: id });
+  const ruleBannerData: EvaluationRuleBannerData | null =
+    ruleRes.ok && ruleRes.value
+      ? {
+          hasRule: true,
+          exactQuestions: ruleRes.value.exactQuestions,
+          currentQuestions: evaluation.totalQuestions,
+          delta: evaluation.totalQuestions - ruleRes.value.exactQuestions,
+        }
+      : null;
 
   const data: UnifiedEditorData = {
     evaluationId: evaluation.id,
@@ -115,6 +132,8 @@ export default async function UnifiedEditorPage({
         <StatusBadge status={evaluation.status} />
         <span className="text-muted-foreground text-sm">{evaluation.totalQuestions} ítem(s)</span>
       </div>
+
+      {ruleBannerData && <EvaluationRuleBanner data={ruleBannerData} />}
 
       <UnifiedEditor data={data} />
     </>

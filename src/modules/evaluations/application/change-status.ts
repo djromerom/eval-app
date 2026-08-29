@@ -2,6 +2,7 @@ import { type AuthenticatedUser, requireRole } from "@/shared/application/authen
 import type { UseCase } from "@/shared/application/use-case";
 import { NotFoundError, type Result, ValidationError, fail, ok } from "@/shared/domain/result";
 import type { NotificationSender } from "@/modules/notifications/domain/notification";
+import type { EvaluationRuleRepository } from "@/modules/evaluation-rules/domain/evaluation-rule";
 import { type EvaluationStatus, findTransition } from "../domain/evaluation-status";
 import type { Evaluation, EvaluationRepository } from "../domain/evaluation";
 
@@ -27,6 +28,7 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
     private readonly evaluations: EvaluationRepository,
     private readonly notifications: NotificationSender,
     private readonly directory: CoordinatorDirectory,
+    private readonly evaluationRules: EvaluationRuleRepository,
   ) {}
 
   async execute({
@@ -64,6 +66,26 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
             : "Solo el autor puede publicar la formulación.",
         ),
       );
+    }
+    // Regla institucional de conteo exacto: si la tupla
+    // (period, course, subject, bookletType) tiene una regla activa, el
+    // número de preguntas debe coincidir antes de salir de DRAFT.
+    // Sprint ago 2026 — ver src/modules/evaluation-rules/.
+    if (to === "IN_REVIEW" || to === "PUBLISHED") {
+      const rule = await this.evaluationRules.findForEvaluation(
+        actor.institutionId,
+        evaluation.courseSubjectId,
+        evaluation.periodId,
+        evaluation.bookletTypeId,
+      );
+      if (rule && evaluation.totalQuestions !== rule.exactQuestions) {
+        return fail(
+          new ValidationError(
+            `La evaluación debe tener exactamente ${rule.exactQuestions} preguntas ` +
+              `(tiene ${evaluation.totalQuestions}) para esta prueba y tipo de cuadernillo.`,
+          ),
+        );
+      }
     }
     if (transition.requiresComment && !comment?.trim()) {
       return fail(new ValidationError("El rechazo requiere un comentario."));

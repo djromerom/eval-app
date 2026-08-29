@@ -11,6 +11,7 @@ import type {
   PeriodRepository,
 } from "@/modules/academic/domain/types";
 import type { BookletTypeRepository } from "@/modules/booklet-types/domain/booklet-type";
+import type { EvaluationRuleRepository } from "@/modules/evaluation-rules/domain/evaluation-rule";
 import type { LeaderAssignmentRepository } from "@/modules/leader-assignments/domain/leader-assignment";
 import type { EvaluationStatus } from "../domain/evaluation-status";
 import {
@@ -208,6 +209,48 @@ async function loadOwnedDraft(
   return ok(evaluation);
 }
 
+/**
+ * Verifica la regla de conteo exacto contra una mutación propuesta.
+ * Sprint ago 2026 — ver `src/modules/evaluation-rules/`.
+ *
+ * - `delta = 1` (AddQuestion/DuplicateQuestion): bloquea si el conteo
+ *   resultante supera el exacto.
+ * - `delta = -1` (DeleteQuestion): bloquea si el conteo resultante queda
+ *   por debajo del exacto.
+ * - Si no hay regla → no hay enforcement → retorna ok.
+ */
+async function checkExactCount(
+  evaluationRules: EvaluationRuleRepository,
+  institutionId: string,
+  evaluation: Evaluation,
+  delta: 1 | -1,
+): Promise<Result<void>> {
+  const rule = await evaluationRules.findForEvaluation(
+    institutionId,
+    evaluation.courseSubjectId,
+    evaluation.periodId,
+    evaluation.bookletTypeId,
+  );
+  if (!rule) return ok(undefined);
+
+  const next = evaluation.totalQuestions + delta;
+  if (delta === 1 && next > rule.exactQuestions) {
+    return fail(
+      new ValidationError(
+        `La regla exige exactamente ${rule.exactQuestions} preguntas para esta prueba y tipo de cuadernillo (tiene ${evaluation.totalQuestions}). No se puede agregar más.`,
+      ),
+    );
+  }
+  if (delta === -1 && next < rule.exactQuestions) {
+    return fail(
+      new ValidationError(
+        `La regla exige exactamente ${rule.exactQuestions} preguntas para esta prueba y tipo de cuadernillo (tiene ${evaluation.totalQuestions}). No se puede eliminar más.`,
+      ),
+    );
+  }
+  return ok(undefined);
+}
+
 export interface AddSectionInput {
   actor: AuthenticatedUser;
   evaluationId: string;
@@ -289,7 +332,10 @@ export interface AddQuestionInput {
 }
 
 export class AddQuestion implements UseCase<AddQuestionInput, Question> {
-  constructor(private readonly evaluations: EvaluationRepository) {}
+  constructor(
+    private readonly evaluations: EvaluationRepository,
+    private readonly evaluationRules: EvaluationRuleRepository,
+  ) {}
 
   async execute({
     actor,
@@ -301,6 +347,16 @@ export class AddQuestion implements UseCase<AddQuestionInput, Question> {
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
+
+    // Regla de conteo exacto: si hay regla para esta tupla y agregar la
+    // pregunta superaría el conteo exacto, bloqueamos. Sprint ago 2026.
+    const addCheck = await checkExactCount(
+      this.evaluationRules,
+      actor.institutionId,
+      owned.value,
+      1,
+    );
+    if (!addCheck.ok) return addCheck;
 
     const shapeError = validateQuestionShape(data);
     if (shapeError) return fail(new ValidationError(shapeError));
@@ -395,13 +451,27 @@ export interface DeleteQuestionInput {
  * count.
  */
 export class DeleteQuestion implements UseCase<DeleteQuestionInput, void> {
-  constructor(private readonly evaluations: EvaluationRepository) {}
+  constructor(
+    private readonly evaluations: EvaluationRepository,
+    private readonly evaluationRules: EvaluationRuleRepository,
+  ) {}
 
   async execute({ actor, evaluationId, questionId }: DeleteQuestionInput): Promise<Result<void>> {
     const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
+
+    // Regla de conteo exacto: si hay regla para esta tupla y eliminar
+    // la pregunta dejaría el conteo por debajo del exacto, bloqueamos.
+    // Sprint ago 2026.
+    const delCheck = await checkExactCount(
+      this.evaluationRules,
+      actor.institutionId,
+      owned.value,
+      -1,
+    );
+    if (!delCheck.ok) return delCheck;
 
     // 1. Localiza la sección dueña de la pregunta antes de borrarla — el repo
     // no expone sectionId tras el delete, y necesitamos sectionId para el
@@ -444,7 +514,10 @@ export interface DuplicateQuestionInput {
  *  - La pregunta origen debe pertenecer a la formulación.
  */
 export class DuplicateQuestion implements UseCase<DuplicateQuestionInput, void> {
-  constructor(private readonly evaluations: EvaluationRepository) {}
+  constructor(
+    private readonly evaluations: EvaluationRepository,
+    private readonly evaluationRules: EvaluationRuleRepository,
+  ) {}
 
   async execute({
     actor,
@@ -455,6 +528,14 @@ export class DuplicateQuestion implements UseCase<DuplicateQuestionInput, void> 
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
+    // Regla de conteo exacto: duplicar cuenta como +1. Sprint ago 2026.
+    const dupCheck = await checkExactCount(
+      this.evaluationRules,
+      actor.institutionId,
+      owned.value,
+      1,
+    );
+    if (!dupCheck.ok) return dupCheck;
     await this.evaluations.duplicateQuestion(actor.institutionId, evaluationId, questionId);
     return ok(undefined);
   }
