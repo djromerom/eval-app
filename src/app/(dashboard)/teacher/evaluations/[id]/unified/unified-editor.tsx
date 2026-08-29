@@ -501,6 +501,23 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
       const msg = e instanceof Error ? e.message : "No se pudo publicar la formulación.";
       setFormError(msg);
       setActionStatus("error");
+      // Si la transición fue bloqueada por la regla de conteo exacto, el
+      // server devuelve un ValidationError con el formato
+      //   "...exactamente N preguntas (tiene M)..."
+      // Parseamos para extraer exact vs current y disparar un toast
+      // direccional ("Sobran / Faltan N ítems") que el docente ve de un
+      // vistazo — el formError ya muestra el detalle del conteo.
+      const ruleMatch = /exactamente (\d+) preguntas \(tiene (\d+)\)/.exec(msg);
+      if (ruleMatch) {
+        const exact = Number(ruleMatch[1]);
+        const current = Number(ruleMatch[2]);
+        const delta = current - exact;
+        if (delta > 0) {
+          toast.error(`Sobran ${delta} ítems. Borrá ítems para poder publicar.`);
+        } else if (delta < 0) {
+          toast.error(`Faltan ${Math.abs(delta)} ítems. Agregá ítems para poder publicar.`);
+        }
+      }
     } finally {
       // Liberamos el lockout. Si el publish tuvo éxito, el revalidate ya
       // refrescó `data.evaluationStatus` y el botón desapareció; el effect
