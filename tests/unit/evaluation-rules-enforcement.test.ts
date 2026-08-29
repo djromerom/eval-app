@@ -285,17 +285,19 @@ describe("Enforcement DeleteQuestion", () => {
     repo.items.push({ ...baseEvaluation, totalQuestions: 50 });
   });
 
-  it("bloquea eliminar cuando current = exact (regla = 50, current = 50)", async () => {
+  it("permite eliminar cuando current = exact (regla = 50, current = 50) — gate inferior removido por el docente (cf1ce47)", async () => {
     rules.rule = baseRule;
     const r = await new DeleteQuestion(repo, rules).execute({
       actor: teacher,
       evaluationId: "e1",
       questionId: "q1",
     });
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.error).toBeInstanceOf(ValidationError);
-    expect(repo.deleteQuestionCalls).toBe(0);
+    // cf1ce47: el docente removió la rama `delta === -1 && next < rule.exactQuestions`
+    // en checkExactCount. Ahora el borrado se permite aun cuando la evaluación
+    // esté exactamente en el conteo de la regla (el publish sigue bloqueado por
+    // ChangeEvaluationStatus si después del borrado no cumple la regla).
+    expect(r.ok).toBe(true);
+    expect(repo.deleteQuestionCalls).toBe(1);
   });
 
   it("permite eliminar cuando current > exact (regla = 50, current = 51)", async () => {
