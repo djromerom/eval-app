@@ -42,8 +42,21 @@ const TRANSITIONS: StatusTransition[] = [
     allowedRoles: ["ECU_LIDER", "TEACHER"],
     requiresComment: false,
   },
-  // Editar una formulación publicada la regresa a borrador y notifica al coordinador
-  { from: "PUBLISHED", to: "DRAFT", allowedRoles: ["TEACHER"], requiresComment: false },
+  // Sprint ago 2026: rechazo tardío post-aprobación. El coordinador puede
+  // revertir una formulación ya aprobada si todavía no se imprimió y detectó
+  // algo que corregir. Mismo patrón que `IN_REVIEW → DRAFT`: comentario
+  // obligatorio para que quede registro del motivo (audit trail).
+  { from: "APPROVED", to: "DRAFT", allowedRoles: ["ECU_LIDER"], requiresComment: true },
+  // Editar una formulación publicada la regresa a borrador y notifica al
+  // coordinador. Sprint ago 2026: el líder ECU también puede revertirla
+  // (rollback solicitado por el coordinador, no es rechazo formal — no
+  // requiere comentario).
+  {
+    from: "PUBLISHED",
+    to: "DRAFT",
+    allowedRoles: ["TEACHER", "ECU_LIDER"],
+    requiresComment: false,
+  },
 ];
 
 export function findTransition(
