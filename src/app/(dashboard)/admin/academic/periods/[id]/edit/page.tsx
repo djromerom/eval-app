@@ -6,10 +6,15 @@ import { requireAuthenticatedUser } from "@/lib/session";
 import {
   makeGetPeriod,
   makeListAcademicYears,
+  makeListCourseSubjects,
+  makeListCourses,
   makeListPeriods,
+  makeListSubjects,
 } from "@/modules/academic/infrastructure/container";
 import { makeListBookletTypesByPeriod } from "@/modules/booklet-types/infrastructure/container";
+import { makeListEvaluationRulesByPeriod } from "@/modules/evaluation-rules/infrastructure/container";
 import { BookletTypesManager } from "./booklet-types-manager";
+import { EvaluationRulesManager } from "./evaluation-rules-manager";
 import { PeriodEditForm } from "./period-edit-form";
 
 export const metadata: Metadata = { title: "Editar prueba" };
@@ -29,21 +34,38 @@ const dateFmt = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
  *
  * Desde ago 2026 el drawer también aloja el `BookletTypesManager` (gestión
  * del catálogo de tipos de cuadernillo por Prueba). El ancho se amplía a
- * 640px para que el form de periodos y la lista de tipos respiren.
+ * 720px para que el form de periodos y la lista de tipos respiren, y
+ * desde este sprint aloja también el `EvaluationRulesManager` (gestión de
+ * reglas de conteo exacto por tupla).
  */
 export default async function EditPeriodPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const actor = await requireAuthenticatedUser("ECU_MASTER");
 
-  const [periodRes, yearsRes, allPeriodsRes, bookletTypesRes] = await Promise.all([
-    makeGetPeriod().execute({ actor, periodId: id }),
+  // Resolución en 2 fases: primero el periodo (necesario para conocer el
+  // academicYear y filtrar cursos); luego el resto en paralelo.
+  const periodRes = await makeGetPeriod().execute({ actor, periodId: id });
+  if (!periodRes.ok) notFound();
+  const period = periodRes.value;
+
+  const [
+    yearsRes,
+    allPeriodsRes,
+    bookletTypesRes,
+    rulesRes,
+    coursesRes,
+    subjectsRes,
+    courseSubjectsRes,
+  ] = await Promise.all([
     makeListAcademicYears().execute({ actor }),
     makeListPeriods().execute({ actor }),
     makeListBookletTypesByPeriod().execute({ actor, periodId: id }),
+    makeListEvaluationRulesByPeriod().execute({ actor, periodId: id }),
+    makeListCourses().execute({ actor, academicYearId: period.academicYearId }),
+    makeListSubjects().execute({ actor }),
+    makeListCourseSubjects().execute({ actor }),
   ]);
 
-  if (!periodRes.ok) notFound();
-  const period = periodRes.value;
   const years = yearsRes.ok ? yearsRes.value : [];
   const year = years.find((y) => y.id === period.academicYearId);
   const yearLabel = year ? String(year.year) : "—";
@@ -63,6 +85,35 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
         description: t.description,
       }))
     : [];
+  // Versión sin `description` para EvaluationRulesManager (solo necesita
+  // id + name para el label de cada regla).
+  const bookletTypesCatalog = bookletTypes.map((t) => ({ id: t.id, name: t.name }));
+
+  const courses = coursesRes.ok ? coursesRes.value.map((c) => ({ id: c.id, name: c.name })) : [];
+  const subjects = subjectsRes.ok ? subjectsRes.value.map((s) => ({ id: s.id, name: s.name })) : [];
+
+  // Mapa courseId → subjectIds habilitado para ese grado. Permite al
+  // `EvaluationRulesManager` filtrar el dropdown de asignaturas cuando el
+  // admin selecciona un grado, así no se le muestran asignaturas que el
+  // grado no tiene habilitadas (ej. 11° no suele tener Tecnología).
+  // Si por alguna razón el mapa queda vacío para un curso, el cliente hace
+  // fallback al listado completo (defensa en profundidad).
+  const subjectsByCourse: Record<string, string[]> = {};
+  if (courseSubjectsRes.ok) {
+    for (const cs of courseSubjectsRes.value) {
+      (subjectsByCourse[cs.courseId] ??= []).push(cs.subjectId);
+    }
+  }
+
+  const rules = rulesRes.ok
+    ? rulesRes.value.map((r) => ({
+        id: r.id,
+        courseId: r.courseId,
+        subjectId: r.subjectId,
+        bookletTypeId: r.bookletTypeId,
+        exactQuestions: r.exactQuestions,
+      }))
+    : [];
 
   return (
     <>
@@ -75,11 +126,11 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
         className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm"
       />
 
-      {/* Drawer anclado a la derecha. Ancho 640px desde ago 2026 para
-          alojar también el BookletTypesManager. */}
+      {/* Drawer anclado a la derecha. Ancho 720px desde ago 2026 para
+          alojar también el EvaluationRulesManager (3 selects side-by-side). */}
       <aside
         aria-label="Editar prueba"
-        className="bg-background fixed inset-y-0 right-0 z-50 flex w-full max-w-[640px] flex-col border-l shadow-xl"
+        className="bg-background fixed inset-y-0 right-0 z-50 flex w-full max-w-[720px] flex-col border-l shadow-xl"
       >
         <header className="bg-muted/30 flex items-center justify-between gap-2 border-b p-5">
           <div className="space-y-1">
@@ -120,6 +171,14 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
             siblingNames={siblingNames}
           />
           <BookletTypesManager periodId={period.id} initialTypes={bookletTypes} />
+          <EvaluationRulesManager
+            periodId={period.id}
+            initialRules={rules}
+            courses={courses}
+            subjects={subjects}
+            subjectsByCourse={subjectsByCourse}
+            bookletTypes={bookletTypesCatalog}
+          />
         </div>
       </aside>
     </>
