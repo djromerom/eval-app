@@ -48,6 +48,7 @@ model Institution {
   scanBatches   ScanBatch[]
   bundles       EvaluationBundle[]
   bookletTypes  BookletType[]
+  evaluationRules EvaluationRule[]
 }
 
 // ========== AUTH & USERS ==========
@@ -81,6 +82,7 @@ model User {
   templates         EvaluationTemplate[]
   scanBatches       ScanBatch[]
   bundlesCreated    EvaluationBundle[]      @relation("BundleCreatedBy")
+  evaluationRulesCreated EvaluationRule[]    @relation("EvaluationRuleCreatedBy")
   auditLogs         AuditLog[]
   notifications     Notification[]
   leaderAssignments LeaderCourseAssignment[]
@@ -172,6 +174,7 @@ model Course {
   groups            Group[]
   bundles           EvaluationBundle[]
   leaderAssignments LeaderCourseAssignment[]
+  evaluationRules   EvaluationRule[]
 
   @@index([institutionId, academicYearId])
 }
@@ -196,6 +199,7 @@ model Subject {
 
   courses      CourseSubject[]
   questionBank QuestionBank[]
+  evaluationRules EvaluationRule[]
 
   @@index([institutionId])
   @@index([institutionId, parentSubjectId])
@@ -282,6 +286,7 @@ model Period {
 
   evaluations  Evaluation[]
   bookletTypes BookletType[]
+  evaluationRules EvaluationRule[]
 
   @@unique([institutionId, academicYearId, name])
   @@index([institutionId, academicYearId])
@@ -399,9 +404,46 @@ model BookletType {
   createdAt     DateTime    @default(now())
 
   evaluations Evaluation[]
+  evaluationRules EvaluationRule[]
 
   @@unique([institutionId, periodId, name])
   @@index([institutionId, periodId])
+}
+
+/**
+ * Regla institucional que exige un número EXACTO de ítems para la
+ * evaluación, condicionada a la tupla (period, course, subject, bookletType).
+ * Sprint ago 2026: introducido para que el admin pueda fijar conteos
+ * inmutables por Prueba × Grado × Asignatura × Tipo y bloquear el envío
+ * a revisión / publicación de evaluaciones que no coincidan.
+ * - bookletTypeId es REQUERIDO: no hay evaluaciones sin tipo de cuadernillo.
+ * - onDelete: Cascade para Period (sigue a la prueba); Restrict para
+ *   Course/Subject/BookletType (forzar limpieza manual).
+ * Ver src/modules/evaluation-rules/ para los use cases.
+ */
+model EvaluationRule {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  institutionId  String       @db.Uuid
+  institution    Institution  @relation(fields: [institutionId], references: [id])
+  periodId       String       @db.Uuid
+  period         Period       @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  courseId       String       @db.Uuid
+  course         Course       @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  subjectId      String       @db.Uuid
+  subject        Subject      @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  bookletTypeId  String       @db.Uuid
+  bookletType    BookletType  @relation(fields: [bookletTypeId], references: [id], onDelete: Restrict)
+  // Conteo exacto de preguntas requerido. Rango válido lo enforza el use case
+  // (ver MIN_EXACT_QUESTIONS / MAX_EXACT_QUESTIONS en evaluation-rule.ts).
+  exactQuestions Int
+  createdById    String       @db.Uuid
+  createdBy      User         @relation("EvaluationRuleCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([institutionId, periodId, courseId, subjectId, bookletTypeId])
+  @@index([institutionId, periodId])
+  @@index([institutionId, periodId, courseId, subjectId])
 }
 
 enum DraftStatus {
@@ -831,6 +873,7 @@ enum NotificationType {
   EVALUATION_PENDING_REVIEW
   EVALUATION_APPROVED
   EVALUATION_REJECTED
+  EVALUATION_PUBLISHED
   SCANNING_COMPLETED
   SCANNING_ERROR
   NEW_STUDENT_ASSIGNED
