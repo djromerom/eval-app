@@ -312,6 +312,15 @@ export interface EvaluationRepository {
   ): Promise<void>;
   updateStatus(institutionId: string, id: string, status: EvaluationStatus): Promise<void>;
   /**
+   * Devuelve el `courseId` de la evaluación vía `courseSubject.courseId`, o
+   * `null` si la evaluación no existe (o no pertenece a la institución).
+   * Usado por `ChangeEvaluationStatus` para el scope check del líder ECU:
+   * solo puede mutar evaluaciones de cursos a los que está asignado.
+   * Sprint ago 2026 — cierre del gap de seguridad donde el server action
+   * no chequeaba scope institucional (ver [[eval-prisma-enum-domain-drift]]).
+   */
+  findCourseIdByEvaluation(institutionId: string, evaluationId: string): Promise<string | null>;
+  /**
    * Actualiza los campos de metadata editables desde el panel Settings
    * (hoy solo `durationMinutes`). El use case `UpdateEvaluationSettings`
    * se encarga de validar DRAFT-only antes de invocar este método.

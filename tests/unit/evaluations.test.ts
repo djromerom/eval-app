@@ -39,6 +39,10 @@ import type {
   NotificationMessage,
   NotificationSender,
 } from "@/modules/notifications/domain/notification";
+import type {
+  LeaderAssignment,
+  LeaderAssignmentRepository,
+} from "@/modules/leader-assignments/domain/leader-assignment";
 
 class FakeEvaluations implements EvaluationRepository {
   items: Evaluation[] = [];
@@ -182,6 +186,16 @@ class FakeEvaluations implements EvaluationRepository {
   async createNewVersion(): Promise<Evaluation> {
     throw new Error("no usado");
   }
+  /**
+   * Scope check del líder ECU: por defecto la evaluación cae en `c1`
+   * (mismo curso al que `FakeLeaderAssignments` declara asignado al
+   * coordinador). Tests específicos de scope viven en
+   * `change-status-scope.test.ts`.
+   */
+  evaluationCourseId: string | null = "c1";
+  async findCourseIdByEvaluation(_i: string, _eid: string): Promise<string | null> {
+    return this.evaluationCourseId;
+  }
   async existsByCourseSubjectPeriodBookletTypeYear(
     institutionId: string,
     courseSubjectId: string,
@@ -289,6 +303,33 @@ class SpySender implements NotificationSender {
   sent: NotificationMessage[] = [];
   async send(m: NotificationMessage) {
     this.sent.push(m);
+  }
+}
+
+/**
+ * Stub mínimo de LeaderAssignmentRepository para los tests de flujo.
+ * Por defecto el coordinador está asignado a `c1` — coincide con el
+ * `evaluationCourseId` que devuelve `FakeEvaluations.findCourseIdByEvaluation`,
+ * así que el scope check pasa sin tocar nada. Tests específicos de scope
+ * (ForbiddenError en transiciones out-of-scope) viven en
+ * `change-status-scope.test.ts`.
+ */
+class FakeLeaderAssignments implements LeaderAssignmentRepository {
+  assigned: string[] = ["c1"];
+  async listAssignedCourseIds(_i: string, _u: string): Promise<string[]> {
+    return this.assigned;
+  }
+  async assign(): Promise<void> {
+    /* noop */
+  }
+  async unassign(): Promise<void> {
+    /* noop */
+  }
+  async isAssigned(): Promise<boolean> {
+    return false;
+  }
+  async listAssignments(): Promise<LeaderAssignment[]> {
+    return [];
   }
 }
 
@@ -901,6 +942,7 @@ describe("Flujo de aprobación", () => {
         coordinatorIds: async () => ["c1"],
       },
       new FakeEvaluationRules(),
+      new FakeLeaderAssignments(),
     );
     const created = await repo.create("i1", "t1", { title: "P", courseSubjectId: "cs1" });
     evalId = created.id;
