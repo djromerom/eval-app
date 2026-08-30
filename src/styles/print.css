@@ -492,6 +492,25 @@
 
 .question-text {
   font-weight: 700;
+  /* Flex para que el número ("5.") nunca quede solo en una línea cuando el
+     texto wrappea en columnas estrechas: el span del número ocupa su ancho
+     y el texto toma el resto, wrappeando dentro de su propio item. */
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
+}
+
+.question-text .item-number {
+  flex: 0 0 auto;
+}
+
+.question-text > :not(.item-number) {
+  /* El item del texto (RichTextInline) toma todo el ancho restante y puede
+     reducirse (min-width: 0) para que el wrap interno funcione dentro del
+     item flex, no antes — sin esto el navegador wrappea entre el número y
+     el texto en lugar de dentro del texto. */
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .question-options {
@@ -501,6 +520,22 @@
 
 .question-options li {
   margin-top: 0.1rem;
+  /* Mismo patrón que .question-text: la letra ("A.") nunca queda sola en
+     una línea cuando el texto de la opción wrappea. La letra ocupa su ancho
+     natural; el texto toma el resto y wrappea dentro de su propio item flex,
+     alineado bajo la primera palabra (no bajo la letra). */
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
+}
+
+.question-options .option-letter {
+  flex: 0 0 auto;
+}
+
+.question-options li > :not(.option-letter) {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 /* ===== Hoja de respuestas OMR ===== */
