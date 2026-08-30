@@ -161,6 +161,11 @@ class FakeEvaluations implements EvaluationRepository {
   async existsByCourseSubjectPeriodBookletTypeYear(): Promise<boolean> {
     return false;
   }
+  /** Stub: este fake no modela courseSubject→courseId (los tests de banco
+   *  no ejercitan ChangeEvaluationStatus). */
+  async findCourseIdByEvaluation(): Promise<string | null> {
+    return null;
+  }
 }
 
 const teacher: AuthenticatedUser = { userId: "t1", institutionId: "i1", roles: ["TEACHER"] };
