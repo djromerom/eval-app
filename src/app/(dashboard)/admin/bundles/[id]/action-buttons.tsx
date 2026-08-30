@@ -6,6 +6,7 @@ import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { deleteBundleAction, toggleBundleReadyAction, type BundleFormState } from "../actions";
+import { BundlePdfDownloads } from "./bundle-pdf-downloads";
 
 function ToggleSubmit({ isDraft }: { isDraft: boolean }) {
   const { pending } = useFormStatus();
@@ -87,18 +88,10 @@ export function BundleActionPanel({ bundleId, isDraft }: { bundleId: string; isD
       {/* Links estáticos (descargas / navegación) */}
       {!isDraft ? (
         <>
-          <Link
-            href={`/api/bundles/${bundleId}/pdf`}
-            className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "w-full")}
-          >
-            Descargar cuadernillo (PDF)
-          </Link>
-          <Link
-            href={`/api/bundles/${bundleId}/pdf-linear`}
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full")}
-          >
-            Descargar PDF
-          </Link>
+          {/* Sprint 2026-08-30: los 2 PDFs (cuadernillo booklet + lineal)
+              muestran overlay full-screen mientras se generan. Ver
+              `bundle-pdf-downloads.tsx` para el detalle del patrón. */}
+          <BundlePdfDownloads bundleId={bundleId} />
           <Link
             href={`/admin/bundles/${bundleId}/answer-sheets`}
             className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full")}
