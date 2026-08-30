@@ -110,6 +110,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # wget para healthcheck, curl para debug, ca-certificates para TLS).
 # `poppler-utils` es dependencia del worker `question-extract` (pdfinfo +
 # pdftoppm/pdftocairo) — vive embebido en `src/lib/saber-extractor/`.
+# `fonts-liberation` provee Liberation Serif/Sans/Mono (clones métricos de
+# Times New Roman / Arial / Courier New) para que el cover PDF no caiga a
+# DejaVu Serif en prod y haga overflow del contenedor 8.5×11in por diferencia
+# de métricas. Dev (macOS) usa Times New Roman — métricas equivalentes.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -117,6 +121,7 @@ RUN apt-get update \
         wget \
         curl \
         poppler-utils \
+        fonts-liberation \
         libnss3 \
         libnspr4 \
         libatk1.0-0 \
