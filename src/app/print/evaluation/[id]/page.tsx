@@ -85,7 +85,7 @@ export default async function PrintEvaluationPage({
 
                 {/* Agrupado para que el contexto no se separe de su 1ª pregunta. */}
                 <div className="block-intro">
-                  {numbers.length > 0 && (
+                  {numbers.length > 1 && (
                     <p className="block-lead">
                       RESPONDA LAS PREGUNTAS {first} A LA {last}
                       {hasContext || section.title
@@ -104,12 +104,14 @@ export default async function PrintEvaluationPage({
                 {section.questions.map((q) => (
                   <div key={q.id} className={`question${isWideQuestion(q) ? "wide" : ""}`}>
                     <p className="question-text">
-                      {q.number}. <RichTextInline value={q.text} />
+                      <span className="item-number">{q.number}.</span>{" "}
+                      <RichTextInline value={q.text} />
                     </p>
                     <ul className="question-options">
                       {q.options.map((o) => (
                         <li key={o.key}>
-                          {o.key}. <RichTextInline value={o.text} />
+                          <span className="option-letter">{o.key}.</span>{" "}
+                          <RichTextInline value={o.text} />
                         </li>
                       ))}
                     </ul>
