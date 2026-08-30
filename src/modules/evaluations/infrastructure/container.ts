@@ -66,6 +66,7 @@ export const makeChangeEvaluationStatus = () =>
     notificationSender,
     coordinatorDirectory,
     evaluationRules,
+    leaderAssignments,
   );
 
 // Templates

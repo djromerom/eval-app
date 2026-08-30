@@ -590,6 +590,20 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
     });
   }
 
+  async findCourseIdByEvaluation(
+    institutionId: string,
+    evaluationId: string,
+  ): Promise<string | null> {
+    // Resuelve `courseSubject.courseId` desde la evaluación. Filtra por
+    // `institutionId` y `deletedAt` para no exponer ids de formulaciones
+    // borradas o cross-tenant (defensa contra fugas).
+    const row = await prisma.evaluation.findFirst({
+      where: { id: evaluationId, institutionId, deletedAt: null },
+      select: { courseSubject: { select: { courseId: true } } },
+    });
+    return row?.courseSubject.courseId ?? null;
+  }
+
   async updateSettings(
     institutionId: string,
     id: string,

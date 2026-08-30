@@ -304,6 +304,11 @@ class InMemoryEvaluations implements EvaluationRepository {
   async existsByCourseSubjectPeriodBookletTypeYear(): Promise<boolean> {
     return false;
   }
+  /** Stub: la evaluación no tiene courseId resuelto en este fake (la única
+   *  ruta que la usa es `FindRuleForEvaluation`, que no toca scope). */
+  async findCourseIdByEvaluation(): Promise<string | null> {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------

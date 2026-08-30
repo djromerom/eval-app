@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/evaluations/status-badge";
 import { makeListEvaluations } from "@/modules/evaluations/infrastructure/container";
 import type { EvaluationListItem } from "@/modules/evaluations/domain/evaluation";
 import type { EvaluationStatus } from "@/modules/evaluations/domain/evaluation-status";
 import { approveAction, publishAction, revertAction } from "./actions";
 import { RejectForm } from "./reject-form";
+import { ReviewActionButton } from "./review-action-button";
 import { REVIEW_FILTER_OPTIONS } from "./review-constants";
 import { StatusFilter } from "./status-filter";
 
@@ -41,17 +41,22 @@ function Row({ e, children }: { e: EvaluationListItem; children: React.ReactNode
 }
 
 /** Renderiza los botones que apliquen al estado visible de la fila. La sección
- *  actual está implícita en `currentStatus` (pasada por page.tsx). */
+ *  actual está implícita en `currentStatus` (pasada por page.tsx).
+ *
+ *  Sprint 2026-08-30: cada acción dispara un `toast.success` al terminar
+ *  OK (ver `review-action-button.tsx` y la prop `successMessage` de
+ *  `RejectForm`). */
 function ActionsFor({ status, evaluationId }: { status: EvaluationStatus; evaluationId: string }) {
   if (status === "IN_REVIEW") {
     return (
       <>
-        <form action={approveAction}>
-          <input type="hidden" name="evaluationId" value={evaluationId} />
-          <Button type="submit" size="sm">
-            Aprobar
-          </Button>
-        </form>
+        <ReviewActionButton
+          action={approveAction}
+          evaluationId={evaluationId}
+          successMessage="Formulación aprobada"
+          label="Aprobar"
+          pendingLabel="Aprobando…"
+        />
         <RejectForm evaluationId={evaluationId} />
       </>
     );
@@ -59,30 +64,34 @@ function ActionsFor({ status, evaluationId }: { status: EvaluationStatus; evalua
   if (status === "APPROVED") {
     return (
       <>
-        <form action={publishAction}>
-          <input type="hidden" name="evaluationId" value={evaluationId} />
-          <Button type="submit" size="sm">
-            Publicar
-          </Button>
-        </form>
+        <ReviewActionButton
+          action={publishAction}
+          evaluationId={evaluationId}
+          successMessage="Formulación publicada"
+          label="Publicar"
+          pendingLabel="Publicando…"
+        />
         {/* Reutiliza RejectForm: la transición `APPROVED → DRAFT` para
             ECU_LIDER también exige comentario (rechazo tardío). */}
         <RejectForm
           evaluationId={evaluationId}
           label="Volver a borrador"
           pendingLabel="Volviendo…"
+          successMessage="Formulación revertida a borrador"
         />
       </>
     );
   }
   // PUBLISHED: solo botón de rollback (sin comment).
   return (
-    <form action={revertAction}>
-      <input type="hidden" name="evaluationId" value={evaluationId} />
-      <Button type="submit" size="sm" variant="outline">
-        Volver a borrador
-      </Button>
-    </form>
+    <ReviewActionButton
+      action={revertAction}
+      evaluationId={evaluationId}
+      successMessage="Formulación revertida a borrador"
+      label="Volver a borrador"
+      pendingLabel="Volviendo…"
+      variant="outline"
+    />
   );
 }
 

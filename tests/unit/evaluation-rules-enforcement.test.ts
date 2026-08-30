@@ -17,6 +17,10 @@ import type {
 } from "@/modules/evaluation-rules/domain/evaluation-rule";
 import type { AuthenticatedUser } from "@/shared/application/authenticated-user";
 import { ValidationError } from "@/shared/domain/result";
+import type {
+  LeaderAssignment,
+  LeaderAssignmentRepository,
+} from "@/modules/leader-assignments/domain/leader-assignment";
 
 // ---------------------------------------------------------------------------
 // Actores
@@ -120,6 +124,12 @@ class FakeEvaluations implements EvaluationRepository {
   async createNewVersion(_i: string, _id: string): Promise<never> {
     return {} as never;
   }
+  /** Scope check del líder: por defecto la evaluación cae en `c1`, que
+   *  coincide con el curso asignado al coordinador en `FakeLeaderAssignments`.
+   *  Tests específicos de scope viven en `change-status-scope.test.ts`. */
+  async findCourseIdByEvaluation(_i: string, _id: string): Promise<string | null> {
+    return "c1";
+  }
   async existsByCourseSubjectPeriodBookletTypeYear(
     _i: string,
     _cs: string,
@@ -162,6 +172,28 @@ class FakeRules implements EvaluationRuleRepository {
 class FakeSender implements NotificationSender {
   async send(_m: NotificationMessage) {
     /* noop */
+  }
+}
+
+/** Stub mínimo de LeaderAssignmentRepository para los tests de flujo.
+ *  Por defecto el coordinador está asignado a `c1`, que coincide con el
+ *  courseId que devuelve `FakeEvaluations.findCourseIdByEvaluation`. */
+class FakeLeaderAssignments implements LeaderAssignmentRepository {
+  assigned: string[] = ["c1"];
+  async listAssignedCourseIds(_i: string, _u: string): Promise<string[]> {
+    return this.assigned;
+  }
+  async assign(): Promise<void> {
+    /* noop */
+  }
+  async unassign(): Promise<void> {
+    /* noop */
+  }
+  async isAssigned(): Promise<boolean> {
+    return false;
+  }
+  async listAssignments(): Promise<LeaderAssignment[]> {
+    return [];
   }
 }
 
@@ -390,6 +422,7 @@ describe("Enforcement ChangeEvaluationStatus", () => {
       new FakeSender(),
       { coordinatorIds: async () => ["c1"] },
       rules,
+      new FakeLeaderAssignments(),
     );
     repo.items.push({ ...baseEvaluation });
   });

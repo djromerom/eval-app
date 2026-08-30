@@ -1,8 +1,16 @@
 import { type AuthenticatedUser, requireRole } from "@/shared/application/authenticated-user";
 import type { UseCase } from "@/shared/application/use-case";
-import { NotFoundError, type Result, ValidationError, fail, ok } from "@/shared/domain/result";
+import {
+  ForbiddenError,
+  NotFoundError,
+  type Result,
+  ValidationError,
+  fail,
+  ok,
+} from "@/shared/domain/result";
 import type { NotificationSender } from "@/modules/notifications/domain/notification";
 import type { EvaluationRuleRepository } from "@/modules/evaluation-rules/domain/evaluation-rule";
+import type { LeaderAssignmentRepository } from "@/modules/leader-assignments/domain/leader-assignment";
 import { type EvaluationStatus, findTransition } from "../domain/evaluation-status";
 import type { Evaluation, EvaluationRepository } from "../domain/evaluation";
 
@@ -29,6 +37,7 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
     private readonly notifications: NotificationSender,
     private readonly directory: CoordinatorDirectory,
     private readonly evaluationRules: EvaluationRuleRepository,
+    private readonly leaderAssignments: LeaderAssignmentRepository,
   ) {}
 
   async execute({
@@ -42,6 +51,17 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
 
     const evaluation = await this.evaluations.findById(actor.institutionId, evaluationId);
     if (!evaluation) return fail(new NotFoundError("Formulación", evaluationId));
+
+    // Scope institucional (ago 2026): un ECU_LIDER que no sea ECU_MASTER
+    // solo puede mutar evaluaciones de cursos a los que está asignado
+    // vía LeaderAssignment. Antes el UI filtraba vía findByCourseIds pero
+    // el server action no chequeaba scope, así que un líder podía mutar
+    // cualquier evaluación de la institución pasando su id directo.
+    // ECU_MASTER no tiene restricción (admin institucional).
+    if (actor.roles.includes("ECU_LIDER") && !actor.roles.includes("ECU_MASTER")) {
+      const scopeCheck = await this.enforceLeaderScope(actor, evaluationId);
+      if (!scopeCheck.ok) return scopeCheck;
+    }
 
     const transition = findTransition(evaluation.status, to);
     if (!transition || !transition.allowedRoles.some((r) => actor.roles.includes(r))) {
@@ -158,5 +178,33 @@ export class ChangeEvaluationStatus implements UseCase<ChangeEvaluationStatusInp
         link: teacherLink,
       });
     }
+  }
+
+  /** Chequea que la evaluación pertenezca a un curso asignado al líder.
+   *  Devuelve `ok(undefined)` cuando pasa; `fail(ForbiddenError)` cuando
+   *  no hay asignaciones o la evaluación está fuera del scope. */
+  private async enforceLeaderScope(
+    actor: AuthenticatedUser,
+    evaluationId: string,
+  ): Promise<Result<undefined>> {
+    const assignedCourseIds = await this.leaderAssignments.listAssignedCourseIds(
+      actor.institutionId,
+      actor.userId,
+    );
+    if (assignedCourseIds.length === 0) {
+      return fail(
+        new ForbiddenError("No tenés permisos para operar evaluaciones en esta institución."),
+      );
+    }
+    const evaluationCourseId = await this.evaluations.findCourseIdByEvaluation(
+      actor.institutionId,
+      evaluationId,
+    );
+    if (!evaluationCourseId || !assignedCourseIds.includes(evaluationCourseId)) {
+      return fail(
+        new ForbiddenError("Esta evaluación pertenece a un curso que no tenés asignado."),
+      );
+    }
+    return ok(undefined);
   }
 }

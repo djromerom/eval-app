@@ -95,6 +95,11 @@ class FakeEvaluations implements EvaluationRepository {
     const e = this.items.find((x) => x.id === id);
     if (e) e.status = status;
   }
+  /** Stub: este fake no modela courseSubject→courseId, y los tests de
+   *  UpdateEvaluationSettings no tocan scope. */
+  async findCourseIdByEvaluation(): Promise<string | null> {
+    return null;
+  }
   async updateSettings(
     _i: string,
     id: string,
