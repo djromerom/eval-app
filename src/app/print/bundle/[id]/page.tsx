@@ -7,6 +7,7 @@ import { resolvePrintActor } from "@/lib/print-access";
 import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
 import { makeGetMyInstitution } from "@/modules/institutions/infrastructure/container";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
+import { makeListCourseSubjects } from "@/modules/academic/infrastructure/container";
 import { makePreviewCover } from "@/modules/bundle-cover/infrastructure/container";
 import { fitCoverToIframe } from "@/modules/bundle-cover/application/fit-cover-to-iframe";
 import { makeLoadCoverHtml } from "@/modules/cover-html/infrastructure/container";
@@ -197,6 +198,12 @@ export default async function PrintBundlePage({
   const logoSrc = await readLogoIfNeeded(institution?.logo, theme.showLogo);
   const cssVars = themeToCssVars(theme) as Record<string, string>;
 
+  // Mapa courseSubjectId -> CourseSubjectView para resolver el nombre del
+  // grado y la asignatura de cada evaluación del bundle (necesarios para
+  // el header de página "ECU GRADO – ASIGNATURA N°").
+  const csRes = await makeListCourseSubjects().execute({ actor });
+  const csById = new Map(csRes.ok ? csRes.value.map((c) => [c.id, c]) : []);
+
   // Detección de cover custom (ago 2026): si el admin configuró el cover
   // en cualquiera de las 3 vistas (/cover-html live, /cover-designer Monaco
   // override, o /cover-studio), el HTML renderizado por `PreviewCover`
@@ -378,28 +385,26 @@ export default async function PrintBundlePage({
       })()}
 
       {/* ===== Páginas 2+: booklet de cada evaluation ===== */}
-      {validEvaluations.map(({ item, evaluation }, evalIdx) => {
+      {validEvaluations.map(({ item, evaluation }) => {
         const competencyRows = buildCompetencyRows(evaluation.sections);
+        // Header de página: ECU + grado + asignatura + N° cuadernillo de
+        // esta evaluación. Mismo formato que en el booklet individual.
+        const cs = csById.get(evaluation.courseSubjectId);
+        const area = cs?.subjectName ?? "";
+        const grade = cs?.courseName ?? "";
+        const bookletLabel = evaluation.bookletNumber != null ? ` ${evaluation.bookletNumber}` : "";
         return (
           <div key={item.id} className="bundle-eval-section">
-            {/* Apertura de la formulación: franja destacada que encadena con
-                sus preguntas en la misma hoja. Antes era una página completa
-                para dos líneas — en un cuadernillo de 3 asignaturas eso son 3
-                cartas casi vacías. La franja sigue marcando con claridad
-                dónde empieza cada asignatura. */}
-            {evalIdx > 0 ? (
-              <div className="bundle-eval-band">
-                <span className="bundle-eval-band-title">{evaluation.title}</span>
-                <span className="bundle-eval-band-part">
-                  Parte {item.order} de {validEvaluations.length}
-                </span>
-              </div>
-            ) : null}
             {/* UN solo contenedor por formulación, igual que en el booklet de
                 una formulación suelta: a dos columnas el texto fluye de la
                 izquierda a la derecha y de ahí a la página siguiente. Con un
                 contenedor por contexto, Chrome balancea mal al fragmentar. */}
             <section className="sheet questions">
+              <div className="print-page-header">
+                ECU {grade}
+                {bookletLabel}
+              </div>
+              {area ? <p className="subject-title">{area}</p> : null}
               <div className="questions-flow" data-columns={theme.questionColumns}>
                 {evaluation.sections.map((section, idx) => {
                   const numbers = section.questions.map(
@@ -425,7 +430,7 @@ export default async function PrintBundlePage({
                           </p>
                         )}
                         {section.title ? (
-                          <p className="block-text-title">«{section.title.toUpperCase()}»</p>
+                          <p className="block-text-title">«{section.title}»</p>
                         ) : null}
                         {hasContext ? (
                           <RichText value={section.content} className="context-paragraph" />

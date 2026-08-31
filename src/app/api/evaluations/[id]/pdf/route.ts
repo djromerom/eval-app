@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
+import { makeListCourseSubjects } from "@/modules/academic/infrastructure/container";
 import type { PrintKind } from "@/shared/infrastructure/crypto/print-token";
 import {
   type PdfGenerationJob,
@@ -38,9 +39,33 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Formulación no encontrada." }, { status: 404 });
   }
 
+  // Construimos el header persistente que el worker estampa con pdf-lib en
+  // cada página: "ECU [GRADO] – [ASIGNATURA] [N° cuadernillo]". El
+  // booklet (kind=booklet) es el único kind donde aplica — las hojas
+  // de respuestas y la clave no llevan este header.
+  const pageHeader =
+    kind === "booklet"
+      ? await (async () => {
+          const csRes = await makeListCourseSubjects().execute({ actor });
+          const cs = csRes.ok
+            ? csRes.value.find((c) => c.id === evalRes.value.courseSubjectId)
+            : undefined;
+          const grade = cs?.courseName ?? "";
+          const area = cs?.subjectName ?? "";
+          const bookletLabel =
+            evalRes.value.bookletNumber != null ? ` ${evalRes.value.bookletNumber}` : "";
+          return `ECU ${grade} – ${area}${bookletLabel}`;
+        })()
+      : undefined;
+
   const job = await getPdfGenerationQueue().add(
     "pdf",
-    { evaluationId: id, institutionId: actor.institutionId, kind } satisfies PdfGenerationJob,
+    {
+      evaluationId: id,
+      institutionId: actor.institutionId,
+      kind,
+      pageHeader,
+    } satisfies PdfGenerationJob,
     { removeOnComplete: true, removeOnFail: 50 },
   );
 
