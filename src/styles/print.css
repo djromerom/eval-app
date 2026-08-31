@@ -25,7 +25,7 @@
    * el mismo CSS.
    */
   size: letter portrait;
-  margin: 2cm;
+  margin: 1.5cm 2cm;
   @bottom-center {
     content: counter(page);
     font-family: Arial, Helvetica, sans-serif;
@@ -103,8 +103,8 @@
   border-top: 3px double #000;
 }
 .section-divider.dots {
-  border-top: 1px dotted #000;
-  border-top-style: dotted;
+  border-top: 0;
+  border-top-style: none;
 }
 
 .sheet {
@@ -395,12 +395,24 @@
   font-weight: 700;
   text-align: center;
   text-transform: uppercase;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+
+/* Imágenes dentro del booklet: centradas horizontalmente y limitadas al
+   ancho del contenedor (no se desbordan en columnas estrechas). `display:
+   block` permite que `margin: auto` funcione dentro de los contenedores
+   flex de preguntas y opciones. */
+.booklet img {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 100%;
+  height: auto;
 }
 
 /* "RESPONDA LAS PREGUNTAS X A LA Y..." */
 .block-lead {
-  font-size: 11pt;
+  font-size: 10pt;
   font-weight: 700;
   text-transform: uppercase;
   margin: 0.6rem 0;
@@ -411,11 +423,9 @@
    negrilla y centrado. El case se aplica por CSS para que un cambio
    futuro de política solo toque el estilo y no el JSX. */
 .block-text-title {
-  font-size: 12pt;
+  font-size: 10pt;
   font-weight: 700;
-  font-style: italic;
   text-align: center;
-  text-transform: lowercase;
   margin: 0.4rem 0;
 }
 
@@ -536,6 +546,10 @@
 
 .question {
   margin-bottom: 0.7rem;
+  border-right: 1px solid #ccc;
+  border-bottom: 1px solid #ccc;
+  padding-right: 0.4rem;
+  padding-bottom: 0.3rem;
   /* Ninguna pregunta se parte entre dos columnas ni entre dos páginas. */
   break-inside: avoid;
 }
@@ -547,7 +561,8 @@
 }
 
 .question-text {
-  font-weight: 700;
+  font-weight: 400;
+  text-align: justify;
   /* Flex para que el número ("5.") nunca quede solo en una línea cuando el
      texto wrappea en columnas estrechas: el span del número ocupa su ancho
      y el texto toma el resto, wrappeando dentro de su propio item. */
@@ -576,6 +591,7 @@
 
 .question-options li {
   margin-top: 0.1rem;
+  text-align: justify;
   /* Mismo patrón que .question-text: la letra ("A.") nunca queda sola en
      una línea cuando el texto de la opción wrappea. La letra ocupa su ancho
      natural; el texto toma el resto y wrappea dentro de su propio item flex,

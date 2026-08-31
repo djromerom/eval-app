@@ -429,9 +429,7 @@ export default async function PrintBundlePage({
                               : ""}
                           </p>
                         )}
-                        {section.title ? (
-                          <p className="block-text-title">«{section.title}»</p>
-                        ) : null}
+                        {section.title ? <p className="block-text-title">{section.title}</p> : null}
                         {hasContext ? (
                           <RichText value={section.content} className="context-paragraph" />
                         ) : null}
