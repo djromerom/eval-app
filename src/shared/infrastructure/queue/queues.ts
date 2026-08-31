@@ -44,6 +44,13 @@ export interface PdfGenerationJob {
   kind: PrintKind;
   /** Query string extra (sin `?` inicial), p.ej. "students=id1,id2". */
   extraQuery?: string;
+  /** Texto del header a estampar en cada página del PDF (esquina superior
+   *  izquierda) usando pdf-lib. Si está presente, el worker lo dibuja sobre
+   *  CADA página del PDF resultante — útil cuando el header HTML+CSS se ve
+   *  solo en la primera página de cada sheet (limitación de Chrome con
+   *  position:fixed dentro de multicolumna). Si no se envía, no se estampa
+   *  nada (compatibilidad con jobs que no requieren header persistente). */
+  pageHeader?: string;
 }
 
 /** Resultado que el worker devuelve al completar el job. */

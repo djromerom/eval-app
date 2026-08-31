@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Worker } from "bullmq";
 import puppeteer from "puppeteer";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { env } from "@/config/env";
 import { type PrintKind, signPrintToken } from "@/shared/infrastructure/crypto/print-token";
 import { imposeBooklet } from "@/shared/imposition/booklet-pdf";
@@ -58,6 +58,37 @@ const ROUTE_BY_KIND: Record<PrintKind, string> = {
 const BUNDLE_KINDS = new Set<PrintKind>(
   (Object.keys(ROUTE_BY_KIND) as PrintKind[]).filter((k) => ROUTE_BY_KIND[k].includes("bundle")),
 );
+
+/**
+ * Estampa el header dado en la esquina superior izquierda de CADA página
+ * del PDF usando pdf-lib. Chrome NO repite un header position:fixed entre
+ * páginas cuando hay multicolumna, así que el estampado post-render es la
+ * única forma 100% confiable de tener un header persistente en el PDF
+ * generado por el worker.
+ *
+ * El header se posiciona dentro del área imprimible (debajo del margen
+ * superior de 2cm) en la esquina izquierda, en mayúsculas y bold para
+ * coincidir con el estilo del header HTML.
+ */
+async function stampHeaderOnAllPages(pdfBytes: Uint8Array, header: string): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(pdfBytes);
+  const font = await doc.embedFont(StandardFonts.HelveticaBold);
+  const pages = doc.getPages();
+  const fontSize = 10;
+  const xMarginPt = (2 / 2.54) * 72; // 2cm -> pt (margen izquierdo)
+  const yTopOffsetPt = (0.6 / 2.54) * 72; // 0.6cm bajo el borde superior
+  for (const page of pages) {
+    const { width, height } = page.getSize();
+    page.drawText(header.toUpperCase(), {
+      x: xMarginPt,
+      y: height - yTopOffsetPt - fontSize,
+      size: fontSize,
+      font,
+      color: rgb(0, 0, 0),
+    });
+  }
+  return await doc.save();
+}
 
 /** Genera el PDF lineal (carta, 1 página por hoja lógica) con Puppeteer. */
 async function renderLinearPdf(url: string): Promise<Uint8Array> {
@@ -237,6 +268,17 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
       log.info({ jobId: job.id, linearBytes: linear.length }, "PDF lineal generado");
       out = await imposeBooklet(linear, { coverPages: 0 });
       log.info({ jobId: job.id, bytes: out.length }, "Imposición aplicada");
+    }
+
+    // Header persistente: si el job lo trae, lo estampamos en cada página
+    // del PDF resultante con pdf-lib. Chrome NO repite position:fixed entre
+    // páginas con multicolumna, así que esto es la única vía 100%
+    // confiable para que el header aparezca en TODAS las hojas, no solo
+    // en la primera de cada sheet.
+    if (job.data.pageHeader) {
+      const before = out.length;
+      out = await stampHeaderOnAllPages(out, job.data.pageHeader);
+      log.info({ jobId: job.id, before, after: out.length }, "Header estampado en cada página");
     }
 
     const dir = path.join(env.STORAGE_DIR, "pdf", institutionId);

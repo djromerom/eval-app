@@ -44,6 +44,8 @@ export default async function PrintEvaluationPage({
   };
   const cs = csRes.ok ? csRes.value.find((c) => c.id === evaluation.courseSubjectId) : undefined;
   const area = cs?.subjectName ?? "";
+  const grade = cs?.courseName ?? "";
+  const bookletLabel = evaluation.bookletNumber != null ? ` ${evaluation.bookletNumber}` : "";
 
   const cssVars = themeToCssVars(theme) as Record<string, string>;
 
@@ -70,6 +72,10 @@ export default async function PrintEvaluationPage({
           Con un contenedor por contexto, Chrome balanceaba mal al fragmentar
           entre páginas y no se ahorraba papel. */}
       <section className="sheet questions">
+        <div className="print-page-header">
+          ECU {grade}
+          {bookletLabel}
+        </div>
         {area ? <p className="subject-title">{area}</p> : null}
         <div className="questions-flow" data-columns={theme.questionColumns}>
           {evaluation.sections.map((section, idx) => {
