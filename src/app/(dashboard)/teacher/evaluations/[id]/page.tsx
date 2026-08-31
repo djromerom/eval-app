@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/session";
+import { hasRole } from "@/shared/application/authenticated-user";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/evaluations/status-badge";
@@ -28,13 +29,16 @@ export default async function EvaluationDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const result = await makeGetEvaluation().execute({ actor, id });
   if (!result.ok) notFound();
   const evaluation = result.value;
 
   const isOwner = evaluation.teacherId === actor.userId;
-  const editable = isOwner && evaluation.status === "DRAFT";
+  // ECU_MASTER (super admin) puede editar el contenido de cualquier
+  // evaluación DRAFT de su institución aunque NO sea el autor.
+  // El teacherId original se conserva (atribución sigue siendo del docente).
+  const editable = (isOwner || hasRole(actor, "ECU_MASTER")) && evaluation.status === "DRAFT";
 
   // Resuelve la asignatura de la formulación para importar/exportar del banco.
   const csRes = await makeListCourseSubjects().execute({ actor });
