@@ -16,14 +16,30 @@
    * El cuadernillo doble carta ya impuesto se descarga aparte con el botón
    * "Descargar PDF", que produce un PDF server-side (Puppeteer + pdf-lib)
    * listo para llevar a imprenta.
+   *
+   * Paginado centrado al pie: número encerrado en un círculo (border +
+   * border-radius: 50%). El soporte real del círculo depende del motor
+   * de impresión: Chrome ignora `border-radius` en @page margin boxes
+   * (sale un cuadrado con borde en su lugar). Si más adelante migramos a
+   * un motor que sí respete el círculo real (Prince, PDFreactor), basta
+   * el mismo CSS.
    */
   size: letter portrait;
   margin: 2cm;
   @bottom-center {
     content: counter(page);
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 9pt;
-    color: #555;
+    font-size: 10pt;
+    font-weight: 700;
+    color: #fff;
+    background: #000;
+    border-radius: 50%;
+    display: inline-block;
+    width: 24pt;
+    height: 24pt;
+    line-height: 22pt;
+    text-align: center;
+    vertical-align: middle;
   }
 }
 
@@ -353,10 +369,32 @@
   margin-bottom: 0.6rem;
 }
 
-.subject-title {
-  font-size: 12pt;
+/* Header de página (esquina superior izquierda): "ECU [GRADO] [N° cuadernillo]".
+   La asignatura NO viaja aquí — vive en .subject-title (centrado, mayúscula,
+   negrilla) para evitar duplicados. Va al inicio del flujo del
+   .sheet.questions; en print-from-browser aparece solo en la primera
+   página de cada sheet (limitación de Chrome con position:fixed dentro
+   de multicolumna). El worker PDF (pdf-lib) lo estampa en CADA página
+   para cobertura 100% en el PDF descargado. */
+.print-page-header {
+  font-size: 10pt;
   font-weight: 700;
-  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding-bottom: 0.25rem;
+  margin-bottom: 0.4rem;
+  border-bottom: 1px solid #000;
+}
+
+/* Nombre de la asignatura: centrado, mayúscula, negrilla. Es el título
+   prominente de la asignatura dentro del sheet de preguntas. El header
+   de página lleva "ECU [GRADO] [N° cuadernillo]" sin asignatura, así
+   que este es el único lugar donde aparece el nombre del área. */
+.subject-title {
+  font-size: 14pt;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
   margin-bottom: 0.5rem;
 }
 
@@ -369,12 +407,20 @@
   letter-spacing: 0.02em;
 }
 
+/* Título del contexto: primera letra en mayúscula, resto en minúscula,
+   negrilla y centrado. El case se aplica por CSS para que un cambio
+   futuro de política solo toque el estilo y no el JSX. */
 .block-text-title {
   font-size: 12pt;
   font-weight: 700;
   font-style: italic;
   text-align: center;
+  text-transform: lowercase;
   margin: 0.4rem 0;
+}
+
+.block-text-title::first-letter {
+  text-transform: uppercase;
 }
 
 .context-paragraph {
@@ -478,6 +524,16 @@
   column-span: all;
 }
 
+/* Cada bloque de ítems (excepto el primero) inicia al comienzo de una página.
+   El selector `.block-intro ~ .block-intro` matchea cualquier .block-intro
+   que tenga otro .block-intro como hermano anterior — el primero no matchea,
+   así que no genera página en blanco al inicio. Funciona tanto en la
+   evaluación suelta (varios bloques de 1 asignatura) como en el cuadernillo
+   (varios bloques por formulación, varios sheet.questions por asignatura). */
+.questions-flow > .block-intro ~ .block-intro {
+  break-before: page;
+}
+
 .question {
   margin-bottom: 0.7rem;
   /* Ninguna pregunta se parte entre dos columnas ni entre dos páginas. */
@@ -531,6 +587,7 @@
 
 .question-options .option-letter {
   flex: 0 0 auto;
+  font-weight: 700;
 }
 
 .question-options li > :not(.option-letter) {
@@ -639,11 +696,21 @@
     break-after: auto;
   }
 
-  /* Los bloques de preguntas FLUYEN entre sí: un bloque de 2 preguntas no
-   * debe quemar una hoja entera. Solo las páginas que son de verdad
-   * independientes (portada, carátula de cada evaluación del compendio,
-   * tabla de competencias) conservan su salto. */
+  /* Cada asignatura del compendio inicia al comienzo de una página nueva.
+     La primera asignatura ya queda en su propia página porque el cover
+     (.sheet.cover-sheet) cierra con break-after: page de la regla .sheet
+     por default. Las siguientes usan el selector de hermano general
+     `~` para tomar break-before sin necesidad de tocar el JSX. */
+  .bundle-eval-section ~ .bundle-eval-section .sheet.questions {
+    break-before: page;
+  }
+
+  /* Por consistencia, también forzamos break-before en el booklet individual
+     si su primera pregunta cae al pie de una página: ningún contenido de
+     preguntas debe quedar pegado al cover (que no existe en este caso pero
+     aplica por simetría). */
   .sheet.questions {
-    break-after: auto;
+    /* sin break-after: auto - usa el default .sheet { break-after: page }
+       para que CADA asignatura quede aislada en sus propias páginas. */
   }
 }
