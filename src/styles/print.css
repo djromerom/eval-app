@@ -356,7 +356,8 @@
 .subject-title {
   font-size: 12pt;
   font-weight: 700;
-  text-align: left;
+  text-align: center;
+  text-transform: uppercase;
   margin-bottom: 0.5rem;
 }
 
@@ -369,12 +370,20 @@
   letter-spacing: 0.02em;
 }
 
+/* Título del contexto: primera letra en mayúscula, resto en minúscula,
+   negrilla y centrado. El case se aplica por CSS para que un cambio
+   futuro de política solo toque el estilo y no el JSX. */
 .block-text-title {
   font-size: 12pt;
   font-weight: 700;
   font-style: italic;
   text-align: center;
+  text-transform: lowercase;
   margin: 0.4rem 0;
+}
+
+.block-text-title::first-letter {
+  text-transform: uppercase;
 }
 
 .context-paragraph {
@@ -476,6 +485,16 @@
 .questions-flow[data-columns="2"] .section-divider,
 .questions-flow[data-columns="2"] .subject-title {
   column-span: all;
+}
+
+/* Cada bloque de ítems (excepto el primero) inicia al comienzo de una página.
+   El selector `.block-intro ~ .block-intro` matchea cualquier .block-intro
+   que tenga otro .block-intro como hermano anterior — el primero no matchea,
+   así que no genera página en blanco al inicio. Funciona tanto en la
+   evaluación suelta (varios bloques de 1 asignatura) como en el cuadernillo
+   (varios bloques por formulación, varios sheet.questions por asignatura). */
+.questions-flow > .block-intro ~ .block-intro {
+  break-before: page;
 }
 
 .question {

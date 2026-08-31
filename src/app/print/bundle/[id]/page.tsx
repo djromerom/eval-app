@@ -386,15 +386,17 @@ export default async function PrintBundlePage({
                 sus preguntas en la misma hoja. Antes era una página completa
                 para dos líneas — en un cuadernillo de 3 asignaturas eso son 3
                 cartas casi vacías. La franja sigue marcando con claridad
-                dónde empieza cada asignatura. */}
-            {evalIdx > 0 ? (
-              <div className="bundle-eval-band">
-                <span className="bundle-eval-band-title">{evaluation.title}</span>
-                <span className="bundle-eval-band-part">
-                  Parte {item.order} de {validEvaluations.length}
-                </span>
-              </div>
-            ) : null}
+                dónde empieza cada asignatura.
+                Antes solo aparecía a partir de la 2da (evalIdx > 0) — la 1ra
+                evaluación del cuadernillo no mostraba su nombre en la apertura
+                (solo en el cover). Ahora aparece en TODAS para que el nombre
+                sea visible junto a las preguntas desde el inicio. */}
+            <div className="bundle-eval-band">
+              <span className="bundle-eval-band-title">{evaluation.title}</span>
+              <span className="bundle-eval-band-part">
+                Parte {item.order} de {validEvaluations.length}
+              </span>
+            </div>
             {/* UN solo contenedor por formulación, igual que en el booklet de
                 una formulación suelta: a dos columnas el texto fluye de la
                 izquierda a la derecha y de ahí a la página siguiente. Con un
@@ -425,7 +427,7 @@ export default async function PrintBundlePage({
                           </p>
                         )}
                         {section.title ? (
-                          <p className="block-text-title">«{section.title.toUpperCase()}»</p>
+                          <p className="block-text-title">«{section.title}»</p>
                         ) : null}
                         {hasContext ? (
                           <RichText value={section.content} className="context-paragraph" />
