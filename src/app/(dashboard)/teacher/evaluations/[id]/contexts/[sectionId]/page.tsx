@@ -64,6 +64,7 @@ export default async function ContextEditorPage({
       title: section.title,
       content: section.content,
       snippet: richTextToPlain(section.content).slice(0, 320),
+      columnLayoutOverride: section.columnLayoutOverride,
       questions: section.questions.map((q) => ({
         id: q.id,
         number: q.number,

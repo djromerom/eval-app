@@ -13,6 +13,7 @@ import type {
   EvaluationRepository,
   EvaluationSection,
   Question,
+  SectionColumnLayout,
   SoloLevel,
   UpdateEvaluationSettingsData,
   UpdateQuestionData,
@@ -62,6 +63,8 @@ type SectionRow = {
   title: string | null;
   content: Prisma.JsonValue;
   order: number;
+  /** Override del layout de impresión (`null` = "auto" / heurística). */
+  columnLayoutOverride: string | null;
   questions: {
     id: string;
     number: number;
@@ -111,6 +114,7 @@ function toSection(s: SectionRow): EvaluationSection {
     title: s.title,
     content: s.content,
     order: s.order,
+    columnLayoutOverride: parseColumnLayoutOverride(s.columnLayoutOverride),
     questions: s.questions.map((q) => ({
       id: q.id,
       number: q.number,
@@ -126,6 +130,17 @@ function toSection(s: SectionRow): EvaluationSection {
       options: q.options.map((o) => ({ key: o.key as AnswerKey, text: o.text })),
     })),
   };
+}
+
+/**
+ * Convierte el valor crudo de la BD (`string | null`) al tipo del dominio.
+ * Tolera valores viejos o basura cayendo a `null` (auto), porque la columna
+ * se llenó en producción sin constraint y un valor inválido no debe romper
+ * el render del cuadernillo.
+ */
+function parseColumnLayoutOverride(raw: string | null): SectionColumnLayout | null {
+  if (raw === "1col" || raw === "2col") return raw;
+  return null;
 }
 
 const json = (v: unknown): Prisma.InputJsonValue => (v ?? {}) as Prisma.InputJsonValue;
@@ -290,6 +305,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         title: data.title ?? null,
         content: json(data.content),
         order,
+        columnLayoutOverride: data.columnLayoutOverride ?? null,
       },
       include: { questions: { include: { options: true } } },
     });
@@ -314,6 +330,10 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
       data: {
         ...(data.title !== undefined ? { title: data.title } : {}),
         ...(data.content !== undefined ? { content: json(data.content) } : {}),
+        // `null` explícito = vuelve a "auto"; `undefined` (ausente) = no se toca.
+        ...(data.columnLayoutOverride !== undefined
+          ? { columnLayoutOverride: data.columnLayoutOverride }
+          : {}),
       },
       include: { questions: { include: { options: true }, orderBy: { number: "asc" } } },
     });
@@ -652,6 +672,10 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
             title: section.title,
             content: json(section.content),
             order: section.order,
+            // El override de columnas de impresión se arrastra a la nueva
+            // versión: si el docente lo eligió por sección, la copia sale
+            // con la misma configuración (Commit 2).
+            columnLayoutOverride: section.columnLayoutOverride,
             questions: {
               create: section.questions.map((q) => ({
                 number: q.number,

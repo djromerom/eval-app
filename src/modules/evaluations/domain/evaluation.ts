@@ -34,6 +34,21 @@ export interface Evaluation {
   theme: unknown;
 }
 
+/**
+ * Override del layout de impresión por sección (sprint de baja densidad,
+ * ago 2026). `null` = "auto" (la heurística `computeSectionDensity` decide);
+ * `"1col"` fuerza 1 columna; `"2col"` fuerza 2 columnas.
+ *
+ * El docente lo edita por sección desde el editor (SectionForm/SectionEditor)
+ * y el cuadernillo impreso lo lee para resolver la densidad efectiva.
+ */
+export type SectionColumnLayout = "1col" | "2col";
+
+export const SECTION_COLUMN_LAYOUTS = [
+  "1col",
+  "2col",
+] as const satisfies readonly SectionColumnLayout[];
+
 /** Bloque de contexto: agrupa preguntas bajo un texto/imagen/tabla común. */
 export interface EvaluationSection {
   id: string;
@@ -41,6 +56,9 @@ export interface EvaluationSection {
   content: unknown; // TipTap JSON
   order: number;
   questions: Question[];
+  /** Override del layout de impresión. `null` = decisión automática por
+   *  heurística (ver `computeSectionDensity`). Sprint de baja densidad. */
+  columnLayoutOverride: SectionColumnLayout | null;
 }
 
 export interface Question {
@@ -150,6 +168,8 @@ export interface CreateEvaluationData {
 export interface CreateSectionData {
   title?: string;
   content?: unknown; // TipTap JSON; por defecto vacío
+  /** Override del layout de impresión. Si se omite, queda en `null` (auto). */
+  columnLayoutOverride?: SectionColumnLayout | null;
 }
 
 /** Edición de un contexto. Campos ausentes = no se tocan. */
@@ -157,6 +177,8 @@ export interface UpdateSectionData {
   /** `null` limpia el título (el contexto pasa a rotularse "Contexto N"). */
   title?: string | null;
   content?: unknown; // TipTap JSON
+  /** Override del layout de impresión. `null` explícito = vuelve a "auto". */
+  columnLayoutOverride?: SectionColumnLayout | null;
 }
 
 /**

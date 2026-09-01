@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeSectionDensity,
+  resolveSectionDensity,
   richTextCharCount,
 } from "@/modules/printing/domain/section-density";
 import type {
@@ -53,7 +54,19 @@ function seccion(preguntas: Question[]): EvaluationSection {
     title: null,
     content: null,
     order: 0,
+    columnLayoutOverride: null,
     questions: preguntas,
+  };
+}
+
+/** Construye una sección con override explícito. */
+function seccionConOverride(
+  preguntas: Question[],
+  override: "1col" | "2col" | null,
+): EvaluationSection {
+  return {
+    ...seccion(preguntas),
+    columnLayoutOverride: override,
   };
 }
 
@@ -184,5 +197,63 @@ describe("computeSectionDensity", () => {
     const cuerpo137 = "w".repeat(137);
     const preguntasLow2 = Array.from({ length: 5 }, () => pregunta(opciones, cuerpo137));
     expect(computeSectionDensity(seccion(preguntasLow2))).toBe("low");
+  });
+});
+
+describe("resolveSectionDensity", () => {
+  // Casos base: la heurística decidiría "low" (ítems cortos con varias opciones)
+  // o "high" (ítems largos) según el contenido. El override se aplica sobre eso.
+
+  it("override null → delega en la heurística (caso low)", () => {
+    const opciones = ["a", "b", "c", "d"];
+    const preguntas = Array.from({ length: 5 }, () => pregunta(opciones));
+    expect(resolveSectionDensity(seccionConOverride(preguntas, null))).toBe("low");
+  });
+
+  it("override null → delega en la heurística (caso high)", () => {
+    const cuerpoLargo = "y".repeat(200);
+    const preguntas = Array.from({ length: 5 }, () => pregunta(["a", "b", "c", "d"], cuerpoLargo));
+    expect(resolveSectionDensity(seccionConOverride(preguntas, null))).toBe("high");
+  });
+
+  it('override "2col" fuerza low aunque la heurística diría high', () => {
+    const cuerpoLargo = "y".repeat(200);
+    const preguntas = Array.from({ length: 5 }, () => pregunta(["a", "b", "c", "d"], cuerpoLargo));
+    expect(resolveSectionDensity(seccionConOverride(preguntas, "2col"))).toBe("low");
+  });
+
+  it('override "1col" fuerza high aunque la heurística diría low', () => {
+    // Ítems muy cortos: la heurística diría "low" (matching A-H).
+    const opciones = [
+      "bag",
+      "bottle",
+      "camera",
+      "countryside",
+      "helmet",
+      "map",
+      "station",
+      "sweater",
+    ];
+    const preguntas = Array.from({ length: 5 }, () =>
+      pregunta(opciones, "You put your clothes in it."),
+    );
+    expect(resolveSectionDensity(seccionConOverride(preguntas, "1col"))).toBe("high");
+  });
+
+  it('override "1col" también gana sobre imagen (forzar 1-col es seguro)', () => {
+    const preguntas = Array.from({ length: 5 }, (_, i) =>
+      i === 2
+        ? { ...pregunta(["a", "b", "c", "d"]), image: "/x.jpg" }
+        : pregunta(["a", "b", "c", "d"]),
+    );
+    expect(resolveSectionDensity(seccionConOverride(preguntas, "1col"))).toBe("high");
+  });
+
+  it("coincide con computeSectionDensity cuando override es null", () => {
+    const preguntas = Array.from({ length: 5 }, () => pregunta(["a", "b", "c", "d"]));
+    const sinOverride = seccion(preguntas);
+    const conNull = seccionConOverride(preguntas, null);
+    expect(resolveSectionDensity(sinOverride)).toBe(computeSectionDensity(sinOverride));
+    expect(resolveSectionDensity(conNull)).toBe(computeSectionDensity(conNull));
   });
 });

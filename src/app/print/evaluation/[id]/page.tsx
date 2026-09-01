@@ -12,7 +12,7 @@ import { RichText, RichTextInline } from "@/components/editor/rich-text";
 import { richTextHasRenderableContent } from "@/shared/domain/rich-text";
 import { inlineSectionsImages } from "@/modules/uploads/application/inline-content-images";
 import { isWideQuestion } from "@/modules/printing/domain/wide-question";
-import { computeSectionDensity } from "@/modules/printing/domain/section-density";
+import { resolveSectionDensity } from "@/modules/printing/domain/section-density";
 import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import { PrintButton } from "./print-button";
 
@@ -85,9 +85,10 @@ export default async function PrintEvaluationPage({
             const last = numbers[numbers.length - 1];
             const hasContext = richTextHasRenderableContent(section.content);
             // Densidad de impresión: heurística detecta matching/V-F/secciones
-            // cortas → "low" (2 columnas). El override del docente llega en
-            // Commit 2; mientras tanto la heurística decide por sección.
-            const density = computeSectionDensity(section);
+            // cortas → "low" (2 columnas). El override del docente
+            // (`columnLayoutOverride`) gana sobre la heurística cuando existe;
+            // `resolveSectionDensity` aplica esa lógica.
+            const density = resolveSectionDensity(section);
             return (
               <Fragment key={section.id}>
                 {/* Separador configurable (line / double / dots) — el primer
