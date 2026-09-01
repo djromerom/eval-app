@@ -544,6 +544,38 @@
   break-before: page;
 }
 
+/* Contenedor de las preguntas de UNA sección (cada sección del cuadernillo
+ * tiene su propio `.questions-list` dentro de `.questions-flow`).
+ *
+ * data-density="low" → secciones con ítems cortos (matching A–H, V/F,
+ * completar) que desperdiciarían media página en una sola columna. La
+ * heurística `computeSectionDensity()` decide esto por sección; el docente
+ * podrá sobreescribirlo en Commit 2.
+ *
+ * `column-span: all` saca la sección del flujo de columnas del padre
+ * (.questions-flow) para que ocupe el ancho completo; adentro se hace el
+ * propio multicolumna. `column-fill: auto` llena la primera columna antes
+ * de saltar a la segunda — sin esto, Chrome balancea y deja la columna
+ * derecha corta (mismo motivo del comentario de `.questions-flow` arriba).
+ *
+ * `column-rule` reemplaza al `border-right` del encajonado light del
+ * .question, así que se apaga en las preguntas adentro (ver abajo). */
+.questions-list[data-density="low"] {
+  column-span: all;
+  column-count: 2;
+  column-gap: 0.6cm;
+  column-rule: 1px solid #ccc;
+  column-fill: auto;
+  list-style: none;
+  padding-left: 0;
+  margin: 0 0 0.5rem 0;
+}
+
+.questions-list[data-density="low"] .question {
+  border-right: 0;
+  padding-right: 0;
+}
+
 .question {
   margin-bottom: 0.7rem;
   border-right: 1px solid #ccc;

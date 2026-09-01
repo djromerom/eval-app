@@ -13,6 +13,7 @@ import { fitCoverToIframe } from "@/modules/bundle-cover/application/fit-cover-t
 import { makeLoadCoverHtml } from "@/modules/cover-html/infrastructure/container";
 import { inlineSectionsImages } from "@/modules/uploads/application/inline-content-images";
 import { isWideQuestion } from "@/modules/printing/domain/wide-question";
+import { computeSectionDensity } from "@/modules/printing/domain/section-density";
 import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import { computeCoverTable, formatDuration } from "@/modules/bundles/domain/cover-table";
 import { getResolvedBundleTheme } from "@/modules/theme/application/get-resolved-bundle-theme";
@@ -413,6 +414,10 @@ export default async function PrintBundlePage({
                   const first = numbers[0];
                   const last = numbers[numbers.length - 1];
                   const hasContext = richTextHasRenderableContent(section.content);
+                  // Densidad de impresión: heurística detecta matching/V-F/secciones
+                  // cortas → "low" (2 columnas). El override del docente llega en
+                  // Commit 2; mientras tanto la heurística decide por sección.
+                  const density = computeSectionDensity(section);
                   return (
                     <Fragment key={section.id}>
                       {idx > 0 ? (
@@ -435,24 +440,32 @@ export default async function PrintBundlePage({
                         ) : null}
                       </div>
 
-                      {section.questions.map((q) => (
-                        <div key={q.id} className={`question${isWideQuestion(q) ? "wide" : ""}`}>
-                          <p className="question-text">
-                            <span className="item-number">
-                              {(q as unknown as { globalNumber: number }).globalNumber}.
-                            </span>{" "}
-                            <RichTextInline value={q.text} />
-                          </p>
-                          <ul className="question-options">
-                            {q.options.map((o) => (
-                              <li key={o.key}>
-                                <span className="option-letter">{o.key}.</span>{" "}
-                                <RichTextInline value={o.text} />
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
+                      {/* Contenedor de las preguntas de ESTA sección.
+                          data-density="low" activa el layout de 2 columnas en
+                          print.css; "high" mantiene el flujo vertical normal.
+                          Las preguntas wide (con imagen/tabla) ya tienen
+                          column-span: all, así que cruzan ambas columnas
+                          sin importar la densidad. */}
+                      <ul className="questions-list" data-density={density}>
+                        {section.questions.map((q) => (
+                          <div key={q.id} className={`question${isWideQuestion(q) ? "wide" : ""}`}>
+                            <p className="question-text">
+                              <span className="item-number">
+                                {(q as unknown as { globalNumber: number }).globalNumber}.
+                              </span>{" "}
+                              <RichTextInline value={q.text} />
+                            </p>
+                            <ul className="question-options">
+                              {q.options.map((o) => (
+                                <li key={o.key}>
+                                  <span className="option-letter">{o.key}.</span>{" "}
+                                  <RichTextInline value={o.text} />
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </ul>
                     </Fragment>
                   );
                 })}
