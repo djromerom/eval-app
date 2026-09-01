@@ -100,6 +100,7 @@ export default async function EvaluationDetailPage({
                     title={section.title}
                     content={section.content}
                     questionCount={section.questions.length}
+                    columnLayoutOverride={section.columnLayoutOverride}
                   >
                     <RichText value={section.content} className="text-muted-foreground" />
                   </SectionEditor>

@@ -46,6 +46,7 @@ export function SectionEditor({
   title,
   content,
   questionCount,
+  columnLayoutOverride,
   children,
 }: {
   evaluationId: string;
@@ -55,6 +56,8 @@ export function SectionEditor({
   title: string | null;
   content: unknown;
   questionCount: number;
+  /** Override del layout de impresión (`null` = auto / heurística). */
+  columnLayoutOverride: string | null;
   /** Render del contenido en modo lectura (RichText del server component).
    *  Opcional: si no se pasa, el componente solo expone el header con
    *  Editar / Eliminar, útil cuando el padre ya pinta el contenido por su
@@ -99,6 +102,20 @@ export function SectionEditor({
             Contenido del contexto (texto, tablas, imágenes, fórmulas $…$)
           </label>
           <RichTextEditor name="content" defaultValue={content} minHeightClass="min-h-20" />
+        </div>
+        <div>
+          <label className="text-muted-foreground mb-1 block text-xs font-medium">
+            Columnas en impresión
+          </label>
+          <select
+            name="columnLayoutOverride"
+            defaultValue={columnLayoutOverride ?? ""}
+            className="border-input bg-background focus-visible:ring-ring h-9 w-full max-w-md rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
+          >
+            <option value="">Automático</option>
+            <option value="1col">1 columna</option>
+            <option value="2col">2 columnas</option>
+          </select>
         </div>
         {state.error ? <p className="text-destructive text-sm">{state.error}</p> : null}
         <div className="flex items-center gap-2">

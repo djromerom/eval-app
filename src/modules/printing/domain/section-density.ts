@@ -11,7 +11,8 @@
  * Vive en `printing/domain` porque es decisión de layout, no de negocio.
  *
  * El docente puede sobreescribir la decisión por sección desde el editor
- * (Commit 2 del sprint). Mientras tanto, esta heurística marca el default.
+ * (override `columnLayoutOverride` en `EvaluationSection`). `resolveSectionDensity`
+ * aplica el override sobre la heurística.
  */
 
 import type { EvaluationSection } from "@/modules/evaluations/domain/evaluation";
@@ -55,6 +56,24 @@ export function computeSectionDensity(section: EvaluationSection): SectionDensit
   const avgChars = totalChars / items.length;
 
   return avgChars < LOW_DENSITY_AVG_CHARS ? "low" : "high";
+}
+
+/**
+ * Resuelve la densidad efectiva de impresión: aplica el override del docente
+ * (si existe) sobre la heurística.
+ *
+ * - `columnLayoutOverride === "2col"` → `"low"` (forzar 2 columnas).
+ * - `columnLayoutOverride === "1col"` → `"high"` (forzar 1 columna).
+ * - `columnLayoutOverride === null` → heurística decide.
+ *
+ * Las páginas de impresión (`/print/bundle/[id]`, `/print/evaluation/[id]`)
+ * usan esta función en vez de `computeSectionDensity` directamente para que
+ * el override llegue al render sin lógica duplicada.
+ */
+export function resolveSectionDensity(section: EvaluationSection): SectionDensity {
+  if (section.columnLayoutOverride === "2col") return "low";
+  if (section.columnLayoutOverride === "1col") return "high";
+  return computeSectionDensity(section);
 }
 
 /**
