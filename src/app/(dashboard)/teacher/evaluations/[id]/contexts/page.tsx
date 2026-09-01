@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/session";
+import { hasRole } from "@/shared/application/authenticated-user";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/evaluations/status-badge";
 import { richTextToPlain } from "@/components/editor/render";
@@ -20,12 +21,14 @@ export const metadata = { title: "Contextos" };
  */
 export default async function ContextsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const result = await makeGetEvaluation().execute({ actor, id });
   if (!result.ok) notFound();
   const evaluation = result.value;
 
-  const editable = evaluation.teacherId === actor.userId && evaluation.status === "DRAFT";
+  const editable =
+    (evaluation.teacherId === actor.userId || hasRole(actor, "ECU_MASTER")) &&
+    evaluation.status === "DRAFT";
 
   const contexts: ContextCardData[] = evaluation.sections.map((section) => {
     const competencies = Array.from(

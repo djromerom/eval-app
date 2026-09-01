@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/session";
+import { hasRole } from "@/shared/application/authenticated-user";
 import { PageHeader } from "@/components/page-header";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { StatusBadge } from "@/components/evaluations/status-badge";
@@ -33,13 +34,15 @@ export default async function UnifiedEditorPage({
 }) {
   const { id } = await params;
   const { from } = await searchParams;
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const result = await makeGetEvaluation().execute({ actor, id });
   if (!result.ok) notFound();
   const evaluation = result.value;
 
   const isOwner = evaluation.teacherId === actor.userId;
-  const editable = isOwner && evaluation.status === "DRAFT";
+  // ECU_MASTER (super admin) puede editar el contenido de cualquier
+  // evaluación DRAFT de su institución aunque NO sea el autor.
+  const editable = (isOwner || hasRole(actor, "ECU_MASTER")) && evaluation.status === "DRAFT";
   // Cuando el docente llega desde el listado "Mis formulaciones" (?from=list),
   // la card de creación/edición arranca OCULTA. El listado es un índice: el
   // docente hace click para entrar a editar UN ítem puntual, no a llenar el

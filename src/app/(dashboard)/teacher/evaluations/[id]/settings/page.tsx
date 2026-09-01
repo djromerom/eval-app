@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/session";
+import { hasRole } from "@/shared/application/authenticated-user";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/evaluations/status-badge";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
@@ -16,13 +17,15 @@ export default async function EvaluationSettingsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const result = await makeGetEvaluation().execute({ actor, id });
   if (!result.ok) notFound();
   const evaluation = result.value;
 
   const isOwner = evaluation.teacherId === actor.userId;
-  const editable = isOwner && evaluation.status === "DRAFT";
+  // ECU_MASTER puede editar el contenido de cualquier evaluación DRAFT de su
+  // institución aunque NO sea el autor (coherente con UpdateEvaluationSettings).
+  const editable = (isOwner || hasRole(actor, "ECU_MASTER")) && evaluation.status === "DRAFT";
 
   const fallbackMinutes = Math.round(evaluation.totalQuestions * DEFAULT_MINUTES_PER_QUESTION);
 

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireAuthenticatedUser } from "@/lib/session";
+import { hasRole } from "@/shared/application/authenticated-user";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/evaluations/status-badge";
 import { richTextToPlain } from "@/components/editor/render";
@@ -25,7 +26,7 @@ export default async function ContextEditorPage({
   params: Promise<{ id: string; sectionId: string }>;
 }) {
   const { id, sectionId } = await params;
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const result = await makeGetEvaluation().execute({ actor, id });
   if (!result.ok) notFound();
   const evaluation = result.value;
@@ -34,7 +35,9 @@ export default async function ContextEditorPage({
   if (!section) notFound();
 
   const isOwner = evaluation.teacherId === actor.userId;
-  const editable = isOwner && evaluation.status === "DRAFT";
+  // ECU_MASTER (super admin) puede editar el contenido de cualquier
+  // evaluación DRAFT de su institución aunque NO sea el autor.
+  const editable = (isOwner || hasRole(actor, "ECU_MASTER")) && evaluation.status === "DRAFT";
 
   // Mismo truco que el editor clásico: resolvemos subjectId para poder
   // importar del banco de preguntas filtrado por asignatura.

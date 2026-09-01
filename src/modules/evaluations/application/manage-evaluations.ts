@@ -200,7 +200,13 @@ async function loadOwnedDraft(
 ): Promise<Result<Evaluation>> {
   const evaluation = await evaluations.findById(actor.institutionId, evaluationId);
   if (!evaluation) return fail(new NotFoundError("Formulación", evaluationId));
-  if (evaluation.teacherId !== actor.userId) {
+  // ECU_MASTER (super admin) puede editar el contenido de cualquier
+  // evaluación DRAFT de su institución aunque NO sea el autor. El
+  // teacherId original se conserva: el admin "colabora" en el formulario
+  // pero la titularidad sigue siendo del docente.
+  // (ago 2026: cierre del gap histórico donde el admin solo podía leer
+  // y el docente tenía que pedir el cambio.)
+  if (evaluation.teacherId !== actor.userId && !hasRole(actor, "ECU_MASTER")) {
     return fail(new ValidationError("Solo el autor puede editar la formulación."));
   }
   if (evaluation.status !== "DRAFT") {
@@ -259,7 +265,7 @@ export class AddSection implements UseCase<AddSectionInput, EvaluationSection> {
     evaluationId,
     data,
   }: AddSectionInput): Promise<Result<EvaluationSection>> {
-    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER", "ECU_MASTER");
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
@@ -284,7 +290,7 @@ export class UpdateSection implements UseCase<UpdateSectionInput, EvaluationSect
     sectionId,
     data,
   }: UpdateSectionInput): Promise<Result<EvaluationSection>> {
-    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER", "ECU_MASTER");
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
@@ -309,7 +315,7 @@ export class DeleteSection implements UseCase<DeleteSectionInput, void> {
   constructor(private readonly evaluations: EvaluationRepository) {}
 
   async execute({ actor, evaluationId, sectionId }: DeleteSectionInput): Promise<Result<void>> {
-    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER", "ECU_MASTER");
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
@@ -337,7 +343,7 @@ export class AddQuestion implements UseCase<AddQuestionInput, Question> {
     sectionId,
     data,
   }: AddQuestionInput): Promise<Result<Question>> {
-    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER", "ECU_MASTER");
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
@@ -387,7 +393,7 @@ export class UpdateQuestion implements UseCase<UpdateQuestionInput, Question> {
     questionId,
     data,
   }: UpdateQuestionInput): Promise<Result<Question>> {
-    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER", "ECU_MASTER");
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
@@ -451,7 +457,7 @@ export class DeleteQuestion implements UseCase<DeleteQuestionInput, void> {
   ) {}
 
   async execute({ actor, evaluationId, questionId }: DeleteQuestionInput): Promise<Result<void>> {
-    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER", "ECU_MASTER");
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
@@ -518,7 +524,7 @@ export class DuplicateQuestion implements UseCase<DuplicateQuestionInput, void> 
     evaluationId,
     questionId,
   }: DuplicateQuestionInput): Promise<Result<void>> {
-    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER", "ECU_MASTER");
     if (!authorized.ok) return authorized;
     const owned = await loadOwnedDraft(this.evaluations, actor, evaluationId);
     if (!owned.ok) return owned;
@@ -625,7 +631,7 @@ export class ReorderQuestions implements UseCase<ReorderQuestionsInput, void> {
     sectionId,
     orderedQuestionIds,
   }: ReorderQuestionsInput): Promise<Result<void>> {
-    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
+    const authorized = requireRole(actor, "TEACHER", "ECU_LIDER", "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
     if (orderedQuestionIds.length === 0) {

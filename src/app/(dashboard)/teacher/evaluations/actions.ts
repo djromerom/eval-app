@@ -160,7 +160,7 @@ export async function addSectionAction(
   _prev: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const evaluationId = str(formData, "evaluationId");
   const result = await makeAddSection().execute({
     actor,
@@ -183,7 +183,7 @@ export async function updateSectionAction(
   _prev: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const evaluationId = str(formData, "evaluationId");
   const result = await makeUpdateSection().execute({
     actor,
@@ -205,7 +205,7 @@ export async function deleteSectionAction(
   _prev: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const evaluationId = str(formData, "evaluationId");
   const result = await makeDeleteSection().execute({
     actor,
@@ -221,7 +221,7 @@ export async function addQuestionAction(
   _prev: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const evaluationId = str(formData, "evaluationId");
   const soloLevel = str(formData, "soloLevel");
   const weightRaw = str(formData, "weight");
@@ -270,7 +270,7 @@ export async function updateQuestionAction(
   _prev: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const evaluationId = str(formData, "evaluationId");
   const soloLevel = str(formData, "soloLevel");
   const weightRaw = str(formData, "weight");
@@ -306,7 +306,7 @@ export async function deleteQuestionAction(
   _prev: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const evaluationId = str(formData, "evaluationId");
   const result = await makeDeleteQuestion().execute({
     actor,
@@ -328,7 +328,7 @@ export async function duplicateQuestionAction(
   _prev: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const evaluationId = str(formData, "evaluationId");
   const result = await makeDuplicateQuestion().execute({
     actor,
@@ -348,7 +348,7 @@ export async function duplicateQuestionAction(
  * El use case valida pertenencia, DRAFT-only y ownership antes de renumerar.
  */
 export async function reorderQuestionsAction(formData: FormData): Promise<AdminFormState> {
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const evaluationId = str(formData, "evaluationId");
   const sectionId = str(formData, "sectionId");
   const orderedIdsRaw = str(formData, "orderedIds");
@@ -377,7 +377,7 @@ export async function reorderQuestionsAction(formData: FormData): Promise<AdminF
 }
 
 export async function submitForReviewAction(formData: FormData): Promise<void> {
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const evaluationId = str(formData, "evaluationId");
   const result = await makeChangeEvaluationStatus().execute({
     actor,
@@ -398,7 +398,7 @@ export async function submitForReviewAction(formData: FormData): Promise<void> {
  * revalida todas las rutas donde la formulación aparece como estado.
  */
 export async function publishEvaluationAction(formData: FormData): Promise<void> {
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
   const evaluationId = str(formData, "evaluationId");
   const result = await makeChangeEvaluationStatus().execute({
     actor,
