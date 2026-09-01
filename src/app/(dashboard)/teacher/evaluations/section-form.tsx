@@ -39,6 +39,20 @@ export function SectionForm({ evaluationId }: { evaluationId: string }) {
         </label>
         <RichTextEditor name="content" minHeightClass="min-h-20" />
       </div>
+      <div>
+        <label className="text-muted-foreground mb-1 block text-xs font-medium">
+          Columnas en impresión
+        </label>
+        <select
+          name="columnLayoutOverride"
+          defaultValue=""
+          className="border-input bg-background focus-visible:ring-ring h-9 w-full max-w-md rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
+        >
+          <option value="">Automático</option>
+          <option value="1col">1 columna</option>
+          <option value="2col">2 columnas</option>
+        </select>
+      </div>
       {state.error ? <p className="text-destructive text-sm">{state.error}</p> : null}
       <SubmitButton />
     </form>

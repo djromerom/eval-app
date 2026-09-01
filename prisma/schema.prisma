@@ -470,6 +470,10 @@ model EvaluationSection {
   content      Json // TipTap JSON (rich text con KaTeX, imágenes, tablas)
   order        Int
   createdAt    DateTime   @default(now())
+  /// Override del layout de impresión por sección. NULL = "auto" (heurística
+  /// decide). Valores: "1col" = forzar 1 columna, "2col" = forzar 2 columnas.
+  /// Sprint de baja densidad (ago 2026).
+  columnLayoutOverride String?
 
   questions Question[]
 

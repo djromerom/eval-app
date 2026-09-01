@@ -34,6 +34,8 @@ interface SectionLite {
   title: string | null;
   content: unknown;
   snippet: string;
+  /** Override del layout de impresión (`null` = auto / heurística). */
+  columnLayoutOverride: string | null;
   questions: QuestionLite[];
 }
 
@@ -119,6 +121,7 @@ export function ContextEditor({ data }: { data: ContextEditorData }) {
               title={data.section.title}
               content={data.section.content}
               questionCount={data.section.questions.length}
+              columnLayoutOverride={data.section.columnLayoutOverride}
             />
           ) : null}
           <Link href={indexHref} className="text-primary text-xs font-semibold hover:underline">

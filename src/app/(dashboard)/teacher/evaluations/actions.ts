@@ -5,7 +5,12 @@ import { redirect } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/session";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import type { AnswerKey, SoloLevel } from "@/modules/evaluations/domain/evaluation";
-import { MIN_OPTIONS, ANSWER_KEYS_ORDER } from "@/modules/evaluations/domain/evaluation";
+import {
+  MIN_OPTIONS,
+  ANSWER_KEYS_ORDER,
+  SECTION_COLUMN_LAYOUTS,
+  type SectionColumnLayout,
+} from "@/modules/evaluations/domain/evaluation";
 import { env } from "@/config/env";
 import {
   makeListAcademicYears,
@@ -27,6 +32,25 @@ import {
 
 function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
+}
+
+/**
+ * Parsea el override de layout de impresión del formData.
+ *
+ * - Vacío o ausente → `null` (auto / heurística).
+ * - "1col" / "2col" → el valor tipado.
+ * - Cualquier otro valor (por tampering del cliente) → `null` defensivo.
+ *
+ * El setter por sección es opt-in: si el docente no toca el select, queda
+ * en `null` y la heurística decide. Si pone "2col", el cuadernillo ignora
+ * la heurística y fuerza 2 columnas para esa sección.
+ */
+function parseColumnLayoutOverride(formData: FormData, key: string): SectionColumnLayout | null {
+  const raw = String(formData.get(key) ?? "").trim();
+  if (!raw) return null;
+  return (SECTION_COLUMN_LAYOUTS as readonly string[]).includes(raw)
+    ? (raw as SectionColumnLayout)
+    : null;
 }
 
 /** Parsea el JSON del editor rico; si no es JSON válido, lo trata como texto.
@@ -141,7 +165,11 @@ export async function addSectionAction(
   const result = await makeAddSection().execute({
     actor,
     evaluationId,
-    data: { title: str(formData, "title") || undefined, content: rich(formData, "content") },
+    data: {
+      title: str(formData, "title") || undefined,
+      content: rich(formData, "content"),
+      columnLayoutOverride: parseColumnLayoutOverride(formData, "columnLayoutOverride"),
+    },
   });
   if (!result.ok) return { error: result.error.message };
   revalidatePath(`/teacher/evaluations/${evaluationId}`);
@@ -162,7 +190,11 @@ export async function updateSectionAction(
     evaluationId,
     sectionId: str(formData, "sectionId"),
     // Título vacío → null: el contexto vuelve a rotularse "Contexto N".
-    data: { title: str(formData, "title") || null, content: rich(formData, "content") },
+    data: {
+      title: str(formData, "title") || null,
+      content: rich(formData, "content"),
+      columnLayoutOverride: parseColumnLayoutOverride(formData, "columnLayoutOverride"),
+    },
   });
   if (!result.ok) return { error: result.error.message };
   revalidatePath(`/teacher/evaluations/${evaluationId}`);
