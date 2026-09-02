@@ -4,6 +4,7 @@ import "@/styles/print.css";
 import { notFound } from "next/navigation";
 import { resolvePrintActor } from "@/lib/print-access";
 import { isPrintable } from "@/modules/evaluations/domain/evaluation-status";
+import type { EvaluationSection } from "@/modules/evaluations/domain/evaluation";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
 import { makeListCourseSubjects } from "@/modules/academic/infrastructure/container";
 import { getResolvedTheme } from "@/modules/theme/application/get-resolved-theme";
@@ -12,7 +13,8 @@ import { RichText, RichTextInline } from "@/components/editor/rich-text";
 import { richTextHasRenderableContent } from "@/shared/domain/rich-text";
 import { inlineSectionsImages } from "@/modules/uploads/application/inline-content-images";
 import { isWideQuestion } from "@/modules/printing/domain/wide-question";
-import { computeSectionDensity } from "@/modules/printing/domain/section-density";
+import { resolveGroupDensity } from "@/modules/printing/domain/section-density";
+import { groupSectionsForPrint } from "@/modules/printing/domain/section-grouping";
 import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import { PrintButton } from "./print-button";
 
@@ -79,60 +81,76 @@ export default async function PrintEvaluationPage({
         </div>
         {area ? <p className="subject-title">{area}</p> : null}
         <div className="questions-flow" data-columns={theme.questionColumns}>
-          {evaluation.sections.map((section, idx) => {
-            const numbers = section.questions.map((q) => q.number);
-            const first = numbers[0];
-            const last = numbers[numbers.length - 1];
-            const hasContext = richTextHasRenderableContent(section.content);
-            // Densidad de impresión: heurística detecta matching/V-F/secciones
-            // cortas → "low" (2 columnas). El override del docente llega en
-            // Commit 2; mientras tanto la heurística decide por sección.
-            const density = computeSectionDensity(section);
+          {groupSectionsForPrint(evaluation.sections).map((group, idx) => {
+            // Densidad a nivel de grupo: las "ninguno" consecutivas se
+            // suman y la heurística por chars/ítem decide si el bloque
+            // entero cabe en 2-col. El override del docente se respeta
+            // solo en `single` y en la 1ª sección de un `none-merged`.
+            const density = resolveGroupDensity(group);
+            const sectionsInGroup: EvaluationSection[] =
+              group.kind === "single" ? [group.section] : group.sections;
+            const allNumbers = sectionsInGroup.flatMap((s) =>
+              s.questions.map((q: { number: number }) => q.number),
+            );
+            const first = allNumbers[0];
+            const last = allNumbers[allNumbers.length - 1];
+            const isMerged = group.kind === "none-merged";
+            // block-intro: en `single`, usa su título/contenido; en
+            // `none-merged`, solo la 1ª sección emite contexto (y los
+            // section-divider intermedios entre las demás "ninguno" se
+            // suprimen ya que están en el mismo grupo).
+            const headSection = sectionsInGroup[0]!;
+            const headHasContext = richTextHasRenderableContent(headSection.content);
+            const showLead = allNumbers.length > 1 && (headHasContext || headSection.title);
             return (
-              <Fragment key={section.id}>
+              <Fragment key={isMerged ? `merged-${headSection.id}` : headSection.id}>
                 {/* Separador configurable (line / double / dots) — el primer
                     bloque no lleva, los demás sí. */}
                 {idx > 0 ? <hr className={`section-divider ${theme.sectionDivider}`} /> : null}
 
-                {/* Agrupado para que el contexto no se separe de su 1ª pregunta. */}
+                {/* Agrupado para que el contexto no se separe de su 1ª pregunta.
+                    En `none-merged`, el head emite intro; las demás secciones
+                    del grupo se renderean sin su propio intro ni divider. */}
                 <div className="block-intro">
-                  {numbers.length > 1 && (
+                  {allNumbers.length > 1 && (
                     <p className="block-lead">
                       RESPONDA LAS PREGUNTAS {first} A LA {last}
-                      {hasContext || section.title
-                        ? " DE ACUERDO CON LA SIGUIENTE INFORMACIÓN"
-                        : ""}
+                      {showLead ? " DE ACUERDO CON LA SIGUIENTE INFORMACIÓN" : ""}
                     </p>
                   )}
-                  {section.title ? <p className="block-text-title">{section.title}</p> : null}
-                  {hasContext ? (
-                    <RichText value={section.content} className="context-paragraph" />
+                  {headSection.title ? (
+                    <p className="block-text-title">{headSection.title}</p>
+                  ) : null}
+                  {headHasContext ? (
+                    <RichText value={headSection.content} className="context-paragraph" />
                   ) : null}
                 </div>
 
-                {/* Contenedor de las preguntas de ESTA sección.
+                {/* Contenedor de las preguntas de ESTE grupo.
                     data-density="low" activa el layout de 2 columnas en
                     print.css; "high" mantiene el flujo vertical normal.
                     Las preguntas wide (con imagen/tabla) ya tienen
                     column-span: all, así que cruzan ambas columnas
                     sin importar la densidad. */}
                 <ul className="questions-list" data-density={density}>
-                  {section.questions.map((q) => (
-                    <div key={q.id} className={`question${isWideQuestion(q) ? "wide" : ""}`}>
-                      <p className="question-text">
-                        <span className="item-number">{q.number}.</span>{" "}
-                        <RichTextInline value={q.text} />
-                      </p>
-                      <ul className="question-options">
-                        {q.options.map((o) => (
-                          <li key={o.key}>
-                            <span className="option-letter">{o.key}.</span>{" "}
-                            <RichTextInline value={o.text} />
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
+                  {sectionsInGroup.flatMap((s) =>
+                    s.questions.map((q) => (
+                      <div key={q.id} className={`question${isWideQuestion(q) ? "wide" : ""}`}>
+                        <p className="question-text">
+                          <span className="item-number">{q.number}.</span>{" "}
+                          <RichTextInline value={q.text} />
+                        </p>
+                        <ul className="question-options">
+                          {q.options.map((o) => (
+                            <li key={o.key}>
+                              <span className="option-letter">{o.key}.</span>{" "}
+                              <RichTextInline value={o.text} />
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )),
+                  )}
                 </ul>
               </Fragment>
             );

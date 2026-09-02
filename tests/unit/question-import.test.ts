@@ -121,6 +121,7 @@ class FakeEvaluations implements EvaluationRepository {
       title: data.title ?? null,
       content: data.content ?? { type: "doc", content: [] },
       order: (this.detail?.sections.length ?? 0) + this.addSectionCalls.length,
+      columnLayoutOverride: null,
       questions: [],
     };
   }
@@ -171,6 +172,7 @@ class FakeEvaluations implements EvaluationRepository {
       title: data.title === undefined ? null : data.title,
       content: data.content,
       order: 1,
+      columnLayoutOverride: null,
       questions: [],
     };
   }
@@ -358,6 +360,7 @@ describe("QuestionsFromEvaluation", () => {
           order: 0,
           title: "Lectura",
           content: "Texto del contexto largo…",
+          columnLayoutOverride: null,
           questions: [
             {
               id: "q1",
@@ -405,6 +408,7 @@ describe("QuestionsFromEvaluation", () => {
           order: 0,
           title: "A",
           content: "",
+          columnLayoutOverride: null,
           questions: [],
         },
         {
@@ -412,6 +416,7 @@ describe("QuestionsFromEvaluation", () => {
           order: 1,
           title: "B",
           content: "",
+          columnLayoutOverride: null,
           questions: [
             {
               id: "q1",
@@ -551,6 +556,7 @@ describe("ImportQuestions", () => {
           title: null,
           content: { type: "doc", content: [] },
           order: 1,
+          columnLayoutOverride: null,
           questions: [],
         },
       ],
@@ -648,6 +654,7 @@ describe("ImportQuestions", () => {
           title: null,
           content: { type: "doc", content: [] },
           order: 1,
+          columnLayoutOverride: null,
           questions: [],
         },
       ],
@@ -674,6 +681,7 @@ describe("ImportQuestions", () => {
           title: null,
           content: { type: "doc", content: [] },
           order: 1,
+          columnLayoutOverride: null,
           questions: [],
         },
       ],
@@ -720,6 +728,7 @@ describe("ImportQuestions", () => {
           title: null,
           content: { type: "doc", content: [] },
           order: 1,
+          columnLayoutOverride: null,
           questions: [],
         },
       ],
@@ -987,6 +996,7 @@ describe("ImportQuestions", () => {
           title: null,
           content: { type: "doc", content: [] },
           order: 1,
+          columnLayoutOverride: null,
           questions: [],
         },
       ],

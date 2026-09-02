@@ -549,14 +549,22 @@
  *
  * data-density="low" → secciones con ítems cortos (matching A–H, V/F,
  * completar) que desperdiciarían media página en una sola columna. La
- * heurística `computeSectionDensity()` decide esto por sección; el docente
- * podrá sobreescribirlo en Commit 2.
+ * heurística `computeGroupDensity()` decide esto por GRUPO; el docente
+ * puede sobreescribirlo por sección con `columnLayoutOverride`.
  *
- * `column-span: all` saca la sección del flujo de columnas del padre
+ * `column-span: all` saca el grupo del flujo de columnas del padre
  * (.questions-flow) para que ocupe el ancho completo; adentro se hace el
- * propio multicolumna. `column-fill: auto` llena la primera columna antes
- * de saltar a la segunda — sin esto, Chrome balancea y deja la columna
- * derecha corta (mismo motivo del comentario de `.questions-flow` arriba).
+ * propio multicolumna.
+ *
+ * NO se usa `column-fill: auto` (PR #79) a propósito: `auto` mete todo
+ * en col-1 y deja col-2 vacía con bloques cortos (2-3 ítems), el caso
+ * más habitual cuando el docente activa 2-col. Con el default (`balance`),
+ * las preguntas se reparten col-1 / col-2 y se aprovecha el ancho del
+ * pliego. El riesgo histórico (Chrome desbalancea al fragmentar entre
+ * páginas) lo mitiga ahora la fusión de "ninguno" consecutivas en grupos
+ * más grandes (`none-merged`): los grupos típicos de low-density tienen
+ * 5-10 ítems y la primera columna se llena sola, col-2 hereda 4-5
+ * ítems y se balancean sin problema al cruzar página.
  *
  * `column-rule` reemplaza al `border-right` del encajonado light del
  * .question, así que se apaga en las preguntas adentro (ver abajo). */
@@ -565,7 +573,6 @@
   column-count: 2;
   column-gap: 0.6cm;
   column-rule: 1px solid #ccc;
-  column-fill: auto;
   list-style: none;
   padding-left: 0;
   margin: 0 0 0.5rem 0;

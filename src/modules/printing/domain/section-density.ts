@@ -11,10 +11,12 @@
  * Vive en `printing/domain` porque es decisión de layout, no de negocio.
  *
  * El docente puede sobreescribir la decisión por sección desde el editor
- * (Commit 2 del sprint). Mientras tanto, esta heurística marca el default.
+ * (override `columnLayoutOverride` en `EvaluationSection`). `resolveSectionDensity`
+ * aplica el override sobre la heurística.
  */
 
 import type { EvaluationSection } from "@/modules/evaluations/domain/evaluation";
+import type { SectionGroup } from "@/modules/printing/domain/section-grouping";
 
 /** "low" → la sección se imprime a 2 columnas. "high" → a 1 columna. */
 export type SectionDensity = "low" | "high";
@@ -53,6 +55,78 @@ export function computeSectionDensity(section: EvaluationSection): SectionDensit
     return sum + textChars + optChars;
   }, 0);
   const avgChars = totalChars / items.length;
+
+  return avgChars < LOW_DENSITY_AVG_CHARS ? "low" : "high";
+}
+
+/**
+ * Resuelve la densidad efectiva de impresión: aplica el override del docente
+ * (si existe) sobre la heurística.
+ *
+ * - `columnLayoutOverride === "2col"` → `"low"` (forzar 2 columnas).
+ * - `columnLayoutOverride === "1col"` → `"high"` (forzar 1 columna).
+ * - `columnLayoutOverride === null` → heurística decide.
+ *
+ * Las páginas de impresión (`/print/bundle/[id]`, `/print/evaluation/[id]`)
+ * usan esta función en vez de `computeSectionDensity` directamente para que
+ * el override llegue al render sin lógica duplicada.
+ */
+export function resolveSectionDensity(section: EvaluationSection): SectionDensity {
+  if (section.columnLayoutOverride === "2col") return "low";
+  if (section.columnLayoutOverride === "1col") return "high";
+  return computeSectionDensity(section);
+}
+
+/**
+ * Densidad efectiva de impresión de un grupo.
+ *
+ * - `single` → delega en `resolveSectionDensity` (override + heurística).
+ * - `none-merged` → no se respeta override por sección (perderíamos la
+ *   granularidad al fusionar); se calcula la densidad sumando chars e
+ *   ítems de todas las secciones fusionadas, lo cual activa la regla
+ *   de "muchos ítems cortos juntos → low" que cada sección por separado
+ *   no vería (recordar que un solo ítem ya devuelve "high").
+ *
+ * Si el docente quiere forzar 2-col en un grupo `none-merged`, debe poner
+ * el override en la PRIMERA sección del run; el render del grupo toma el
+ * override de esa sección como señal global. Cualquier override de las
+ * secciones interiores del grupo se ignora a propósito.
+ */
+export function resolveGroupDensity(group: SectionGroup): SectionDensity {
+  if (group.kind === "single") {
+    return resolveSectionDensity(group.section);
+  }
+  const first = group.sections[0];
+  if (first?.columnLayoutOverride === "2col") return "low";
+  if (first?.columnLayoutOverride === "1col") return "high";
+  return computeGroupDensity(group);
+}
+
+/**
+ * Heurística pura de densidad para un grupo (sin override).
+ *
+ * - Grupo vacío → "high" (nada que compactar).
+ * - Algún ítem con imagen → "high" (la imagen rompe el flujo de columna).
+ * - Promedio de chars/ítem < `LOW_DENSITY_AVG_CHARS` → "low".
+ * - Else → "high".
+ *
+ * Para grupos `single` delega en `computeSectionDensity` (mismas reglas:
+ * 0 ítems → high; 1 ítem → high; imagen → high; else por chars/ítem).
+ */
+export function computeGroupDensity(group: SectionGroup): SectionDensity {
+  if (group.kind === "single") return computeSectionDensity(group.section);
+
+  const allItems = group.sections.flatMap((s) => s.questions);
+  if (allItems.length === 0) return "high";
+  if (allItems.length === 1) return "high";
+  if (allItems.some((q) => q.image != null)) return "high";
+
+  const totalChars = allItems.reduce((sum, q) => {
+    const textChars = richTextCharCount(q.text);
+    const optChars = q.options.reduce((s, o) => s + richTextCharCount(o.text), 0);
+    return sum + textChars + optChars;
+  }, 0);
+  const avgChars = totalChars / allItems.length;
 
   return avgChars < LOW_DENSITY_AVG_CHARS ? "low" : "high";
 }

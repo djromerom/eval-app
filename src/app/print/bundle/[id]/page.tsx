@@ -13,7 +13,8 @@ import { fitCoverToIframe } from "@/modules/bundle-cover/application/fit-cover-t
 import { makeLoadCoverHtml } from "@/modules/cover-html/infrastructure/container";
 import { inlineSectionsImages } from "@/modules/uploads/application/inline-content-images";
 import { isWideQuestion } from "@/modules/printing/domain/wide-question";
-import { computeSectionDensity } from "@/modules/printing/domain/section-density";
+import { resolveGroupDensity } from "@/modules/printing/domain/section-density";
+import { groupSectionsForPrint } from "@/modules/printing/domain/section-grouping";
 import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import { computeCoverTable, formatDuration } from "@/modules/bundles/domain/cover-table";
 import { getResolvedBundleTheme } from "@/modules/theme/application/get-resolved-bundle-theme";
@@ -21,6 +22,7 @@ import { themeToCssVars } from "@/modules/theme/domain/theme";
 import { RichText, RichTextInline } from "@/components/editor/rich-text";
 import { richTextHasRenderableContent } from "@/shared/domain/rich-text";
 import { PrintButton } from "../../evaluation/[id]/print-button";
+import type { EvaluationSection } from "@/modules/evaluations/domain/evaluation";
 
 export const metadata: Metadata = { title: "Vista previa del cuadernillo" };
 
@@ -407,64 +409,79 @@ export default async function PrintBundlePage({
               </div>
               {area ? <p className="subject-title">{area}</p> : null}
               <div className="questions-flow" data-columns={theme.questionColumns}>
-                {evaluation.sections.map((section, idx) => {
-                  const numbers = section.questions.map(
-                    (q) => (q as unknown as { globalNumber: number }).globalNumber,
+                {groupSectionsForPrint(evaluation.sections).map((group, idx) => {
+                  // Densidad a nivel de grupo: las "ninguno" consecutivas se
+                  // suman y la heurística decide si el bloque entero cabe
+                  // en 2-col. El override del docente se respeta solo en
+                  // `single` y en la 1ª sección de un `none-merged`.
+                  const density = resolveGroupDensity(group);
+                  const sectionsInGroup: EvaluationSection[] =
+                    group.kind === "single" ? [group.section] : group.sections;
+                  const allNumbers = sectionsInGroup.flatMap((s) =>
+                    s.questions.map((q) => (q as unknown as { globalNumber: number }).globalNumber),
                   );
-                  const first = numbers[0];
-                  const last = numbers[numbers.length - 1];
-                  const hasContext = richTextHasRenderableContent(section.content);
-                  // Densidad de impresión: heurística detecta matching/V-F/secciones
-                  // cortas → "low" (2 columnas). El override del docente llega en
-                  // Commit 2; mientras tanto la heurística decide por sección.
-                  const density = computeSectionDensity(section);
+                  const first = allNumbers[0];
+                  const last = allNumbers[allNumbers.length - 1];
+                  const isMerged = group.kind === "none-merged";
+                  // block-intro: en `single`, usa su título/contenido;
+                  // en `none-merged`, solo la 1ª sección emite contexto
+                  // (los section-divider intermedios se suprimen porque
+                  // están dentro del mismo grupo).
+                  const headSection = sectionsInGroup[0]!;
+                  const headHasContext = richTextHasRenderableContent(headSection.content);
+                  const showLead = allNumbers.length > 1 && (headHasContext || headSection.title);
                   return (
-                    <Fragment key={section.id}>
+                    <Fragment key={isMerged ? `merged-${headSection.id}` : headSection.id}>
                       {idx > 0 ? (
                         <hr className={`section-divider ${theme.sectionDivider}`} />
                       ) : null}
 
-                      {/* Agrupado para que el contexto no se separe de su 1ª pregunta. */}
+                      {/* Agrupado para que el contexto no se separe de su 1ª
+                          pregunta. En `none-merged`, solo el head emite intro. */}
                       <div className="block-intro">
-                        {numbers.length > 1 && (
+                        {allNumbers.length > 1 && (
                           <p className="block-lead">
                             RESPONDA LAS PREGUNTAS {first} A LA {last}
-                            {hasContext || section.title
-                              ? " DE ACUERDO CON LA SIGUIENTE INFORMACIÓN"
-                              : ""}
+                            {showLead ? " DE ACUERDO CON LA SIGUIENTE INFORMACIÓN" : ""}
                           </p>
                         )}
-                        {section.title ? <p className="block-text-title">{section.title}</p> : null}
-                        {hasContext ? (
-                          <RichText value={section.content} className="context-paragraph" />
+                        {headSection.title ? (
+                          <p className="block-text-title">{headSection.title}</p>
+                        ) : null}
+                        {headHasContext ? (
+                          <RichText value={headSection.content} className="context-paragraph" />
                         ) : null}
                       </div>
 
-                      {/* Contenedor de las preguntas de ESTA sección.
-                          data-density="low" activa el layout de 2 columnas en
-                          print.css; "high" mantiene el flujo vertical normal.
+                      {/* Contenedor de las preguntas de ESTE grupo.
+                          data-density="low" activa el layout de 2 columnas
+                          en print.css; "high" mantiene el flujo vertical.
                           Las preguntas wide (con imagen/tabla) ya tienen
-                          column-span: all, así que cruzan ambas columnas
-                          sin importar la densidad. */}
+                          column-span: all, así que cruzan ambas columnas. */}
                       <ul className="questions-list" data-density={density}>
-                        {section.questions.map((q) => (
-                          <div key={q.id} className={`question${isWideQuestion(q) ? "wide" : ""}`}>
-                            <p className="question-text">
-                              <span className="item-number">
-                                {(q as unknown as { globalNumber: number }).globalNumber}.
-                              </span>{" "}
-                              <RichTextInline value={q.text} />
-                            </p>
-                            <ul className="question-options">
-                              {q.options.map((o) => (
-                                <li key={o.key}>
-                                  <span className="option-letter">{o.key}.</span>{" "}
-                                  <RichTextInline value={o.text} />
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
+                        {sectionsInGroup.flatMap((s) =>
+                          s.questions.map((q) => (
+                            <div
+                              key={q.id}
+                              className={`question${isWideQuestion(q) ? "wide" : ""}`}
+                            >
+                              <p className="question-text">
+                                <span className="item-number">
+                                  {(q as unknown as { globalNumber: number }).globalNumber}.
+                                </span>{" "}
+                                <RichTextInline value={q.text} />
+                              </p>
+                              <ul className="question-options">
+                                {q.options.map((o) => (
+                                  <li key={o.key}>
+                                    <span className="option-letter">{o.key}.</span>{" "}
+                                    <RichTextInline value={o.text} />
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )),
+                        )}
                       </ul>
                     </Fragment>
                   );
