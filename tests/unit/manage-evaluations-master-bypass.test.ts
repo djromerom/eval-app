@@ -82,11 +82,25 @@ class FakeEvaluations implements EvaluationRepository {
     return [];
   }
   async addSection(): Promise<EvaluationSection> {
-    return { id: "sec-new", title: null, content: null, order: 0, questions: [] };
+    return {
+      id: "sec-new",
+      title: null,
+      content: null,
+      order: 0,
+      questions: [],
+      columnLayoutOverride: null,
+    };
   }
   async updateSection(_i: string, _e: string, sectionId: string): Promise<EvaluationSection> {
     this.updated.push({ kind: "section", id: sectionId });
-    return { id: sectionId, title: null, content: null, order: 0, questions: [] };
+    return {
+      id: sectionId,
+      title: null,
+      content: null,
+      order: 0,
+      questions: [],
+      columnLayoutOverride: null,
+    };
   }
   async deleteSection(_i: string, _e: string, sectionId: string): Promise<void> {
     this.deleted.push({ kind: "section", id: sectionId });
