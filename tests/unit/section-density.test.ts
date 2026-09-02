@@ -10,10 +10,13 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  computeGroupDensity,
   computeSectionDensity,
+  resolveGroupDensity,
   resolveSectionDensity,
   richTextCharCount,
 } from "@/modules/printing/domain/section-density";
+import type { SectionGroup } from "@/modules/printing/domain/section-grouping";
 import type {
   EvaluationSection,
   Question,
@@ -255,5 +258,138 @@ describe("resolveSectionDensity", () => {
     const conNull = seccionConOverride(preguntas, null);
     expect(resolveSectionDensity(sinOverride)).toBe(computeSectionDensity(sinOverride));
     expect(resolveSectionDensity(conNull)).toBe(computeSectionDensity(conNull));
+  });
+});
+
+/**
+ * `computeGroupDensity` y `resolveGroupDensity` cubren el caso del sprint
+ * Sep 2026: cuando el docente apila varias secciones "ninguno" consecutivas,
+ * cada una por separado sería "high" (vacía o de 1 ítem) y desperdiciaría la
+ * página. Fusionadas en `none-merged`, la suma de ítems cortos activa la
+ * regla de chars/ítem < 150 → "low" y la sección entera pasa a 2 columnas.
+ */
+describe("computeGroupDensity", () => {
+  it("single delega en computeSectionDensity", () => {
+    // Mismo comportamiento que ya cubre el bloque de arriba: verificar que
+    // el contrato `single → computeSectionDensity(section)` se mantiene.
+    const group: SectionGroup = {
+      kind: "single",
+      section: seccion(Array.from({ length: 5 }, () => pregunta(["a", "b", "c", "d"]))),
+    };
+    expect(computeGroupDensity(group)).toBe("low");
+  });
+
+  it("none-merged vacío → high", () => {
+    const group: SectionGroup = { kind: "none-merged", sections: [] };
+    expect(computeGroupDensity(group)).toBe("high");
+  });
+
+  it("none-merged de 1 ítem → high (la fusión no engaña al umbral de 1 ítem)", () => {
+    const s = seccion([pregunta(["a", "b", "c", "d"])]);
+    const group: SectionGroup = { kind: "none-merged", sections: [s] };
+    expect(computeGroupDensity(group)).toBe("high");
+  });
+
+  it("none-merged con un ítem corto por sección, total <150 chars/ítem → low", () => {
+    // Caso real INGLÉS PARTE 1: 5 secciones 'ninguno' con 1 ítem cada una,
+    // cada ítem corto (5 chars/ítem aprox). Fusionadas → 5 ítems cortos
+    // → 25 chars/5 = 5 chars/ítem → low (2-col).
+    const opciones = ["a", "b", "c", "d"];
+    const items = Array.from({ length: 5 }, () => seccion([pregunta(opciones, "x")]));
+    const group: SectionGroup = { kind: "none-merged", sections: items };
+    expect(computeGroupDensity(group)).toBe("low");
+  });
+
+  it("none-merged con ítems largos → high aunque el nº total sea bajo", () => {
+    const cuerpoLargo = "y".repeat(200);
+    const items = Array.from({ length: 5 }, () =>
+      seccion([pregunta(["a", "b", "c", "d"], cuerpoLargo)]),
+    );
+    const group: SectionGroup = { kind: "none-merged", sections: items };
+    expect(computeGroupDensity(group)).toBe("high");
+  });
+
+  it("none-merged con UNA imagen entre shorts → high (la imagen rompe flujo)", () => {
+    const items = Array.from({ length: 5 }, (_, idx) =>
+      seccion([
+        idx === 2
+          ? { ...pregunta(["a", "b", "c", "d"]), image: "/x.jpg" }
+          : pregunta(["a", "b", "c", "d"]),
+      ]),
+    );
+    const group: SectionGroup = { kind: "none-merged", sections: items };
+    expect(computeGroupDensity(group)).toBe("high");
+  });
+
+  it("none-merged suma chars a través de varias secciones", () => {
+    // 3 secciones, 2 ítems cortos cada una → 6 ítems cortos. Si fueran 3
+    // secciones independientes, cada una vería 2 ítems cortos → low, pero
+    // la regla de "1 ítem → high" no aplicaría porque hay 2 por sección.
+    // Lo que prueba este test: la fusión NUNCA empeora una decisión ya baja.
+    const items = Array.from({ length: 3 }, () =>
+      seccion([pregunta(["a", "b", "c", "d"]), pregunta(["a", "b", "c", "d"])]),
+    );
+    const group: SectionGroup = { kind: "none-merged", sections: items };
+    expect(computeGroupDensity(group)).toBe("low");
+  });
+
+  it("none-merged donde la 1ª sección está vacía y la 2ª tiene 2 ítems cortos → low", () => {
+    // Caso típico: docente arrastra una sección vacía al final del batch.
+    // La fusión evita que la sección vacía (high por sí misma) contamine
+    // el cálculo del grupo entero.
+    const vacia = seccion([]);
+    const conDosCorto = seccion([pregunta(["a", "b", "c", "d"]), pregunta(["a", "b", "c", "d"])]);
+    const group: SectionGroup = { kind: "none-merged", sections: [vacia, conDosCorto] };
+    expect(computeGroupDensity(group)).toBe("low");
+  });
+});
+
+describe("resolveGroupDensity", () => {
+  it("single con override 2col → low", () => {
+    const s = seccionConOverride(
+      Array.from({ length: 5 }, () => pregunta(["a", "b", "c", "d"])),
+      "2col",
+    );
+    expect(resolveGroupDensity({ kind: "single", section: s })).toBe("low");
+  });
+
+  it("single con override 1col → high", () => {
+    const opciones = [
+      "bag",
+      "bottle",
+      "camera",
+      "countryside",
+      "helmet",
+      "map",
+      "station",
+      "sweater",
+    ];
+    const s = seccionConOverride(
+      Array.from({ length: 5 }, () => pregunta(opciones, "You put your clothes in it.")),
+      "1col",
+    );
+    expect(resolveGroupDensity({ kind: "single", section: s })).toBe("high");
+  });
+
+  it("none-merged: override de la 1ª sección controla el grupo entero", () => {
+    // Tres secciones "ninguno" con un ítem corto cada una → heurística low.
+    // Pero la 1ª lleva override "1col" → gana, todo el grupo va a 1-col.
+    const items = [
+      seccionConOverride([pregunta(["a", "b", "c", "d"])], "1col"),
+      seccion([pregunta(["a", "b", "c", "d"])]),
+      seccion([pregunta(["a", "b", "c", "d"])]),
+    ];
+    expect(resolveGroupDensity({ kind: "none-merged", sections: items })).toBe("high");
+  });
+
+  it("none-merged: override de secciones interiores se ignora", () => {
+    // La 1ª sección no tiene override (heurística low), la 2ª tiene "1col".
+    // La del medio NO debe imponerse: se respeta solo la 1ª.
+    const items = [
+      seccion([pregunta(["a", "b", "c", "d"])]),
+      seccionConOverride([pregunta(["a", "b", "c", "d"])], "1col"),
+      seccion([pregunta(["a", "b", "c", "d"])]),
+    ];
+    expect(resolveGroupDensity({ kind: "none-merged", sections: items })).toBe("low");
   });
 });
