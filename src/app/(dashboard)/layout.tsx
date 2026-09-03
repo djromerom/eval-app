@@ -63,6 +63,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   // (multi-rol), se añade a `can("manage-bundles", roles)` en
   // capabilities.ts — NO se toca este menú.
   { href: "/admin/bundles", label: "Cuadernillos", requires: "manage-bundles" },
+  { href: "/admin/consultas", label: "Consultas", requires: "run-queries" },
   // Sección coordinador.
   { href: "/coordinator/review", label: "Revisión", requires: "review-evaluations" },
   // Sección docente.
