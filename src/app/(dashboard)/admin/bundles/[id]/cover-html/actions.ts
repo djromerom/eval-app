@@ -10,19 +10,24 @@
  * Mismo patrón que `cover-studio/actions.ts`:
  * `requireAuthenticatedUser` + use case + `revalidatePath` + return state.
  *
- * ## Extracción de SVGs (ago 2026)
+ * ## Extracción de imágenes (ago 2026, actualizado sep 2026)
  *
  * Antes de Zod, el HTML pasa por `extractInlineAssets`:
- *   1. Los `<svg>` inline y los `<img data:image/...;base64,...>` se mueven
- *      a `institutions/{id}/cover-html/{bundleId}/{uuid}.{svg|png|...}`.
+ *   1. Los `<img src="data:image/...;base64,...">` se mueven a
+ *      `institutions/{id}/cover-html/{bundleId}/{uuid}.{png|jpg|gif|webp|svg}`.
  *   2. El HTML slimmed (con `<img src="/api/uploads/...">`) va a Zod + use case.
+ *
+ * Los `<svg>...</svg>` inline NO se extraen desde sep 2026 (fix A): el
+ * reemplazo `<svg>`→`<img>` destruía atributos (class, viewBox, fill) y
+ * rompía los íconos al guardar. Persisten literales en `html`.
+ *
  *   3. Los archivos del save ANTERIOR se borran del disco DESPUÉS de
  *      persistir el nuevo slimHtml, y SOLO los que el nuevo HTML ya no
  *      referencia (`computeOrphanAssets`) — así no acumulamos huérfanos
  *      Y evitamos la ventana en la que el iframe del navegador pide URLs
  *      borradas (HTTP cache miss → 404 → imagen rota).
  *
- * Si la extracción falla (TooManyInlineSvgs / OversizedSvg), el HTML
+ * Si la extracción falla (TooManyInlineAssets / OversizedInlineAsset), el HTML
  * original llega al Zod igual (defensa-en-profundidad — los assets se
  * mantienen inline). El caller recibe el error específico. Los archivos
  * del save anterior quedan intactos en disco.
