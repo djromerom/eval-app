@@ -436,53 +436,62 @@ export default async function PrintBundlePage({
                         <hr className={`section-divider ${theme.sectionDivider}`} />
                       ) : null}
 
-                      {/* Agrupado para que el contexto no se separe de su 1ª
-                          pregunta. En `none-merged`, solo el head emite intro. */}
-                      <div className="block-intro">
-                        {allNumbers.length > 1 && (
-                          <p className="block-lead">
-                            RESPONDA LAS PREGUNTAS {first} A LA {last}
-                            {showLead ? " DE ACUERDO CON LA SIGUIENTE INFORMACIÓN" : ""}
-                          </p>
-                        )}
-                        {headSection.title ? (
-                          <p className="block-text-title">{headSection.title}</p>
-                        ) : null}
-                        {headHasContext ? (
-                          <RichText value={headSection.content} className="context-paragraph" />
-                        ) : null}
-                      </div>
+                      {/* Wrapper común por grupo: pega el intro con sus preguntas
+                          cuando el bloque es "ninguno" suelto (intro
+                          vacío, 1 pregunta) o "específico" (intro poblado
+                          + 1 pregunta). `data-print-group-density` activa
+                          `column-span: all` solo cuando la densidad es low
+                          (mismo rol que el histórico .block-intro en
+                          2-col). */}
+                      <div className="print-group" data-print-group-density={density}>
+                        {/* Agrupado para que el contexto no se separe de su 1ª
+                            pregunta. En `none-merged`, solo el head emite intro. */}
+                        <div className="block-intro">
+                          {showLead && (
+                            <p className="block-lead">
+                              RESPONDA LAS PREGUNTAS {first} A LA {last} DE ACUERDO CON LA SIGUIENTE
+                              INFORMACIÓN
+                            </p>
+                          )}
+                          {headSection.title ? (
+                            <p className="block-text-title">{headSection.title}</p>
+                          ) : null}
+                          {headHasContext ? (
+                            <RichText value={headSection.content} className="context-paragraph" />
+                          ) : null}
+                        </div>
 
-                      {/* Contenedor de las preguntas de ESTE grupo.
-                          data-density="low" activa el layout de 2 columnas
-                          en print.css; "high" mantiene el flujo vertical.
-                          Las preguntas wide (con imagen/tabla) ya tienen
-                          column-span: all, así que cruzan ambas columnas. */}
-                      <ul className="questions-list" data-density={density}>
-                        {sectionsInGroup.flatMap((s) =>
-                          s.questions.map((q) => (
-                            <div
-                              key={q.id}
-                              className={`question${isWideQuestion(q) ? "wide" : ""}`}
-                            >
-                              <p className="question-text">
-                                <span className="item-number">
-                                  {(q as unknown as { globalNumber: number }).globalNumber}.
-                                </span>{" "}
-                                <RichTextInline value={q.text} />
-                              </p>
-                              <ul className="question-options">
-                                {q.options.map((o) => (
-                                  <li key={o.key}>
-                                    <span className="option-letter">{o.key}.</span>{" "}
-                                    <RichTextInline value={o.text} />
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )),
-                        )}
-                      </ul>
+                        {/* Contenedor de las preguntas de ESTE grupo.
+                            data-density="low" activa el layout de 2 columnas
+                            en print.css; "high" mantiene el flujo vertical.
+                            Las preguntas wide (con imagen/tabla) ya tienen
+                            column-span: all, así que cruzan ambas columnas. */}
+                        <ul className="questions-list" data-density={density}>
+                          {sectionsInGroup.flatMap((s) =>
+                            s.questions.map((q) => (
+                              <div
+                                key={q.id}
+                                className={`question${isWideQuestion(q) ? "wide" : ""}`}
+                              >
+                                <p className="question-text">
+                                  <span className="item-number">
+                                    {(q as unknown as { globalNumber: number }).globalNumber}.
+                                  </span>{" "}
+                                  <RichTextInline value={q.text} />
+                                </p>
+                                <ul className="question-options">
+                                  {q.options.map((o) => (
+                                    <li key={o.key}>
+                                      <span className="option-letter">{o.key}.</span>{" "}
+                                      <RichTextInline value={o.text} />
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )),
+                          )}
+                        </ul>
+                      </div>
                     </Fragment>
                   );
                 })}
