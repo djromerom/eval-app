@@ -583,6 +583,42 @@
   padding-right: 0;
 }
 
+/* ===== Pegado de contexto → preguntas =====
+ *
+ * Pedido del docente (sep 2026): cuando un CONTEXTO lleva UN solo ítem
+ * ("específico") o el bloque es "ninguno" (sin título ni contenido), el
+ * intro y sus preguntas deben viajar pegados en la misma página.
+ *
+ * Las reglas existentes (`.block-intro { break-after: avoid }` arriba, y
+ * `.question { break-inside: avoid }` más abajo) son insuficientes cuando:
+ *   1) El intro está vacío (item "ninguno" suelto): el div queda <div></div>,
+ *      sin contenido que empujar, y la primera .question puede quedar
+ *      huérfana al pie de la página anterior.
+ *   2) Contexto + 1 ítem: intro y .question son hermanos dentro de
+ *      .questions-flow; no hay wrapper común que los ancle como bloque.
+ *
+ * El wrapper `.print-group` resuelve las dos variantes uniformemente.
+ * `break-inside: avoid` pega el conjunto; si no cabe, Chrome parte entre
+ * hermanos — nunca dentro de un .question — "saltar de página solo al
+ * cruzar".
+ *
+ * Aplica a TODO grupo (single y none-merged): los `none-merged` ya fusionan
+ * N secciones en una, así que el `break-inside: avoid` los pega todos.
+ *
+ * Preserva comportamiento histórico de multicolumna:
+ *  - density=low: cruza las 2 columnas del .questions-flow (igual que el
+ *    .block-intro histórico, ahora lo ejerce el wrapper).
+ *  - density=high: NO cruza. Las .question siguen fluyendo como item-column
+ *    dentro del .questions-flow[data-columns="2"].
+ */
+.print-group {
+  break-inside: avoid;
+}
+
+.questions-flow[data-columns="2"] .print-group[data-print-group-density="low"] {
+  column-span: all;
+}
+
 .question {
   margin-bottom: 0.7rem;
   border-right: 1px solid #ccc;
