@@ -578,11 +578,6 @@
   margin: 0 0 0.5rem 0;
 }
 
-.questions-list[data-density="low"] .question {
-  border-right: 0;
-  padding-right: 0;
-}
-
 /* ===== Pegado de contexto → preguntas =====
  *
  * Pedido del docente (sep 2026): cuando un CONTEXTO lleva UN solo ítem
@@ -629,8 +624,26 @@
   break-inside: avoid;
 }
 
-/* Preguntas con imagen o tabla: a media página (~8 cm) serían ilegibles, así
- * que cruzan ambas columnas. Lo decide `isWideQuestion` al renderizar. */
+/* Encajonado de cada pregunta (border-right + border-bottom) preservado en
+ * TODOS los grupos, incluyendo density=low. Antes se apagaba el border-right
+ * aquí (sprint PR #83) porque se duplicaba con el column-rule vertical del
+ * .questions-list[data-density="low"], pero el docente (sep 2026) prefiere
+ * el encajonado individual de cada pregunta aunque la línea vertical quede
+ * doble en el gap entre col-1 y col-2. */
+
+/* Preguntas wide (con imagen/tabla): mismo encajonado que .question base
+ * (border-right + border-bottom; sin arriba ni izquierda — pedido docente
+ * sep 2026). Como ocupan todo el ancho de página los bordes laterales
+ * coinciden con el @page margin y no se notan; los bordes inferior y
+ * derecho siguen siendo visibles para cerrar el recuadro por abajo y a
+ * la derecha. Padding right+bottom explícito para que el contenido wide
+ * (imagen/tabla full-width) tenga aire interno. */
+.question.wide {
+  border-right: 1px solid #ccc;
+  border-bottom: 1px solid #ccc;
+  padding-right: 0.4rem;
+  padding-bottom: 0.3rem;
+}
 .questions-flow[data-columns="2"] .question.wide {
   column-span: all;
 }
