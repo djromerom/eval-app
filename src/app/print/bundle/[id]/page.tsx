@@ -409,7 +409,7 @@ export default async function PrintBundlePage({
               </div>
               {area ? <p className="subject-title">{area}</p> : null}
               <div className="questions-flow" data-columns={theme.questionColumns}>
-                {groupSectionsForPrint(evaluation.sections).map((group, idx) => {
+                {groupSectionsForPrint(evaluation.sections).map((group) => {
                   // Densidad a nivel de grupo: las "ninguno" consecutivas se
                   // suman y la heurística decide si el bloque entero cabe
                   // en 2-col. El override del docente se respeta solo en
@@ -432,17 +432,23 @@ export default async function PrintBundlePage({
                   const showLead = allNumbers.length > 1 && (headHasContext || headSection.title);
                   return (
                     <Fragment key={isMerged ? `merged-${headSection.id}` : headSection.id}>
-                      {idx > 0 ? (
-                        <hr className={`section-divider ${theme.sectionDivider}`} />
-                      ) : null}
-
                       {/* Wrapper común por grupo: pega el intro con sus preguntas
                           cuando el bloque es "ninguno" suelto (intro
                           vacío, 1 pregunta) o "específico" (intro poblado
                           + 1 pregunta). `data-print-group-density` activa
                           `column-span: all` solo cuando la densidad es low
                           (mismo rol que el histórico .block-intro en
-                          2-col). */}
+                          2-col).
+
+                          Pedido del docente (sep 2026): sin separador
+                          visual entre bloques — los contextos se encadenan
+                          directamente. Antes había un
+                          <hr className="section-divider"> opcional (line /
+                          double / dots) configurable por theme; se quitó
+                          para dar continuidad visual entre contextos. El
+                          .bundle-eval-band (la franja gris "ECU GRADO N°"
+                          entre asignaturas dentro del cuadernillo) sigue
+                          intacto en otra capa. */}
                       <div className="print-group" data-print-group-density={density}>
                         {/* Agrupado para que el contexto no se separe de su 1ª
                             pregunta. En `none-merged`, solo el head emite intro. */}
@@ -471,7 +477,7 @@ export default async function PrintBundlePage({
                             s.questions.map((q) => (
                               <div
                                 key={q.id}
-                                className={`question${isWideQuestion(q) ? "wide" : ""}`}
+                                className={`question${isWideQuestion(q) ? " wide" : ""}`}
                               >
                                 <p className="question-text">
                                   <span className="item-number">
