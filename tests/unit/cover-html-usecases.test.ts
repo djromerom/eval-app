@@ -314,8 +314,8 @@ describe("Cover HTML — use cases", () => {
     });
 
     it("rechaza HTML demasiado grande (> MAX bytes)", async () => {
-      // 250KB de padding supera el MAX de 200KB.
-      const huge = validProject("x".repeat(250_000));
+      // 3.2MB de padding supera el MAX de 3MB (3 * 1024 * 1024).
+      const huge = validProject("x".repeat(3_200_000));
       const uc = new SaveCoverHtml({ liveStates, bundles });
       const result = await uc.execute({ actor: ecuMaster, bundleId: "b1", project: huge });
       expect(result.ok).toBe(false);
