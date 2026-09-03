@@ -6,6 +6,7 @@ import type { EvaluationStatus } from "@/modules/evaluations/domain/evaluation-s
 export interface FormulacionesFilterState {
   search: string;
   subjectName: string; // "" = todas
+  courseName: string; // "" = todos
   academicYearYear: number | null; // null = todos
   status: EvaluationStatus | ""; // "" = todos
 }
@@ -13,6 +14,7 @@ export interface FormulacionesFilterState {
 export const EMPTY_FILTERS: FormulacionesFilterState = {
   search: "",
   subjectName: "",
+  courseName: "",
   academicYearYear: null,
   status: "",
 };
@@ -24,12 +26,14 @@ export function FormulacionesFilterRow({
   filters,
   onChange,
   subjectOptions,
+  courseOptions,
   yearOptions,
 }: {
   filters: FormulacionesFilterState;
   onChange: (next: FormulacionesFilterState) => void;
   /** Opciones derivadas de las filas actuales; ya dedupeadas y ordenadas. */
   subjectOptions: string[];
+  courseOptions: string[];
   yearOptions: number[];
 }) {
   const yearLabel = useMemo(() => {
@@ -56,6 +60,19 @@ export function FormulacionesFilterRow({
         {subjectOptions.map((s) => (
           <option key={s} value={s}>
             {s}
+          </option>
+        ))}
+      </select>
+      <select
+        value={filters.courseName}
+        onChange={(e) => onChange({ ...filters, courseName: e.target.value })}
+        className="border-input bg-background focus-visible:border-primary focus-visible:ring-primary/20 rounded-md border px-3 py-1.5 text-sm focus-visible:ring-2 focus-visible:outline-hidden"
+        aria-label="Filtrar por grado"
+      >
+        <option value="">Todos los grados</option>
+        {courseOptions.map((c) => (
+          <option key={c} value={c}>
+            {c}
           </option>
         ))}
       </select>

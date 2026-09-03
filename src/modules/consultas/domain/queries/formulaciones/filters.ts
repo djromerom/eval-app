@@ -18,6 +18,8 @@ export interface FormulacionesFilters {
   search?: string;
   /** Filtra por asignatura (nombre exacto). */
   subjectName?: string;
+  /** Filtra por grado (Course.name exacto, p.ej. "10-1", "11-2"). */
+  courseName?: string;
   /** Filtra por año académico. */
   academicYearYear?: number;
   /** Filtra por estado del workflow (DRAFT / IN_REVIEW / APPROVED / PUBLISHED). */
@@ -32,6 +34,7 @@ export function parseFormulacionesFilters(
   const out: FormulacionesFilters = {};
   if (sp.search && sp.search.trim()) out.search = sp.search.trim();
   if (sp.subjectName && sp.subjectName.trim()) out.subjectName = sp.subjectName.trim();
+  if (sp.courseName && sp.courseName.trim()) out.courseName = sp.courseName.trim();
   if (sp.academicYearYear && /^\d+$/.test(sp.academicYearYear)) {
     out.academicYearYear = Number(sp.academicYearYear);
   }
@@ -52,6 +55,7 @@ export function applyFormulacionesFilters<
   T extends {
     title: string;
     subjectName: string;
+    courseName: string;
     academicYearYear: number;
     status: import("@/modules/evaluations/domain/evaluation-status").EvaluationStatus;
     authorName: string;
@@ -59,6 +63,7 @@ export function applyFormulacionesFilters<
 >(rows: T[], f: FormulacionesFilters): T[] {
   return rows.filter((r) => {
     if (f.subjectName && r.subjectName !== f.subjectName) return false;
+    if (f.courseName && r.courseName !== f.courseName) return false;
     if (f.academicYearYear && r.academicYearYear !== f.academicYearYear) return false;
     if (f.status && r.status !== f.status) return false;
     if (f.search && f.search.trim()) {
