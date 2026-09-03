@@ -33,7 +33,11 @@ export type Capability =
    *  visibilidad institucional, aunque no aprueba por defecto). */
   | "review-evaluations"
   /** Crear / editar evaluations propias. TEACHER y ECU_LIDER. */
-  | "create-evaluations";
+  | "create-evaluations"
+  /** Ejecutar las "Consultas" predefinidas sobre datos institucionales
+   *  (listado de formulaciones con X/Y items vs regla, etc.). Solo
+   *  ECU_MASTER y SUPER_ADMIN. */
+  | "run-queries";
 
 /**
  * Devuelve `true` si el conjunto de roles del actor concede la capability.
@@ -57,5 +61,7 @@ export function can(capability: Capability, roles: Role[]): boolean {
       return hasRole(actor, "ECU_LIDER", "ECU_MASTER");
     case "create-evaluations":
       return hasRole(actor, "TEACHER", "ECU_LIDER");
+    case "run-queries":
+      return hasRole(actor, "ECU_MASTER", "SUPER_ADMIN");
   }
 }
