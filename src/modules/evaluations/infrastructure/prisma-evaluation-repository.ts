@@ -258,7 +258,13 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
 
   private async listWhere(where: Prisma.EvaluationWhereInput): Promise<EvaluationListItem[]> {
     const rows = await prisma.evaluation.findMany({
-      where,
+      // Módulo consultas (Sprint 5-3): mostramos solo la cabeza de la cadena
+      // de versiones (cada aprobación crea una nueva fila con parentVersionId
+      // apuntando a la anterior; sin este filtro, una misma formulación
+      // aparecería N veces). El campo es opcional — los listados del
+      // coordinator siguen funcionando porque su UI ya espera 1 fila por
+      // formulación.
+      where: { ...where, parentVersionId: null },
       orderBy: { updatedAt: "desc" },
       include: {
         courseSubject: {
