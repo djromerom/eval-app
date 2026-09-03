@@ -14,7 +14,7 @@
 
 import { z } from "zod";
 
-const htmlSchema = z.string().min(1); // sin cap de chars — el use case (save-cover-html) mide bytes UTF-8 con MAX_COVER_LIVE_PROJECT_BYTES (200KB). Zod previa tenía max(500_000) que era INCONSISTENTE con el use case (chars ≠ bytes UTF-8 con tildes).
+const htmlSchema = z.string().min(1); // sin cap de chars — el use case (save-cover-html) mide bytes UTF-8 con MAX_COVER_LIVE_PROJECT_BYTES (3MB). Zod previa tenía max(500_000) que era INCONSISTENTE con el use case (chars ≠ bytes UTF-8 con tildes).
 
 export const coverLiveProjectSchema = z.object({
   html: htmlSchema,

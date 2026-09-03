@@ -40,10 +40,13 @@ export type CoverLiveProject = {
   html: string;
   previewMode?: boolean;
   /**
-   * Paths relativos a STORAGE_DIR de los assets (SVGs + imágenes base64)
-   * extraídos en el último save (ago 2026). El render los inlea a data
-   * URLs (vía `inlineHtmlImages`) y el save los borra antes de
-   * reemplazarlos. Si está vacío o ausente, no hay assets extraídos.
+   * Paths relativos a STORAGE_DIR de los assets (imágenes base64)
+   * extraídos en el último save (ago 2026, actualizado sep 2026). Después
+   * del fix A ya NO incluimos SVGs (esos se guardan inline en `html`); el
+   * campo solo lista imágenes `<img data:...>` que fueron a disco. El
+   * render los inlea a data URLs (vía `inlineHtmlImages`) y el save los
+   * borra antes de reemplazarlos. Si está vacío o ausente, no hay assets
+   * extraídos.
    *
    * Mantener este campo sincronizado con el FS es responsabilidad del
    * server action: en cada save borra los paths viejos y persiste los
@@ -68,10 +71,11 @@ export function toCoverLiveProject(value: unknown): CoverLiveProject {
 
 /** Tamaño máximo del HTML persistido (en bytes UTF-8).
  *
- *  Igual orden que `MAX_COVER_TEMPLATE_BODY_BYTES` (200KB) — un HTML
- *  de portada con SVGs inline raramente supera los 50KB; 200KB da holgura
- *  para assets incrustados sin permitir DOS por strings gigantes. */
-export const MAX_COVER_LIVE_PROJECT_BYTES = 200_000;
+ *  Subido de 200KB → 3MB (3 sep 2026, pedido del docente). Las portadas
+ *  con SVGs grandes incrustados pueden acercarse al MB; el cap se ajustó
+ *  para recibirlos sin tropezar antes con el use case. Se mantiene el
+ *  cap razonable para evitar DOS por strings gigantes. */
+export const MAX_COVER_LIVE_PROJECT_BYTES = 3 * 1024 * 1024;
 
 /** Tamaño mínimo razonable: una portada vacía-pero-válida (solo el wrapper
  *  `<div></div>`) debe entrar. 50B es holgado para ese shape. */
