@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import type { FormulacionRow } from "@/modules/consultas/domain/queries/formulaciones/formulacion-row";
+import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/evaluations/status-badge";
 import {
   EMPTY_FILTERS,
@@ -9,28 +11,50 @@ import {
   type FormulacionesFilterState,
 } from "./formulaciones-filter-row";
 import { ItemsBadgeCell } from "./items-badge-cell";
+import { DownloadXlsxButton } from "./download-xlsx-button";
 
-/** Componente cliente que renderiza el listado de formulaciones. Mantiene
- *  los filtros en `useState` y aplica `applyFormulacionesFilters` sobre el
- *  array de filas que llegó del servidor.
+/** Componente cliente que renderiza el listado completo de la consulta
+ *  "Listado de Formulaciones": PageHeader + filtro + tabla + botón XLSX.
+ *
+ *  Aunque el nombre sugiere "table", hace de wrapper cliente porque el
+ *  botón de descarga (en el slot `actions` del PageHeader) necesita acceso
+ *  al mismo `useState` de filtros que el filter row — mover el state arriba
+ *  evitaría un Context/portal adicional.
  *
  *  Sin paginación: el módulo consultas asume ≤ 300 filas por institución
  *  (datasets reales observados). Si crece, se evoluciona a searchParams-driven
  *  como `/coordinator/review` sin tocar el dominio.
  */
-export function FormulacionesTable({ rows }: { rows: FormulacionRow[] }) {
+export function FormulacionesTable({
+  rows,
+  title,
+  description,
+  actions,
+}: {
+  rows: FormulacionRow[];
+  /** Título del PageHeader (viene del registry: `consulta.title`). */
+  title: string;
+  /** Descripción del PageHeader. */
+  description: ReactNode;
+  /** Slot adicional de actions (futuro: "Nuevo", "Imprimir", etc.). El botón
+   *  "Descargar XLSX" se añade SIEMPRE al lado derecho por este componente. */
+  actions?: ReactNode;
+}) {
   const [filters, setFilters] = useState<FormulacionesFilterState>(EMPTY_FILTERS);
 
   // Lookups: derivamos opciones de filtro de las filas mismas (sin fetch).
-  const { subjectOptions, yearOptions } = useMemo(() => {
+  const { subjectOptions, courseOptions, yearOptions } = useMemo(() => {
     const subjects = new Set<string>();
+    const courses = new Set<string>();
     const years = new Set<number>();
     for (const r of rows) {
       subjects.add(r.subjectName);
+      courses.add(r.courseName);
       years.add(r.academicYearYear);
     }
     return {
       subjectOptions: Array.from(subjects).sort((a, b) => a.localeCompare(b, "es")),
+      courseOptions: Array.from(courses).sort((a, b) => a.localeCompare(b, "es")),
       yearOptions: Array.from(years).sort((a, b) => b - a),
     };
   }, [rows]);
@@ -39,6 +63,7 @@ export function FormulacionesTable({ rows }: { rows: FormulacionRow[] }) {
     const term = filters.search.trim().toLowerCase();
     return rows.filter((r) => {
       if (filters.subjectName && r.subjectName !== filters.subjectName) return false;
+      if (filters.courseName && r.courseName !== filters.courseName) return false;
       if (filters.academicYearYear && r.academicYearYear !== filters.academicYearYear) return false;
       if (filters.status && r.status !== filters.status) return false;
       if (term) {
@@ -53,86 +78,101 @@ export function FormulacionesTable({ rows }: { rows: FormulacionRow[] }) {
     d.toLocaleDateString("es-CO", { year: "numeric", month: "short", day: "2-digit" });
 
   return (
-    <div className="space-y-3">
-      <FormulacionesFilterRow
-        filters={filters}
-        onChange={setFilters}
-        subjectOptions={subjectOptions}
-        yearOptions={yearOptions}
+    <>
+      <PageHeader
+        title={title}
+        description={description}
+        actions={
+          <>
+            {actions}
+            <DownloadXlsxButton filters={filters} />
+          </>
+        }
       />
 
-      <p className="text-muted-foreground text-sm">
-        Mostrando {visible.length} de {rows.length} formulaciones
-      </p>
+      <div className="space-y-3">
+        <FormulacionesFilterRow
+          filters={filters}
+          onChange={setFilters}
+          subjectOptions={subjectOptions}
+          courseOptions={courseOptions}
+          yearOptions={yearOptions}
+        />
 
-      <div className="bg-card overflow-x-auto rounded-xl border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            <tr>
-              <th className="px-3 py-2 text-left">Asignatura</th>
-              <th className="px-3 py-2 text-left">Año</th>
-              <th className="px-3 py-2 text-left">Prueba</th>
-              <th className="px-3 py-2 text-left">Tipo</th>
-              <th className="px-3 py-2 text-left">Estado</th>
-              <th className="px-3 py-2 text-left">Items</th>
-              <th className="px-3 py-2 text-left">Autor</th>
-              <th className="px-3 py-2 text-left">Asignados</th>
-              <th className="px-3 py-2 text-left">Actualizado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          Mostrando {visible.length} de {rows.length} formulaciones
+        </p>
+
+        <div className="bg-card overflow-x-auto rounded-xl border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-muted-foreground text-xs font-medium tracking-wide uppercase">
               <tr>
-                <td colSpan={9} className="text-muted-foreground px-3 py-6 text-center text-sm">
-                  {rows.length === 0
-                    ? "No hay formulaciones registradas en la institución."
-                    : "Ninguna formulación coincide con los filtros aplicados."}
-                </td>
+                <th className="px-3 py-2 text-left">Asignatura</th>
+                <th className="px-3 py-2 text-left">Grado</th>
+                <th className="px-3 py-2 text-left">Año</th>
+                <th className="px-3 py-2 text-left">Prueba</th>
+                <th className="px-3 py-2 text-left">Tipo</th>
+                <th className="px-3 py-2 text-left">Estado</th>
+                <th className="px-3 py-2 text-left">Items</th>
+                <th className="px-3 py-2 text-left">Autor</th>
+                <th className="px-3 py-2 text-left">Asignados</th>
+                <th className="px-3 py-2 text-left">Actualizado</th>
               </tr>
-            ) : (
-              visible.map((r) => (
-                <tr key={r.id} className="hover:bg-muted/20 border-t">
-                  <td className="px-3 py-2">
-                    <div className="font-medium">{r.subjectName}</div>
-                    <div className="text-muted-foreground text-xs">{r.courseName}</div>
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">{r.academicYearYear}</td>
-                  <td className="px-3 py-2">
-                    {r.periodName ?? <span className="text-muted-foreground">—</span>}
-                  </td>
-                  <td className="px-3 py-2">
-                    {r.bookletTypeName ?? <span className="text-muted-foreground">—</span>}
-                  </td>
-                  <td className="px-3 py-2">
-                    <StatusBadge status={r.status} />
-                  </td>
-                  <td className="px-3 py-2">
-                    <ItemsBadgeCell
-                      total={r.itemsTotal}
-                      expected={r.itemsExpected}
-                      badge={r.itemsBadge}
-                    />
-                  </td>
-                  <td className="px-3 py-2">{r.authorName}</td>
-                  <td className="text-muted-foreground px-3 py-2">
-                    {r.assignedTeachers.length === 0 ? (
-                      <span aria-label="Sin docentes asignados">—</span>
-                    ) : (
-                      <span title={r.assignedTeachers.join(", ")}>
-                        {r.assignedTeachers.slice(0, 3).join(", ")}
-                        {r.assignedTeachers.length > 3 ? ` +${r.assignedTeachers.length - 3}` : ""}
-                      </span>
-                    )}
-                  </td>
-                  <td className="text-muted-foreground px-3 py-2 text-xs tabular-nums">
-                    {fmtDate(r.updatedAt)}
+            </thead>
+            <tbody>
+              {visible.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="text-muted-foreground px-3 py-6 text-center text-sm">
+                    {rows.length === 0
+                      ? "No hay formulaciones registradas en la institución."
+                      : "Ninguna formulación coincide con los filtros aplicados."}
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                visible.map((r) => (
+                  <tr key={r.id} className="hover:bg-muted/20 border-t">
+                    <td className="px-3 py-2 font-medium">{r.subjectName}</td>
+                    <td className="px-3 py-2">{r.courseName}</td>
+                    <td className="px-3 py-2 tabular-nums">{r.academicYearYear}</td>
+                    <td className="px-3 py-2">
+                      {r.periodName ?? <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      {r.bookletTypeName ?? <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      <StatusBadge status={r.status} />
+                    </td>
+                    <td className="px-3 py-2">
+                      <ItemsBadgeCell
+                        total={r.itemsTotal}
+                        expected={r.itemsExpected}
+                        badge={r.itemsBadge}
+                      />
+                    </td>
+                    <td className="px-3 py-2">{r.authorName}</td>
+                    <td className="text-muted-foreground px-3 py-2">
+                      {r.assignedTeachers.length === 0 ? (
+                        <span aria-label="Sin docentes asignados">—</span>
+                      ) : (
+                        <span title={r.assignedTeachers.join(", ")}>
+                          {r.assignedTeachers.slice(0, 3).join(", ")}
+                          {r.assignedTeachers.length > 3
+                            ? ` +${r.assignedTeachers.length - 3}`
+                            : ""}
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-muted-foreground px-3 py-2 text-xs tabular-nums">
+                      {fmtDate(r.updatedAt)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

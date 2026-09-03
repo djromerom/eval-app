@@ -151,6 +151,7 @@ describe("parseFormulacionesFilters + applyFormulacionesFilters (UI helper)", ()
       id: "ev-1",
       title: "Parcial Matemáticas",
       subjectName: "Matemáticas",
+      courseName: "8°",
       status: "DRAFT",
       academicYearYear: 2026,
       authorName: "Ana",
@@ -159,6 +160,7 @@ describe("parseFormulacionesFilters + applyFormulacionesFilters (UI helper)", ()
       id: "ev-2",
       title: "Quiz Física",
       subjectName: "Física",
+      courseName: "9°",
       status: "PUBLISHED",
       academicYearYear: 2026,
       authorName: "Bea",
@@ -167,6 +169,7 @@ describe("parseFormulacionesFilters + applyFormulacionesFilters (UI helper)", ()
       id: "ev-3",
       title: "Quiz Física 2",
       subjectName: "Física",
+      courseName: "10°",
       status: "IN_REVIEW",
       academicYearYear: 2025,
       authorName: "Cal",
@@ -186,6 +189,11 @@ describe("parseFormulacionesFilters + applyFormulacionesFilters (UI helper)", ()
 
   it("filtro por asignatura exacto", () => {
     const f = parseFormulacionesFilters({ subjectName: "Matemáticas" });
+    expect(applyFormulacionesFilters(rows, f).map((r) => r.id)).toEqual(["ev-1"]);
+  });
+
+  it("filtro por grado (courseName) exacto", () => {
+    const f = parseFormulacionesFilters({ courseName: "8°" });
     expect(applyFormulacionesFilters(rows, f).map((r) => r.id)).toEqual(["ev-1"]);
   });
 
