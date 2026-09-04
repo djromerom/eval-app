@@ -183,7 +183,7 @@ function renderImageBlock(node: TipTapNode, ctx: WalkerContext): string {
 // Inline-level dispatch
 // ---------------------------------------------------------------------------
 
-function renderInline(node: TipTapNode, ctx: WalkerContext): string {
+export function renderInline(node: TipTapNode, ctx: WalkerContext): string {
   if (ctx.depth > MAX_DEPTH) return "";
 
   // Text node: aplicamos marks (bold/italic/code) wrap-around + escape.
