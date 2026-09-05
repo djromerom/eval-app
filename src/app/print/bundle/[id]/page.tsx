@@ -449,7 +449,11 @@ export default async function PrintBundlePage({
                           .bundle-eval-band (la franja gris "ECU GRADO N°"
                           entre asignaturas dentro del cuadernillo) sigue
                           intacto en otra capa. */}
-                      <div className="print-group" data-print-group-density={density}>
+                      <div
+                        className="print-group"
+                        data-print-group-density={density}
+                        data-items={allNumbers.length}
+                      >
                         {/* Agrupado para que el contexto no se separe de su 1ª
                             pregunta. En `none-merged`, solo el head emite intro. */}
                         <div className="block-intro">
@@ -477,7 +481,7 @@ export default async function PrintBundlePage({
                             s.questions.map((q) => (
                               <div
                                 key={q.id}
-                                className={`question${isWideQuestion(q) ? " wide" : ""}`}
+                                className={`question${isWideQuestion(q) ? "wide" : ""}`}
                               >
                                 <p className="question-text">
                                   <span className="item-number">

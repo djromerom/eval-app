@@ -534,13 +534,16 @@
   column-span: all;
 }
 
-/* Cada bloque de ítems (excepto el primero) inicia al comienzo de una página.
-   El selector `.block-intro ~ .block-intro` matchea cualquier .block-intro
-   que tenga otro .block-intro como hermano anterior — el primero no matchea,
-   así que no genera página en blanco al inicio. Funciona tanto en la
-   evaluación suelta (varios bloques de 1 asignatura) como en el cuadernillo
-   (varios bloques por formulación, varios sheet.questions por asignatura). */
-.questions-flow > .block-intro ~ .block-intro {
+/* Cada bloque de ítems inicia al comienzo de una página SOLO si tiene
+   1 sola pregunta. El selector matchea cualquier .block-intro dentro de
+   un .print-group precedido por otro .print-group Y cuyo group tiene
+   data-items="1". El atributo data-items lo pone el JSX con
+   allNumbers.length (print/bundle/[id]/page.tsx). Si el grupo tiene 2+
+   preguntas, NO se fuerza el salto: el bloque contexto+preguntas se queda
+   pegado al anterior (más items = menos sentido el salto forzado, solo
+   desperdicia espacio). Funciona tanto en la evaluación suelta (varios
+   bloques de 1 asignatura) como en el cuadernillo. */
+.questions-flow > .print-group ~ .print-group[data-items="1"] .block-intro {
   break-before: page;
 }
 
@@ -800,21 +803,17 @@
     break-after: auto;
   }
 
-  /* Cada asignatura del compendio inicia al comienzo de una página nueva.
-     La primera asignatura ya queda en su propia página porque el cover
-     (.sheet.cover-sheet) cierra con break-after: page de la regla .sheet
-     por default. Las siguientes usan el selector de hermano general
-     `~` para tomar break-before sin necesidad de tocar el JSX. */
-  .bundle-eval-section ~ .bundle-eval-section .sheet.questions {
-    break-before: page;
-  }
-
-  /* Por consistencia, también forzamos break-before en el booklet individual
-     si su primera pregunta cae al pie de una página: ningún contenido de
-     preguntas debe quedar pegado al cover (que no existe en este caso pero
-     aplica por simetría). */
-  .sheet.questions {
-    /* sin break-after: auto - usa el default .sheet { break-after: page }
-       para que CADA asignatura quede aislada en sus propias páginas. */
+  /* 5 sep 2026: las asignaturas del cuadernillo fluyen en cascada sin
+     forzar salto de página entre sí. Se quita el break-before: page que
+     tenía `.bundle-eval-section ~ .bundle-eval-section .sheet.questions`
+     y se añade break-after: auto a las sheets de preguntas dentro del
+     bundle, para que las preguntas de una asignatura puedan fluir a la
+     siguiente sin interrupción forzada (si no caben, hacen wrap natural).
+     El cover sigue siendo su propia página (.sheet { break-after: page }
+     arriba), y la última .sheet del bundle cierra con break-after: auto
+     (.sheet:last-child). El booklet individual no se ve afectado: tiene
+     una sola .sheet.questions, no hay flujo entre sheets. */
+  .bundle-eval-section .sheet.questions {
+    break-after: auto;
   }
 }
