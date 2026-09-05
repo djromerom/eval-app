@@ -1,63 +1,60 @@
 /**
- * Composition root del módulo latex-export (L10 — sep 2026).
- * ==========================================================
+ * Composition root del módulo latex-export (L10 — sep 2026, fix 5 sep 2026).
+ * ========================================================================
  *
  * Cablea el use case `BuildLatexZip` con sus dependencias:
- *   - `loadBundle`     ← `makeGetBundle().execute` (existing)
- *   - `loadEvaluation` ← `makeGetEvaluation().execute` (existing)
+ *   - `loadBundle`     ← `PrismaBundleRepository.findDetail` (directo)
+ *   - `loadEvaluation` ← `PrismaEvaluationRepository.getDetail` (directo)
  *   - `readUpload`     ← `makePrismaImageFetcher()` (L9)
  *
- * Sigue el patrón de los demás módulos del repo: cada `make*()` factory
- * devuelve una instancia nueva del use case, evitando compartir estado
- * mutable entre requests HTTP.
+ * ## Por qué repos directos (no `makeGetBundle`/`makeGetEvaluation`)
  *
- * Sin repo propio: los use cases `GetBundle` y `GetEvaluation` ya están
- * definidos en sus módulos yacen; los reusamos porque traen el scoping
- * por `institutionId` y el manejo de errores `Result<T>` que el route
- * handler mapea a HTTP.
+ * Inicialmente el container cableaba contra los use cases `GetBundle` y
+ * `GetEvaluation` reusando el scoping existente. Eso funcionaba para
+ * `GetBundle` (no tiene role check interno), pero rompía con
+ * `GetEvaluation`: su `execute()` hace `requireRole(actor, "TEACHER",
+ * "ECU_LIDER", "ECU_MASTER")` y rechaza actores con sólo `SUPER_ADMIN`
+ * — que es justo quien la route handler del export SÍ deja pasar
+ * (porque tiene capability `manage-bundles`).
+ *
+ * Solución: el container llama directo a los repos, saltándose los use
+ * cases intermedios. La route ya validó `requireAuthenticatedUser +
+ * can("manage-bundles")` ANTES de invocar `BuildLatexZip.execute`, así
+ * que re-validar el rol dentro de los loaders sería duplicar trabajo
+ * y reintroducir el bug. `BuildLatexZip.execute` mantiene su propio
+ * `requireRole` interno como defensa en profundidad.
+ *
+ * Sin repo propio: los repos ya están definidos en sus módulos yacen;
+ * los reusamos porque traen el scoping por `institutionId` (RLS) y
+ * devuelven `null` cuando no hay match (lo que el use case de export
+ * mapea a `NotFoundError`).
  */
-import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
-import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
+import { PrismaBundleRepository } from "@/modules/bundles/infrastructure/prisma-bundle-repository";
+import { PrismaEvaluationRepository } from "@/modules/evaluations/infrastructure/prisma-evaluation-repository";
 import { BuildLatexZip } from "../application/build-latex-zip";
 import { makePrismaImageFetcher } from "./prisma-image-fetcher";
+
+// Instancias módulo-scope: los repos son stateless (solo dependen del
+// cliente Prisma que ya es singleton). Reusar entre requests evita
+// gastar el overhead de instanciar Prisma internamente.
+const bundleRepository = new PrismaBundleRepository();
+const evaluationRepository = new PrismaEvaluationRepository();
 
 /**
  * Crea el use case. Se llama desde el route handler con cada GET para
  * garantizar instancias frescas y, con ellas, estado mutable fresco
- * (counters, caches de request).
+ * (los `EvaluationImageRegistry` se crean dentro de `execute` por
+ * evaluación, así que no hay riesgo de fuga entre requests).
  *
- * El wrapping con `async (...)` evita acoplar este factory al shape
- * `Result<T>` de los use cases existentes: cuando `loadBundle`/`loadEvaluation`
- * devuelven `null`, lo tratamos como "no encontrado" en el use case de
- * export (que ya devuelve `NotFoundError`). Si devuelven `ForbiddenError`
- * o cualquier otro `DomainError`, propagamos.
+ * `loadBundle`/`loadEvaluation` devuelven `null` cuando el repo no
+ * encuentra el registro — el use case de export lo convierte en
+ * `NotFoundError`.
  */
 export const makeBuildLatexZip = () =>
   new BuildLatexZip({
-    loadBundle: async (institutionId, bundleId) => {
-      const res = await makeGetBundle().execute({
-        actor: { userId: "", institutionId, roles: ["SUPER_ADMIN"] },
-        bundleId,
-      });
-      // El route handler inyecta el actor real; este actor sintético con
-      // SUPER_ADMIN es un detalle interno — la autorización de export se
-      // valida DENTRO de `BuildLatexZip.execute` con `requireRole`.
-      if (!res.ok) {
-        if (res.error.code === "NOT_FOUND") return null;
-        throw res.error;
-      }
-      return res.value;
-    },
-    loadEvaluation: async (institutionId, evaluationId) => {
-      const res = await makeGetEvaluation().execute({
-        actor: { userId: "", institutionId, roles: ["SUPER_ADMIN"] },
-        id: evaluationId,
-      });
-      if (!res.ok) {
-        if (res.error.code === "NOT_FOUND") return null;
-        throw res.error;
-      }
-      return res.value;
-    },
+    loadBundle: async (institutionId, bundleId) =>
+      bundleRepository.findDetail(institutionId, bundleId),
+    loadEvaluation: async (institutionId, evaluationId) =>
+      evaluationRepository.getDetail(institutionId, evaluationId),
     readUpload: makePrismaImageFetcher(),
   });
