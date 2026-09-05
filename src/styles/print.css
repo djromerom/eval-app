@@ -661,6 +661,11 @@
 
 .question-text .item-number {
   flex: 0 0 auto;
+  /* 5 sep 2026: numeral + punto en negrita. Aplica al cuadernillo
+     (src/app/print/bundle/[id]) y al booklet individual
+     (src/app/print/evaluation/[id]) porque ambos usan la misma clase.
+     El span contiene número+punto, así que ambos salen en bold. */
+  font-weight: 700;
 }
 
 .question-text > :not(.item-number) {
