@@ -23,7 +23,6 @@
  *     que `extractInlineAssets` guarda.
  */
 import { storagePathFromUploadUrl, UPLOAD_URL_PREFIX } from "@/modules/uploads/domain/upload";
-import type { ImageResolution } from "../domain/latex-walker";
 
 export interface InlineImageRef {
   kind: "inline";
@@ -81,7 +80,7 @@ function extForPath(path: string): string {
 export function resolveImageSrc(
   src: string,
   seenCountMap: Map<string, number>,
-): ImageResolution | InlineImageRef {
+): { kind: "skip"; reason: "external" | "data" | "unknown" } | InlineImageRef {
   if (!src || typeof src !== "string") {
     return { kind: "skip", reason: "unknown" };
   }

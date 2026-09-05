@@ -14,30 +14,37 @@
  *     texto renderizado.
  *
  * Cobertura: los 10 caracteres especiales canónicos de pandoc LaTeX writer.
- * Orden importa: el backslash (`\`) debe ir PRIMERO para no romper el
- * reemplazo de los demás (que introducen `\` en la salida).
  *
  * Referencia: https://pandoc.org/MANUAL.html#extension-latex_raw_tex
+ *
+ * ## Implementación: single regex pass
+ *
+ * Una sola regex con todas las alternativas y un Map<match, replacement>.
+ * Esto evita el bug clásico de "tabla de pares `[pattern, replacement]`":
+ * el reemplazo de `\char92{}` introduce `{}` en el output, que la siguiente
+ * regla de escape de `{`/`}` re-escaparía. Con un solo pass el `\` input
+ * se mira UNA vez, no se vuelve a tocar.
  */
-// Usamos `\char92{}` (carácter ASCII 92 = `\`) en lugar de
-// `\textbackslash{}` para evitar el ciclo de escape: el output de
-// `\textbackslash{}` contiene `{}` que la siguiente regla (escape de `{`)
-// re-escaparía a `\{\}`. `\char92{}` no contiene `{` ni `}` en el output,
-// así que el resto de la tabla opera limpio.
-// Referencia: TeX primitive `\char<num>` es portable y compila en todo
-// LaTeX (article, beamer, etc.).
-const ESCAPE_TABLE: ReadonlyArray<readonly [RegExp, string]> = [
-  [/\\/g, "\\char92{}"],
-  [/([#$&_])/g, "\\$1"],
-  [/\{/g, "\\{"],
-  [/\}/g, "\\}"],
-  [/~/g, "\\textasciitilde{}"],
-  [/\^/g, "\\textasciicircum{}"],
-  [/[%]/g, "\\%"],
-  [/>/g, "\\textgreater{}"],
-  [/</g, "\\textless{}"],
-  [/\r?\n/g, " "],
-];
+
+const ESCAPE_RE = /\\|[#$&_{}]|~|\^|%|>|<|\r\n|\r|\n/g;
+
+const ESCAPE_MAP: Readonly<Record<string, string>> = {
+  "\\": "\\char92{}",
+  "#": "\\#",
+  $: "\\$",
+  "&": "\\&",
+  _: "\\_",
+  "{": "\\{",
+  "}": "\\}",
+  "~": "\\textasciitilde{}",
+  "^": "\\textasciicircum{}",
+  "%": "\\%",
+  "<": "\\textless{}",
+  ">": "\\textgreater{}",
+  "\r\n": " ",
+  "\r": "",
+  "\n": " ",
+};
 
 /**
  * Escapa el texto para uso dentro de un .tex (no en comentarios).
@@ -48,11 +55,7 @@ const ESCAPE_TABLE: ReadonlyArray<readonly [RegExp, string]> = [
  * `escapeLatexComment` en su lugar.
  */
 export function escapeLatex(text: string): string {
-  let out = text;
-  for (const [pattern, replacement] of ESCAPE_TABLE) {
-    out = out.replace(pattern, replacement);
-  }
-  return out;
+  return text.replace(ESCAPE_RE, (m) => ESCAPE_MAP[m]!);
 }
 
 /**
@@ -60,26 +63,28 @@ export function escapeLatex(text: string): string {
  * (`% ...`). A diferencia de `escapeLatex`:
  *
  *   • NO escapa `<`, `>`, `~`, `^`, `%` — son inofensivos dentro de un `% ...`.
- *   • Sí escapa `{`, `}`, `\`, `#`, `$`, `&`, `_` — el primero por seguridad
- *     general; el resto porque aunque estén en un comentario, un parser
- *     LaTeX curioso podría interpretarlos si el comentario tiene continuación
- *     de línea incorrecta.
+ *   • Sí escapa `{`, `}`, `\`, `#`, `$`, `&`, `_` — por seguridad general,
+ *     aunque estén en un comentario un parser LaTeX curioso podría
+ *     interpretarlos si el comentario tiene continuación de línea incorrecta.
  *   • Convierte `\n` en continuación de comentario (`%\n% `) para que NO se
  *     "termine" el comentario a mitad del mensaje y el resto se interprete
  *     como LaTeX ejecutable.
  */
-const COMMENT_ESCAPE_TABLE: ReadonlyArray<readonly [RegExp, string]> = [
-  [/\\/g, "\\char92{}"],
-  [/([#$&_])/g, "\\$1"],
-  [/\{/g, "\\{"],
-  [/\}/g, "\\}"],
-  [/\r?\n/g, "\n% "],
-];
+const COMMENT_ESCAPE_RE = /\\|[#$&_{}]|\r\n|\r|\n/g;
+const COMMENT_ESCAPE_MAP: Readonly<Record<string, string>> = {
+  "\\": "\\char92{}",
+  "#": "\\#",
+  $: "\\$",
+  "&": "\\&",
+  _: "\\_",
+  "{": "\\{",
+  "}": "\\}",
+  "\r\n": "\n% ",
+  "\r": "",
+  "\n": "\n% ",
+};
 
 export function escapeLatexComment(text: string): string {
-  let out = text;
-  for (const [pattern, replacement] of COMMENT_ESCAPE_TABLE) {
-    out = out.replace(pattern, replacement);
-  }
-  return "% " + out;
+  const body = text.replace(COMMENT_ESCAPE_RE, (m) => COMMENT_ESCAPE_MAP[m]!);
+  return "% " + body;
 }

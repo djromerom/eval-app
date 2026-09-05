@@ -196,7 +196,9 @@ export function renderInline(node: TipTapNode, ctx: WalkerContext): string {
       return renderInlineMath(node);
     case "hardBreak":
       // Dentro de celda tabularx, `\\` rompe la fila — usamos `\newline`.
-      return ctx.insideTableCell ? "\\newline" : "\\\\";
+      // El `\n` posterior separa el break del siguiente inline para que el
+      // .tex sea legible cuando varias líneas conviven en el mismo párrafo.
+      return ctx.insideTableCell ? "\\newline\n" : "\\\\\n";
     case "image":
       return renderImageCore(node, ctx);
     case "bulletList":

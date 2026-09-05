@@ -27,33 +27,53 @@ const RESERVED_RE = /[\\/:*?"<>|\s]+/g;
 const NON_ASCII_RE = /[^\x20-\x7E]/g;
 const TRIM_RE = /^[-_.]+|[-_.]+$/g;
 
+/**
+ * Combinaciones de tildes y caracteres no-ASCII que `String.normalize("NFD")`
+ * + strip de combining marks no maneja limpiamente. Se mantienen explícitas
+ * para evitar sorpresas con `°`, `¿¡`, `—–` y similares.
+ */
 const ASCII_FALLBACKS: Record<string, string> = {
   "°": "",
   ñ: "n",
+  Ñ: "n",
   á: "a",
+  Á: "a",
   é: "e",
+  É: "e",
   í: "i",
+  Í: "i",
   ó: "o",
+  Ó: "o",
   ú: "u",
+  Ú: "u",
   ü: "u",
+  Ü: "u",
   "¿": "",
   "¡": "",
   "—": "-",
   "–": "-",
 };
 
+/** Rango Unicode de los combining marks (Block "Combining Diacritical Marks"). */
+const COMBINING_MARKS_RE = /[̀-ͯ]/g;
+
 function asciiFold(s: string): string {
+  // 1. Sustituciones explícitas (manejan chars que no se descomponen con
+  //    NFD o cuyo fold no es trivial: °, ¿¡, em/en dash, etc.).
   let out = s;
   for (const [from, to] of Object.entries(ASCII_FALLBACKS)) {
     out = out.replaceAll(from, to);
   }
+  // 2. NFD descompone tildes en `letra + combining-mark`. Strip los combining
+  //    marks para que la letra base sobreviva (`Á` → `A` + U+0301 → `A`).
+  out = out.normalize("NFD").replace(COMBINING_MARKS_RE, "");
   return out;
 }
 
 export function sanitizeFilename(input: string): string {
   if (!input) return "untitled";
 
-  // 1. Fold de tildes y chars no-ASCII comunes.
+  // 1. Fold de tildes (NFD + strip combining + sustituciones explícitas).
   let s = asciiFold(input);
 
   // 2. Strip todo lo que no sea ASCII imprimible.
