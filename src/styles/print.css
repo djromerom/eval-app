@@ -627,6 +627,61 @@
   column-span: all;
 }
 
+/* Caso "contexto + 1 ítem" (data-items="1"): la .question que cuelga del
+ * grupo ya trae su `border-right`. Extendemos esa misma línea hacia arriba
+ * para encajonar el .block-intro con un border-right del mismo grosor y
+ * color, y el mismo `padding-right` que .question (0.4rem) para que el
+ * texto no quede pegado a la línea y el grosor de la pila vertical sea
+ * continuo entre ambos bloques.
+ *
+ * `padding-bottom: 0.7rem` da el mismo aire visual que en el caso 2+,
+ * pero DENTRO del recuadro; combinado con `.questions-list { margin-top: 0 }`
+ * más abajo, el hueco entre el bottom del intro y el top de Q1 desaparece
+ * y el border-right fluye sin discontinuidad (antes el navegador
+ * aplicaba `margin-top: 1em` por defecto al `<ul>`, cortando la línea).
+ *
+ * La silueta final es una "L" acostada: palo vertical derecho que cubre
+ * contexto + ítem, y el borde inferior del ítem cierra por debajo.
+ */
+.print-group[data-items="1"] .block-intro {
+  border-right: 1px solid #ccc;
+  padding-right: 0.4rem;
+  padding-bottom: 0.7rem;
+}
+
+/* Caso "contexto + 1 ítem" (data-items="1"): sin margen superior del
+ * <ul> para que el border-right del .block-intro (regla anterior) y el
+ * de la .question se toquen sin hueco. `.questions-list[data-density="low"]`
+ * ya tiene `margin: 0 0 0.5rem 0` (lo cubre este selector también por
+ * precedencia), pero el caso density="high" —el habitual para 1 ítem
+ * porque no hay con quién balancear— depende de esta regla. */
+.print-group[data-items="1"] .questions-list {
+  margin-top: 0;
+}
+
+/* Encajonado del contexto común cuando agrupa 2+ ítems.
+ *
+ * El .question base ya trae `border-right` + `border-bottom`; el docente
+ * (sep 2026) quiere que el .block-intro que precede a 2+ preguntas
+ * cierre el mismo recuadro a la derecha y por abajo, para que la pila
+ * visual (intro + cada pregunta) forme una "escalera" donde el borde
+ * derecho se alinea en todos los bloques y los bordes inferiores se
+ * apilan uno debajo del otro. Sin esto el contexto quedaba "abierto"
+ * a la derecha y se sentía desconectado del cuerpo de preguntas.
+ *
+ * data-items="1" representa los dos casos en que NO se debe encajonar
+ * (contexto suelto de un solo ítem / intro vacío + 1 ítem): no tendría
+ * "vecino" a la derecha y el recuadro parecería colgar. Para esos casos
+ * la regla `.print-group[data-items="1"] { break-inside: avoid }` sigue
+ * gobernando el pegado de página sin alterarlos visualmente. */
+.print-group:not([data-items="1"]) .block-intro {
+  border-right: 1px solid #ccc;
+  border-bottom: 1px solid #ccc;
+  padding-right: 0.4rem;
+  padding-bottom: 0.3rem;
+  margin-bottom: 0.7rem;
+}
+
 .question {
   margin-bottom: 0.7rem;
   border-right: 1px solid #ccc;
