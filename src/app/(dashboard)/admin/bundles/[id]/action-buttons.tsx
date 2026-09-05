@@ -85,6 +85,17 @@ export function BundleActionPanel({ bundleId, isDraft }: { bundleId: string; isD
         </p>
       ) : null}
 
+      {/* Export LaTeX (Overleaf) — disponible también en DRAFT para que el
+          docente pueda empezar a editar en Overleaf antes de sellar. La ruta
+          /api/bundles/:id/latex-zip valida 403 si el cuadernillo está vacío
+          o el rol no tiene manage-bundles. */}
+      <Link
+        href={`/api/bundles/${bundleId}/latex-zip`}
+        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full")}
+      >
+        Descargar LaTeX (Overleaf)
+      </Link>
+
       {/* Links estáticos (descargas / navegación) */}
       {!isDraft ? (
         <>
