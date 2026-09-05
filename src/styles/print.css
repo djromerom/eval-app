@@ -682,6 +682,24 @@
   margin-bottom: 0.7rem;
 }
 
+/* Cuando el contexto no tiene título ni contenido (data-empty="true" emitido
+ * por las páginas /print), el recuadro del .block-intro cuelga sin nada
+ * adentro — un borde cerrado alrededor de vacío. Apagamos border, padding
+ * y margin para que el bloque sea invisible (las preguntas de abajo
+ * simplemente no tienen recuadro superior encima).
+ *
+ * El atributo se evalúa en el servidor, no en el cliente: las páginas
+ * /print son server components, así que `data-empty` sale en el HTML
+ * estático sin necesidad de JS. La regla también aplica al lead
+ * (`.block-lead` "RESPONDA LAS PREGUNTAS..."): si el contexto no tiene
+ * ni título ni contenido, no tiene sentido mostrar el lead que anuncia
+ * "SIGUIENTE INFORMACIÓN" sin información. */
+.print-group .block-intro[data-empty="true"] {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
 .question {
   margin-bottom: 0.7rem;
   border-right: 1px solid #ccc;

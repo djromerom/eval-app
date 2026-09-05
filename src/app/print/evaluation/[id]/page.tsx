@@ -122,7 +122,10 @@ export default async function PrintEvaluationPage({
                   {/* Agrupado para que el contexto no se separe de su 1ª pregunta.
                       En `none-merged`, el head emite intro; las demás secciones
                       del grupo se renderean sin su propio intro ni divider. */}
-                  <div className="block-intro">
+                  <div
+                    className="block-intro"
+                    data-empty={!headSection.title && !headHasContext ? "true" : undefined}
+                  >
                     {showLead && (
                       <p className="block-lead">
                         RESPONDA LAS PREGUNTAS {first} A LA {last} DE ACUERDO CON LA SIGUIENTE
