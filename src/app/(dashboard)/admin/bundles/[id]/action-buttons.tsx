@@ -8,6 +8,12 @@ import { cn } from "@/lib/utils";
 import { deleteBundleAction, toggleBundleReadyAction, type BundleFormState } from "../actions";
 import { BundlePdfDownloads } from "./bundle-pdf-downloads";
 
+// 5 sep 2026: feature latex-export pausada temporalmente mientras el docente
+// trabaja en otras cosas. La ruta /api/bundles/:id/latex-zip y el módulo
+// siguen vivos (rama feat/latex-export); sólo ocultamos el botón del panel.
+// Para re-habilitar: flip a `true`. No tocar el resto del componente.
+const LATEX_EXPORT_ENABLED = false;
+
 function ToggleSubmit({ isDraft }: { isDraft: boolean }) {
   const { pending } = useFormStatus();
   return (
@@ -85,16 +91,19 @@ export function BundleActionPanel({ bundleId, isDraft }: { bundleId: string; isD
         </p>
       ) : null}
 
-      {/* Export LaTeX (Overleaf) — disponible también en DRAFT para que el
-          docente pueda empezar a editar en Overleaf antes de sellar. La ruta
-          /api/bundles/:id/latex-zip valida 403 si el cuadernillo está vacío
-          o el rol no tiene manage-bundles. */}
-      <Link
-        href={`/api/bundles/${bundleId}/latex-zip`}
-        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full")}
-      >
-        Descargar LaTeX (Overleaf)
-      </Link>
+      {/* Export LaTeX (Overleaf) — oculto temporalmente (LATEX_EXPORT_ENABLED = false).
+          Para re-habilitar: flip del flag arriba. La ruta sigue viva, sólo escondimos
+          el botón del panel. Disponible también en DRAFT para que el docente pueda
+          empezar a editar en Overleaf antes de sellar. La ruta /api/bundles/:id/latex-zip
+          valida 403 si el cuadernillo está vacío o el rol no tiene manage-bundles. */}
+      {LATEX_EXPORT_ENABLED ? (
+        <Link
+          href={`/api/bundles/${bundleId}/latex-zip`}
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full")}
+        >
+          Descargar LaTeX (Overleaf)
+        </Link>
+      ) : null}
 
       {/* Links estáticos (descargas / navegación) */}
       {!isDraft ? (
