@@ -17,10 +17,24 @@
  *     filesystem local y red. Un `<iframe src="file://...">` sería un
  *     vector de exfiltración.
  *
- * Por eso la política es DENY-by-default: solo permitimos el subset que la
- * plantilla necesita (HTML estructural + CSS embebido + imágenes + svg inline).
- * Cualquier `<script>`, `<iframe>`, `on*=` handler, `javascript:` URL, etc.
- * se elimina silenciosamente.
+ * Política de sanitización (sep 2026):
+ * -----------------------------
+ * Antes usábamos `ALLOWED_TAGS` + `ALLOWED_ATTR` con whitelist explícita
+ * (DENY-by-default). Pero DOMPurify tiene una limitación conocida: cuando
+ * pasas esas listas, NO se aplican correctamente a elementos del namespace
+ * SVG — los atributos `viewBox`, `d`, `stroke-width`, etc. se eliminan del
+ * output aunque estén listados, y los íconos SVG del docente quedaban
+ * vacíos en el PDF.
+ *
+ * Solución: usar `USE_PROFILES: { html: true, svg: true }` — los profiles
+ * built-in de DOMPurify SÍ manejan correctamente los attrs de SVG. La
+ * defensa XSS sigue activa:
+ *
+ *   • `<script>`, `<iframe>`, `<object>`, `<embed>`, `<base>` — bloqueados
+ *     por FORBID_TAGS (veto explícito por encima del profile).
+ *   • `href="javascript:..."`, `src="data:text/html,..."` — eliminados
+ *     por los defaults del profile html.
+ *   • Event handlers `on*=` — eliminados por defaults.
  *
  * Si la sanitización REMUEVE algo que el docente considera esencial, el use
  * case devuelve UNSAFE_COVER_TEMPLATE con la lista de lo quitado — la UI lo
@@ -49,126 +63,6 @@ export interface RenderCoverInput {
   source: CoverTemplateSource;
 }
 
-/** Tags permitidos en el output. Es whitelist explícita; cualquier otro tag
- *  se elimina (junto con su contenido si es peligroso). */
-const ALLOWED_TAGS = [
-  // Estructura HTML5
-  "html",
-  "head",
-  "body",
-  "title",
-  "meta",
-  "link",
-  "div",
-  "section",
-  "header",
-  "footer",
-  "main",
-  "article",
-  "aside",
-  "nav",
-  "p",
-  "br",
-  "hr",
-  "span",
-  "strong",
-  "em",
-  "b",
-  "i",
-  "u",
-  "small",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "ul",
-  "ol",
-  "li",
-  "dl",
-  "dt",
-  "dd",
-  "img",
-  "figure",
-  "figcaption",
-  "picture",
-  "source",
-  "table",
-  "thead",
-  "tbody",
-  "tfoot",
-  "tr",
-  "th",
-  "td",
-  "caption",
-  "blockquote",
-  "pre",
-  "code",
-  // Estilos + SVG inline (necesarios para los iconos de asignatura y las
-  // decoraciones que usan algunas plantillas).
-  "style",
-  "svg",
-  "g",
-  "path",
-  "circle",
-  "rect",
-  "line",
-  "polygon",
-  "polyline",
-  "text",
-  "tspan",
-  "defs",
-  "use",
-  "title",
-  "desc",
-];
-
-/** Atributos permitidos. `style` se permite para CSS inline (p.ej. en SVG). */
-const ALLOWED_ATTR = [
-  "class",
-  "id",
-  "style",
-  "href",
-  "src",
-  "alt",
-  "title",
-  "lang",
-  "dir",
-  "width",
-  "height",
-  "viewbox",
-  "preserveaspectratio",
-  "fill",
-  "stroke",
-  "strokewidth",
-  "stroke-width",
-  "stroke-linecap",
-  "stroke-linejoin",
-  "d",
-  "cx",
-  "cy",
-  "r",
-  "rx",
-  "ry",
-  "x",
-  "y",
-  "x1",
-  "y1",
-  "x2",
-  "y2",
-  "points",
-  "transform",
-  "opacity",
-  "xmlns",
-  "colspan",
-  "rowspan",
-  "scope",
-  "type",
-  "rel",
-  "charset",
-];
-
 /** Tags que SI se eliminan con todo su contenido (no son autocierre y
  *  meterlos dejaría HTML a medio cerrar). */
 const FORBIDDEN_TAGS_WITH_CONTENT = ["script", "iframe", "object", "embed"];
@@ -183,29 +77,21 @@ export class RenderCover {
     //    de iconos de asignatura).
     const substituted = Mustache.render(template, context as unknown as Record<string, unknown>);
 
-    // 2) Sanitizar. Configuración en DENY-by-default para todo lo no listado.
+    // 2) Sanitizar. Usamos los profiles built-in de DOMPurify (`html` + `svg`)
+    // en vez de un whitelist explícito — ver docstring del módulo. FORBID_TAGS
+    // actúa como veto explícito por encima del profile (los profiles ya
+    // excluyen lo peligroso, pero el veto hace la defensa explícita y robusta
+    // a futuros cambios de defaults).
     const dirty = collectForbidden(substituted);
     const clean = DOMPurify.sanitize(substituted, {
-      ALLOWED_TAGS,
-      ALLOWED_ATTR,
+      USE_PROFILES: { html: true, svg: true },
       FORBID_TAGS: [...FORBIDDEN_TAGS_WITH_CONTENT, ...FORBIDDEN_VOID_TAGS],
-      // No permitimos data: URLs arbitrarios — solo data:image/*.
-      // Tampoco javascript:, vbscript:, file:.
-      ALLOWED_URI_REGEXP:
-        /^(?:(?:https?|mailto):|[#/]|(?:data:image\/(?:png|jpe?g|gif|webp|svg\+xml)[;,])|(?:data:application\/pdf))/i,
-      // OJO — NO poner KEEP_CONTENT:false. La doc de DOMPurify es confusa
-      // y la opción, contra lo que el nombre sugiere, NO significa "el
-      // contenido de los tags prohibidos se borra". En algunas versiones
-      // borra TODO el contenido de texto, dejando solo tags vacíos. El
-      // default (omitir la opción) preserva el contenido de los tags
-      // permitidos y borra el de los prohibidos — que es lo que queremos.
-      RETURN_TRUSTED_TYPE: false,
       // Sin WHOLE_DOCUMENT, DOMPurify extrae solo el `<body>` y descarta
-      // `<head>` + `<style>` (los tags siguen en ALLOWED_TAGS pero su
-      // CONTENIDO se descarta porque se considera peligroso por default).
+      // `<head>` + `<style>` (considera su contenido peligroso por default).
       // Necesitamos el `<style>` para que el preview en iframe aplique el
-      // CSS de la plantilla. Las restricciones de ALLOWED_TAGS/ATTR siguen
-      // activas, así que la política DENY-by-default se mantiene.
+      // CSS de la plantilla. Con USE_PROFILES + WHOLE_DOCUMENT el `<style>`
+      // se preserva y los SVG attributes (viewBox, d, etc.) también.
+      RETURN_TRUSTED_TYPE: false,
       WHOLE_DOCUMENT: true,
     });
 

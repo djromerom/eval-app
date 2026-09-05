@@ -1,21 +1,23 @@
 /**
- * Tests del helper `extractInlineAssets` (ago 2026).
+ * Tests del helper `extractInlineAssets` (ago 2026, actualizado sep 2026).
  * ===================================================
  *
- * Helper que toma el HTML de la portada, mueve los assets inline
- * (SVGs vectoriales + imágenes base64 en `<img>`) a disco y los
- * reemplaza por `<img src="/api/uploads/...">`. Valida:
+ * Helper que toma el HTML de la portada, mueve las imágenes inline
+ * (data URIs en `<img src>`) a disco y reemplaza el src por
+ * `<img src="/api/uploads/...">`. Valida:
  *
- *   • Happy path: SVGs, imágenes base64 (PNG/JPEG/GIF/WebP/SVG), mix.
- *   • Edge cases: HTML sin assets, SVG vacío, base64 con caracteres especiales.
+ *   • Happy path: imágenes base64 (PNG/JPEG/GIF/WebP/SVG en `<img>`).
+ *   • Edge cases: HTML sin assets, base64 con caracteres especiales.
  *   • Caps: MAX_ASSETS_PER_SAVE, MAX_ASSET_BYTES.
  *   • Idempotencia (segunda llamada sobre HTML ya slimmed).
  *   • Orden de aparición preservado.
+ *
+ * NOTA (sep 2026): los `<svg>` inline ya NO se extraen (fix A). Los
+ * tests que afirmaban extracción de SVG ahora están borrados.
  */
 import { describe, expect, it } from "vitest";
 import {
   extractInlineAssets,
-  MAX_ASSET_BYTES,
   MAX_ASSETS_PER_SAVE,
   OversizedInlineAssetError,
   TooManyInlineAssetsError,
@@ -33,10 +35,12 @@ function makeSave() {
 
 describe("extractInlineAssets", () => {
   // ========================================================================
-  // SVG path
+  // Happy paths
   // ========================================================================
 
   it("HTML sin assets devuelve html intacto y extractedAssets=[]", async () => {
+    // (sep 2026) Tras el fix A, los `<svg>` inline ya NO se extraen —
+    // este test ahora cubre HTML sin imágenes data: (ni SVG ni data:).
     const html = "<h1>Hola</h1><p>Mundo sin svg ni imágenes</p>";
     const { save, saved } = makeSave();
 
@@ -50,59 +54,6 @@ describe("extractInlineAssets", () => {
     expect(result.extractedAssets).toEqual([]);
     expect(saved).toHaveLength(0);
   });
-
-  it("extrae 1 SVG y lo reemplaza por <img>", async () => {
-    const svg = '<svg width="24" height="24"><circle cx="12" cy="12" r="10"/></svg>';
-    const html = `<h1>Título</h1>${svg}<p>Después</p>`;
-    const { save, saved } = makeSave();
-
-    const result = await extractInlineAssets(html, {
-      institutionId: "inst-A",
-      bundleId: "b1",
-      save,
-    });
-
-    expect(result.extractedAssets).toHaveLength(1);
-    expect(result.extractedAssets[0]!).toMatch(
-      /^institutions\/inst-A\/cover-html\/b1\/[\w-]+\.svg$/,
-    );
-    expect(result.html).toContain('<img src="/api/uploads/');
-    expect(result.html).toContain('class="cover-html-extracted-asset"');
-    expect(result.html).not.toContain("<svg");
-    expect(result.html).toContain("<h1>Título</h1>");
-
-    expect(saved).toHaveLength(1);
-    expect(saved[0]!.data.toString("utf8")).toBe(svg);
-    expect(saved[0]!.path).toBe(result.extractedAssets[0]);
-  });
-
-  it("extrae múltiples SVGs preservando orden de aparición", async () => {
-    const svg1 = '<svg width="10"><rect/></svg>';
-    const svg2 = '<svg width="20"><path d="M0 0"/></svg>';
-    const svg3 = '<svg width="30"><line x1="0" y1="0" x2="1" y2="1"/></svg>';
-    const html = `<p>A</p>${svg1}<p>B</p>${svg2}<p>C</p>${svg3}<p>D</p>`;
-    const { save, saved } = makeSave();
-
-    const result = await extractInlineAssets(html, {
-      institutionId: "inst-A",
-      bundleId: "b1",
-      save,
-    });
-
-    expect(result.extractedAssets).toHaveLength(3);
-    expect(new Set(result.extractedAssets).size).toBe(3);
-    expect((result.html.match(/<img src=/g) ?? []).length).toBe(3);
-    expect(result.html).not.toContain("<svg");
-
-    expect(saved).toHaveLength(3);
-    expect(saved[0]!.data.toString("utf8")).toBe(svg1);
-    expect(saved[1]!.data.toString("utf8")).toBe(svg2);
-    expect(saved[2]!.data.toString("utf8")).toBe(svg3);
-  });
-
-  // ========================================================================
-  // Imágenes base64 path (ago 2026 — el caso real del docente)
-  // ========================================================================
 
   it("extrae 1 imagen PNG base64 y la reemplaza por <img>", async () => {
     // 1x1 PNG transparente en base64 (~70 bytes decoded)
@@ -154,6 +105,9 @@ describe("extractInlineAssets", () => {
   });
 
   it("extrae SVG dentro de <img src='data:image/svg+xml;base64,...'> como .svg", async () => {
+    // Esto es un `<img>` con src=data:image/svg+xml — sigue siendo una
+    // data URI en un `<img>`, así que SÍ se extrae. La regla "no extraer
+    // SVG inline" aplica solo a `<svg>...</svg>` literales (fix A).
     const svgText = "<svg><circle/></svg>";
     const svgBase64 = Buffer.from(svgText).toString("base64");
     const svgDataUri = `data:image/svg+xml;base64,${svgBase64}`;
@@ -171,8 +125,10 @@ describe("extractInlineAssets", () => {
     expect(saved[0]!.data.toString("utf8")).toBe(svgText);
   });
 
-  it("mezcla SVG inline + <img base64> + <img src='/static/...'>, solo extrae los inline", async () => {
-    const svg = "<svg><rect/></svg>";
+  it("mezcla <svg> literal + <img base64> + <img src='/static/...'>, solo extrae el data:", async () => {
+    // (sep 2026) El <svg> ahora queda LITERAL en el HTML; solo el data:
+    // URI del <img> se externaliza a disco.
+    const svg = "<svg viewBox='0 0 10 10'><rect/></svg>";
     const pngBase64 =
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
     const pngUri = `data:image/png;base64,${pngBase64}`;
@@ -190,17 +146,19 @@ describe("extractInlineAssets", () => {
       save,
     });
 
-    // Solo extrae el SVG y la PNG inline. Las externas se quedan.
-    expect(result.extractedAssets).toHaveLength(2);
-    expect(saved).toHaveLength(2);
+    // Solo extrae la PNG. El <svg> queda literal; las externas se quedan.
+    expect(result.extractedAssets).toHaveLength(1);
+    expect(saved).toHaveLength(1);
     expect(result.html).toContain("/static/keep.png");
     expect(result.html).toContain("https://cdn.example.com/keep.png");
     expect(result.html).toContain('<img src="/api/uploads/');
-    expect(result.html).not.toContain("<svg");
+    expect(result.html).toContain(svg); // el <svg> literal sobrevive intacto
     expect(result.html).not.toContain("data:image/png");
   });
 
-  it("intercala SVG y <img base64> preservando orden de aparición", async () => {
+  it("preserva <svg> literales y extrae solo <img data:>", async () => {
+    // (sep 2026) Ningún SVG es extraído por el helper — se mantienen
+    // en el HTML persistido con sus atributos originales.
     const svg1 = '<svg width="10"><rect/></svg>';
     const pngBase64 =
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -215,11 +173,12 @@ describe("extractInlineAssets", () => {
       save,
     });
 
-    expect(result.extractedAssets).toHaveLength(3);
-    expect(saved).toHaveLength(3);
-    expect(saved[0]!.data.toString("utf8")).toBe(svg1);
-    expect(saved[1]!.data.toString("base64")).toBe(pngBase64);
-    expect(saved[2]!.data.toString("utf8")).toBe(svg2);
+    // Solo la PNG se extrae; ambos <svg> sobreviven literales.
+    expect(result.extractedAssets).toHaveLength(1);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]!.data.toString("base64")).toBe(pngBase64);
+    expect(result.html).toContain(svg1);
+    expect(result.html).toContain(svg2);
   });
 
   // ========================================================================
@@ -227,28 +186,17 @@ describe("extractInlineAssets", () => {
   // ========================================================================
 
   it("rechaza si supera MAX_ASSETS_PER_SAVE", async () => {
-    const svgs = Array.from(
+    // (sep 2026) Usamos <img> en vez de <svg>: los SVG ya no se extraen.
+    const imgs = Array.from(
       { length: MAX_ASSETS_PER_SAVE + 1 },
-      (_, i) => `<svg width="${i}"><rect/></svg>`,
+      () => `<img src="data:image/png;base64,iVBORw0KGgo="/>`,
     ).join("");
-    const html = `<p>${svgs}</p>`;
+    const html = `<p>${imgs}</p>`;
     const { save, saved } = makeSave();
 
     await expect(
       extractInlineAssets(html, { institutionId: "inst-A", bundleId: "b1", save }),
     ).rejects.toThrow(TooManyInlineAssetsError);
-
-    expect(saved).toHaveLength(0);
-  });
-
-  it("rechaza si UN SVG supera MAX_ASSET_BYTES", async () => {
-    const huge = '<svg width="10">' + "a".repeat(MAX_ASSET_BYTES) + "</svg>";
-    const html = `<p>${huge}</p>`;
-    const { save, saved } = makeSave();
-
-    await expect(
-      extractInlineAssets(html, { institutionId: "inst-A", bundleId: "b1", save }),
-    ).rejects.toThrow(OversizedInlineAssetError);
 
     expect(saved).toHaveLength(0);
   });
@@ -270,11 +218,13 @@ describe("extractInlineAssets", () => {
     expect(saved).toHaveLength(0);
   });
 
-  it("acepta exactamente MAX_ASSETS_PER_SAVE assets combinados", async () => {
+  it("acepta exactamente MAX_ASSETS_PER_SAVE imágenes", async () => {
+    // (sep 2026) Solo <img>: los SVG ya no se extraen, así que este test
+    // verifica el cap con N imágenes en vez de N/2 SVG + N/2 img.
     const pngBase64 = "iVBORw0KGgo=";
     const items = Array.from(
-      { length: MAX_ASSETS_PER_SAVE / 2 },
-      (_, i) => `<svg width="${i}"><rect/></svg><img src="data:image/png;base64,${pngBase64}"/>`,
+      { length: MAX_ASSETS_PER_SAVE },
+      () => `<img src="data:image/png;base64,${pngBase64}"/>`,
     ).join("");
     const html = `<p>${items}</p>`;
     const { save, saved } = makeSave();
@@ -290,15 +240,15 @@ describe("extractInlineAssets", () => {
   });
 
   it("idempotencia: llamar dos veces sobre HTML ya slimmed no extrae más", async () => {
-    const svg = '<svg width="24"><circle/></svg>';
+    // (sep 2026) Sin SVG a extraer: solo la PNG cuenta.
     const pngUri = "data:image/png;base64,iVBORw0KGgo=";
     const { save, saved } = makeSave();
-    const first = await extractInlineAssets(`<p>${svg}<img src="${pngUri}"/></p>`, {
+    const first = await extractInlineAssets(`<p><img src="${pngUri}"/></p>`, {
       institutionId: "inst-A",
       bundleId: "b1",
       save,
     });
-    expect(first.extractedAssets).toHaveLength(2);
+    expect(first.extractedAssets).toHaveLength(1);
 
     const second = await extractInlineAssets(first.html, {
       institutionId: "inst-A",
@@ -307,20 +257,21 @@ describe("extractInlineAssets", () => {
     });
     expect(second.extractedAssets).toEqual([]);
     expect(second.html).toBe(first.html);
-    expect(saved).toHaveLength(2);
+    expect(saved).toHaveLength(1);
   });
 
   it("usa institutionId y bundleId del contexto en el path", async () => {
-    const svg = '<svg width="10"><rect/></svg>';
+    // (sep 2026) <img> data URI en vez de <svg>.
+    const img = `<img src="data:image/png;base64,iVBORw0KGgo="/>`;
     const { save } = makeSave();
-    const result = await extractInlineAssets(`<p>${svg}</p>`, {
+    const result = await extractInlineAssets(`<p>${img}</p>`, {
       institutionId: "inst-XYZ",
       bundleId: "bundle-42",
       save,
     });
 
     expect(result.extractedAssets[0]!).toMatch(
-      /^institutions\/inst-XYZ\/cover-html\/bundle-42\/[\w-]+\.svg$/,
+      /^institutions\/inst-XYZ\/cover-html\/bundle-42\/[\w-]+\.png$/,
     );
   });
 });

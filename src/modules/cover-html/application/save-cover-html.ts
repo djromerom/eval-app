@@ -87,7 +87,7 @@ export class SaveCoverHtml implements UseCase<SaveCoverHtmlInput, CoverLiveState
     if (bytes > MAX_COVER_LIVE_PROJECT_BYTES) {
       return fail(
         new ValidationError(
-          `El HTML live es demasiado grande (${bytes} bytes). Máximo ${MAX_COVER_LIVE_PROJECT_BYTES} (~200KB).`,
+          `El HTML live es demasiado grande (${bytes} bytes). Máximo ${MAX_COVER_LIVE_PROJECT_BYTES} (~3MB).`,
         ),
       );
     }

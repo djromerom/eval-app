@@ -585,6 +585,67 @@ describe("bundle-cover", () => {
     });
   });
 
+  // -------------------- RenderCover + SVG (sep 2026) --------------------
+
+  describe("RenderCover + SVG inline", () => {
+    // Regression test (sep 2026): tras el fix A de extractInlineAssets (ya
+    // no extrae `<svg>` literales), el HTML live del docente pasa por
+    // RenderCover con sus `<svg><path d="..."/></svg>` intactos.
+    //
+    // DOMPurify tiene una limitación conocida: cuando se pasa
+    // `ALLOWED_TAGS`/`ALLOWED_ATTR` con whitelist explícita, los atributos
+    // del namespace SVG (`viewBox`, `d`, `stroke-width`, etc.) NO se
+    // preservan aunque estén listados — los íconos del docente quedaban
+    // vacíos en el PDF. El fix es usar `USE_PROFILES: { html, svg }` y
+    // dejar que DOMPurify use sus whitelists built-in para el namespace
+    // SVG.
+    it("preserva <svg viewBox><path d='...'/></svg> literal del docente", () => {
+      const render = new RenderCover();
+      const teacherIcon = `<html><body>
+        <article class="subject">
+          <span class="subject-icon icon">
+            <svg id="critical-reading" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 38.33 36.8">
+              <path class="cls-1" d="m7.22,18.5c0-.47,0-.94,0-1.41c0-.54,0-1.07,0-1.61.01-.57.34-.8.88-.63.17.05.33.11.53.18,0-.4,0-.77,0-1.14.01-.5.36-.81.8-.61.73.33,1.22.09,1.8-.36,1.17-.91,2.53-1.36,4.03-1.32Z"></path>
+            </svg>
+          </span>
+          <span>Lectura Crítica</span>
+        </article>
+      </body></html>`;
+      const out = render.execute({
+        template: teacherIcon,
+        context: {
+          institution: { name: "x", logo: null, legalFooter: "x", primaryColor: "#000" },
+          bundle: {
+            name: "x",
+            grade: "x",
+            bookletCode: "x",
+            periodLabel: "x",
+            totalQuestions: 0,
+            totalTime: "x",
+          },
+          session: { name: "x", labelShort: "x" },
+          story: { title: null, description: null, illustration: null },
+          subjects: [],
+          cover: {
+            instructions: { title: "x", items: [], itemsAfter: [] },
+            callout: { text: "x" },
+            howToMark: { question: "x", example: "x", exampleLabel: "x", circles: [] },
+            prohibited: { title: "x", body: "x" },
+          },
+        },
+        key: DEFAULT_COVER_TEMPLATE_KEY,
+        source: "OVERRIDE",
+      });
+
+      // El <svg> y el <path> sobreviven con sus atributos críticos.
+      expect(out.html).toContain("<svg");
+      expect(out.html).toContain('viewBox="0 0 38.33 36.8"');
+      expect(out.html).toContain("<path");
+      expect(out.html).toMatch(/<path[^>]*\bd="m7\.22/);
+      expect(out.html).toContain("Lectura Crítica");
+    });
+  });
+
   // -------------------- SaveCoverTemplate --------------------
 
   describe("SaveCoverTemplate", () => {
