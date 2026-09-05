@@ -595,13 +595,23 @@
  *   2) Contexto + 1 ítem: intro y .question son hermanos dentro de
  *      .questions-flow; no hay wrapper común que los ancle como bloque.
  *
- * El wrapper `.print-group` resuelve las dos variantes uniformemente.
- * `break-inside: avoid` pega el conjunto; si no cabe, Chrome parte entre
- * hermanos — nunca dentro de un .question — "saltar de página solo al
- * cruzar".
+ * El wrapper `.print-group` resuelve las dos variantes — pero SOLO cuando
+ * data-items="1". Para grupos con 2+ ítems `break-inside: avoid` es
+ * contraproducente: un block-intro largo (Lectura + tabla + imagen) hace
+ * que el grupo entero no quepa en la página del subject-title, y Chrome lo
+ * empuja entero a la siguiente, dejando el subject-title huérfano (vive en
+ * `.sheet.questions`, fuera del wrapper).
  *
- * Aplica a TODO grupo (single y none-merged): los `none-merged` ya fusionan
- * N secciones en una, así que el `break-inside: avoid` los pega todos.
+ * Los dos casos que justificaron el wrapper siguen cubiertos con
+ * data-items="1":
+ *   1) Intro vacío + 1 ítem ("ninguno suelto"): sin break-inside: avoid,
+ *      la .question queda huérfana al pie de página anterior.
+ *   2) Contexto + 1 ítem: sin wrapper común, intro y pregunta se separan.
+ *
+ * Para grupos con 2+ ítems el pegado contexto→primera pregunta sigue
+ * garantizado por `.block-intro { break-after: avoid }`; las preguntas
+ * restantes fluyen entre páginas sin partirse dentro (cada `.question`
+ * tiene `break-inside: avoid`).
  *
  * Preserva comportamiento histórico de multicolumna:
  *  - density=low: cruza las 2 columnas del .questions-flow (igual que el
@@ -609,7 +619,7 @@
  *  - density=high: NO cruza. Las .question siguen fluyendo como item-column
  *    dentro del .questions-flow[data-columns="2"].
  */
-.print-group {
+.print-group[data-items="1"] {
   break-inside: avoid;
 }
 
