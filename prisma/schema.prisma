@@ -319,7 +319,7 @@ model Student {
   grade          String?
   // Cuadernillo por defecto del estudiante al armar hojas de respuesta.
   // Nullable para mantener compat con filas existentes.
-  bookletTypeId  String?
+  bookletTypeId  String?  @db.Uuid
   bookletType    BookletType? @relation(fields: [bookletTypeId], references: [id], onDelete: SetNull)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt

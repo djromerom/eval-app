@@ -11,7 +11,7 @@
 
 ALTER TABLE "Student"
   ADD COLUMN "grade"         TEXT,
-  ADD COLUMN "bookletTypeId" TEXT;
+  ADD COLUMN "bookletTypeId" UUID;
 
 ALTER TABLE "Student"
   ADD CONSTRAINT "Student_bookletTypeId_fkey"
