@@ -41,6 +41,24 @@ export function evaluationMatchesBundleCourse(
   return bundleCourseId === evaluationCourseId;
 }
 
+/**
+ * Sprint Bundle-Period (sep 2026) — invariante Tipo de cuadernillo.
+ *
+ * Si el bundle tiene `bookletTypeId` definido, todos sus items deben tener
+ * ESE BookletType. Si el bundle tiene `bookletTypeId === null`, no hay
+ * restricción (admite cualquier Tipo — útil durante la migración de bundles
+ * existentes en prod).
+ *
+ * Función pura: recibe el BookletType del bundle y el de la evaluation.
+ */
+export function evaluationMatchesBundleBookletType(
+  bundleBookletTypeId: string | null,
+  evaluationBookletTypeId: string | null,
+): boolean {
+  if (bundleBookletTypeId === null) return true;
+  return bundleBookletTypeId === evaluationBookletTypeId;
+}
+
 /** Mínimo de items requeridos para marcar el bundle como READY. */
 export const MIN_ITEMS_FOR_READY = 1;
 

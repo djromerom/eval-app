@@ -130,6 +130,8 @@ export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
           parentSubjectName: e.parentSubjectName,
           courseId: e.courseId,
           courseName: e.courseName,
+          bookletTypeId: e.bookletTypeId,
+          bookletTypeName: e.bookletTypeName,
         },
       ]),
     );

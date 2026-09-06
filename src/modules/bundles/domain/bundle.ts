@@ -37,6 +37,22 @@ export interface Bundle {
   courseId: string | null;
   /** Nombre del curso resuelto por el repo (para portada y listados). */
   courseName: string | null;
+  /**
+   * Sprint Bundle-Period (sep 2026): Prueba a la que pertenece el compendio.
+   * Opcional para compat con bundles existentes en prod. Se hidrata con un
+   * join a `period` en el repo (o `null` si el bundle no tiene prueba).
+   */
+  periodId: string | null;
+  /** Nombre del Period (Prueba) resuelto por el repo. */
+  periodName: string | null;
+  /**
+   * Sprint Bundle-Period: Tipo de cuadernillo (BookletType) del compendio.
+   * Si está set, debe pertenecer al mismo `periodId` (validado en use cases)
+   * y todos los items deben tener ese BookletType. Opcional para compat.
+   */
+  bookletTypeId: string | null;
+  /** Nombre del BookletType resuelto por el repo. */
+  bookletTypeName: string | null;
   status: BundleStatus;
   /**
    * Override visual por cuadernillo. JSONB crudo: la capa de aplicación no
@@ -110,6 +126,18 @@ export interface CreateBundleData {
   bookletNumber?: number | null;
   /** Curso del cuadernillo. `null`/omitido = cross-course. */
   courseId?: string | null;
+  /**
+   * Sprint Bundle-Period: Prueba del cuadernillo. Si se omite, el use case
+   * inyecta el periodo actual del año académico vigente (o null si la
+   * institución no tiene año actual). `null` explícito = sin prueba.
+   */
+  periodId?: string | null;
+  /**
+   * Sprint Bundle-Period: Tipo de cuadernillo. Si está set, debe pertenecer
+   * al `periodId` resuelto y todos los items deben tener ese BookletType
+   * (validado en CreateBundle).
+   */
+  bookletTypeId?: string | null;
   evaluationIds: string[];
   theme?: Partial<BundleTheme> | null;
 }
@@ -122,6 +150,17 @@ export interface UpdateBundleData {
    * string = asignar curso (requiere que los items ya presentes coincidan).
    */
   courseId?: string | null;
+  /**
+   * Sprint Bundle-Period: Prueba del compendio. `undefined` = no tocar;
+   * `null` = limpiar; string = asignar (debe existir en la institución).
+   */
+  periodId?: string | null;
+  /**
+   * Sprint Bundle-Period: Tipo de cuadernillo. `undefined` = no tocar;
+   * `null` = limpiar; string = asignar (debe existir y pertenecer al periodId
+   * final; todos los items deben tener ese BookletType).
+   */
+  bookletTypeId?: string | null;
   theme?: Partial<BundleTheme> | null;
   /**
    * Override del copy de la portada. `undefined` = no tocar; `null` = limpiar
@@ -131,6 +170,17 @@ export interface UpdateBundleData {
    * PR 3 (ago 2026).
    */
   coverContent?: unknown | null;
+}
+
+/**
+ * Filtros opcionales para listar bundles (Sprint Bundle-Period).
+ * El scope multi-tenant y por roles (ECU_LIDER → courseIds asignados) se
+ * aplica ANTES de los filtros — los filtros refinan, no reemplazan.
+ */
+export interface BundleFilters {
+  periodId?: string;
+  bookletTypeId?: string;
+  status?: BundleStatus;
 }
 
 export interface AddItemInput {
@@ -161,13 +211,20 @@ export interface BundleRepository {
         parentSubjectName: string | null;
         courseId: string;
         courseName: string;
+        /** Sprint Bundle-Period: Tipo de cuadernillo de la evaluation. */
+        bookletTypeId: string | null;
+        bookletTypeName: string | null;
       }
     >,
   ): Promise<Bundle>;
 
   findById(institutionId: string, id: string): Promise<Bundle | null>;
   findDetail(institutionId: string, id: string): Promise<BundleDetail | null>;
-  findAll(institutionId: string): Promise<Bundle[]>;
+  /**
+   * Lista todos los bundles de la institución. Acepta filtros opcionales
+   * (Sprint Bundle-Period) para refinar por Prueba, Tipo o Estado.
+   */
+  findAll(institutionId: string, filters?: BundleFilters): Promise<Bundle[]>;
   /**
    * Lista los bundles cuyo `courseId` está en `courseIds`. Los bundles
    * cross-course (courseId null) NO se incluyen — el líder solo ve los
@@ -219,6 +276,10 @@ export interface BundleRepository {
       /** Sprint 9: curso de la evaluation, para validar contra bundle.courseId. */
       courseId: string;
       courseName: string;
+      /** Sprint Bundle-Period: Tipo de cuadernillo, para validar contra
+       *  `bundle.bookletTypeId` cuando éste está set. */
+      bookletTypeId: string | null;
+      bookletTypeName: string | null;
     }>
   >;
 }

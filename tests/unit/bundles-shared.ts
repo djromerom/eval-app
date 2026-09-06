@@ -102,7 +102,59 @@ export type SeedEvaluation = {
   /** Sprint 9 — curso de la evaluation (vía courseSubject). */
   courseId: string;
   courseName: string;
+  /** Sprint Bundle-Period — Tipo de cuadernillo de la evaluation. */
+  bookletTypeId: string | null;
+  bookletTypeName: string | null;
 };
+
+/**
+ * Catálogo de BookletTypes compartido por los tests de bundles (Sprint
+ * Bundle-Period). Los IDs son estables para que los specs puedan referirlos
+ * por nombre.
+ */
+export const BOOKLET_TYPES: Record<
+  string,
+  { id: string; name: string; periodId: string; institutionId: string }
+> = {
+  "bt-p1-est": {
+    id: "bt-p1-est",
+    name: "Estándar",
+    periodId: "period-1",
+    institutionId: "inst-1",
+  },
+  "bt-p1-esp": {
+    id: "bt-p1-esp",
+    name: "Especial",
+    periodId: "period-1",
+    institutionId: "inst-1",
+  },
+  "bt-p2-est": {
+    id: "bt-p2-est",
+    name: "Estándar",
+    periodId: "period-2",
+    institutionId: "inst-1",
+  },
+};
+
+/**
+ * Catálogo de periodos compartido por los tests (Sprint Bundle-Period).
+ * Solo lo necesitamos para resolver `periodName` desde `periodId` en los
+ * repositorios en memoria — el repo Prisma lo hace con un join.
+ */
+export const PERIODS: Record<string, { id: string; name: string; institutionId: string }> = {
+  "period-1": { id: "period-1", name: "I Periodo", institutionId: "inst-1" },
+  "period-2": { id: "period-2", name: "II Periodo", institutionId: "inst-1" },
+};
+
+export function bookletTypeNameOf(bookletTypeId: string | null): string | null {
+  if (bookletTypeId === null) return null;
+  return BOOKLET_TYPES[bookletTypeId]?.name ?? null;
+}
+
+export function periodNameOf(periodId: string | null): string | null {
+  if (periodId === null) return null;
+  return PERIODS[periodId]?.name ?? null;
+}
 
 export class InMemoryBundleRepository implements BundleRepository {
   bundles = new Map<string, Bundle>();
@@ -137,6 +189,10 @@ export class InMemoryBundleRepository implements BundleRepository {
       bookletNumber: data.bookletNumber ?? null,
       courseId: data.courseId ?? null,
       courseName: data.courseId ? courseNameOf(data.courseId) : null,
+      periodId: data.periodId ?? null,
+      periodName: periodNameOf(data.periodId ?? null),
+      bookletTypeId: data.bookletTypeId ?? null,
+      bookletTypeName: bookletTypeNameOf(data.bookletTypeId ?? null),
       status: "DRAFT",
       theme: data.theme ?? null,
       coverContent: null,
@@ -176,8 +232,21 @@ export class InMemoryBundleRepository implements BundleRepository {
     };
   }
 
-  async findAll(institutionId: string): Promise<Bundle[]> {
-    return Array.from(this.bundles.values()).filter((b) => b.institutionId === institutionId);
+  async findAll(
+    institutionId: string,
+    filters?: { periodId?: string; bookletTypeId?: string; status?: BundleStatus },
+  ): Promise<Bundle[]> {
+    return Array.from(this.bundles.values()).filter((b) => {
+      if (b.institutionId !== institutionId) return false;
+      if (filters?.periodId !== undefined && b.periodId !== filters.periodId) return false;
+      if (
+        filters?.bookletTypeId !== undefined &&
+        b.bookletTypeId !== filters.bookletTypeId
+      )
+        return false;
+      if (filters?.status !== undefined && b.status !== filters.status) return false;
+      return true;
+    });
   }
 
   async findByCourseIds(institutionId: string, courseIds: string[]): Promise<Bundle[]> {
@@ -198,6 +267,18 @@ export class InMemoryBundleRepository implements BundleRepository {
         ? {
             courseId: data.courseId,
             courseName: data.courseId ? courseNameOf(data.courseId) : null,
+          }
+        : {}),
+      ...(data.periodId !== undefined
+        ? {
+            periodId: data.periodId,
+            periodName: periodNameOf(data.periodId),
+          }
+        : {}),
+      ...(data.bookletTypeId !== undefined
+        ? {
+            bookletTypeId: data.bookletTypeId,
+            bookletTypeName: bookletTypeNameOf(data.bookletTypeId),
           }
         : {}),
       ...(data.theme !== undefined ? { theme: data.theme } : {}),
@@ -376,6 +457,8 @@ export function seedEvaluationGrado6(
     parentSubjectName: options?.parentSubjectName ?? "Ciencias Naturales",
     courseId: options?.courseId ?? "course-6",
     courseName: options?.courseName ?? courseNameOf(options?.courseId ?? "course-6"),
+    bookletTypeId: options?.bookletTypeId ?? null,
+    bookletTypeName: options?.bookletTypeName ?? null,
   };
   repo.seedEvaluation(ev);
   return ev;
