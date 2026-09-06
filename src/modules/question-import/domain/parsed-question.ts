@@ -144,18 +144,39 @@ export function partitionParsedQuestions(questions: ParsedQuestion[]): {
 }
 
 /**
- * Reasigna las claves de opción a A, B, C… en orden.
+ * Normaliza las claves de opción al formato que exige el dominio (A, B, C…
+ * consecutivas, sin huecos).
  *
- * Los parsers pueden leer opciones con claves desordenadas o con huecos (un
- * Word donde falta la C, o donde una opción se escribió con `B,` en vez de
- * `B.`). El dominio exige claves consecutivas desde A, así que se normalizan
- * conservando el orden en que aparecían.
+ * Hay dos casos:
  *
- * Si la correcta apuntaba a una clave concreta, se traslada a su nueva
- * posición; si esa opción ya no existe, se devuelve `null` para que la
- * revisión obligue a marcarla.
+ * 1. Las claves que devolvió el parser YA son consecutivas desde A y
+ *    coinciden con el orden del array. Caso típico: DOCX/IA que leen
+ *    correctamente la letra del PDF y la asocian con su texto. Se pasan
+ *    tal cual — reasignar por posición aquí solo serviría para perder
+ *    información del parser (p. ej. si la IA leyó en otro orden pero
+ *    etiquetó cada texto con su letra original, normalizar desplazaría
+ *    los textos a las letras equivocadas).
+ *
+ * 2. Las claves NO son consecutivas desde A: huecos (falta la B),
+ *    desordenadas, o vienen vacías (caso CSV). El dominio exige claves
+ *    consecutivas desde A, así que se reasignan por posición preservando
+ *    el orden en que aparecieron. Si la correcta apuntaba a una clave
+ *    concreta, se traslada a su nueva posición; si esa opción ya no existe
+ *    en el array resultante, se devuelve `null` para que la revisión
+ *    obligue a marcarla.
  */
 export function normalizeOptionKeys(q: ParsedQuestion): ParsedQuestion {
+  const alreadyValid = q.options.every((o, i) => o.key === ANSWER_KEYS_ORDER[i]);
+  if (alreadyValid) {
+    // Las claves ya son consecutivas desde A; se respeta el parser. Solo se
+    // valida que la correcta apunte a una clave existente — si no, se
+    // devuelve `null` para que la revisión obligue a marcarla.
+    if (q.correctAnswer !== null && !q.options.some((o) => o.key === q.correctAnswer)) {
+      return { ...q, correctAnswer: null };
+    }
+    return q;
+  }
+
   const previousCorrectIndex =
     q.correctAnswer === null ? -1 : q.options.findIndex((o) => o.key === q.correctAnswer);
 

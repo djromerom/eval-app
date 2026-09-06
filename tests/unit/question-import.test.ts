@@ -332,6 +332,26 @@ describe("normalizeOptionKeys", () => {
     expect(out.options.map((o) => o.key)).toEqual(["A", "B", "C", "D"]);
     expect(out.correctAnswer).toBe("B");
   });
+  it("respeta las claves cuando ya son consecutivas desde A", () => {
+    // Caso típico: DOCX/IA leen correctamente la letra del PDF y la asocian
+    // con su texto. Reasignar por posición solo serviría para perder
+    // información del parser (p. ej. si la IA etiquetó cada texto con su
+    // letra original pero los devolvió en orden distinto al array).
+    const out = normalizeOptionKeys(
+      valid({
+        options: [
+          { key: "A", text: "uno" },
+          { key: "B", text: "dos" },
+          { key: "C", text: "tres" },
+          { key: "D", text: "cuatro" },
+        ],
+        correctAnswer: "B",
+      }),
+    );
+    expect(out.options.map((o) => o.key)).toEqual(["A", "B", "C", "D"]);
+    expect(out.options.map((o) => o.text)).toEqual(["uno", "dos", "tres", "cuatro"]);
+    expect(out.correctAnswer).toBe("B");
+  });
   it("devuelve correctAnswer null si la clave original ya no existe", () => {
     const out = normalizeOptionKeys(
       valid({
