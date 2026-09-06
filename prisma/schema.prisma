@@ -312,6 +312,15 @@ model Student {
   enrollmentYear Int
   isActive       Boolean     @default(true)
   deletedAt      DateTime?
+  // Pedido del docente (5 sep 2026): grado como texto libre (ej. "11", "2")
+  // para reportes institucionales. NO es FK porque el course ya está implícito
+  // en `group.courseId`. Nullable: filas existentes quedan null hasta que el
+  // docente las rellene vía import o edición.
+  grade          String?
+  // Cuadernillo por defecto del estudiante al armar hojas de respuesta.
+  // Nullable para mantener compat con filas existentes.
+  bookletTypeId  String?
+  bookletType    BookletType? @relation(fields: [bookletTypeId], references: [id], onDelete: SetNull)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -412,6 +421,9 @@ model BookletType {
 
   evaluations Evaluation[]
   evaluationRules EvaluationRule[]
+  // Back-relation agregada con la migración sep 2026 (Student.bookletTypeId).
+  // El docente asigna el cuadernillo por defecto del estudiante al importar.
+  students Student[]
 
   @@unique([institutionId, periodId, name])
   @@index([institutionId, periodId])
