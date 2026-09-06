@@ -1,7 +1,7 @@
 import { type AuthenticatedUser, requireRole } from "@/shared/application/authenticated-user";
 import type { UseCase } from "@/shared/application/use-case";
 import { type Result, NotFoundError, ValidationError, fail, ok } from "@/shared/domain/result";
-import type { GroupRepository } from "@/modules/academic/domain/types";
+import type { GroupRepository, PeriodRepository } from "@/modules/academic/domain/types";
 import type { BookletTypeRepository } from "@/modules/booklet-types/domain/booklet-type";
 import {
   type CreateStudentData,
@@ -125,6 +125,7 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
   constructor(
     private readonly students: StudentRepository,
     private readonly groups: GroupRepository,
+    private readonly periods: PeriodRepository,
     private readonly bookletTypes: BookletTypeRepository,
   ) {}
 
@@ -155,33 +156,54 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
         continue;
       }
 
-      // Resolución de bookletTypeName → id. 0 matches = sin cuadernillo
-      // (no es fatal, los CSV viejos del docente no traerán esta columna).
-      // >1 matches = ambiguo entre Pruebas: error por fila para no meter el
-      // id equivocado sin avisar.
+      // Resolución de bookletTypeName → id. El docente DEBE traer la
+      // columna PRUEBA (periodName) si trae TIPO DE CUADERNILLO, porque
+      // un mismo nombre (ej. "ESTANDAR") puede existir en varias Pruebas
+      // y no queremos atar al estudiante a un periodo equivocado.
       let bookletTypeId: string | null = null;
       const bookletTypeName = row.bookletTypeName.trim();
       if (bookletTypeName) {
-        const matches = await this.bookletTypes.findByName(
+        const periodName = row.periodName.trim();
+        if (!periodName) {
+          result.errors.push({
+            row: line,
+            message: `Falta la Prueba (columna PRUEBA) para identificar el cuadernillo "${bookletTypeName}".`,
+          });
+          continue;
+        }
+
+        const period = await this.periods.findByName(actor.institutionId, periodName);
+        if (!period) {
+          result.errors.push({
+            row: line,
+            message: `Prueba "${periodName}" no encontrada en esta institución.`,
+          });
+          continue;
+        }
+
+        const matches = await this.bookletTypes.findByNameAndPeriod(
           actor.institutionId,
           bookletTypeName,
+          period.id,
         );
+
+        if (matches.length === 0) {
+          result.errors.push({
+            row: line,
+            message: `Tipo de cuadernillo "${bookletTypeName}" no encontrado en la Prueba "${periodName}".`,
+          });
+          continue;
+        }
         if (matches.length > 1) {
+          // Solo posible si hay duplicados dentro del mismo periodo (caso
+          // borde, el use case CreateBookletType lo evita).
           result.errors.push({
             row: line,
-            message: `Múltiples tipos de cuadernillo con nombre "${bookletTypeName}"; refina con la Prueba correspondiente.`,
+            message: `Múltiples tipos de cuadernillo con nombre "${bookletTypeName}" en la Prueba "${periodName}".`,
           });
           continue;
         }
-        if (matches.length === 1) {
-          bookletTypeId = matches[0]!.id;
-        } else {
-          result.errors.push({
-            row: line,
-            message: `Tipo de cuadernillo "${bookletTypeName}" no encontrado en esta institución.`,
-          });
-          continue;
-        }
+        bookletTypeId = matches[0]!.id;
       }
 
       if (seenCodes.has(row.code)) {

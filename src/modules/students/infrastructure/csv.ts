@@ -91,6 +91,9 @@ export const HEADER_ALIASES: Record<string, CanonicalKey> = {
   tipodecuadernillo: "bookletTypeName",
   tipocuadernillo: "bookletTypeName",
   cuadernillo: "bookletTypeName",
+  prueba: "periodName",
+  periodo: "periodName",
+  period: "periodName",
 };
 
 /** Columnas canónicas que el encabezado debe traer (o el legacy `nombre`
@@ -154,23 +157,20 @@ export function recordToStudentRow(record: Record<string, string>): StudentImpor
     enrollmentYear: Number(record.enrollmentYear ?? ""),
     grade: record.grade ?? "",
     bookletTypeName: record.bookletTypeName ?? "",
+    periodName: record.periodName ?? "",
   };
 }
 
 /** Convierte un array de headers en bruto al array de claves canónicas
  *  usando HEADER_ALIASES + normalizeHeader. Los headers no reconocidos
  *  quedan `undefined` en su posición — el row builder los ignora. */
-export function canonicalHeaders(
-  rawHeaders: string[],
-): (CanonicalKey | undefined)[] {
+export function canonicalHeaders(rawHeaders: string[]): (CanonicalKey | undefined)[] {
   return rawHeaders.map((h) => HEADER_ALIASES[normalizeHeader(h)]);
 }
 
 /** Aplica el filtro de REQUIRED a los headers canónicos. `__legacyName`
  *  satisface `lastName1` + `firstName1` (backward-compat con CSVs viejos). */
-export function missingRequired(
-  headers: (CanonicalKey | undefined)[],
-): (keyof StudentImportRow)[] {
+export function missingRequired(headers: (CanonicalKey | undefined)[]): (keyof StudentImportRow)[] {
   const hasLegacy = (headers as CanonicalKey[]).includes("__legacyName");
   return REQUIRED.filter(
     (r) =>
@@ -203,9 +203,7 @@ export function parseStudentsCsv(text: string): ParsedCsv {
   if (lines.length === 0) return { rows: [], missing: REQUIRED };
 
   const delimiter = detectDelimiter(lines[0]!);
-  const headers = splitLine(lines[0]!, delimiter).map((h) =>
-    HEADER_ALIASES[normalizeHeader(h)],
-  );
+  const headers = splitLine(lines[0]!, delimiter).map((h) => HEADER_ALIASES[normalizeHeader(h)]);
   const missing = missingRequired(headers);
   if (missing.length > 0) return { rows: [], missing };
 

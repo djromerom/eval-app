@@ -7,7 +7,12 @@ import type {
   Student,
   StudentRepository,
 } from "@/modules/students/domain/student";
-import type { Group, GroupRepository } from "@/modules/academic/domain/types";
+import type {
+  Group,
+  GroupRepository,
+  Period,
+  PeriodRepository,
+} from "@/modules/academic/domain/types";
 import type {
   BookletType,
   BookletTypeRepository,
@@ -97,7 +102,7 @@ class InMemoryBookletTypes implements BookletTypeRepository {
   /** Test-only: pre-cargar matches de bookletType por nombre para tests
    *  específicos; por defecto vacío para no interferir con los tests
    *  legacy de CSV. */
-  matches: Record<string, BookletType[]> = {};
+  items: BookletType[] = [];
   async findById() {
     return null;
   }
@@ -108,12 +113,21 @@ class InMemoryBookletTypes implements BookletTypeRepository {
     return [];
   }
   async findByName(_institutionId: string, name: string) {
-    return this.matches[name.toLowerCase()] ?? [];
+    const trimmed = name.trim().toLowerCase();
+    return this.items.filter(
+      (b) => b.institutionId === _institutionId && b.name.trim().toLowerCase() === trimmed,
+    );
   }
-  async create(
-    _institutionId: string,
-    _data: CreateBookletTypeData,
-  ): Promise<BookletType> {
+  async findByNameAndPeriod(_institutionId: string, name: string, periodId: string) {
+    const trimmed = name.trim().toLowerCase();
+    return this.items.filter(
+      (b) =>
+        b.institutionId === _institutionId &&
+        b.periodId === periodId &&
+        b.name.trim().toLowerCase() === trimmed,
+    );
+  }
+  async create(_institutionId: string, _data: CreateBookletTypeData): Promise<BookletType> {
     throw new Error("no usado");
   }
   async update(
@@ -124,6 +138,40 @@ class InMemoryBookletTypes implements BookletTypeRepository {
     return null;
   }
   async delete() {
+    /* noop */
+  }
+}
+
+class InMemoryPeriods implements PeriodRepository {
+  constructor(private readonly items: Period[] = []) {}
+  async findAll(institutionId: string, academicYearId?: string) {
+    return this.items.filter(
+      (p) =>
+        p.institutionId === institutionId &&
+        (!academicYearId || p.academicYearId === academicYearId),
+    );
+  }
+  async findById(institutionId: string, id: string) {
+    return this.items.find((p) => p.institutionId === institutionId && p.id === id) ?? null;
+  }
+  async findByName(institutionId: string, name: string) {
+    const trimmed = name.trim().toLowerCase();
+    const matches = this.items.filter(
+      (p) => p.institutionId === institutionId && p.name.trim().toLowerCase() === trimmed,
+    );
+    matches.sort((a, b) => a.order - b.order);
+    return matches[0] ?? null;
+  }
+  async create(): Promise<Period> {
+    throw new Error("no usado");
+  }
+  async update(): Promise<Period | null> {
+    return null;
+  }
+  async delete(): Promise<void> {
+    /* noop */
+  }
+  async setCurrent(): Promise<void> {
     /* noop */
   }
 }
@@ -180,7 +228,12 @@ describe("ImportStudents", () => {
   beforeEach(() => {
     students = new InMemoryStudents();
     bookletTypes = new InMemoryBookletTypes();
-    uc = new ImportStudents(students, new InMemoryGroups(groups), bookletTypes);
+    uc = new ImportStudents(
+      students,
+      new InMemoryGroups(groups),
+      new InMemoryPeriods(),
+      bookletTypes,
+    );
   });
 
   it("importa filas válidas y reporta errores por fila", async () => {

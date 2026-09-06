@@ -256,6 +256,14 @@ class InMemoryPeriods implements PeriodRepository {
   async findById(institutionId: string, id: string) {
     return this.items.find((p) => p.institutionId === institutionId && p.id === id) ?? null;
   }
+  async findByName(institutionId: string, name: string) {
+    const trimmed = name.trim().toLowerCase();
+    const matches = this.items.filter(
+      (p) => p.institutionId === institutionId && p.name.trim().toLowerCase() === trimmed,
+    );
+    matches.sort((a, b) => a.order - b.order);
+    return matches[0] ?? null;
+  }
   /** Lanza P2002 cuando el nombre ya existe (simula Prisma). */
   async create(institutionId: string, data: CreatePeriodData) {
     const dup = this.items.find(

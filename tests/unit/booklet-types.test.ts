@@ -71,9 +71,20 @@ class InMemoryBookletTypes implements BookletTypeRepository {
   async findByName(institutionId: string, name: string) {
     const trimmed = name.trim().toLowerCase();
     return Array.from(this.byId.values())
+      .filter((b) => b.institutionId === institutionId && b.name.trim().toLowerCase() === trimmed)
+      .map(({ createdAt: _c, ...rest }) => rest);
+  }
+
+  async findByNameAndPeriod(institutionId: string, name: string, periodId: string) {
+    const trimmed = name.trim().toLowerCase();
+    return Array.from(this.byId.values())
       .filter(
-        (b) => b.institutionId === institutionId && b.name.trim().toLowerCase() === trimmed,
+        (b) =>
+          b.institutionId === institutionId &&
+          b.periodId === periodId &&
+          b.name.trim().toLowerCase() === trimmed,
       )
+      .sort((a, b) => a.order - b.order || a.createdAt - b.createdAt)
       .map(({ createdAt: _c, ...rest }) => rest);
   }
 
@@ -158,6 +169,14 @@ class InMemoryPeriods implements PeriodRepository {
   }
   async findById(institutionId: string, id: string) {
     return this.items.find((p) => p.institutionId === institutionId && p.id === id) ?? null;
+  }
+  async findByName(institutionId: string, name: string) {
+    const trimmed = name.trim().toLowerCase();
+    const matches = this.items.filter(
+      (p) => p.institutionId === institutionId && p.name.trim().toLowerCase() === trimmed,
+    );
+    matches.sort((a, b) => a.order - b.order);
+    return matches[0] ?? null;
   }
   async create(institutionId: string, data: CreatePeriodData) {
     const p: Period = {

@@ -76,6 +76,24 @@ export class PrismaBookletTypeRepository implements BookletTypeRepository {
     return rows.map(toBookletType);
   }
 
+  async findByNameAndPeriod(
+    institutionId: string,
+    name: string,
+    periodId: string,
+  ): Promise<BookletType[]> {
+    const trimmed = name.trim();
+    if (!trimmed || !periodId) return [];
+    const rows = await prisma.bookletType.findMany({
+      where: {
+        institutionId,
+        periodId,
+        name: { equals: trimmed, mode: "insensitive" },
+      },
+      orderBy: [{ order: "asc" }],
+    });
+    return rows.map(toBookletType);
+  }
+
   async create(institutionId: string, data: CreateBookletTypeData): Promise<BookletType> {
     const order =
       data.order ??

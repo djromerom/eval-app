@@ -71,10 +71,15 @@ export interface StudentImportRow {
   /** Grado del estudiante (texto libre). Opcional: no todas las planillas
    *  lo incluyen. */
   grade: string;
-  /** Nombre del BookletType (ej. "ESTANDAR"). Se resuelve a id en el use
-   *  case via \`BookletTypeRepository.findByName\`. Vacío = sin cuadernillo
-   *  por defecto. */
+  /** Nombre del BookletType (ej. "ESTANDAR"). Vacío = sin cuadernillo por
+   *  defecto. Si viene, debe acompañarse de `periodName` para identificar
+   *  el cuadernillo dentro de la Prueba correcta. */
   bookletTypeName: string;
+  /** Nombre de la Prueba (Periodo) donde está definido el BookletType. El
+   *  docente lo escribe en la columna PRUEBA del Excel — REQUERIDO si
+   *  `bookletTypeName` viene, porque el mismo nombre puede existir en
+   *  varias Pruebas. Vacío = bookletTypeName también vacío. */
+  periodName: string;
 }
 
 export interface ImportError {
