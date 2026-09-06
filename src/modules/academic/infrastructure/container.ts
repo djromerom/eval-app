@@ -16,6 +16,7 @@ import {
 } from "../application/periods";
 import { CreateSubject, ListSubjects } from "../application/subjects";
 import { PrismaTeacherRepository } from "@/modules/teachers/infrastructure/prisma-teacher-repository";
+import { SetCurrentAcademicYear } from "@/modules/students/application/student-enrollments";
 import {
   PrismaAcademicYearRepository,
   PrismaCourseRepository,
@@ -36,6 +37,7 @@ const teachers = new PrismaTeacherRepository();
 
 export const makeCreateAcademicYear = () => new CreateAcademicYear(years);
 export const makeListAcademicYears = () => new ListAcademicYears(years);
+export const makeSetCurrentAcademicYear = () => new SetCurrentAcademicYear(years);
 
 export const makeCreateCourse = () => new CreateCourse(courses, years);
 export const makeListCourses = () => new ListCourses(courses);
