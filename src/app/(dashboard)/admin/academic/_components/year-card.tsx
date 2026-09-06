@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Calendar, ChevronRight, MoreHorizontal, Pencil, Plus } from "lucide-react";
+import { Calendar, ChevronRight, MoreHorizontal, Pencil, Plus, Star } from "lucide-react";
 import Link from "next/link";
 import type { AcademicYear } from "@/modules/academic/domain/types";
 import { CourseActions } from "./course-actions";
@@ -120,6 +120,16 @@ export function YearCard({
             <div className="flex items-center gap-2">
               <AddButton label="Agregar prueba" />
               <AddButton label="Agregar grado" />
+              {!year.isCurrent ? (
+                <Link
+                  href={`/admin/academic/years/${year.id}/set-current`}
+                  aria-label={`Marcar ${year.year} como año académico actual`}
+                  className="border-input bg-background hover:bg-muted inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold"
+                >
+                  <Star className="text-muted-foreground h-3.5 w-3.5" />
+                  Marcar como actual
+                </Link>
+              ) : null}
               <button
                 type="button"
                 aria-label="Más acciones"
