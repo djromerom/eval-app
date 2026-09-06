@@ -294,7 +294,14 @@ model Period {
 
 model Student {
   id             String      @id @default(uuid(7)) @db.Uuid
-  name           String
+  // Nombre partido en 4 campos según convención colombiana. APELLIDO1 +
+  // NOMBRE1 obligatorios (validados en use case); APELLIDO2 + NOMBRE2
+  // opcionales. Docente acepta pérdida de datos de la antigua columna
+  // `name` y rellena manualmente.
+  lastName1      String      @default("")
+  lastName2      String      @default("")
+  firstName1     String      @default("")
+  firstName2     String      @default("")
   idType         String // T.I., C.C., NUI, R.C.
   idNumber       String
   code           String // código estudiantil único por institución (va en el QR)
