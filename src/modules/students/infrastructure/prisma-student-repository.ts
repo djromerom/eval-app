@@ -21,6 +21,8 @@ function toStudent(r: PrismaStudent): Student {
     code: r.code,
     enrollmentYear: r.enrollmentYear,
     isActive: r.isActive,
+    grade: r.grade,
+    bookletTypeId: r.bookletTypeId,
   };
 }
 
@@ -115,6 +117,8 @@ export class PrismaStudentRepository implements StudentRepository {
           idNumber: data.idNumber,
           enrollmentYear: data.enrollmentYear,
           isActive: data.isActive,
+          grade: data.grade ?? null,
+          bookletTypeId: data.bookletTypeId ?? null,
         },
       }),
     );
