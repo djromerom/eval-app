@@ -194,7 +194,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
       include: {
         sections: {
           orderBy: { order: "asc" },
-          include: { questions: { orderBy: { number: "asc" }, include: { options: true } } },
+          include: { questions: { orderBy: { number: "asc" }, include: { options: { orderBy: { key: "asc" } } } } },
         },
         // Hidrata periodName para que EvaluationDetail exponga el rótulo
         // legible del periodo sin un SELECT extra desde el page.tsx.
@@ -313,7 +313,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
         order,
         columnLayoutOverride: data.columnLayoutOverride ?? null,
       },
-      include: { questions: { include: { options: true } } },
+      include: { questions: { include: { options: { orderBy: { key: "asc" } } } } },
     });
     return toSection(row);
   }
@@ -341,7 +341,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
           ? { columnLayoutOverride: data.columnLayoutOverride }
           : {}),
       },
-      include: { questions: { include: { options: true }, orderBy: { number: "asc" } } },
+      include: { questions: { include: { options: { orderBy: { key: "asc" } } }, orderBy: { number: "asc" } } },
     });
     return toSection(row);
   }
@@ -396,7 +396,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
           bankOriginId: data.bankOriginId ?? null,
           options: { create: data.options.map((o) => ({ key: o.key, text: json(o.text) })) },
         },
-        include: { options: true },
+        include: { options: { orderBy: { key: "asc" } } },
       });
       await tx.evaluation.update({ where: { id: evaluationId }, data: { totalQuestions: number } });
       return {
@@ -453,7 +453,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
             ? { options: { create: data.options.map((o) => ({ key: o.key, text: json(o.text) })) } }
             : {}),
         },
-        include: { options: true },
+        include: { options: { orderBy: { key: "asc" } } },
       });
 
       return {
@@ -521,7 +521,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
       // Cargamos la pregunta con sus opciones para clonar la estructura 1-a-1.
       const source = await tx.question.findFirstOrThrow({
         where: { id: questionId, section: { evaluationId } },
-        include: { options: true },
+        include: { options: { orderBy: { key: "asc" } } },
       });
       const evaluation = await tx.evaluation.findFirstOrThrow({ where: { id: evaluationId } });
       const newNumber = evaluation.totalQuestions + 1;
