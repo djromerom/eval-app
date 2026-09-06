@@ -2,7 +2,10 @@
 
 interface Student {
   id: string;
-  name: string;
+  lastName1: string;
+  lastName2: string;
+  firstName1: string;
+  firstName2: string;
   code: string;
 }
 
@@ -50,7 +53,11 @@ export function GroupSelector({ groups }: { groups: GroupData[] }) {
                     value={s.id}
                     className="h-4 w-4 rounded border-gray-300"
                   />
-                  <span>{s.name}</span>
+                  <span>
+                    {`${s.lastName1} ${s.lastName2} ${s.firstName1} ${s.firstName2}`
+                      .replace(/\s+/g, " ")
+                      .trim()}
+                  </span>
                   <span className="text-muted-foreground ml-auto font-mono text-xs">{s.code}</span>
                 </label>
               ))}

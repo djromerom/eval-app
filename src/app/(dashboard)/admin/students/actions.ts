@@ -28,7 +28,10 @@ export async function createStudentAction(
     actor,
     data: {
       groupId: str(formData, "groupId"),
-      name: str(formData, "name"),
+      lastName1: str(formData, "lastName1"),
+      lastName2: str(formData, "lastName2"),
+      firstName1: str(formData, "firstName1"),
+      firstName2: str(formData, "firstName2"),
       idType: str(formData, "idType"),
       idNumber: str(formData, "idNumber"),
       code: str(formData, "code"),
@@ -58,7 +61,10 @@ export async function updateStudentAction(
     studentId: str(formData, "studentId"),
     data: {
       groupId: str(formData, "groupId"),
-      name: str(formData, "name"),
+      lastName1: str(formData, "lastName1"),
+      lastName2: str(formData, "lastName2"),
+      firstName1: str(formData, "firstName1"),
+      firstName2: str(formData, "firstName2"),
       idType: str(formData, "idType"),
       idNumber: str(formData, "idNumber"),
       enrollmentYear: Number(str(formData, "enrollmentYear")),

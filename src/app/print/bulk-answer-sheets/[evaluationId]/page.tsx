@@ -99,7 +99,11 @@ export default async function BulkAnswerSheetsPage({ params, searchParams }: Pro
               <div className="as-student-fields">
                 <div className="as-field">
                   <span>Nombre:</span>
-                  <span className="as-line-filled">{student.name}</span>
+                  <span className="as-line-filled">
+                    {`${student.lastName1} ${student.lastName2} ${student.firstName1} ${student.firstName2}`
+                      .replace(/\s+/g, " ")
+                      .trim()}
+                  </span>
                 </div>
                 <div className="as-field">
                   <span>Código:</span>

@@ -98,7 +98,10 @@ const baseStudent = (over: Partial<Student> = {}): Student => ({
   id: "s-1",
   institutionId: "i1",
   groupId: "g1",
-  name: "Ana Pérez",
+  lastName1: "PÉREZ",
+  lastName2: "",
+  firstName1: "ANA",
+  firstName2: "",
   idType: "C.C.",
   idNumber: "123",
   code: "EST-001",
@@ -114,7 +117,7 @@ describe("GetStudent", () => {
     const uc = new GetStudent(students);
     const r = await uc.execute({ actor: admin, studentId: "s-1" });
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value.name).toBe("Ana Pérez");
+    if (r.ok) expect(r.value.firstName1).toBe("ANA");
   });
 
   it("devuelve NOT_FOUND si el id no existe", async () => {
@@ -156,7 +159,10 @@ describe("UpdateStudent", () => {
       studentId: "s-1",
       data: {
         groupId: "g1",
-        name: "Ana P.",
+        lastName1: "LÓPEZ",
+        lastName2: "",
+        firstName1: "ANA",
+        firstName2: "",
         idType: "C.C.",
         idNumber: "999",
         enrollmentYear: 2026,
@@ -165,7 +171,7 @@ describe("UpdateStudent", () => {
     });
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.value.name).toBe("Ana P.");
+      expect(r.value.firstName1).toBe("ANA");
       expect(r.value.idNumber).toBe("999");
       expect(r.value.isActive).toBe(false);
       expect(r.value.code).toBe("EST-001"); // código intacto
@@ -178,7 +184,10 @@ describe("UpdateStudent", () => {
       studentId: "s-1",
       data: {
         groupId: "g1",
-        name: "x",
+        lastName1: "x",
+        lastName2: "",
+        firstName1: "x",
+        firstName2: "",
         idType: "PASAPORTE",
         idNumber: "1",
         enrollmentYear: 2026,
@@ -195,7 +204,10 @@ describe("UpdateStudent", () => {
       studentId: "s-1",
       data: {
         groupId: "g-other",
-        name: "x",
+        lastName1: "x",
+        lastName2: "",
+        firstName1: "x",
+        firstName2: "",
         idType: "C.C.",
         idNumber: "1",
         enrollmentYear: 2026,
@@ -212,7 +224,10 @@ describe("UpdateStudent", () => {
       studentId: "s-1",
       data: {
         groupId: "g1",
-        name: "x",
+        lastName1: "x",
+        lastName2: "",
+        firstName1: "x",
+        firstName2: "",
         idType: "C.C.",
         idNumber: "1",
         enrollmentYear: 1989,
@@ -229,7 +244,10 @@ describe("UpdateStudent", () => {
       studentId: "nope",
       data: {
         groupId: "g1",
-        name: "x",
+        lastName1: "x",
+        lastName2: "",
+        firstName1: "x",
+        firstName2: "",
         idType: "C.C.",
         idNumber: "1",
         enrollmentYear: 2026,
@@ -246,7 +264,10 @@ describe("UpdateStudent", () => {
       studentId: "s-1",
       data: {
         groupId: "g1",
-        name: "x",
+        lastName1: "x",
+        lastName2: "",
+        firstName1: "x",
+        firstName2: "",
         idType: "C.C.",
         idNumber: "1",
         enrollmentYear: 2026,

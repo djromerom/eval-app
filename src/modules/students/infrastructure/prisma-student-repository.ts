@@ -12,7 +12,10 @@ function toStudent(r: PrismaStudent): Student {
     id: r.id,
     institutionId: r.institutionId,
     groupId: r.groupId,
-    name: r.name,
+    lastName1: r.lastName1,
+    lastName2: r.lastName2,
+    firstName1: r.firstName1,
+    firstName2: r.firstName2,
     idType: r.idType,
     idNumber: r.idNumber,
     code: r.code,
@@ -53,7 +56,7 @@ export class PrismaStudentRepository implements StudentRepository {
   async findByGroup(institutionId: string, groupId: string): Promise<Student[]> {
     const rows = await prisma.student.findMany({
       where: { institutionId, groupId, ...notDeleted },
-      orderBy: { name: "asc" },
+      orderBy: [{ lastName1: "asc" }, { lastName2: "asc" }, { firstName1: "asc" }, { firstName2: "asc" }],
     });
     return rows.map(toStudent);
   }
@@ -61,7 +64,7 @@ export class PrismaStudentRepository implements StudentRepository {
   async findAll(institutionId: string): Promise<Student[]> {
     const rows = await prisma.student.findMany({
       where: { institutionId, ...notDeleted },
-      orderBy: { name: "asc" },
+      orderBy: [{ lastName1: "asc" }, { lastName2: "asc" }, { firstName1: "asc" }, { firstName2: "asc" }],
     });
     return rows.map(toStudent);
   }
@@ -104,7 +107,10 @@ export class PrismaStudentRepository implements StudentRepository {
         where: { id: row.id },
         data: {
           groupId: data.groupId,
-          name: data.name,
+          lastName1: data.lastName1,
+          lastName2: data.lastName2,
+          firstName1: data.firstName1,
+          firstName2: data.firstName2,
           idType: data.idType,
           idNumber: data.idNumber,
           enrollmentYear: data.enrollmentYear,

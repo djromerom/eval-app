@@ -39,7 +39,12 @@ export default async function GenerateSheetsPage({ params }: Props) {
 
   const students = await prisma.student.findMany({
     where: { institutionId: actor.institutionId, isActive: true },
-    orderBy: { name: "asc" },
+    orderBy: [
+      { lastName1: "asc" },
+      { lastName2: "asc" },
+      { firstName1: "asc" },
+      { firstName2: "asc" },
+    ],
   });
 
   // Agrupar estudiantes por grupo
@@ -55,7 +60,10 @@ export default async function GenerateSheetsPage({ params }: Props) {
       group: { id: g.id, name: g.name },
       students: (studentsByGroup.get(g.id) ?? []).map((s) => ({
         id: s.id,
-        name: s.name,
+        lastName1: s.lastName1,
+        lastName2: s.lastName2,
+        firstName1: s.firstName1,
+        firstName2: s.firstName2,
         code: s.code,
       })),
     }))

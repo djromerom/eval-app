@@ -2,7 +2,14 @@ export interface Student {
   id: string;
   institutionId: string;
   groupId: string;
-  name: string;
+  // Nombre partido en 4 campos según convención colombiana. APELLIDO1 +
+  // NOMBRE1 obligatorios (validados en use case); APELLIDO2 + NOMBRE2
+  // opcionales — caso real: muchos estudiantes tienen solo 1 apellido o 1
+  // nombre.
+  lastName1: string;
+  lastName2: string;
+  firstName1: string;
+  firstName2: string;
   idType: string; // T.I., C.C., NUI, R.C.
   idNumber: string;
   code: string; // único por institución, embebido en el QR
@@ -12,7 +19,10 @@ export interface Student {
 
 export interface CreateStudentData {
   groupId: string;
-  name: string;
+  lastName1: string;
+  lastName2: string;
+  firstName1: string;
+  firstName2: string;
   idType: string;
   idNumber: string;
   code: string;
@@ -24,7 +34,10 @@ export interface CreateStudentData {
  *  preserva el historial de QR. */
 export interface UpdateStudentData {
   groupId: string;
-  name: string;
+  lastName1: string;
+  lastName2: string;
+  firstName1: string;
+  firstName2: string;
   idType: string;
   idNumber: string;
   enrollmentYear: number;
@@ -33,7 +46,10 @@ export interface UpdateStudentData {
 
 /** Fila cruda de una importación masiva (Excel/CSV) antes de validar. */
 export interface StudentImportRow {
-  name: string;
+  lastName1: string;
+  lastName2: string;
+  firstName1: string;
+  firstName2: string;
   idType: string;
   idNumber: string;
   code: string;
@@ -83,4 +99,24 @@ export const ID_TYPES = ["T.I.", "C.C.", "C.E.", "NUI", "R.C.", "PPT"] as const;
 
 export function isValidIdType(idType: string): boolean {
   return (ID_TYPES as readonly string[]).includes(idType);
+}
+
+/** Las 4 partes que componen el nombre del estudiante. Usado como input de
+ *  `formatStudentFullName` para que la UI/print/reportes no tengan que
+ *  conocer la forma exacta — solo pasar las 4 strings. */
+export interface StudentNameParts {
+  lastName1: string;
+  lastName2: string;
+  firstName1: string;
+  firstName2: string;
+}
+
+/** Concatena las 4 partes en MAYÚSCULA para display estilo lista ICFES
+ *  colombiano: "PÉREZ GARCÍA JUAN CARLOS". Las partes vacías se omiten
+ *  (un estudiante con solo APELLIDO1 + NOMBRE1 sale como "PÉREZ ANA"). */
+export function formatStudentFullName(s: StudentNameParts): string {
+  return [s.lastName1, s.lastName2, s.firstName1, s.firstName2]
+    .map((p) => p.trim().toUpperCase())
+    .filter(Boolean)
+    .join(" ");
 }

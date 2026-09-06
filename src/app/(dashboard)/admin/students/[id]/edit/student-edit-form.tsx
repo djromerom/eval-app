@@ -10,7 +10,10 @@ import { deleteStudentAction, updateStudentAction } from "../../actions";
 export interface StudentEditFormProps {
   student: {
     id: string;
-    name: string;
+    lastName1: string;
+    lastName2: string;
+    firstName1: string;
+    firstName2: string;
     idType: string;
     idNumber: string;
     groupId: string;
@@ -87,17 +90,66 @@ export function StudentEditForm({ student, groupOptions, returnHref }: StudentEd
 
         <div className="space-y-1.5">
           <label
-            htmlFor="name"
+            htmlFor="lastName1"
             className="text-muted-foreground text-xs font-semibold tracking-wide uppercase"
           >
-            Nombre completo
+            Apellido 1
           </label>
           <input
-            id="name"
-            name="name"
+            id="lastName1"
+            name="lastName1"
             type="text"
             required
-            defaultValue={student.name}
+            defaultValue={student.lastName1}
+            className="border-input focus:ring-primary/30 w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label
+            htmlFor="lastName2"
+            className="text-muted-foreground text-xs font-semibold tracking-wide uppercase"
+          >
+            Apellido 2
+          </label>
+          <input
+            id="lastName2"
+            name="lastName2"
+            type="text"
+            defaultValue={student.lastName2}
+            className="border-input focus:ring-primary/30 w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label
+            htmlFor="firstName1"
+            className="text-muted-foreground text-xs font-semibold tracking-wide uppercase"
+          >
+            Nombre 1
+          </label>
+          <input
+            id="firstName1"
+            name="firstName1"
+            type="text"
+            required
+            defaultValue={student.firstName1}
+            className="border-input focus:ring-primary/30 w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label
+            htmlFor="firstName2"
+            className="text-muted-foreground text-xs font-semibold tracking-wide uppercase"
+          >
+            Nombre 2
+          </label>
+          <input
+            id="firstName2"
+            name="firstName2"
+            type="text"
+            defaultValue={student.firstName2}
             className="border-input focus:ring-primary/30 w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:outline-none"
           />
         </div>

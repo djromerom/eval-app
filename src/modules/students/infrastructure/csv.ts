@@ -49,11 +49,23 @@ function normalizeHeader(h: string): string {
     .replace(/[\s._-]/g, "");
 }
 
-// Sinónimos aceptados por columna → clave canónica.
-const HEADER_ALIASES: Record<string, keyof StudentImportRow> = {
-  nombre: "name",
-  nombres: "name",
-  nombrecompleto: "name",
+// Sinónimos aceptados por columna → clave canónica (o `__legacyName` para el
+// campo legacy `nombre` que se parte por whitespace en el row builder).
+type CanonicalKey = keyof StudentImportRow | "__legacyName";
+const HEADER_ALIASES: Record<string, CanonicalKey> = {
+  // Apellidos y nombres partidos (preferidos a partir de sep 2026)
+  apellido1: "lastName1",
+  primerapellido: "lastName1",
+  apellido2: "lastName2",
+  segundoapellido: "lastName2",
+  nombre1: "firstName1",
+  primernombre: "firstName1",
+  nombre2: "firstName2",
+  segundonombre: "firstName2",
+  // Legacy: nombre completo (se parte por whitespace en el row builder)
+  nombre: "__legacyName",
+  nombres: "__legacyName",
+  nombrecompleto: "__legacyName",
   tipodoc: "idType",
   tipodocumento: "idType",
   tipoid: "idType",
@@ -79,7 +91,8 @@ export interface ParsedCsv {
 }
 
 const REQUIRED: (keyof StudentImportRow)[] = [
-  "name",
+  "lastName1",
+  "firstName1",
   "idType",
   "idNumber",
   "code",
@@ -96,7 +109,9 @@ export function parseStudentsCsv(text: string): ParsedCsv {
   if (lines.length === 0) return { rows: [], missing: REQUIRED };
 
   const delimiter = detectDelimiter(lines[0]!);
-  const headers = splitLine(lines[0]!, delimiter).map((h) => HEADER_ALIASES[normalizeHeader(h)]);
+  const headers = splitLine(lines[0]!, delimiter).map(
+    (h) => HEADER_ALIASES[normalizeHeader(h)] as CanonicalKey | undefined,
+  );
   const missing = REQUIRED.filter((r) => !headers.includes(r));
   if (missing.length > 0) return { rows: [], missing };
 
@@ -107,8 +122,19 @@ export function parseStudentsCsv(text: string): ParsedCsv {
     headers.forEach((key, idx) => {
       if (key) record[key] = cells[idx] ?? "";
     });
+    // Backward-compat: si vino columna legacy `nombre` y no llegaron las 4
+    // separadas, parte por whitespace para no bloquear CSVs viejos del
+    // docente (apellido1 apellido2 nombre1 nombre2).
+    const legacyName = (record.__legacyName ?? "").trim();
+    const lastName1 = (record.lastName1 ?? "").trim() || splitLegacy(legacyName, 0);
+    const lastName2 = (record.lastName2 ?? "").trim() || splitLegacy(legacyName, 1);
+    const firstName1 = (record.firstName1 ?? "").trim() || splitLegacy(legacyName, 2);
+    const firstName2 = (record.firstName2 ?? "").trim() || splitLegacy(legacyName, 3);
     rows.push({
-      name: record.name ?? "",
+      lastName1,
+      lastName2,
+      firstName1,
+      firstName2,
       idType: record.idType ?? "",
       idNumber: record.idNumber ?? "",
       code: record.code ?? "",
@@ -117,4 +143,10 @@ export function parseStudentsCsv(text: string): ParsedCsv {
     });
   }
   return { rows, missing: [] };
+}
+
+/** Devuelve la i-ésima palabra (0-based) del nombre legacy, o "" si no existe. */
+function splitLegacy(name: string, index: number): string {
+  const parts = name.split(/\s+/).filter(Boolean);
+  return parts[index] ?? "";
 }

@@ -14,12 +14,16 @@ import {
 } from "../domain/student";
 
 function validateBasics(data: {
-  name: string;
+  lastName1: string;
+  lastName2: string;
+  firstName1: string;
+  firstName2: string;
   idType: string;
   code: string;
   enrollmentYear: number;
 }): string | null {
-  if (!data.name.trim()) return "El nombre es obligatorio.";
+  if (!data.lastName1.trim()) return "El apellido 1 es obligatorio.";
+  if (!data.firstName1.trim()) return "El nombre 1 es obligatorio.";
   if (!isValidIdType(data.idType)) return `Tipo de documento inválido: "${data.idType}".`;
   if (!isValidStudentCode(data.code)) {
     return `Código inválido "${data.code}" (alfanumérico, sin espacios, máx. 32).`;
@@ -159,7 +163,10 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
       seenCodes.add(row.code);
       valid.push({
         groupId,
-        name: row.name.trim(),
+        lastName1: row.lastName1.trim(),
+        lastName2: row.lastName2.trim(),
+        firstName1: row.firstName1.trim(),
+        firstName2: row.firstName2.trim(),
         idType: row.idType.trim(),
         idNumber: row.idNumber.trim(),
         code: row.code,
@@ -220,7 +227,8 @@ export class UpdateStudent implements UseCase<UpdateStudentInput, Student> {
     const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
-    if (!data.name.trim()) return fail(new ValidationError("El nombre es obligatorio."));
+    if (!data.lastName1.trim()) return fail(new ValidationError("El apellido 1 es obligatorio."));
+    if (!data.firstName1.trim()) return fail(new ValidationError("El nombre 1 es obligatorio."));
     if (!data.idNumber.trim())
       return fail(new ValidationError("El número de documento es obligatorio."));
     if (!isValidIdType(data.idType)) {

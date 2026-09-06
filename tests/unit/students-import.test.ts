@@ -41,7 +41,10 @@ class InMemoryStudents implements StudentRepository {
     id: string,
     data: {
       groupId: string;
-      name: string;
+      lastName1: string;
+      lastName2: string;
+      firstName1: string;
+      firstName2: string;
       idType: string;
       idNumber: string;
       enrollmentYear: number;

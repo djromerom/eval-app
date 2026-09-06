@@ -60,7 +60,11 @@ export default async function EditStudentPage({ params }: { params: Promise<{ id
               </span>
               Estudiante
             </p>
-            <h1 className="font-display text-xl font-bold">{student.name}</h1>
+            <h1 className="font-display text-xl font-bold">
+              {`${student.lastName1} ${student.lastName2} ${student.firstName1} ${student.firstName2}`
+                .replace(/\s+/g, " ")
+                .trim()}
+            </h1>
           </div>
           <Link
             href="/admin/students"
@@ -75,7 +79,10 @@ export default async function EditStudentPage({ params }: { params: Promise<{ id
           <StudentEditForm
             student={{
               id: student.id,
-              name: student.name,
+              lastName1: student.lastName1,
+              lastName2: student.lastName2,
+              firstName1: student.firstName1,
+              firstName2: student.firstName2,
               idType: student.idType,
               idNumber: student.idNumber,
               groupId: student.groupId,
