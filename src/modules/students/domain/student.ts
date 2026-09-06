@@ -15,6 +15,14 @@ export interface Student {
   code: string; // único por institución, embebido en el QR
   enrollmentYear: number;
   isActive: boolean;
+  /** Grado como texto libre (ej. "11", "2"). Nullable: filas existentes
+   *  quedan null hasta que el docente las rellene vía import o edición.
+   *  NO es FK — el course ya está implícito en `group.courseId`. */
+  grade?: string | null;
+  /** Cuadernillo por defecto del estudiante al armar hojas de respuesta.
+   *  Nullable para mantener compat con filas existentes. Resuelto por
+   *  nombre desde \`StudentImportRow.bookletTypeName\` durante el import. */
+  bookletTypeId?: string | null;
 }
 
 export interface CreateStudentData {
@@ -27,6 +35,8 @@ export interface CreateStudentData {
   idNumber: string;
   code: string;
   enrollmentYear: number;
+  grade?: string | null;
+  bookletTypeId?: string | null;
 }
 
 /** Campos editables desde el drawer de edición. NO incluye `code` — el
@@ -42,6 +52,8 @@ export interface UpdateStudentData {
   idNumber: string;
   enrollmentYear: number;
   isActive: boolean;
+  grade?: string | null;
+  bookletTypeId?: string | null;
 }
 
 /** Fila cruda de una importación masiva (Excel/CSV) antes de validar. */
@@ -56,6 +68,13 @@ export interface StudentImportRow {
   /** Nombre del grupo (ej. "11-03"); se resuelve a groupId al importar. */
   groupName: string;
   enrollmentYear: number;
+  /** Grado del estudiante (texto libre). Opcional: no todas las planillas
+   *  lo incluyen. */
+  grade: string;
+  /** Nombre del BookletType (ej. "ESTANDAR"). Se resuelve a id en el use
+   *  case via \`BookletTypeRepository.findByName\`. Vacío = sin cuadernillo
+   *  por defecto. */
+  bookletTypeName: string;
 }
 
 export interface ImportError {

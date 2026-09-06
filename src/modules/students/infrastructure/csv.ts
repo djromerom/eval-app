@@ -147,6 +147,12 @@ export function parseStudentsCsv(text: string): ParsedCsv {
       code: record.code ?? "",
       groupName: record.groupName ?? "",
       enrollmentYear: Number(record.enrollmentYear ?? ""),
+      // Vacíos por defecto para CSV: el parser XLSX los populará con los
+      // aliases institucionales (commit 5). El CSV del docente no suele
+      // traer grado/bookletType — si los trae, los siguientes commits los
+      // aceptarán.
+      grade: record.grade ?? "",
+      bookletTypeName: record.bookletTypeName ?? "",
     });
   }
   return { rows, missing: [] };
