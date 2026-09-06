@@ -259,6 +259,9 @@ const noPeriods: PeriodRepository = {
   async setCurrent() {
     // no-op — los tests de CreateEvaluation no ejercitan el flip
   },
+  async findCurrent() {
+    return null;
+  },
 };
 
 /** Repo de BookletTypes en memoria para los tests de CreateEvaluation.

@@ -10,9 +10,12 @@ import { MarkBundleReady } from "@/modules/bundles/application/mark-bundle-ready
 import {
   InMemoryBundleRepository,
   courses,
+  periods,
+  bookletTypes,
   seedEvaluationGrado6,
   superAdmin,
   teacher,
+  years,
 } from "./bundles-shared";
 
 describe("UpdateBundle", () => {
@@ -22,8 +25,8 @@ describe("UpdateBundle", () => {
 
   beforeEach(() => {
     repo = new InMemoryBundleRepository();
-    createBundle = new CreateBundle(repo, courses);
-    updateBundle = new UpdateBundle(repo, courses);
+    createBundle = new CreateBundle(repo, courses, years, periods, bookletTypes);
+    updateBundle = new UpdateBundle(repo, courses, periods, bookletTypes);
   });
 
   /** Crea un bundle DRAFT con las evaluations dadas y devuelve su id. */

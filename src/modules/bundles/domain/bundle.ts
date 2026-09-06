@@ -107,6 +107,11 @@ export interface BundleItemDetail extends BundleItem {
   courseId: string;
   /** Nombre del curso ("11°") para los mensajes de error y la UI. */
   courseName: string;
+  /** Sprint Bundle-Period: Tipo de cuadernillo de la evaluation. Hidratado
+   *  por el repo con un join. Usado por `UpdateBundle`/`AddEvaluationToBundle`
+   *  para validar la invariante "items homogéneos al bundle.bookletTypeId". */
+  bookletTypeId: string | null;
+  bookletTypeName: string | null;
 }
 
 /** Bundle con items ya cargados. */

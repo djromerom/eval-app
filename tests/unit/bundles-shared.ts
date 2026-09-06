@@ -10,7 +10,24 @@ import type {
   UpdateBundleData,
 } from "@/modules/bundles/domain/bundle";
 import type { BundleStatus } from "@/modules/bundles/domain/bundle-status";
-import type { Course, CourseRepository, CreateCourseData } from "@/modules/academic/domain/types";
+import type {
+  AcademicYear,
+  AcademicYearRepository,
+  Course,
+  CourseRepository,
+  CreateAcademicYearData,
+  CreateCourseData,
+  CreatePeriodData,
+  Period,
+  PeriodRepository,
+  UpdatePeriodData,
+} from "@/modules/academic/domain/types";
+import type {
+  BookletType,
+  BookletTypeRepository,
+  CreateBookletTypeData,
+  UpdateBookletTypeData,
+} from "@/modules/booklet-types/domain/booklet-type";
 
 /**
  * Catálogo de cursos compartido por los tests de bundles (Sprint 9).
@@ -49,6 +66,163 @@ export class InMemoryCourseRepository implements CourseRepository {
 
 /** Instancia compartida: el catálogo es inmutable, no hay estado por test. */
 export const courses = new InMemoryCourseRepository();
+
+/**
+ * Sprint Bundle-Period (sep 2026): repos en memoria compartidos para que
+ * los tests de CreateBundle/UpdateBundle/ListBundles puedan cablear las
+ * nuevas dependencias (AcademicYear, Period, BookletType). Mantienen el
+ * contrato de los puertos — los use cases los ejercitan igual que con el
+ * adaptador Prisma.
+ *
+ * Cada test que necesite estado sembrado crea su propia instancia
+ * (`new InMemoryAcademicYearRepository()`); para los casos por defecto
+ * (sin año actual / sin periodo / sin bookletTypes) se ofrecen singletons
+ * `years` / `periods` / `bookletTypes`.
+ */
+export class InMemoryAcademicYearRepository implements AcademicYearRepository {
+  items: AcademicYear[] = [];
+  async findAll(institutionId: string): Promise<AcademicYear[]> {
+    return this.items.filter((y) => y.institutionId === institutionId);
+  }
+  async findById(institutionId: string, id: string): Promise<AcademicYear | null> {
+    return this.items.find((y) => y.institutionId === institutionId && y.id === id) ?? null;
+  }
+  async findByYear(institutionId: string, year: number): Promise<AcademicYear | null> {
+    return (
+      this.items.find((y) => y.institutionId === institutionId && y.year === year) ?? null
+    );
+  }
+  async create(institutionId: string, data: CreateAcademicYearData): Promise<AcademicYear> {
+    const y: AcademicYear = {
+      id: `ay-${this.items.length + 1}`,
+      institutionId,
+      year: data.year,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      isCurrent: data.isCurrent ?? false,
+    };
+    this.items.push(y);
+    return y;
+  }
+  async setCurrent(institutionId: string, id: string): Promise<void> {
+    for (const y of this.items) {
+      if (y.institutionId === institutionId) y.isCurrent = y.id === id;
+    }
+  }
+  async findCurrent(institutionId: string): Promise<AcademicYear | null> {
+    return this.items.find((y) => y.institutionId === institutionId && y.isCurrent) ?? null;
+  }
+}
+
+export class InMemoryPeriodRepository implements PeriodRepository {
+  items: Period[] = [];
+  async findAll(institutionId: string, academicYearId?: string): Promise<Period[]> {
+    return this.items.filter(
+      (p) =>
+        p.institutionId === institutionId &&
+        (!academicYearId || p.academicYearId === academicYearId),
+    );
+  }
+  async findById(institutionId: string, id: string): Promise<Period | null> {
+    return this.items.find((p) => p.institutionId === institutionId && p.id === id) ?? null;
+  }
+  async create(institutionId: string, data: CreatePeriodData): Promise<Period> {
+    const p: Period = {
+      id: `period-${this.items.length + 1}`,
+      institutionId,
+      academicYearId: data.academicYearId,
+      name: data.name,
+      order: data.order,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      isCurrent: false,
+    };
+    this.items.push(p);
+    return p;
+  }
+  async update(
+    institutionId: string,
+    id: string,
+    _data: UpdatePeriodData,
+  ): Promise<Period | null> {
+    return this.items.find((p) => p.institutionId === institutionId && p.id === id) ?? null;
+  }
+  async delete(institutionId: string, id: string): Promise<void> {
+    const idx = this.items.findIndex((p) => p.institutionId === institutionId && p.id === id);
+    if (idx >= 0) this.items.splice(idx, 1);
+  }
+  async setCurrent(
+    institutionId: string,
+    academicYearId: string,
+    periodId: string,
+    isCurrent: boolean,
+  ): Promise<void> {
+    for (const p of this.items) {
+      if (
+        p.institutionId === institutionId &&
+        p.academicYearId === academicYearId &&
+        p.id !== periodId
+      ) {
+        p.isCurrent = false;
+      }
+    }
+    const target = this.items.find((p) => p.institutionId === institutionId && p.id === periodId);
+    if (target) target.isCurrent = isCurrent;
+  }
+  async findCurrent(institutionId: string, academicYearId: string): Promise<Period | null> {
+    return (
+      this.items.find(
+        (p) =>
+          p.institutionId === institutionId &&
+          p.academicYearId === academicYearId &&
+          p.isCurrent,
+      ) ?? null
+    );
+  }
+}
+
+export class InMemoryBookletTypeRepository implements BookletTypeRepository {
+  items: BookletType[] = [];
+  async findById(institutionId: string, id: string): Promise<BookletType | null> {
+    return this.items.find((b) => b.institutionId === institutionId && b.id === id) ?? null;
+  }
+  async listByPeriod(institutionId: string, periodId: string): Promise<BookletType[]> {
+    return this.items.filter(
+      (b) => b.institutionId === institutionId && b.periodId === periodId,
+    );
+  }
+  async listByInstitution(institutionId: string): Promise<BookletType[]> {
+    return this.items.filter((b) => b.institutionId === institutionId);
+  }
+  async create(institutionId: string, data: CreateBookletTypeData): Promise<BookletType> {
+    const bt: BookletType = {
+      id: `bt-${this.items.length + 1}`,
+      institutionId,
+      periodId: data.periodId,
+      name: data.name,
+      description: data.description ?? null,
+      order: data.order ?? 0,
+    };
+    this.items.push(bt);
+    return bt;
+  }
+  async update(
+    institutionId: string,
+    id: string,
+    _data: UpdateBookletTypeData,
+  ): Promise<BookletType | null> {
+    return this.items.find((b) => b.institutionId === institutionId && b.id === id) ?? null;
+  }
+  async delete(institutionId: string, id: string): Promise<void> {
+    const idx = this.items.findIndex((b) => b.institutionId === institutionId && b.id === id);
+    if (idx >= 0) this.items.splice(idx, 1);
+  }
+}
+
+/** Singletons vacíos para los tests que no necesitan sembrar estado. */
+export const years = new InMemoryAcademicYearRepository();
+export const periods = new InMemoryPeriodRepository();
+export const bookletTypes = new InMemoryBookletTypeRepository();
 
 function toCourse(c: { id: string; name: string; institutionId: string }): Course {
   return {
@@ -319,6 +493,8 @@ export class InMemoryBundleRepository implements BundleRepository {
         parentSubjectName: ev.parentSubjectName,
         courseId: ev.courseId,
         courseName: ev.courseName,
+        bookletTypeId: ev.bookletTypeId,
+        bookletTypeName: ev.bookletTypeName,
       };
     });
   }

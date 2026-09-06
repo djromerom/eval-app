@@ -94,6 +94,8 @@ class FakeBundleRepo {
         subjectIsArea: false,
         courseId: "course-A",
         courseName: "11°",
+        bookletTypeId: null,
+        bookletTypeName: null,
       })),
       totalQuestions: 0,
     };

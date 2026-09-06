@@ -7,6 +7,9 @@ import {
   superAdmin,
   teacher,
   courses,
+  years,
+  periods,
+  bookletTypes,
 } from "./bundles-shared";
 
 describe("MarkBundleReady", () => {
@@ -16,7 +19,7 @@ describe("MarkBundleReady", () => {
 
   beforeEach(() => {
     repo = new InMemoryBundleRepository();
-    createBundle = new CreateBundle(repo, courses);
+    createBundle = new CreateBundle(repo, courses, years, periods, bookletTypes);
     markReady = new MarkBundleReady(repo);
   });
 

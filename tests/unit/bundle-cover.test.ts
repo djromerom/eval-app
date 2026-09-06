@@ -305,6 +305,8 @@ const item: BundleItemDetail = {
   parentSubjectName: "Ciencias Naturales",
   courseId: "c-6",
   courseName: "6°",
+  bookletTypeId: null,
+  bookletTypeName: null,
 };
 
 const item2: BundleItemDetail = {

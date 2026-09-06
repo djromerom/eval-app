@@ -12,6 +12,9 @@ import {
   teacher,
   seedEvaluationGrado6,
   courses,
+  years,
+  periods,
+  bookletTypes,
 } from "./bundles-shared";
 
 async function makeRepoWithDraftBundle() {
@@ -20,7 +23,7 @@ async function makeRepoWithDraftBundle() {
   const ev2 = seedEvaluationGrado6(repo, { id: "ev-2" });
   // Crear el bundle a través del use case (no `repo.create` directo) — el
   // use case arma el `evaluationsById` Map correctamente.
-  const create = new CreateBundle(repo, courses);
+  const create = new CreateBundle(repo, courses, years, periods, bookletTypes);
   const r = await create.execute({
     actor: superAdmin,
     data: { name: "Simulacro ICFES", evaluationIds: [ev1.id, ev2.id] },

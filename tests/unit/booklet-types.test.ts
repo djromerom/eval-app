@@ -174,6 +174,9 @@ class InMemoryPeriods implements PeriodRepository {
   ) {
     /* noop — los tests de booklet-types no ejercitan el flip de isCurrent */
   }
+  async findCurrent(_institutionId: string, _academicYearId: string): Promise<Period | null> {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------

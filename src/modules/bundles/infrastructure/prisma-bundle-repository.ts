@@ -48,6 +48,7 @@ type BundleItemRow = PrismaBundleItem & {
         parentSubject: { id: string; name: string } | null;
       };
     };
+    bookletType: { id: string; name: string } | null;
   };
 };
 
@@ -89,6 +90,8 @@ function toItemDetail(row: BundleItemRow): BundleItemDetail {
     parentSubjectName: subj.parentSubject?.name ?? null,
     courseId: row.evaluation.courseSubject.courseId,
     courseName: row.evaluation.courseSubject.course.name,
+    bookletTypeId: row.evaluation.bookletType?.id ?? null,
+    bookletTypeName: row.evaluation.bookletType?.name ?? null,
   };
 }
 
@@ -294,6 +297,7 @@ export class PrismaBundleRepository implements BundleRepository {
                 },
               },
             },
+            bookletType: { select: { id: true, name: true } },
           },
         },
       },

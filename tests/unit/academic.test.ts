@@ -63,6 +63,9 @@ class InMemoryYears implements AcademicYearRepository {
       if (y.institutionId === institutionId) y.isCurrent = y.id === id;
     }
   }
+  async findCurrent(institutionId: string) {
+    return this.items.find((y) => y.institutionId === institutionId && y.isCurrent) ?? null;
+  }
 }
 
 class InMemoryCourses implements CourseRepository {
@@ -338,6 +341,16 @@ class InMemoryPeriods implements PeriodRepository {
     }
     const target = this.items.find((p) => p.institutionId === institutionId && p.id === periodId);
     if (target) target.isCurrent = false;
+  }
+  async findCurrent(institutionId: string, academicYearId: string) {
+    return (
+      this.items.find(
+        (p) =>
+          p.institutionId === institutionId &&
+          p.academicYearId === academicYearId &&
+          p.isCurrent,
+      ) ?? null
+    );
   }
 }
 
