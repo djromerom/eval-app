@@ -399,9 +399,8 @@ export default async function PrintBundlePage({
                 izquierda a la derecha y de ahí a la página siguiente. Con un
                 contenedor por contexto, Chrome balancea mal al fragmentar. */}
             <section className="sheet questions">
-              <div className="sheet-body">
-                {area ? <p className="subject-title">{area}</p> : null}
-                <div className="questions-flow" data-columns={theme.questionColumns}>
+              {area ? <p className="subject-title">{area}</p> : null}
+              <div className="questions-flow" data-columns={theme.questionColumns}>
                 {groupSectionsForPrint(evaluation.sections).map((group) => {
                   // Densidad a nivel de grupo: las "ninguno" consecutivas se
                   // suman y la heurística decide si el bloque entero cabe
@@ -501,7 +500,6 @@ export default async function PrintBundlePage({
                     </Fragment>
                   );
                 })}
-                </div>
               </div>
               <div className="fold-line" />
             </section>

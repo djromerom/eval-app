@@ -79,9 +79,8 @@ export default async function PrintEvaluationPage({
           ECU {grade}
           {bookletLabel}
         </div>
-        <div className="sheet-body">
-          {area ? <p className="subject-title">{area}</p> : null}
-          <div className="questions-flow" data-columns={theme.questionColumns}>
+        {area ? <p className="subject-title">{area}</p> : null}
+        <div className="questions-flow" data-columns={theme.questionColumns}>
           {groupSectionsForPrint(evaluation.sections).map((group) => {
             // Densidad a nivel de grupo: las "ninguno" consecutivas se
             // suman y la heurística por chars/ítem decide si el bloque
@@ -171,7 +170,6 @@ export default async function PrintEvaluationPage({
               </Fragment>
             );
           })}
-          </div>
         </div>
         <div className="fold-line" />
       </section>
