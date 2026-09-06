@@ -105,6 +105,10 @@ export interface AcademicYearRepository {
   findAll(institutionId: string): Promise<AcademicYear[]>;
   findById(institutionId: string, id: string): Promise<AcademicYear | null>;
   findByYear(institutionId: string, year: number): Promise<AcademicYear | null>;
+  /** Año académico marcado como actual de la institución (el único con
+   *  `isCurrent=true`). Devuelve `null` si no hay — use cases deben tratar
+   *  ese caso como `ValidationError` ("No hay año académico activo"). */
+  findCurrent(institutionId: string): Promise<AcademicYear | null>;
   create(institutionId: string, data: CreateAcademicYearData): Promise<AcademicYear>;
   /** Marca uno como actual y desmarca el resto de la institución. */
   setCurrent(institutionId: string, id: string): Promise<void>;

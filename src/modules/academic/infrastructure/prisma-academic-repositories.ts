@@ -91,6 +91,12 @@ export class PrismaAcademicYearRepository implements AcademicYearRepository {
     const row = await prisma.academicYear.findFirst({ where: { institutionId, year } });
     return row && toYear(row);
   }
+  async findCurrent(institutionId: string): Promise<AcademicYear | null> {
+    const row = await prisma.academicYear.findFirst({
+      where: { institutionId, isCurrent: true },
+    });
+    return row && toYear(row);
+  }
   async create(institutionId: string, data: CreateAcademicYearData): Promise<AcademicYear> {
     return toYear(
       await prisma.academicYear.create({

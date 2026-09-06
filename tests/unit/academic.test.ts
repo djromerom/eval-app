@@ -46,6 +46,9 @@ class InMemoryYears implements AcademicYearRepository {
   async findByYear(institutionId: string, year: number) {
     return this.items.find((y) => y.institutionId === institutionId && y.year === year) ?? null;
   }
+  async findCurrent(institutionId: string) {
+    return this.items.find((y) => y.institutionId === institutionId && y.isCurrent) ?? null;
+  }
   async create(institutionId: string, data: CreateAcademicYearData) {
     const y: AcademicYear = {
       id: `y-${this.items.length + 1}`,
