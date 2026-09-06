@@ -140,6 +140,22 @@
   overflow: hidden;
 }
 
+/* Wrapper interno del .sheet.questions: agrupa .subject-title + .questions-flow
+ * para que Chrome los mantenga juntos en la misma página. Sin este wrapper,
+ * `break-after: avoid` en el subject-title NO se propaga a través del límite
+ * de multicolumna del .questions-flow (Chrome ignora avoid entre un <p> y un
+ * contenedor con column-count), y la asignatura queda huérfana al pie de la
+ * hoja anterior con la primera pregunta empujada a la siguiente.
+ *
+ * `break-inside: avoid` aquí obliga al navegador: si título + flujo caben en
+ * la página actual, los deja juntos; si NO caben, mueve el wrapper entero a
+ * la página siguiente. No se rompe el multi-columna interno porque
+ * `break-inside: avoid` actúa sobre el wrapper, no sobre las columnas.
+ */
+.sheet-body {
+  break-inside: avoid;
+}
+
 /* Pliego portada (tabloid landscape 17×11in): dos mitades lado a lado.
  * - `.cover-blank-half` (izquierda): 8.5×11in en blanco — al doblar el
  *   pliego por el eje vertical, queda como interior de la portada.
@@ -396,18 +412,6 @@
   text-align: center;
   text-transform: uppercase;
   margin-bottom: 0.15rem;
-  /* Mismo patrón que .block-intro: si la asignatura aparece al pie de una
-   * hoja con poco espacio debajo, Chrome la dejaba huérfana y empujaba el
-   * cuerpo de preguntas (con su número, imágenes y opciones) a la hoja
-   * siguiente — el estudiante tenía que ir y volver entre páginas para
-   * leer la pregunta completa. `break-after: avoid` mantiene el título
-   * pegado al primer bloque del flujo: si no caben juntos al pie, AMBOS
-   * bajan a la siguiente página.
-   *
-   * No forzamos `break-before: page` (que gastaría media hoja en cada
-   * sección): la idea es solo evitar el caso huérfano, no asegurar
-   * siempre página nueva. */
-  break-after: avoid;
 }
 
 /* Imágenes dentro del booklet: centradas horizontalmente y limitadas al
@@ -557,19 +561,6 @@
    bloques de 1 asignatura) como en el cuadernillo. */
 .questions-flow > .print-group ~ .print-group[data-items="1"] .block-intro {
   break-before: page;
-}
-
-/* El primer .print-group de cada .questions-flow debe quedarse pegado al
- * .subject-title que tiene justo encima. Chrome a veces rompe la página
- * entre el título y la primera pregunta aunque el subject-title traiga
- * `break-after: avoid` — porque el siguiente sibling es un contenedor
- * multicolumna (`.questions-flow { column-count: N }`) y la propagación
- * del avoid a través de multi-columna es flaky. Esta regla ata el primer
- * print-group desde el otro lado: "no rompas justo antes de mí". Si entre
- * título y primer bloque no caben en la página actual, los dos bajan a
- * la siguiente. */
-.questions-flow > .print-group:first-child {
-  break-before: avoid;
 }
 
 /* Contenedor de las preguntas de UNA sección (cada sección del cuadernillo
