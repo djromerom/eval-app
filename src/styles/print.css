@@ -140,6 +140,22 @@
   overflow: hidden;
 }
 
+/* Wrapper interno del .sheet.questions: agrupa .subject-title + .questions-flow
+ * para que Chrome los mantenga juntos en la misma página. Sin este wrapper,
+ * `break-after: avoid` en el subject-title NO se propaga a través del límite
+ * de multicolumna del .questions-flow (Chrome ignora avoid entre un <p> y un
+ * contenedor con column-count), y la asignatura queda huérfana al pie de la
+ * hoja anterior con la primera pregunta empujada a la siguiente.
+ *
+ * `break-inside: avoid` aquí obliga al navegador: si título + flujo caben en
+ * la página actual, los deja juntos; si NO caben, mueve el wrapper entero a
+ * la página siguiente. No se rompe el multi-columna interno porque
+ * `break-inside: avoid` actúa sobre el wrapper, no sobre las columnas.
+ */
+.sheet-body {
+  break-inside: avoid;
+}
+
 /* Pliego portada (tabloid landscape 17×11in): dos mitades lado a lado.
  * - `.cover-blank-half` (izquierda): 8.5×11in en blanco — al doblar el
  *   pliego por el eje vertical, queda como interior de la portada.
