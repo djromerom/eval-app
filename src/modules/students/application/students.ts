@@ -2,6 +2,7 @@ import { type AuthenticatedUser, requireRole } from "@/shared/application/authen
 import type { UseCase } from "@/shared/application/use-case";
 import { type Result, NotFoundError, ValidationError, fail, ok } from "@/shared/domain/result";
 import type { GroupRepository } from "@/modules/academic/domain/types";
+import type { BookletTypeRepository } from "@/modules/booklet-types/domain/booklet-type";
 import {
   type CreateStudentData,
   type ImportResult,
@@ -124,6 +125,7 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
   constructor(
     private readonly students: StudentRepository,
     private readonly groups: GroupRepository,
+    private readonly bookletTypes: BookletTypeRepository,
   ) {}
 
   async execute({ actor, rows }: ImportStudentsInput): Promise<Result<ImportResult>> {
@@ -152,6 +154,36 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
         result.errors.push({ row: line, message: `Grupo "${row.groupName}" no encontrado.` });
         continue;
       }
+
+      // Resolución de bookletTypeName → id. 0 matches = sin cuadernillo
+      // (no es fatal, los CSV viejos del docente no traerán esta columna).
+      // >1 matches = ambiguo entre Pruebas: error por fila para no meter el
+      // id equivocado sin avisar.
+      let bookletTypeId: string | null = null;
+      const bookletTypeName = row.bookletTypeName.trim();
+      if (bookletTypeName) {
+        const matches = await this.bookletTypes.findByName(
+          actor.institutionId,
+          bookletTypeName,
+        );
+        if (matches.length > 1) {
+          result.errors.push({
+            row: line,
+            message: `Múltiples tipos de cuadernillo con nombre "${bookletTypeName}"; refina con la Prueba correspondiente.`,
+          });
+          continue;
+        }
+        if (matches.length === 1) {
+          bookletTypeId = matches[0]!.id;
+        } else {
+          result.errors.push({
+            row: line,
+            message: `Tipo de cuadernillo "${bookletTypeName}" no encontrado en esta institución.`,
+          });
+          continue;
+        }
+      }
+
       if (seenCodes.has(row.code)) {
         result.errors.push({ row: line, message: `Código "${row.code}" duplicado en el archivo.` });
         continue;
@@ -171,6 +203,8 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
         idNumber: row.idNumber.trim(),
         code: row.code,
         enrollmentYear: row.enrollmentYear,
+        grade: row.grade.trim() || null,
+        bookletTypeId,
       });
     }
 

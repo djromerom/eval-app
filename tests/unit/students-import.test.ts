@@ -8,6 +8,12 @@ import type {
   StudentRepository,
 } from "@/modules/students/domain/student";
 import type { Group, GroupRepository } from "@/modules/academic/domain/types";
+import type {
+  BookletType,
+  BookletTypeRepository,
+  CreateBookletTypeData,
+  UpdateBookletTypeData,
+} from "@/modules/booklet-types/domain/booklet-type";
 
 class InMemoryStudents implements StudentRepository {
   items: Student[] = [];
@@ -87,6 +93,41 @@ class InMemoryGroups implements GroupRepository {
   }
 }
 
+class InMemoryBookletTypes implements BookletTypeRepository {
+  /** Test-only: pre-cargar matches de bookletType por nombre para tests
+   *  específicos; por defecto vacío para no interferir con los tests
+   *  legacy de CSV. */
+  matches: Record<string, BookletType[]> = {};
+  async findById() {
+    return null;
+  }
+  async listByPeriod() {
+    return [];
+  }
+  async listByInstitution() {
+    return [];
+  }
+  async findByName(_institutionId: string, name: string) {
+    return this.matches[name.toLowerCase()] ?? [];
+  }
+  async create(
+    _institutionId: string,
+    _data: CreateBookletTypeData,
+  ): Promise<BookletType> {
+    throw new Error("no usado");
+  }
+  async update(
+    _institutionId: string,
+    _id: string,
+    _data: UpdateBookletTypeData,
+  ): Promise<BookletType | null> {
+    return null;
+  }
+  async delete() {
+    /* noop */
+  }
+}
+
 const admin: AuthenticatedUser = { userId: "u", institutionId: "i1", roles: ["ECU_MASTER"] };
 const groups: Group[] = [{ id: "g1", institutionId: "i1", courseId: "c1", name: "11-03" }];
 
@@ -134,10 +175,12 @@ Pérez Gómez Ana;T.I.;1;EST-1;11-03;2026`,
 
 describe("ImportStudents", () => {
   let students: InMemoryStudents;
+  let bookletTypes: InMemoryBookletTypes;
   let uc: ImportStudents;
   beforeEach(() => {
     students = new InMemoryStudents();
-    uc = new ImportStudents(students, new InMemoryGroups(groups));
+    bookletTypes = new InMemoryBookletTypes();
+    uc = new ImportStudents(students, new InMemoryGroups(groups), bookletTypes);
   });
 
   it("importa filas válidas y reporta errores por fila", async () => {
