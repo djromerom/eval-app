@@ -273,6 +273,9 @@ const noBookletTypes: BookletTypeRepository = {
   async listByInstitution() {
     return [];
   },
+  async findByName() {
+    return [];
+  },
   async create() {
     throw new Error("no usado");
   },
@@ -859,6 +862,9 @@ describe("CreateEvaluation — unicidad con bookletTypeId", () => {
       return [];
     },
     async listByInstitution() {
+      return [];
+    },
+    async findByName() {
       return [];
     },
     async create() {

@@ -63,6 +63,19 @@ export class PrismaBookletTypeRepository implements BookletTypeRepository {
     return rows.map(toBookletType);
   }
 
+  async findByName(institutionId: string, name: string): Promise<BookletType[]> {
+    const trimmed = name.trim();
+    if (!trimmed) return [];
+    // Match case-insensitive: la BD guarda "Estándar", el Excel puede traer
+    // "ESTANDAR". Postgres LIKE con ILIKE no es portable; usamos `mode:
+    // "insensitive"` de Prisma.
+    const rows = await prisma.bookletType.findMany({
+      where: { institutionId, name: { equals: trimmed, mode: "insensitive" } },
+      orderBy: [{ periodId: "asc" }, { order: "asc" }],
+    });
+    return rows.map(toBookletType);
+  }
+
   async create(institutionId: string, data: CreateBookletTypeData): Promise<BookletType> {
     const order =
       data.order ??

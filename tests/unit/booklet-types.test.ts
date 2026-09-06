@@ -68,6 +68,15 @@ class InMemoryBookletTypes implements BookletTypeRepository {
       .map(({ createdAt: _c, ...rest }) => rest);
   }
 
+  async findByName(institutionId: string, name: string) {
+    const trimmed = name.trim().toLowerCase();
+    return Array.from(this.byId.values())
+      .filter(
+        (b) => b.institutionId === institutionId && b.name.trim().toLowerCase() === trimmed,
+      )
+      .map(({ createdAt: _c, ...rest }) => rest);
+  }
+
   async create(institutionId: string, data: CreateBookletTypeData) {
     if (this.p2002OnCreate) {
       const err = new Error("Unique constraint") as Error & { code: string };

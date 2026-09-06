@@ -217,6 +217,9 @@ class InMemoryBookletTypes implements BookletTypeRepository {
   async listByInstitution() {
     return [];
   }
+  async findByName() {
+    return [];
+  }
   async create(): Promise<BookletType> {
     throw new Error("noop");
   }
