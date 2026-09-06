@@ -112,7 +112,14 @@ export function parseStudentsCsv(text: string): ParsedCsv {
   const headers = splitLine(lines[0]!, delimiter).map(
     (h) => HEADER_ALIASES[normalizeHeader(h)] as CanonicalKey | undefined,
   );
-  const missing = REQUIRED.filter((r) => !headers.includes(r));
+  // Backward-compat: la columna legacy `nombre` satisface los REQUIRED de
+  // lastName1 + firstName1 (se parte por whitespace en el row builder). Así
+  // los CSVs viejos del docente siguen funcionando sin pedirle migrar a las 4
+  // columnas separadas.
+  const hasLegacyName = headers.includes("__legacyName");
+  const missing = REQUIRED.filter(
+    (r) => !headers.includes(r) && !(hasLegacyName && (r === "lastName1" || r === "firstName1")),
+  );
   if (missing.length > 0) return { rows: [], missing };
 
   const rows: StudentImportRow[] = [];

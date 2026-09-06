@@ -90,21 +90,43 @@ class InMemoryGroups implements GroupRepository {
 const admin: AuthenticatedUser = { userId: "u", institutionId: "i1", roles: ["ECU_MASTER"] };
 const groups: Group[] = [{ id: "g1", institutionId: "i1", courseId: "c1", name: "11-03" }];
 
-const CSV = `nombre;tipo_doc;num_doc;codigo;grupo;anio_ingreso
-Ana Pérez;T.I.;123;EST-001;11-03;2026
-Luis Gómez;C.C.;456;EST-002;11-03;2026`;
+const CSV = `apellido1;apellido2;nombre1;nombre2;tipo_doc;num_doc;codigo;grupo;anio_ingreso
+Pérez;Gómez;Ana;;T.I.;123;EST-001;11-03;2026
+García;;Luis;Carlos;C.C.;456;EST-002;11-03;2026`;
 
 describe("parseStudentsCsv", () => {
   it("parsea encabezados con tildes y separador ;", () => {
     const { rows, missing } = parseStudentsCsv(CSV);
     expect(missing).toHaveLength(0);
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({ name: "Ana Pérez", code: "EST-001", groupName: "11-03" });
+    expect(rows[0]).toMatchObject({
+      lastName1: "Pérez",
+      lastName2: "Gómez",
+      firstName1: "Ana",
+      firstName2: "",
+      code: "EST-001",
+      groupName: "11-03",
+    });
     expect(rows[0]!.enrollmentYear).toBe(2026);
   });
 
+  it("acepta columnas legacy 'nombre' y parte por whitespace", () => {
+    const { rows, missing } = parseStudentsCsv(
+      `nombre;tipo_doc;num_doc;codigo;grupo;anio_ingreso
+Pérez Gómez Ana;T.I.;1;EST-1;11-03;2026`,
+    );
+    expect(missing).toHaveLength(0);
+    expect(rows[0]).toMatchObject({
+      lastName1: "Pérez",
+      lastName2: "Gómez",
+      firstName1: "Ana",
+      firstName2: "",
+    });
+  });
+
   it("reporta columnas faltantes", () => {
-    const { missing } = parseStudentsCsv("nombre,codigo\nAna,EST-1");
+    const { missing } = parseStudentsCsv("apellido1,codigo\nPérez,EST-1");
+    expect(missing).toContain("firstName1");
     expect(missing).toContain("groupName");
     expect(missing).toContain("idType");
   });
@@ -120,10 +142,10 @@ describe("ImportStudents", () => {
 
   it("importa filas válidas y reporta errores por fila", async () => {
     const { rows } = parseStudentsCsv(
-      `nombre;tipo_doc;num_doc;codigo;grupo;anio_ingreso
-Ana;T.I.;1;EST-001;11-03;2026
-SinGrupo;C.C.;2;EST-002;99-99;2026
-Dup;C.C.;3;EST-001;11-03;2026`,
+      `apellido1;apellido2;nombre1;nombre2;tipo_doc;num_doc;codigo;grupo;anio_ingreso
+Pérez;;Ana;;T.I.;1;EST-001;11-03;2026
+Sin;;Grupo;;C.C.;2;EST-002;99-99;2026
+Dup;;Otro;;C.C.;3;EST-001;11-03;2026`,
     );
     const r = await uc.execute({ actor: admin, rows });
     expect(r.ok).toBe(true);
