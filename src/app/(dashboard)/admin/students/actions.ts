@@ -27,7 +27,6 @@ export async function createStudentAction(
   const result = await makeCreateStudent().execute({
     actor,
     data: {
-      groupId: str(formData, "groupId"),
       lastName1: str(formData, "lastName1"),
       lastName2: str(formData, "lastName2"),
       firstName1: str(formData, "firstName1"),
@@ -36,6 +35,9 @@ export async function createStudentAction(
       idNumber: str(formData, "idNumber"),
       code: str(formData, "code"),
       enrollmentYear: Number(str(formData, "enrollmentYear")),
+      enrollment: {
+        groupId: str(formData, "groupId"),
+      },
     },
   });
   if (!result.ok) return { error: result.error.message };
@@ -60,7 +62,6 @@ export async function updateStudentAction(
     actor,
     studentId: str(formData, "studentId"),
     data: {
-      groupId: str(formData, "groupId"),
       lastName1: str(formData, "lastName1"),
       lastName2: str(formData, "lastName2"),
       firstName1: str(formData, "firstName1"),
@@ -69,6 +70,9 @@ export async function updateStudentAction(
       idNumber: str(formData, "idNumber"),
       enrollmentYear: Number(str(formData, "enrollmentYear")),
       isActive: formData.get("isActive") === "on",
+      enrollment: {
+        groupId: str(formData, "groupId"),
+      },
     },
   });
   if (!result.ok) return { error: result.error.message };

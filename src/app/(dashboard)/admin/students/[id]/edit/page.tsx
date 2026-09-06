@@ -85,7 +85,7 @@ export default async function EditStudentPage({ params }: { params: Promise<{ id
               firstName2: student.firstName2,
               idType: student.idType,
               idNumber: student.idNumber,
-              groupId: student.groupId,
+              groupId: student.currentEnrollment?.groupId ?? "",
               enrollmentYear: student.enrollmentYear,
               isActive: student.isActive,
               code: student.code,

@@ -36,7 +36,9 @@ export default async function StudentsPage() {
 
   // ===== Stats del KPI strip =====
   const active = students.filter((s) => s.isActive).length;
-  const groupsUsed = new Set(students.map((s) => s.groupId)).size;
+  const groupsUsed = new Set(
+    students.map((s) => s.currentEnrollment?.groupId).filter((g): g is string => Boolean(g)),
+  ).size;
   const enrolledThisYear = students.filter((s) => s.enrollmentYear === currentYear).length;
 
   // ===== Lookup para que la tabla cliente renderice nombres de grupo =====

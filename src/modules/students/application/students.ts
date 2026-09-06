@@ -1,7 +1,11 @@
 import { type AuthenticatedUser, requireRole } from "@/shared/application/authenticated-user";
 import type { UseCase } from "@/shared/application/use-case";
 import { type Result, NotFoundError, ValidationError, fail, ok } from "@/shared/domain/result";
-import type { GroupRepository, PeriodRepository } from "@/modules/academic/domain/types";
+import type {
+  AcademicYearRepository,
+  GroupRepository,
+  PeriodRepository,
+} from "@/modules/academic/domain/types";
 import type { BookletTypeRepository } from "@/modules/booklet-types/domain/booklet-type";
 import {
   type CreateStudentData,
@@ -40,11 +44,14 @@ export interface CreateStudentInput {
   data: CreateStudentData;
 }
 
-/** Alta individual de estudiante (ADMIN). REQUERIMIENTOS_v2.md §3.2. */
+/** Alta individual de estudiante (ADMIN). REQUERIMIENTOS_v2.md §3.2.
+ *  Requiere un año académico marcado como `isCurrent` en la institución —
+ *  cada estudiante se matricula automáticamente en él. */
 export class CreateStudent implements UseCase<CreateStudentInput, Student> {
   constructor(
     private readonly students: StudentRepository,
     private readonly groups: GroupRepository,
+    private readonly years: AcademicYearRepository,
   ) {}
 
   async execute({ actor, data }: CreateStudentInput): Promise<Result<Student>> {
@@ -54,14 +61,35 @@ export class CreateStudent implements UseCase<CreateStudentInput, Student> {
     const error = validateBasics(data);
     if (error) return fail(new ValidationError(error));
 
-    const group = await this.groups.findById(actor.institutionId, data.groupId);
+    // Resolver año académico actual. Sin él no podemos crear la matrícula.
+    const currentYear = await this.years.findCurrent(actor.institutionId);
+    if (!currentYear) {
+      return fail(
+        new ValidationError(
+          "No hay año académico marcado como actual. Configure uno en /admin/academic.",
+        ),
+      );
+    }
+
+    const group = await this.groups.findById(actor.institutionId, data.enrollment.groupId);
     if (!group) return fail(new ValidationError("El grupo indicado no existe en tu institución."));
 
     if (await this.students.findByCode(actor.institutionId, data.code)) {
       return fail(new ValidationError(`Ya existe un estudiante con el código "${data.code}".`));
     }
 
-    return ok(await this.students.create(actor.institutionId, data));
+    // Inyectar academicYearId del año actual (la UI no lo manda — es interno).
+    return ok(
+      await this.students.create(actor.institutionId, {
+        ...data,
+        enrollment: {
+          academicYearId: currentYear.id,
+          groupId: data.enrollment.groupId,
+          grade: data.enrollment.grade,
+          bookletTypeId: data.enrollment.bookletTypeId,
+        },
+      }),
+    );
   }
 }
 
@@ -120,6 +148,11 @@ export interface ImportStudentsInput {
 /**
  * Importación masiva con validación fila a fila (§3.2). No aborta ante errores:
  * inserta las filas válidas y reporta las inválidas para corrección.
+ *
+ * Cada estudiante se matricula en el año académico actual de la institución
+ * (no el que venga en el XLSX). Si la fila incluye `bookletTypeName`, debe
+ * traer `periodName` para identificar el cuadernillo dentro de la Prueba
+ * correcta — y esa Prueba DEBE pertenecer al año académico actual.
  */
 export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult> {
   constructor(
@@ -127,6 +160,7 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
     private readonly groups: GroupRepository,
     private readonly periods: PeriodRepository,
     private readonly bookletTypes: BookletTypeRepository,
+    private readonly years: AcademicYearRepository,
   ) {}
 
   async execute({ actor, rows }: ImportStudentsInput): Promise<Result<ImportResult>> {
@@ -134,6 +168,16 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
     if (!authorized.ok) return authorized;
 
     if (rows.length === 0) return fail(new ValidationError("El archivo no tiene filas."));
+
+    // Resolver año académico actual. Sin él no podemos matricular.
+    const currentYear = await this.years.findCurrent(actor.institutionId);
+    if (!currentYear) {
+      return fail(
+        new ValidationError(
+          "No hay año académico marcado como actual. Configure uno en /admin/academic.",
+        ),
+      );
+    }
 
     const groups = await this.groups.findAll(actor.institutionId);
     const groupByName = new Map(groups.map((g) => [g.name.toLowerCase(), g.id]));
@@ -160,6 +204,11 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
       // columna PRUEBA (periodName) si trae TIPO DE CUADERNILLO, porque
       // un mismo nombre (ej. "ESTANDAR") puede existir en varias Pruebas
       // y no queremos atar al estudiante a un periodo equivocado.
+      //
+      // Decisión del docente (6 sep 2026): la Prueba solo se usa para
+      // IDENTIFICAR el cuadernillo — no para fijar el año académico del
+      // estudiante. El estudiante se matricula SIEMPRE en el año actual de
+      // la institución. Si la Prueba no es del año actual → error.
       let bookletTypeId: string | null = null;
       const bookletTypeName = row.bookletTypeName.trim();
       if (bookletTypeName) {
@@ -177,6 +226,17 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
           result.errors.push({
             row: line,
             message: `Prueba "${periodName}" no encontrada en esta institución.`,
+          });
+          continue;
+        }
+
+        // Solo Pruebas del año académico actual sirven para identificar el
+        // cuadernillo — el estudiante se matricula en el año actual, no
+        // en el año de la Prueba.
+        if (period.academicYearId !== currentYear.id) {
+          result.errors.push({
+            row: line,
+            message: `La Prueba "${periodName}" no pertenece al año académico actual. Solo se pueden asignar cuadernillos del año en curso.`,
           });
           continue;
         }
@@ -216,7 +276,6 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
       }
       seenCodes.add(row.code);
       valid.push({
-        groupId,
         lastName1: row.lastName1.trim(),
         lastName2: row.lastName2.trim(),
         firstName1: row.firstName1.trim(),
@@ -225,8 +284,12 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
         idNumber: row.idNumber.trim(),
         code: row.code,
         enrollmentYear: row.enrollmentYear,
-        grade: row.grade.trim() || null,
-        bookletTypeId,
+        enrollment: {
+          academicYearId: currentYear.id,
+          groupId,
+          grade: row.grade.trim() || null,
+          bookletTypeId,
+        },
       });
     }
 
@@ -272,11 +335,19 @@ export interface UpdateStudentInput {
  * Edita los campos editables de un estudiante (NO incluye `code` — ese flujo
  * tiene su propio caso de uso con historial). Valida formato + tenancy del
  * grupo antes de delegar al repositorio.
+ *
+ * Si `data.enrollment` viene, el repo también hace upsert de la matrícula:
+ * - Si existe fila para (student, AY): actualiza grupo/grado/cuadernillo.
+ * - Si no: crea con isCurrent=true (desmarcando los previos).
+ *
+ * El año académico se inyecta del año actual de la institución (la UI no
+ * lo manda — es interno). Igual patrón que CreateStudent.
  */
 export class UpdateStudent implements UseCase<UpdateStudentInput, Student> {
   constructor(
     private readonly students: StudentRepository,
     private readonly groups: GroupRepository,
+    private readonly years: AcademicYearRepository,
   ) {}
 
   async execute({ actor, studentId, data }: UpdateStudentInput): Promise<Result<Student>> {
@@ -294,13 +365,29 @@ export class UpdateStudent implements UseCase<UpdateStudentInput, Student> {
       return fail(new ValidationError("Año de ingreso inválido."));
     }
 
-    const group = await this.groups.findById(actor.institutionId, data.groupId);
-    if (!group) return fail(new ValidationError("El grupo indicado no existe en tu institución."));
+    let enrollment = data.enrollment;
+    if (enrollment) {
+      const group = await this.groups.findById(actor.institutionId, enrollment.groupId);
+      if (!group) return fail(new ValidationError("El grupo indicado no existe en tu institución."));
+
+      // Inyectar academicYearId del año actual.
+      const currentYear = await this.years.findCurrent(actor.institutionId);
+      if (!currentYear) {
+        return fail(
+          new ValidationError(
+            "No hay año académico marcado como actual. Configure uno en /admin/academic.",
+          ),
+        );
+      }
+      enrollment = { ...enrollment, academicYearId: currentYear.id };
+    }
 
     const current = await this.students.findById(actor.institutionId, studentId);
     if (!current) return fail(new NotFoundError("Estudiante", studentId));
 
-    return ok(await this.students.update(actor.institutionId, studentId, data));
+    return ok(
+      await this.students.update(actor.institutionId, studentId, { ...data, enrollment }),
+    );
   }
 }
 

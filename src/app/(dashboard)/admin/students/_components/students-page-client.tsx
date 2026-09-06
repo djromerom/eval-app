@@ -96,7 +96,9 @@ export function StudentsPageClient({ students, groups, currentYear }: StudentsPa
       if (tab === "inactive" && s.isActive) return false;
       // search
       if (splitTerms.length === 0) return true;
-      const groupName = (groups.byId[s.groupId] ?? "").toLowerCase();
+      const groupName = s.currentEnrollment
+        ? (groups.byId[s.currentEnrollment.groupId] ?? "").toLowerCase()
+        : "";
       const haystack = [
         `${s.lastName1} ${s.lastName2} ${s.firstName1} ${s.firstName2}`.trim(),
         s.code,
@@ -387,7 +389,9 @@ function StudentsTable({
                 {s.idType} {s.idNumber}
               </td>
               <td className="text-muted-foreground px-4 py-3 font-mono text-xs">{s.code}</td>
-              <td className="text-muted-foreground px-4 py-3">{groupLookup[s.groupId] ?? "—"}</td>
+              <td className="text-muted-foreground px-4 py-3">
+                {s.currentEnrollment ? (groupLookup[s.currentEnrollment.groupId] ?? "—") : "—"}
+              </td>
               <td className="text-muted-foreground px-4 py-3 whitespace-nowrap">
                 {s.enrollmentYear}
               </td>

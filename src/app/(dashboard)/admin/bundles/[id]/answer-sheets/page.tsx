@@ -54,9 +54,14 @@ export default async function BundleAnswerSheetsPage({
   }
 
   // Lista de estudiantes de la institución. En el futuro se filtrará por
-  // curso (CourseSubject) si el bundle lo requiere; por ahora todos.
+  // curso (CourseSubject) si el bundle lo requiere; por ahora todos los que
+  // tengan matrícula vigente en el año actual.
   const students = await prisma.student.findMany({
-    where: { institutionId: actor.institutionId, isActive: true },
+    where: {
+      institutionId: actor.institutionId,
+      isActive: true,
+      enrollments: { some: { isCurrent: true } },
+    },
     orderBy: [
       { lastName1: "asc" },
       { lastName2: "asc" },
@@ -70,7 +75,11 @@ export default async function BundleAnswerSheetsPage({
       firstName1: true,
       firstName2: true,
       code: true,
-      group: { select: { name: true } },
+      enrollments: {
+        where: { isCurrent: true },
+        take: 1,
+        select: { group: { select: { name: true } } },
+      },
     },
   });
 
@@ -117,7 +126,7 @@ export default async function BundleAnswerSheetsPage({
                         .trim()}
                     </div>
                     <div className="text-muted-foreground text-xs">
-                      {s.code} · {s.group?.name ?? "Sin grado"}
+                      {s.code} · {s.enrollments[0]?.group?.name ?? "Sin grado"}
                     </div>
                   </div>
                 </label>

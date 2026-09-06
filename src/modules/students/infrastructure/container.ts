@@ -25,12 +25,15 @@ const groups = new PrismaGroupRepository();
 const periods = new PrismaPeriodRepository();
 const bookletTypes = new PrismaBookletTypeRepository();
 
-export const makeCreateStudent = () => new CreateStudent(students, groups);
+// `CreateStudent` e `ImportStudents` ahora resuelven el año académico actual
+// para matricular a cada estudiante — por eso necesitan `years`.
+export const makeCreateStudent = () => new CreateStudent(students, groups, years);
 export const makeListStudents = () => new ListStudents(students);
 export const makeChangeStudentCode = () => new ChangeStudentCode(students);
-export const makeImportStudents = () => new ImportStudents(students, groups, periods, bookletTypes);
+export const makeImportStudents = () =>
+  new ImportStudents(students, groups, periods, bookletTypes, years);
 export const makeGetStudent = () => new GetStudent(students);
-export const makeUpdateStudent = () => new UpdateStudent(students, groups);
+export const makeUpdateStudent = () => new UpdateStudent(students, groups, years);
 export const makeDeleteStudent = () => new DeleteStudent(students);
 
 // StudentEnrollment use cases (wiring — los use cases en sí están en

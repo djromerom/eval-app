@@ -1,7 +1,8 @@
+import type { StudentEnrollment } from "./student-enrollment";
+
 export interface Student {
   id: string;
   institutionId: string;
-  groupId: string;
   // Nombre partido en 4 campos según convención colombiana. APELLIDO1 +
   // NOMBRE1 obligatorios (validados en use case); APELLIDO2 + NOMBRE2
   // opcionales — caso real: muchos estudiantes tienen solo 1 apellido o 1
@@ -15,18 +16,29 @@ export interface Student {
   code: string; // único por institución, embebido en el QR
   enrollmentYear: number;
   isActive: boolean;
-  /** Grado como texto libre (ej. "11", "2"). Nullable: filas existentes
-   *  quedan null hasta que el docente las rellene vía import o edición.
-   *  NO es FK — el course ya está implícito en `group.courseId`. */
+  /** Matrícula vigente del estudiante en el año académico actual (la única
+   *  con `isCurrent=true`). Contiene grupo/grado/cuadernillo. Hidratada por
+   *  el repo al hacer `findById`/`findByCode`/`findAll`/etc.
+   *  `null` si el estudiante no tiene enrollment en el año actual (caso
+   *  borde post-migración — UI muestra "—"). */
+  currentEnrollment: StudentEnrollment | null;
+}
+
+/** Datos de la matrícula vigente del estudiante. Usado en create + update
+ *  para mover el grupo/grado/cuadernillo.
+ *
+ *  `academicYearId` es OPCIONAL en el input porque los use cases
+ *  (`CreateStudent`/`UpdateStudent`/`ImportStudents`) lo inyectan desde
+ *  el año académico actual de la institución — la UI nunca lo envía.
+ *  El repositorio requiere que venga presente en el momento del insert. */
+export interface StudentEnrollmentInput {
+  academicYearId?: string;
+  groupId: string;
   grade?: string | null;
-  /** Cuadernillo por defecto del estudiante al armar hojas de respuesta.
-   *  Nullable para mantener compat con filas existentes. Resuelto por
-   *  nombre desde \`StudentImportRow.bookletTypeName\` durante el import. */
   bookletTypeId?: string | null;
 }
 
 export interface CreateStudentData {
-  groupId: string;
   lastName1: string;
   lastName2: string;
   firstName1: string;
@@ -35,15 +47,14 @@ export interface CreateStudentData {
   idNumber: string;
   code: string;
   enrollmentYear: number;
-  grade?: string | null;
-  bookletTypeId?: string | null;
+  enrollment: StudentEnrollmentInput;
 }
 
 /** Campos editables desde el drawer de edición. NO incluye `code` — el
  *  cambio de código tiene su propio caso de uso (`ChangeStudentCode`) que
- *  preserva el historial de QR. */
+ *  preserva el historial de QR.
+ *  `enrollment` es opcional: si no viene, solo se actualizan datos personales. */
 export interface UpdateStudentData {
-  groupId: string;
   lastName1: string;
   lastName2: string;
   firstName1: string;
@@ -52,8 +63,7 @@ export interface UpdateStudentData {
   idNumber: string;
   enrollmentYear: number;
   isActive: boolean;
-  grade?: string | null;
-  bookletTypeId?: string | null;
+  enrollment?: StudentEnrollmentInput;
 }
 
 /** Fila cruda de una importación masiva (Excel/CSV) antes de validar. */

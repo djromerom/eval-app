@@ -38,21 +38,32 @@ export default async function GenerateSheetsPage({ params }: Props) {
   });
 
   const students = await prisma.student.findMany({
-    where: { institutionId: actor.institutionId, isActive: true },
+    where: {
+      institutionId: actor.institutionId,
+      isActive: true,
+      // Solo estudiantes con matrícula vigente — los demás no imprimen hoja
+      // de respuestas (caso borde post-migración).
+      enrollments: { some: { isCurrent: true } },
+    },
     orderBy: [
       { lastName1: "asc" },
       { lastName2: "asc" },
       { firstName1: "asc" },
       { firstName2: "asc" },
     ],
+    include: {
+      enrollments: { where: { isCurrent: true }, take: 1, select: { groupId: true } },
+    },
   });
 
-  // Agrupar estudiantes por grupo
+  // Agrupar estudiantes por grupo (solo los que tienen matrícula vigente)
   const studentsByGroup = new Map<string, typeof students>();
   for (const s of students) {
-    const list = studentsByGroup.get(s.groupId) ?? [];
+    const currentGroupId = s.enrollments[0]?.groupId;
+    if (!currentGroupId) continue;
+    const list = studentsByGroup.get(currentGroupId) ?? [];
     list.push(s);
-    studentsByGroup.set(s.groupId, list);
+    studentsByGroup.set(currentGroupId, list);
   }
 
   const groupsData = groups
