@@ -11,6 +11,7 @@ import {
   buildSignedQrContent,
   generateQrDataUrl,
 } from "@/modules/printing/infrastructure/qr-generator";
+import { normalizeStudentIds } from "../../_lib/search-params";
 
 export const metadata: Metadata = { title: "Hojas de respuestas" };
 
@@ -28,7 +29,7 @@ function splitIntoColumns<T>(items: T[]): T[][] {
 
 interface Props {
   params: Promise<{ evaluationId: string }>;
-  searchParams: Promise<{ students?: string; t?: string }>;
+  searchParams: Promise<{ students?: string | string[]; t?: string }>;
 }
 
 export default async function BulkAnswerSheetsPage({ params, searchParams }: Props) {
@@ -47,7 +48,7 @@ export default async function BulkAnswerSheetsPage({ params, searchParams }: Pro
   const institutionName = instRes.ok ? instRes.value.name : "";
   const institutionCode = instRes.ok ? instRes.value.code : "";
 
-  const ids = studentIds?.split(",").filter(Boolean) ?? [];
+  const ids = normalizeStudentIds(studentIds);
   const students =
     ids.length > 0
       ? await prisma.student.findMany({

@@ -62,9 +62,18 @@
 
 .as-line-filled {
   border-bottom: 1px solid #000;
-  height: 1.2rem;
+  min-height: 1.2rem;
+  height: auto;
   font-weight: 400;
   padding: 0 0.2rem;
+  /* Nombres largos como "ACOSTA BUENO JONASS DAVID" no caben en una sola
+   * línea dentro del ancho de 180px del bloque izquierdo. Permitimos wrap
+   * en el espacio entre palabras (sin romper palabras) y dejamos que el
+   * campo crezca verticalmente para acomodar 2 líneas si hace falta. */
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+  line-height: 1.1;
 }
 
 /* Grid de burbujas — 3 columnas para casar con el PDF institucional
