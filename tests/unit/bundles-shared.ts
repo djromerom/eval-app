@@ -355,6 +355,20 @@ export class InMemoryBundleRepository implements BundleRepository {
   items = new Map<string, BundleItem & { institutionId: string }>();
   evaluations = new Map<string, SeedEvaluation>();
   /**
+   * Sprint Bundle-Period (sep 2026): repos inyectados para resolver nombres
+   * de Period/BookletType en `create`/`update`, replicando el join que hace
+   * el adaptador Prisma. Opcionales — si no se inyectan, cae al catálogo
+   * estático (`PERIODS` / `BOOKLET_TYPES`).
+   */
+  constructor(
+    private readonly periodLookup?: {
+      findById: (iid: string, id: string) => Promise<Period | null>;
+    },
+    private readonly bookletTypeLookup?: {
+      findById: (iid: string, id: string) => Promise<BookletType | null>;
+    },
+  ) {}
+  /**
    * Contador monotónico para generar IDs de item. NO usar `this.items.size + 1`
    * porque tras un remove el tamaño baja y el siguiente add reciclaría un ID
    * existente → `items.set(id, ...)` sobrescribe la fila previa en vez de
@@ -384,9 +398,15 @@ export class InMemoryBundleRepository implements BundleRepository {
       courseId: data.courseId ?? null,
       courseName: data.courseId ? courseNameOf(data.courseId) : null,
       periodId: data.periodId ?? null,
-      periodName: periodNameOf(data.periodId ?? null),
+      periodName: data.periodId
+        ? ((await this.periodLookup?.findById(institutionId, data.periodId))?.name ??
+          periodNameOf(data.periodId))
+        : null,
       bookletTypeId: data.bookletTypeId ?? null,
-      bookletTypeName: bookletTypeNameOf(data.bookletTypeId ?? null),
+      bookletTypeName: data.bookletTypeId
+        ? ((await this.bookletTypeLookup?.findById(institutionId, data.bookletTypeId))?.name ??
+          bookletTypeNameOf(data.bookletTypeId))
+        : null,
       status: "DRAFT",
       theme: data.theme ?? null,
       coverContent: null,
@@ -464,13 +484,19 @@ export class InMemoryBundleRepository implements BundleRepository {
       ...(data.periodId !== undefined
         ? {
             periodId: data.periodId,
-            periodName: periodNameOf(data.periodId),
+            periodName: data.periodId
+              ? ((await this.periodLookup?.findById(institutionId, data.periodId))?.name ??
+                periodNameOf(data.periodId))
+              : null,
           }
         : {}),
       ...(data.bookletTypeId !== undefined
         ? {
             bookletTypeId: data.bookletTypeId,
-            bookletTypeName: bookletTypeNameOf(data.bookletTypeId),
+            bookletTypeName: data.bookletTypeId
+              ? ((await this.bookletTypeLookup?.findById(institutionId, data.bookletTypeId))
+                  ?.name ?? bookletTypeNameOf(data.bookletTypeId))
+              : null,
           }
         : {}),
       ...(data.theme !== undefined ? { theme: data.theme } : {}),
