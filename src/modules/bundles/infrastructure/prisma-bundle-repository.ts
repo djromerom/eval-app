@@ -67,6 +67,7 @@ function toBundle(row: BundleRow): Bundle {
     status: row.status as BundleStatus,
     theme: row.theme,
     coverContent: row.coverContent,
+    evaluationDate: row.evaluationDate,
     createdById: row.createdById,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -132,6 +133,7 @@ export class PrismaBundleRepository implements BundleRepository {
           periodId: data.periodId ?? null,
           bookletTypeId: data.bookletTypeId ?? null,
           theme: (data.theme ?? null) as Prisma.InputJsonValue,
+          evaluationDate: data.evaluationDate ?? null,
         },
         include: {
           course: { select: { name: true } },
@@ -196,11 +198,14 @@ export class PrismaBundleRepository implements BundleRepository {
     };
   }
 
-  async findAll(institutionId: string, filters?: {
-    periodId?: string;
-    bookletTypeId?: string;
-    status?: BundleStatus;
-  }): Promise<Bundle[]> {
+  async findAll(
+    institutionId: string,
+    filters?: {
+      periodId?: string;
+      bookletTypeId?: string;
+      status?: BundleStatus;
+    },
+  ): Promise<Bundle[]> {
     const rows = await prisma.evaluationBundle.findMany({
       where: {
         institutionId,
@@ -247,6 +252,7 @@ export class PrismaBundleRepository implements BundleRepository {
         ...(data.coverContent !== undefined
           ? { coverContent: (data.coverContent ?? null) as Prisma.InputJsonValue }
           : {}),
+        ...(data.evaluationDate !== undefined ? { evaluationDate: data.evaluationDate } : {}),
       },
       include: {
         course: { select: { name: true } },

@@ -18,6 +18,13 @@ export const metadata: Metadata = { title: "Detalle del cuadernillo" };
 
 const dateFmt = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
 
+/** Convierte `Bundle.evaluationDate: Date | null` al formato `yyyy-mm-dd`
+ *  que requiere `<input type="date">`. Devuelve "" si es null. */
+function dateToInput(d: Date | null): string {
+  if (!d) return "";
+  return d.toISOString().slice(0, 10);
+}
+
 export default async function BundleDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const actor = await requireAuthenticatedUser("ECU_MASTER", "ECU_LIDER");
   const { id } = await params;
@@ -96,6 +103,7 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
               initialCourseId={bundle.courseId}
               initialPeriodId={bundle.periodId}
               initialBookletTypeId={bundle.bookletTypeId}
+              initialEvaluationDate={dateToInput(bundle.evaluationDate)}
               courses={courses}
               periods={periods}
               bookletTypes={bookletTypes}

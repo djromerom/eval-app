@@ -10,7 +10,7 @@ export interface Student {
   lastName2: string;
   firstName1: string;
   firstName2: string;
-  idType: string; // T.I., C.C., NUI, R.C.
+  idType: string; // T.I., C.C., NUI, R.C., NES, etc.
   idNumber: string;
   code: string; // único por institución, embebido en el QR
   enrollmentYear: number;
@@ -119,7 +119,7 @@ export function isValidStudentCode(code: string): boolean {
   return CODE_PATTERN.test(code);
 }
 
-export const ID_TYPES = ["T.I.", "C.C.", "C.E.", "NUI", "R.C.", "PPT"] as const;
+export const ID_TYPES = ["T.I.", "C.C.", "C.E.", "NUI", "R.C.", "NES", "PPT"] as const;
 
 export function isValidIdType(idType: string): boolean {
   return (ID_TYPES as readonly string[]).includes(idType);

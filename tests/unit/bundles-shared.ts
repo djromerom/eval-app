@@ -410,6 +410,7 @@ export class InMemoryBundleRepository implements BundleRepository {
       status: "DRAFT",
       theme: data.theme ?? null,
       coverContent: null,
+      evaluationDate: data.evaluationDate ?? null,
       createdAt: now,
       updatedAt: now,
     };
@@ -501,6 +502,7 @@ export class InMemoryBundleRepository implements BundleRepository {
         : {}),
       ...(data.theme !== undefined ? { theme: data.theme } : {}),
       ...(data.coverContent !== undefined ? { coverContent: data.coverContent } : {}),
+      ...(data.evaluationDate !== undefined ? { evaluationDate: data.evaluationDate } : {}),
       updatedAt: new Date(),
     };
     this.bundles.set(id, updated);

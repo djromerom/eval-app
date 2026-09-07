@@ -81,6 +81,9 @@ export function CreateBundleWizard({
   const [periodId, setPeriodId] = useState(() => currentPeriod?.id ?? "");
   const [bookletTypeId, setBookletTypeId] = useState("");
   const periodLocked = !!currentPeriod;
+  // Fecha de la prueba (sep 2026). yyyy-mm-dd para <input type="date">.
+  // "" = no asignar al crear (queda null en BD → no se imprime en la hoja).
+  const [evaluationDate, setEvaluationDate] = useState("");
 
   // BookletTypes disponibles para la Prueba seleccionada.
   const filteredTypes = useMemo(
@@ -236,6 +239,26 @@ export function CreateBundleWizard({
               </p>
             )}
           </div>
+        </div>
+
+        {/* Fecha de la prueba (sep 2026): si está set, se imprime en la
+            hoja de respuestas unificada del cuadernillo. Opcional al crear. */}
+        <div className="space-y-1">
+          <label htmlFor="evaluationDate" className="text-sm font-medium">
+            Fecha de la prueba (opcional)
+          </label>
+          <input
+            id="evaluationDate"
+            name="evaluationDate"
+            type="date"
+            value={evaluationDate}
+            onChange={(e) => setEvaluationDate(e.target.value)}
+            className="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none sm:max-w-xs"
+          />
+          <p className="text-muted-foreground text-xs">
+            Si la defines, se imprime en la hoja de respuestas. Déjala vacía para no mostrar el
+            campo.
+          </p>
         </div>
 
         <div className="space-y-1">

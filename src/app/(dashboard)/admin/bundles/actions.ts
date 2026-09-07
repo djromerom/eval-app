@@ -38,6 +38,10 @@ export async function createBundleAction(
   // "" en el select de Tipo = sin tipo. El use case no inyecta default aquí.
   const bookletTypeIdRaw = String(formData.get("bookletTypeId") ?? "").trim();
   const bookletTypeId: string | undefined = bookletTypeIdRaw === "" ? undefined : bookletTypeIdRaw;
+  // Fecha de la prueba (sep 2026). "" = no asignar; yyyy-mm-dd → Date.
+  const evaluationDateRaw = String(formData.get("evaluationDate") ?? "").trim();
+  const evaluationDate: Date | null | undefined =
+    evaluationDateRaw === "" ? undefined : new Date(`${evaluationDateRaw}T00:00:00.000Z`);
 
   if (!name) return { error: "El nombre es obligatorio." };
   if (evaluationIds.length === 0) {
@@ -47,6 +51,9 @@ export async function createBundleAction(
   const bookletNumber = bookletNumberRaw === "" ? null : Number(bookletNumberRaw);
   if (bookletNumber !== null && (!Number.isFinite(bookletNumber) || bookletNumber <= 0)) {
     return { error: "El número de cuadernillo debe ser un entero positivo." };
+  }
+  if (evaluationDate instanceof Date && Number.isNaN(evaluationDate.getTime())) {
+    return { error: "La fecha de la prueba no es válida." };
   }
 
   const result = await makeCreateBundle().execute({
@@ -58,6 +65,7 @@ export async function createBundleAction(
       periodId,
       bookletTypeId,
       evaluationIds,
+      evaluationDate: evaluationDate ?? null,
     },
   });
   if (!result.ok) return { error: result.error.message };
@@ -87,11 +95,19 @@ export async function updateBundleAction(
   // "limpiar" (a diferencia de CreateBundle donde `undefined` resuelve el default).
   const periodId = String(formData.get("periodId") ?? "").trim() || null;
   const bookletTypeId = String(formData.get("bookletTypeId") ?? "").trim() || null;
+  // Fecha de la prueba (sep 2026). "" = limpiar; yyyy-mm-dd → Date.
+  const evaluationDateRaw = String(formData.get("evaluationDate") ?? "").trim();
+  const evaluationDateParsed: Date | null =
+    evaluationDateRaw === "" ? null : new Date(`${evaluationDateRaw}T00:00:00.000Z`);
+  if (evaluationDateParsed instanceof Date && Number.isNaN(evaluationDateParsed.getTime())) {
+    return { error: "La fecha de la prueba no es válida." };
+  }
+  const evaluationDate = evaluationDateRaw === "" ? null : evaluationDateParsed;
 
   const result = await makeUpdateBundle().execute({
     actor,
     bundleId: id,
-    data: { name, bookletNumber, courseId, periodId, bookletTypeId },
+    data: { name, bookletNumber, courseId, periodId, bookletTypeId, evaluationDate },
   });
   if (!result.ok) return { error: result.error.message };
 

@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { updateBundleAction, type BundleFormState } from "../actions";
@@ -41,6 +42,7 @@ export function BundleEditForm({
   initialCourseId,
   initialPeriodId,
   initialBookletTypeId,
+  initialEvaluationDate,
   courses,
   periods,
   bookletTypes,
@@ -51,16 +53,61 @@ export function BundleEditForm({
   initialCourseId: string | null;
   initialPeriodId: string | null;
   initialBookletTypeId: string | null;
+  initialEvaluationDate: string; // yyyy-mm-dd ya formateado, o "" si null
   courses: Array<{ id: string; name: string }>;
   periods: PeriodOption[];
   bookletTypes: BookletTypeOption[];
 }) {
   const [state, formAction] = useActionState(updateBundleAction, {} as BundleFormState);
+  const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
 
-  // Estado controlado de los selects (necesario para la cascada).
+  // Sprint Bundle-Period sep 2026 (bug): tras un save exitoso, `revalidatePath`
+  // invalida la caché del server pero NO dispara automáticamente un re-render
+  // del client con props frescos (eso solo ocurre con `redirect()`). Llamamos
+  // `router.refresh()` para que la página server traiga los nuevos datos y los
+  // useEffect sincronizadores de abajo actualicen el state de los inputs.
+  useEffect(() => {
+    if (state.success) {
+      router.refresh();
+    }
+  }, [state.success, router]);
+
+  // Sprint Bundle-Period sep 2026 (bug): todos los campos son controlados y
+  // sincronizan con los props cuando el server re-renderiza tras un save.
+  // Sin esto, los inputs no controlados (`defaultValue`) retienen los valores
+  // viejos del DOM y los controlados (`useState(initialXxx)`) mantienen el
+  // state inicial — el form mostraba los datos antiguos después de "Guardar
+  // cambios" aunque el server ya hubiera persistido los nuevos.
+  const [name, setName] = useState<string>(initialName);
+  const [bookletNumber, setBookletNumber] = useState<string>(
+    initialBookletNumber === null ? "" : String(initialBookletNumber),
+  );
+  const [courseId, setCourseId] = useState<string>(initialCourseId ?? "");
   const [periodId, setPeriodId] = useState<string>(initialPeriodId ?? "");
   const [bookletTypeId, setBookletTypeId] = useState<string>(initialBookletTypeId ?? "");
+  // Fecha de la prueba (sep 2026). yyyy-mm-dd para <input type="date">.
+  // "" = sin fecha asignada; el use case trata "" como null (limpiar).
+  const [evaluationDate, setEvaluationDate] = useState<string>(initialEvaluationDate);
+
+  useEffect(() => {
+    setName(initialName);
+  }, [initialName]);
+  useEffect(() => {
+    setBookletNumber(initialBookletNumber === null ? "" : String(initialBookletNumber));
+  }, [initialBookletNumber]);
+  useEffect(() => {
+    setCourseId(initialCourseId ?? "");
+  }, [initialCourseId]);
+  useEffect(() => {
+    setPeriodId(initialPeriodId ?? "");
+  }, [initialPeriodId]);
+  useEffect(() => {
+    setBookletTypeId(initialBookletTypeId ?? "");
+  }, [initialBookletTypeId]);
+  useEffect(() => {
+    setEvaluationDate(initialEvaluationDate);
+  }, [initialEvaluationDate]);
 
   // BookletTypes disponibles para la Prueba seleccionada. Si periodId es ""
   // (sin Prueba), mostramos todos para que el admin pueda asignar Tipo antes
@@ -71,8 +118,13 @@ export function BundleEditForm({
   }, [periodId, bookletTypes]);
 
   // Si cambia la Prueba seleccionada, descartamos el Tipo seleccionado si ya
-  // no es válido en el nuevo Period.
+  // no es válido en el nuevo Period. La validación final de consistencia
+  // Period/BookletType vive en `UpdateBundle` (server); aquí solo sincronizamos
+  // la UI cuando el docente cambia manualmente el Period.
+  const prevPeriodId = useRef(periodId);
   useEffect(() => {
+    if (prevPeriodId.current === periodId) return;
+    prevPeriodId.current = periodId;
     if (!periodId) {
       if (bookletTypeId) setBookletTypeId("");
       return;
@@ -80,13 +132,10 @@ export function BundleEditForm({
     if (bookletTypeId && !filteredTypes.find((bt) => bt.id === bookletTypeId)) {
       setBookletTypeId("");
     }
-  }, [periodId, filteredTypes, bookletTypeId]);
-
-  useEffect(() => {
-    if (state.success) {
-      // No reset: queremos mantener los valores actuales visibles.
-    }
-  }, [state.success]);
+    // Solo queremos dispararlo cuando periodId cambia por acción del usuario,
+    // no cuando filteredTypes o bookletTypeId cambian por re-render del server.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodId]);
 
   return (
     <form ref={formRef} action={formAction} className="bg-card space-y-4 rounded-xl border p-6">
@@ -101,7 +150,8 @@ export function BundleEditForm({
             id="name"
             name="name"
             required
-            defaultValue={initialName}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             minLength={3}
             maxLength={120}
           />
@@ -116,7 +166,8 @@ export function BundleEditForm({
             type="number"
             min={1}
             step={1}
-            defaultValue={initialBookletNumber ?? ""}
+            value={bookletNumber}
+            onChange={(e) => setBookletNumber(e.target.value)}
             placeholder="Opcional"
           />
         </div>
@@ -160,8 +211,38 @@ export function BundleEditForm({
                 {bt.name}
               </option>
             ))}
+            {/* Defensivo: si el bookletTypeId persistido no aparece en
+                filteredTypes (catálogo desfasado, bookletType de otro periodo),
+                renderizamos una opción fantasma con ese value para que el
+                <select> no caiga silenciosamente a la primera opción. El
+                server rechaza el save si el BookletType no existe o no
+                pertenece al Period. */}
+            {bookletTypeId && !filteredTypes.some((bt) => bt.id === bookletTypeId) && (
+              <option value={bookletTypeId}>(tipo no disponible)</option>
+            )}
           </select>
         </div>
+      </div>
+
+      {/* Fecha de la prueba (sep 2026): si está set, se imprime en la hoja
+          de respuestas unificada del cuadernillo. Si se deja vacía, el
+          bloque "Fecha:" no se renderiza en absoluto (ni siquiera la línea). */}
+      <div className="space-y-1">
+        <label htmlFor="evaluationDate" className="text-sm font-medium">
+          Fecha de la prueba
+        </label>
+        <input
+          id="evaluationDate"
+          name="evaluationDate"
+          type="date"
+          value={evaluationDate}
+          onChange={(e) => setEvaluationDate(e.target.value)}
+          className="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none sm:max-w-xs"
+        />
+        <p className="text-muted-foreground text-xs">
+          Opcional. Si la defines, se imprime en la hoja de respuestas. Déjala vacía para no mostrar
+          el campo.
+        </p>
       </div>
 
       <div className="space-y-1">
@@ -171,7 +252,8 @@ export function BundleEditForm({
         <select
           id="courseId"
           name="courseId"
-          defaultValue={initialCourseId ?? ""}
+          value={courseId}
+          onChange={(e) => setCourseId(e.target.value)}
           className="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
         >
           <option value="">Sin grado específico (varios grados)</option>

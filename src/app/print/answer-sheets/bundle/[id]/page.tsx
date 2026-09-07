@@ -11,10 +11,20 @@ import {
   buildSignedQrContent,
   generateQrDataUrl,
 } from "@/modules/printing/infrastructure/qr-generator";
+import { normalizeStudentIds } from "../../../_lib/search-params";
+import { AutoPrint } from "./_components/auto-print";
 
 export const metadata: Metadata = { title: "Hojas de respuestas del cuadernillo" };
 
 const KEYS = ANSWER_KEYS_ORDER;
+
+// Formato corto DD/MM/YYYY (es-CO) para el campo "Fecha:" de la hoja de
+// respuestas unificada del cuadernillo (sep 2026).
+const dateFmtShort = new Intl.DateTimeFormat("es-CO", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
 
 /** Reparte en 3 columnas. La hoja unificada del bundle trata TODAS las
  *  preguntas como una sola lista plana, ignorando secciones y formulaciones:
@@ -54,7 +64,7 @@ export default async function BundleAnswerSheetsPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ students?: string; t?: string }>;
+  searchParams: Promise<{ students?: string | string[]; t?: string }>;
 }) {
   const { id } = await params;
   const { students: studentIds, t } = await searchParams;
@@ -71,7 +81,7 @@ export default async function BundleAnswerSheetsPage({
   const institutionName = instRes.ok ? instRes.value.name : "";
   const institutionCode = instRes.ok ? instRes.value.code : "";
 
-  const ids = studentIds?.split(",").filter(Boolean) ?? [];
+  const ids = normalizeStudentIds(studentIds);
   const students =
     ids.length > 0
       ? await prisma.student.findMany({
@@ -137,6 +147,7 @@ export default async function BundleAnswerSheetsPage({
 
   return (
     <div className="booklet">
+      <AutoPrint />
       <div className="no-print bg-card sticky top-0 z-10 flex w-full max-w-[900px] items-center gap-3 rounded-lg border p-3 text-sm">
         <span className="text-muted-foreground">
           {students.length} hoja(s) de respuestas para el cuadernillo &laquo;{bundle.name}&raquo; (
@@ -177,8 +188,19 @@ export default async function BundleAnswerSheetsPage({
                   <span className="as-line-filled">{student.code}</span>
                 </div>
                 <div className="as-field">
-                  <span>Fecha:</span>
-                  <span className="as-line" />
+                  {/* Sprint evaluación de prueba (sep 2026): si el cuadernillo
+                      tiene `evaluationDate`, se imprime en formato DD/MM/YYYY.
+                      Si es null, NO se renderiza el bloque "Fecha:" en
+                      absoluto — ni siquiera la línea vacía. Pedido explícito
+                      del docente. */}
+                  {bundle.evaluationDate ? (
+                    <>
+                      <span>Fecha:</span>
+                      <span className="as-line-filled">
+                        {dateFmtShort.format(bundle.evaluationDate)}
+                      </span>
+                    </>
+                  ) : null}
                 </div>
               </div>
             </div>

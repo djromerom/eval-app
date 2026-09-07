@@ -73,6 +73,7 @@ class FakeBundleRepo {
       periodName: null,
       bookletTypeId: null,
       bookletTypeName: null,
+      evaluationDate: null,
       status: "READY" as BundleDetail["status"],
       theme: null,
       coverContent: null,
