@@ -686,6 +686,13 @@ model EvaluationBundle {
   // Ver src/modules/cover-html/ y src/app/(dashboard)/admin/bundles/[id]/cover-html/.
   coverLiveProject       Json?
   coverLiveUpdatedAt     DateTime?
+  // --- Fecha de la prueba (sep 2026) ---
+  // Nullable: si está set, se imprime en la hoja de respuestas unificada
+  // del cuadernillo (`/print/answer-sheets/bundle/[id]`). Si es null, el
+  // bloque "Fecha:" no se renderiza en absoluto (ni siquiera con línea en
+  // blanco) — pedido explícito del docente. La fecha la define el admin al
+  // editar el cuadernillo y no se autocompleta.
+  evaluationDate         DateTime?
   createdById            String       @db.Uuid
   createdBy              User         @relation("BundleCreatedBy", fields: [createdById], references: [id])
   createdAt              DateTime     @default(now())

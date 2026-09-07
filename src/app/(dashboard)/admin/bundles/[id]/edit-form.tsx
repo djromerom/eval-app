@@ -42,6 +42,7 @@ export function BundleEditForm({
   initialCourseId,
   initialPeriodId,
   initialBookletTypeId,
+  initialEvaluationDate,
   courses,
   periods,
   bookletTypes,
@@ -52,6 +53,7 @@ export function BundleEditForm({
   initialCourseId: string | null;
   initialPeriodId: string | null;
   initialBookletTypeId: string | null;
+  initialEvaluationDate: string; // yyyy-mm-dd ya formateado, o "" si null
   courses: Array<{ id: string; name: string }>;
   periods: PeriodOption[];
   bookletTypes: BookletTypeOption[];
@@ -84,6 +86,9 @@ export function BundleEditForm({
   const [courseId, setCourseId] = useState<string>(initialCourseId ?? "");
   const [periodId, setPeriodId] = useState<string>(initialPeriodId ?? "");
   const [bookletTypeId, setBookletTypeId] = useState<string>(initialBookletTypeId ?? "");
+  // Fecha de la prueba (sep 2026). yyyy-mm-dd para <input type="date">.
+  // "" = sin fecha asignada; el use case trata "" como null (limpiar).
+  const [evaluationDate, setEvaluationDate] = useState<string>(initialEvaluationDate);
 
   useEffect(() => {
     setName(initialName);
@@ -100,6 +105,9 @@ export function BundleEditForm({
   useEffect(() => {
     setBookletTypeId(initialBookletTypeId ?? "");
   }, [initialBookletTypeId]);
+  useEffect(() => {
+    setEvaluationDate(initialEvaluationDate);
+  }, [initialEvaluationDate]);
 
   // BookletTypes disponibles para la Prueba seleccionada. Si periodId es ""
   // (sin Prueba), mostramos todos para que el admin pueda asignar Tipo antes
@@ -214,6 +222,27 @@ export function BundleEditForm({
             )}
           </select>
         </div>
+      </div>
+
+      {/* Fecha de la prueba (sep 2026): si está set, se imprime en la hoja
+          de respuestas unificada del cuadernillo. Si se deja vacía, el
+          bloque "Fecha:" no se renderiza en absoluto (ni siquiera la línea). */}
+      <div className="space-y-1">
+        <label htmlFor="evaluationDate" className="text-sm font-medium">
+          Fecha de la prueba
+        </label>
+        <input
+          id="evaluationDate"
+          name="evaluationDate"
+          type="date"
+          value={evaluationDate}
+          onChange={(e) => setEvaluationDate(e.target.value)}
+          className="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none sm:max-w-xs"
+        />
+        <p className="text-muted-foreground text-xs">
+          Opcional. Si la defines, se imprime en la hoja de respuestas. Déjala vacía para no mostrar
+          el campo.
+        </p>
       </div>
 
       <div className="space-y-1">

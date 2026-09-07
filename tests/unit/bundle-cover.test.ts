@@ -334,6 +334,7 @@ const bundle: BundleDetail = {
   status: "DRAFT",
   theme: null,
   coverContent: null,
+  evaluationDate: null,
   createdById: ecuMaster.userId,
   createdAt: new Date(),
   updatedAt: new Date(),

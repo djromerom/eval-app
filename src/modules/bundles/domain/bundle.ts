@@ -69,6 +69,13 @@ export interface Bundle {
    * lideres/docentes en /admin/bundles/:id/cover-designer. PR 3 (ago 2026).
    */
   coverContent: unknown;
+  /**
+   * Fecha de aplicación de la prueba (sep 2026). Si está definida, se imprime
+   * en la hoja de respuestas unificada del cuadernillo; si es null, el bloque
+   * "Fecha:" no se renderiza. La define el admin al editar el cuadernillo y
+   * no se autocompleta ni se sincroniza con `period.startDate`.
+   */
+  evaluationDate: Date | null;
   createdById: string;
   createdAt: Date;
   updatedAt: Date;
@@ -145,6 +152,12 @@ export interface CreateBundleData {
   bookletTypeId?: string | null;
   evaluationIds: string[];
   theme?: Partial<BundleTheme> | null;
+  /**
+   * Fecha de aplicación de la prueba (sep 2026). `undefined` = no tocar al
+   * hidratar desde CreateBundle (la columna DB queda null). Para asignar
+   * una fecha concreta usar `Date`; para limpiar, `null`.
+   */
+  evaluationDate?: Date | null;
 }
 
 export interface UpdateBundleData {
@@ -175,6 +188,11 @@ export interface UpdateBundleData {
    * PR 3 (ago 2026).
    */
   coverContent?: unknown | null;
+  /**
+   * Fecha de aplicación de la prueba (sep 2026). `undefined` = no tocar;
+   * `null` = limpiar; `Date` = asignar.
+   */
+  evaluationDate?: Date | null;
 }
 
 /**

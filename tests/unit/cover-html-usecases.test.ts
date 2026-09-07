@@ -182,6 +182,7 @@ const draftBundle: Bundle = {
   status: "DRAFT",
   theme: {},
   coverContent: null,
+  evaluationDate: null,
   createdById: "user-1",
   createdAt: new Date(),
   updatedAt: new Date(),
