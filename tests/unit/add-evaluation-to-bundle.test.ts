@@ -6,6 +6,9 @@ import { RemoveFromBundle } from "@/modules/bundles/application/remove-from-bund
 import {
   InMemoryBundleRepository,
   courses,
+  years,
+  periods,
+  bookletTypes,
   seedEvaluationGrado6,
   superAdmin,
 } from "./bundles-shared";
@@ -18,7 +21,7 @@ describe("AddEvaluationToBundle", () => {
 
   beforeEach(() => {
     repo = new InMemoryBundleRepository();
-    createBundle = new CreateBundle(repo, courses);
+    createBundle = new CreateBundle(repo, courses, years, periods, bookletTypes);
     addEvaluation = new AddEvaluationToBundle(repo);
     markReady = new MarkBundleReady(repo);
   });

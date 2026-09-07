@@ -1,10 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { makeListBundles } from "@/modules/bundles/infrastructure/container";
+import { makeListPeriods } from "@/modules/academic/infrastructure/container";
+import { makeListBookletTypesByInstitution } from "@/modules/booklet-types/infrastructure/container";
+import type { BundleStatus } from "@/modules/bundles/domain/bundle-status";
 import { cn } from "@/lib/utils";
+import { BundlesFilterRow } from "./_components/bundles-filter-row";
 
 export const metadata: Metadata = { title: "Cuadernillos" };
 
@@ -15,10 +20,45 @@ const STATUS_LABEL: Record<string, string> = {
   READY: "Listo",
 };
 
-export default async function BundlesListPage() {
+const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "DRAFT", label: "Borrador" },
+  { value: "READY", label: "Listo" },
+];
+
+type SearchParams = Promise<{
+  periodId?: string;
+  bookletTypeId?: string;
+  status?: string;
+}>;
+
+function isBundleStatus(value: string | undefined): value is BundleStatus {
+  return value === "DRAFT" || value === "READY";
+}
+
+export default async function BundlesListPage({ searchParams }: { searchParams: SearchParams }) {
   const actor = await requireAuthenticatedUser("ECU_MASTER", "ECU_LIDER");
-  const result = await makeListBundles().execute({ actor });
-  const bundles = result.ok ? result.value : [];
+  const params = await searchParams;
+
+  const periodId = (params.periodId ?? "").trim();
+  const bookletTypeId = (params.bookletTypeId ?? "").trim();
+  const status = (params.status ?? "").trim();
+  const filters = {
+    ...(periodId ? { periodId } : {}),
+    ...(bookletTypeId ? { bookletTypeId } : {}),
+    ...(isBundleStatus(status) ? { status } : {}),
+  };
+
+  const [bundlesRes, periodsRes, bookletTypesRes] = await Promise.all([
+    makeListBundles().execute({ actor, filters }),
+    makeListPeriods().execute({ actor }),
+    makeListBookletTypesByInstitution().execute({ actor }),
+  ]);
+
+  const bundles = bundlesRes.ok ? bundlesRes.value : [];
+  const periods = periodsRes.ok ? periodsRes.value.map((p) => ({ id: p.id, name: p.name })) : [];
+  const bookletTypes = bookletTypesRes.ok
+    ? bookletTypesRes.value.map((bt) => ({ id: bt.id, periodId: bt.periodId, name: bt.name }))
+    : [];
 
   return (
     <>
@@ -33,11 +73,25 @@ export default async function BundlesListPage() {
         </Link>
       </div>
 
+      {/* `useSearchParams` requiere Suspense en producción */}
+      <Suspense fallback={null}>
+        <BundlesFilterRow
+          periods={periods}
+          bookletTypes={bookletTypes}
+          statuses={STATUS_OPTIONS}
+          currentPeriodId={periodId}
+          currentBookletTypeId={bookletTypeId}
+          currentStatus={status}
+        />
+      </Suspense>
+
       <div className="overflow-x-auto rounded-xl border">
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-muted-foreground border-b text-left">
             <tr>
               <th className="px-4 py-3 font-medium">Nombre</th>
+              <th className="px-4 py-3 font-medium">Prueba</th>
+              <th className="px-4 py-3 font-medium">Tipo</th>
               <th className="px-4 py-3 font-medium">Grado</th>
               <th className="px-4 py-3 font-medium">N° cuadernillo</th>
               <th className="px-4 py-3 font-medium">Estado</th>
@@ -48,7 +102,7 @@ export default async function BundlesListPage() {
           <tbody>
             {bundles.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-muted-foreground px-4 py-8 text-center">
+                <td colSpan={8} className="text-muted-foreground px-4 py-8 text-center">
                   Aún no hay cuadernillos. Crea uno para empezar.
                 </td>
               </tr>
@@ -60,6 +114,8 @@ export default async function BundlesListPage() {
                       {b.name}
                     </Link>
                   </td>
+                  <td className="text-muted-foreground px-4 py-3">{b.periodName ?? "—"}</td>
+                  <td className="text-muted-foreground px-4 py-3">{b.bookletTypeName ?? "—"}</td>
                   <td className="text-muted-foreground px-4 py-3">{b.courseName ?? "—"}</td>
                   <td className="text-muted-foreground px-4 py-3">{b.bookletNumber ?? "—"}</td>
                   <td className="px-4 py-3">

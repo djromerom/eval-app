@@ -32,12 +32,7 @@ const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%
  * Ver docs/cuadernillos.md §"Sprint 3 — Reporte comparativo" y §"Sprint 4".
  */
 export default async function BundleReportPage({ params }: { params: Promise<{ id: string }> }) {
-  const actor = await requireAuthenticatedUser(
-    "TEACHER",
-    "ECU_LIDER",
-    "ECU_MASTER",
-    "SUPER_ADMIN",
-  );
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER", "SUPER_ADMIN");
   const { id } = await params;
 
   const bundleRes = await makeGetBundle().execute({ actor, bundleId: id });
@@ -50,7 +45,13 @@ export default async function BundleReportPage({ params }: { params: Promise<{ i
     where: { bundleId: id },
     include: {
       student: {
-        select: { lastName1: true, lastName2: true, firstName1: true, firstName2: true, code: true },
+        select: {
+          lastName1: true,
+          lastName2: true,
+          firstName1: true,
+          firstName2: true,
+          code: true,
+        },
       },
     },
   });

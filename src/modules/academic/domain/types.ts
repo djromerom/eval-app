@@ -108,6 +108,12 @@ export interface AcademicYearRepository {
   create(institutionId: string, data: CreateAcademicYearData): Promise<AcademicYear>;
   /** Marca uno como actual y desmarca el resto de la institución. */
   setCurrent(institutionId: string, id: string): Promise<void>;
+  /** Sprint Bundle-Period (sep 2026): devuelve el año académico con
+   *  `isCurrent=true` en la institución, o `null` si ninguno está marcado.
+   *  Usado por `CreateBundle` para resolver el periodo vigente por
+   *  defecto. Una sola año por institución puede tener `isCurrent=true`
+   *  (constraint enforced por `setCurrent`). */
+  findCurrent(institutionId: string): Promise<AcademicYear | null>;
 }
 
 export interface CourseRepository {
@@ -152,6 +158,12 @@ export interface PeriodRepository {
     periodId: string,
     isCurrent: boolean,
   ): Promise<void>;
+  /** Sprint Bundle-Period (sep 2026): devuelve el Period con `isCurrent=true`
+   *  dentro del año académico indicado, o `null` si no hay ninguno marcado.
+   *  Usado por `CreateBundle` para inyectar el default del periodo del
+   *  cuadernillo. Una sola Prueba por año puede tener `isCurrent=true`
+   *  (constraint enforced por `setCurrent`). */
+  findCurrent(institutionId: string, academicYearId: string): Promise<Period | null>;
 }
 
 export interface UpdatePeriodData {

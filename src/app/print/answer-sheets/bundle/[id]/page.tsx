@@ -95,7 +95,10 @@ export default async function BundleAnswerSheetsPage({
         sections: {
           orderBy: { order: "asc" },
           include: {
-            questions: { orderBy: { number: "asc" }, include: { options: { orderBy: { key: "asc" } } } },
+            questions: {
+              orderBy: { number: "asc" },
+              include: { options: { orderBy: { key: "asc" } } },
+            },
           },
         },
       },

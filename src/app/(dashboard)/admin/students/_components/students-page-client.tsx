@@ -381,7 +381,9 @@ function StudentsTable({
           {students.map((s) => (
             <tr key={s.id} className="hover:bg-muted/30 border-b transition-colors last:border-0">
               <td className="px-4 py-3 font-medium">
-                {`${s.lastName1} ${s.lastName2} ${s.firstName1} ${s.firstName2}`.replace(/\s+/g, " ").trim()}
+                {`${s.lastName1} ${s.lastName2} ${s.firstName1} ${s.firstName2}`
+                  .replace(/\s+/g, " ")
+                  .trim()}
               </td>
               <td className="text-muted-foreground px-4 py-3 whitespace-nowrap">
                 {s.idType} {s.idNumber}

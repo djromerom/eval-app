@@ -185,6 +185,9 @@ class InMemoryPeriods {
   async setCurrent(): Promise<void> {
     /* noop */
   }
+  async findCurrent(): Promise<Period | null> {
+    return null;
+  }
 }
 
 class InMemoryCourses {

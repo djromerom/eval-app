@@ -174,6 +174,16 @@ class InMemoryPeriods implements PeriodRepository {
   async setCurrent(): Promise<void> {
     /* noop */
   }
+  // Sprint Bundle-Period (sep 2026): CreateBundle lo usa para inyectar el
+  // periodo actual del año académico vigente cuando el form no trae periodId.
+  async findCurrent(institutionId: string, academicYearId: string) {
+    return (
+      this.items.find(
+        (p) =>
+          p.institutionId === institutionId && p.academicYearId === academicYearId && p.isCurrent,
+      ) ?? null
+    );
+  }
 }
 
 const admin: AuthenticatedUser = { userId: "u", institutionId: "i1", roles: ["ECU_MASTER"] };

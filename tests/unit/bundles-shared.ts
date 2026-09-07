@@ -10,7 +10,24 @@ import type {
   UpdateBundleData,
 } from "@/modules/bundles/domain/bundle";
 import type { BundleStatus } from "@/modules/bundles/domain/bundle-status";
-import type { Course, CourseRepository, CreateCourseData } from "@/modules/academic/domain/types";
+import type {
+  AcademicYear,
+  AcademicYearRepository,
+  Course,
+  CourseRepository,
+  CreateAcademicYearData,
+  CreateCourseData,
+  CreatePeriodData,
+  Period,
+  PeriodRepository,
+  UpdatePeriodData,
+} from "@/modules/academic/domain/types";
+import type {
+  BookletType,
+  BookletTypeRepository,
+  CreateBookletTypeData,
+  UpdateBookletTypeData,
+} from "@/modules/booklet-types/domain/booklet-type";
 
 /**
  * Catálogo de cursos compartido por los tests de bundles (Sprint 9).
@@ -49,6 +66,183 @@ export class InMemoryCourseRepository implements CourseRepository {
 
 /** Instancia compartida: el catálogo es inmutable, no hay estado por test. */
 export const courses = new InMemoryCourseRepository();
+
+/**
+ * Sprint Bundle-Period (sep 2026): repos en memoria compartidos para que
+ * los tests de CreateBundle/UpdateBundle/ListBundles puedan cablear las
+ * nuevas dependencias (AcademicYear, Period, BookletType). Mantienen el
+ * contrato de los puertos — los use cases los ejercitan igual que con el
+ * adaptador Prisma.
+ *
+ * Cada test que necesite estado sembrado crea su propia instancia
+ * (`new InMemoryAcademicYearRepository()`); para los casos por defecto
+ * (sin año actual / sin periodo / sin bookletTypes) se ofrecen singletons
+ * `years` / `periods` / `bookletTypes`.
+ */
+export class InMemoryAcademicYearRepository implements AcademicYearRepository {
+  items: AcademicYear[] = [];
+  async findAll(institutionId: string): Promise<AcademicYear[]> {
+    return this.items.filter((y) => y.institutionId === institutionId);
+  }
+  async findById(institutionId: string, id: string): Promise<AcademicYear | null> {
+    return this.items.find((y) => y.institutionId === institutionId && y.id === id) ?? null;
+  }
+  async findByYear(institutionId: string, year: number): Promise<AcademicYear | null> {
+    return this.items.find((y) => y.institutionId === institutionId && y.year === year) ?? null;
+  }
+  async create(institutionId: string, data: CreateAcademicYearData): Promise<AcademicYear> {
+    const y: AcademicYear = {
+      id: `ay-${this.items.length + 1}`,
+      institutionId,
+      year: data.year,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      isCurrent: data.isCurrent ?? false,
+    };
+    this.items.push(y);
+    return y;
+  }
+  async setCurrent(institutionId: string, id: string): Promise<void> {
+    for (const y of this.items) {
+      if (y.institutionId === institutionId) y.isCurrent = y.id === id;
+    }
+  }
+  async findCurrent(institutionId: string): Promise<AcademicYear | null> {
+    return this.items.find((y) => y.institutionId === institutionId && y.isCurrent) ?? null;
+  }
+}
+
+export class InMemoryPeriodRepository implements PeriodRepository {
+  items: Period[] = [];
+  async findAll(institutionId: string, academicYearId?: string): Promise<Period[]> {
+    return this.items.filter(
+      (p) =>
+        p.institutionId === institutionId &&
+        (!academicYearId || p.academicYearId === academicYearId),
+    );
+  }
+  async findById(institutionId: string, id: string): Promise<Period | null> {
+    return this.items.find((p) => p.institutionId === institutionId && p.id === id) ?? null;
+  }
+  async create(institutionId: string, data: CreatePeriodData): Promise<Period> {
+    const p: Period = {
+      id: `period-${this.items.length + 1}`,
+      institutionId,
+      academicYearId: data.academicYearId,
+      name: data.name,
+      order: data.order,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      isCurrent: false,
+    };
+    this.items.push(p);
+    return p;
+  }
+  async update(institutionId: string, id: string, _data: UpdatePeriodData): Promise<Period | null> {
+    return this.items.find((p) => p.institutionId === institutionId && p.id === id) ?? null;
+  }
+  async delete(institutionId: string, id: string): Promise<void> {
+    const idx = this.items.findIndex((p) => p.institutionId === institutionId && p.id === id);
+    if (idx >= 0) this.items.splice(idx, 1);
+  }
+  async setCurrent(
+    institutionId: string,
+    academicYearId: string,
+    periodId: string,
+    isCurrent: boolean,
+  ): Promise<void> {
+    for (const p of this.items) {
+      if (
+        p.institutionId === institutionId &&
+        p.academicYearId === academicYearId &&
+        p.id !== periodId
+      ) {
+        p.isCurrent = false;
+      }
+    }
+    const target = this.items.find((p) => p.institutionId === institutionId && p.id === periodId);
+    if (target) target.isCurrent = isCurrent;
+  }
+  async findCurrent(institutionId: string, academicYearId: string): Promise<Period | null> {
+    return (
+      this.items.find(
+        (p) =>
+          p.institutionId === institutionId && p.academicYearId === academicYearId && p.isCurrent,
+      ) ?? null
+    );
+  }
+  // Match case-insensitive por nombre dentro de la institución. Merge origin/main
+  // (a519866): usado por el import XLSX para resolver `PRUEBA` a Period.id.
+  async findByName(institutionId: string, name: string): Promise<Period | null> {
+    const lower = name.toLowerCase();
+    return (
+      this.items.find((p) => p.institutionId === institutionId && p.name.toLowerCase() === lower) ??
+      null
+    );
+  }
+}
+
+export class InMemoryBookletTypeRepository implements BookletTypeRepository {
+  items: BookletType[] = [];
+  async findById(institutionId: string, id: string): Promise<BookletType | null> {
+    return this.items.find((b) => b.institutionId === institutionId && b.id === id) ?? null;
+  }
+  async listByPeriod(institutionId: string, periodId: string): Promise<BookletType[]> {
+    return this.items.filter((b) => b.institutionId === institutionId && b.periodId === periodId);
+  }
+  async listByInstitution(institutionId: string): Promise<BookletType[]> {
+    return this.items.filter((b) => b.institutionId === institutionId);
+  }
+  // Merge origin/main (a519866): usado por el import XLSX para resolver
+  // `TIPO DE CUADERNILLO` a BookletType.id dentro de la Prueba elegida.
+  async findByName(institutionId: string, name: string): Promise<BookletType[]> {
+    const lower = name.toLowerCase();
+    return this.items.filter(
+      (b) => b.institutionId === institutionId && b.name.toLowerCase() === lower,
+    );
+  }
+  async findByNameAndPeriod(
+    institutionId: string,
+    name: string,
+    periodId: string,
+  ): Promise<BookletType[]> {
+    const lower = name.toLowerCase();
+    return this.items.filter(
+      (b) =>
+        b.institutionId === institutionId &&
+        b.periodId === periodId &&
+        b.name.toLowerCase() === lower,
+    );
+  }
+  async create(institutionId: string, data: CreateBookletTypeData): Promise<BookletType> {
+    const bt: BookletType = {
+      id: `bt-${this.items.length + 1}`,
+      institutionId,
+      periodId: data.periodId,
+      name: data.name,
+      description: data.description ?? null,
+      order: data.order ?? 0,
+    };
+    this.items.push(bt);
+    return bt;
+  }
+  async update(
+    institutionId: string,
+    id: string,
+    _data: UpdateBookletTypeData,
+  ): Promise<BookletType | null> {
+    return this.items.find((b) => b.institutionId === institutionId && b.id === id) ?? null;
+  }
+  async delete(institutionId: string, id: string): Promise<void> {
+    const idx = this.items.findIndex((b) => b.institutionId === institutionId && b.id === id);
+    if (idx >= 0) this.items.splice(idx, 1);
+  }
+}
+
+/** Singletons vacíos para los tests que no necesitan sembrar estado. */
+export const years = new InMemoryAcademicYearRepository();
+export const periods = new InMemoryPeriodRepository();
+export const bookletTypes = new InMemoryBookletTypeRepository();
 
 function toCourse(c: { id: string; name: string; institutionId: string }): Course {
   return {
@@ -102,12 +296,78 @@ export type SeedEvaluation = {
   /** Sprint 9 — curso de la evaluation (vía courseSubject). */
   courseId: string;
   courseName: string;
+  /** Sprint Bundle-Period — Tipo de cuadernillo de la evaluation. */
+  bookletTypeId: string | null;
+  bookletTypeName: string | null;
 };
+
+/**
+ * Catálogo de BookletTypes compartido por los tests de bundles (Sprint
+ * Bundle-Period). Los IDs son estables para que los specs puedan referirlos
+ * por nombre.
+ */
+export const BOOKLET_TYPES: Record<
+  string,
+  { id: string; name: string; periodId: string; institutionId: string }
+> = {
+  "bt-p1-est": {
+    id: "bt-p1-est",
+    name: "Estándar",
+    periodId: "period-1",
+    institutionId: "inst-1",
+  },
+  "bt-p1-esp": {
+    id: "bt-p1-esp",
+    name: "Especial",
+    periodId: "period-1",
+    institutionId: "inst-1",
+  },
+  "bt-p2-est": {
+    id: "bt-p2-est",
+    name: "Estándar",
+    periodId: "period-2",
+    institutionId: "inst-1",
+  },
+};
+
+/**
+ * Catálogo de periodos compartido por los tests (Sprint Bundle-Period).
+ * Solo lo necesitamos para resolver `periodName` desde `periodId` en los
+ * repositorios en memoria — el repo Prisma lo hace con un join.
+ */
+export const PERIODS: Record<string, { id: string; name: string; institutionId: string }> = {
+  "period-1": { id: "period-1", name: "I Periodo", institutionId: "inst-1" },
+  "period-2": { id: "period-2", name: "II Periodo", institutionId: "inst-1" },
+};
+
+export function bookletTypeNameOf(bookletTypeId: string | null): string | null {
+  if (bookletTypeId === null) return null;
+  return BOOKLET_TYPES[bookletTypeId]?.name ?? null;
+}
+
+export function periodNameOf(periodId: string | null): string | null {
+  if (periodId === null) return null;
+  return PERIODS[periodId]?.name ?? null;
+}
 
 export class InMemoryBundleRepository implements BundleRepository {
   bundles = new Map<string, Bundle>();
   items = new Map<string, BundleItem & { institutionId: string }>();
   evaluations = new Map<string, SeedEvaluation>();
+  /**
+   * Sprint Bundle-Period (sep 2026): repos inyectados para resolver nombres
+   * de Period/BookletType en `create`/`update`, replicando el join que hace
+   * el adaptador Prisma. Opcionales — si no se inyectan, cae al catálogo
+   * estático (`PERIODS` / `BOOKLET_TYPES`).
+   */
+  constructor(
+    private readonly periodLookup?: {
+      findById: (iid: string, id: string) => Promise<Period | null>;
+    },
+    private readonly bookletTypeLookup?: {
+      findById: (iid: string, id: string) => Promise<BookletType | null>;
+    },
+  ) {}
   /**
    * Contador monotónico para generar IDs de item. NO usar `this.items.size + 1`
    * porque tras un remove el tamaño baja y el siguiente add reciclaría un ID
@@ -137,6 +397,16 @@ export class InMemoryBundleRepository implements BundleRepository {
       bookletNumber: data.bookletNumber ?? null,
       courseId: data.courseId ?? null,
       courseName: data.courseId ? courseNameOf(data.courseId) : null,
+      periodId: data.periodId ?? null,
+      periodName: data.periodId
+        ? ((await this.periodLookup?.findById(institutionId, data.periodId))?.name ??
+          periodNameOf(data.periodId))
+        : null,
+      bookletTypeId: data.bookletTypeId ?? null,
+      bookletTypeName: data.bookletTypeId
+        ? ((await this.bookletTypeLookup?.findById(institutionId, data.bookletTypeId))?.name ??
+          bookletTypeNameOf(data.bookletTypeId))
+        : null,
       status: "DRAFT",
       theme: data.theme ?? null,
       coverContent: null,
@@ -176,14 +446,25 @@ export class InMemoryBundleRepository implements BundleRepository {
     };
   }
 
-  async findAll(institutionId: string): Promise<Bundle[]> {
-    return Array.from(this.bundles.values()).filter((b) => b.institutionId === institutionId);
+  async findAll(
+    institutionId: string,
+    filters?: { periodId?: string; bookletTypeId?: string; status?: BundleStatus },
+  ): Promise<Bundle[]> {
+    return Array.from(this.bundles.values()).filter((b) => {
+      if (b.institutionId !== institutionId) return false;
+      if (filters?.periodId !== undefined && b.periodId !== filters.periodId) return false;
+      if (filters?.bookletTypeId !== undefined && b.bookletTypeId !== filters.bookletTypeId)
+        return false;
+      if (filters?.status !== undefined && b.status !== filters.status) return false;
+      return true;
+    });
   }
 
   async findByCourseIds(institutionId: string, courseIds: string[]): Promise<Bundle[]> {
     if (courseIds.length === 0) return [];
     return Array.from(this.bundles.values()).filter(
-      (b) => b.institutionId === institutionId && b.courseId !== null && courseIds.includes(b.courseId),
+      (b) =>
+        b.institutionId === institutionId && b.courseId !== null && courseIds.includes(b.courseId),
     );
   }
 
@@ -198,6 +479,24 @@ export class InMemoryBundleRepository implements BundleRepository {
         ? {
             courseId: data.courseId,
             courseName: data.courseId ? courseNameOf(data.courseId) : null,
+          }
+        : {}),
+      ...(data.periodId !== undefined
+        ? {
+            periodId: data.periodId,
+            periodName: data.periodId
+              ? ((await this.periodLookup?.findById(institutionId, data.periodId))?.name ??
+                periodNameOf(data.periodId))
+              : null,
+          }
+        : {}),
+      ...(data.bookletTypeId !== undefined
+        ? {
+            bookletTypeId: data.bookletTypeId,
+            bookletTypeName: data.bookletTypeId
+              ? ((await this.bookletTypeLookup?.findById(institutionId, data.bookletTypeId))
+                  ?.name ?? bookletTypeNameOf(data.bookletTypeId))
+              : null,
           }
         : {}),
       ...(data.theme !== undefined ? { theme: data.theme } : {}),
@@ -238,6 +537,8 @@ export class InMemoryBundleRepository implements BundleRepository {
         parentSubjectName: ev.parentSubjectName,
         courseId: ev.courseId,
         courseName: ev.courseName,
+        bookletTypeId: ev.bookletTypeId,
+        bookletTypeName: ev.bookletTypeName,
       };
     });
   }
@@ -376,6 +677,8 @@ export function seedEvaluationGrado6(
     parentSubjectName: options?.parentSubjectName ?? "Ciencias Naturales",
     courseId: options?.courseId ?? "course-6",
     courseName: options?.courseName ?? courseNameOf(options?.courseId ?? "course-6"),
+    bookletTypeId: options?.bookletTypeId ?? null,
+    bookletTypeName: options?.bookletTypeName ?? null,
   };
   repo.seedEvaluation(ev);
   return ev;

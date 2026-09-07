@@ -7,6 +7,9 @@ import {
   teacher,
   adminOtherInstitution,
   courses,
+  years,
+  periods,
+  bookletTypes,
 } from "./bundles-shared";
 
 describe("CreateBundle", () => {
@@ -15,7 +18,7 @@ describe("CreateBundle", () => {
 
   beforeEach(() => {
     repo = new InMemoryBundleRepository();
-    useCase = new CreateBundle(repo, courses);
+    useCase = new CreateBundle(repo, courses, years, periods, bookletTypes);
   });
 
   it("crea el bundle con 1 evaluation (caso N=1, camino canónico)", async () => {

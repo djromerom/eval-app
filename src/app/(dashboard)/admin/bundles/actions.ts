@@ -31,6 +31,13 @@ export async function createBundleAction(
   const evaluationIds = formData.getAll("evaluationIds").map(String).filter(Boolean);
   // "" en el select = cuadernillo cross-course (sin curso asignado).
   const courseId = String(formData.get("courseId") ?? "").trim() || null;
+  // "" en el select de Prueba = dejar que el use case inyecte el periodo actual del año
+  // académico vigente (default). Si el form manda un uuid, se usa como-is.
+  const periodIdRaw = String(formData.get("periodId") ?? "").trim();
+  const periodId: string | undefined = periodIdRaw === "" ? undefined : periodIdRaw;
+  // "" en el select de Tipo = sin tipo. El use case no inyecta default aquí.
+  const bookletTypeIdRaw = String(formData.get("bookletTypeId") ?? "").trim();
+  const bookletTypeId: string | undefined = bookletTypeIdRaw === "" ? undefined : bookletTypeIdRaw;
 
   if (!name) return { error: "El nombre es obligatorio." };
   if (evaluationIds.length === 0) {
@@ -48,6 +55,8 @@ export async function createBundleAction(
       name,
       bookletNumber,
       courseId,
+      periodId,
+      bookletTypeId,
       evaluationIds,
     },
   });
@@ -74,11 +83,15 @@ export async function updateBundleAction(
   if (!name) return { error: "El nombre es obligatorio." };
   // "" en el select = limpiar el curso (cuadernillo cross-course).
   const courseId = String(formData.get("courseId") ?? "").trim() || null;
+  // "" en el select = limpiar la Prueba / Tipo. El use case trata `null` como
+  // "limpiar" (a diferencia de CreateBundle donde `undefined` resuelve el default).
+  const periodId = String(formData.get("periodId") ?? "").trim() || null;
+  const bookletTypeId = String(formData.get("bookletTypeId") ?? "").trim() || null;
 
   const result = await makeUpdateBundle().execute({
     actor,
     bundleId: id,
-    data: { name, bookletNumber, courseId },
+    data: { name, bookletNumber, courseId, periodId, bookletTypeId },
   });
   if (!result.ok) return { error: result.error.message };
 

@@ -14,78 +14,78 @@ datasource db {
 // ========== TENANT ==========
 
 model Institution {
-  id        String   @id @default(uuid(7)) @db.Uuid
-  name      String
-  slug      String   @unique // para subdominio
-  code      String   @unique
-  logo      String?
+  id           String   @id @default(uuid(7)) @db.Uuid
+  name         String
+  slug         String   @unique // para subdominio
+  code         String   @unique
+  logo         String?
   // Tema visual institucional para la impresión del cuadernillo. Ver
   // src/modules/theme/domain/theme.ts (zod schema) y el helper mergeTheme()
   // que combina este JSON con el de Evaluation.theme (override por eval).
-  theme     Json?
+  theme        Json?
   // Override textual del contenido de la portada (copy institucional:
   // legalFooter, cuerpo del bloque prohibido). Se combina en runtime con
   // EvaluationBundle.coverContent (PR 2 vía getResolvedCoverContent).
   // Ver src/modules/bundle-cover/domain/cover-content.ts.
   coverContent Json?
-  address   String?
-  phone     String?
-  email     String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  address      String?
+  phone        String?
+  email        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  users         User[]
-  academicYears AcademicYear[]
-  courses       Course[]
-  subjects      Subject[] // catálogo propio (null en Subject = global)
-  groups        Group[]
-  periods       Period[]
-  students      Student[]
-  evaluations   Evaluation[]
-  questionBank  QuestionBank[]
-  templates     EvaluationTemplate[]
-  scanBatches   ScanBatch[]
-  bundles       EvaluationBundle[]
-  bookletTypes  BookletType[]
+  users           User[]
+  academicYears   AcademicYear[]
+  courses         Course[]
+  subjects        Subject[] // catálogo propio (null en Subject = global)
+  groups          Group[]
+  periods         Period[]
+  students        Student[]
+  evaluations     Evaluation[]
+  questionBank    QuestionBank[]
+  templates       EvaluationTemplate[]
+  scanBatches     ScanBatch[]
+  bundles         EvaluationBundle[]
+  bookletTypes    BookletType[]
   evaluationRules EvaluationRule[]
 }
 
 // ========== AUTH & USERS ==========
 
 model User {
-  id                   String      @id @default(uuid(7)) @db.Uuid
-  email                String      @unique
-  name                 String
-  password             String? // hash bcrypt — solo para provider credentials
-  image                String?
-  emailVerified        DateTime?
-  inviteToken          String? // bcrypt del token de invitación
-  inviteTokenExpiresAt DateTime?
+  id                     String      @id @default(uuid(7)) @db.Uuid
+  email                  String      @unique
+  name                   String
+  password               String? // hash bcrypt — solo para provider credentials
+  image                  String?
+  emailVerified          DateTime?
+  inviteToken            String? // bcrypt del token de invitación
+  inviteTokenExpiresAt   DateTime?
   // sha256 del token de recuperación de contraseña. @unique permite lookup
   // directo por token (URL sin email en la query string). Set a null tras
   // aplicar el reset o cuando expira.
-  passwordResetToken      String?   @unique
-  passwordResetExpiresAt  DateTime?
-  institutionId        String      @db.Uuid
-  institution          Institution @relation(fields: [institutionId], references: [id])
-  isActive             Boolean     @default(true)
-  deletedAt            DateTime?
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
+  passwordResetToken     String?     @unique
+  passwordResetExpiresAt DateTime?
+  institutionId          String      @db.Uuid
+  institution            Institution @relation(fields: [institutionId], references: [id])
+  isActive               Boolean     @default(true)
+  deletedAt              DateTime?
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
 
-  roles             UserRole[]
-  accounts          Account[]
-  teacherProfile    Teacher?
-  evaluations       Evaluation[]
-  questionBank      QuestionBank[]
-  templates         EvaluationTemplate[]
-  scanBatches       ScanBatch[]
-  bundlesCreated    EvaluationBundle[]      @relation("BundleCreatedBy")
-  evaluationRulesCreated EvaluationRule[]    @relation("EvaluationRuleCreatedBy")
-  auditLogs         AuditLog[]
-  notifications     Notification[]
-  leaderAssignments LeaderCourseAssignment[]
+  roles                  UserRole[]
+  accounts               Account[]
+  teacherProfile         Teacher?
+  evaluations            Evaluation[]
+  questionBank           QuestionBank[]
+  templates              EvaluationTemplate[]
+  scanBatches            ScanBatch[]
+  bundlesCreated         EvaluationBundle[]       @relation("BundleCreatedBy")
+  evaluationRulesCreated EvaluationRule[]         @relation("EvaluationRuleCreatedBy")
+  auditLogs              AuditLog[]
+  notifications          Notification[]
+  leaderAssignments      LeaderCourseAssignment[]
 
   @@index([institutionId])
 }
@@ -197,8 +197,8 @@ model Subject {
   isArea          Boolean      @default(false)
   createdAt       DateTime     @default(now())
 
-  courses      CourseSubject[]
-  questionBank QuestionBank[]
+  courses         CourseSubject[]
+  questionBank    QuestionBank[]
   evaluationRules EvaluationRule[]
 
   @@index([institutionId])
@@ -276,17 +276,20 @@ model Period {
   startDate      DateTime
   endDate        DateTime
   order          Int // 1, 2, 3, 4
-  /** Marca la Prueba "en curso" dentro de su año académico (ago 2026).
-   *  Una sola Prueba por año académico puede tener `isCurrent=true`.
-   *  Se enforce desde el use case (transacción); el constraint único en
-   *  la BD se delega a la capa de aplicación porque Prisma no soporta
-   *  partial unique indexes con condiciones arbitrarias sin SQL crudo. */
+  /**
+   * Marca la Prueba "en curso" dentro de su año académico (ago 2026).
+   * Una sola Prueba por año académico puede tener `isCurrent=true`.
+   * Se enforce desde el use case (transacción); el constraint único en
+   * la BD se delega a la capa de aplicación porque Prisma no soporta
+   * partial unique indexes con condiciones arbitrarias sin SQL crudo.
+   */
   isCurrent      Boolean      @default(false)
   createdAt      DateTime     @default(now())
 
-  evaluations  Evaluation[]
-  bookletTypes BookletType[]
+  evaluations     Evaluation[]
+  bookletTypes    BookletType[]
   evaluationRules EvaluationRule[]
+  bundles         EvaluationBundle[]
 
   @@unique([institutionId, academicYearId, name])
   @@index([institutionId, academicYearId])
@@ -397,12 +400,10 @@ model Evaluation {
 
 /**
  * Tipos de cuadernillo configurados POR PRUEBA (ago 2026).
- *
  * El docente pidió poder diferenciar el cuadernillo "Estándar" (que se
  * imprime para todos los estudiantes) del "Especial" (solo para NEE, con
  * contenido distinto). Esto es ORTOGONAL a `Evaluation.bookletNumber`,
  * que es una variante para evitar copia (cuadernillo 1, 2, 3...).
- *
  * Catálogo por Prueba, no global. El nombre es único dentro de la Prueba
  * (cada Prueba decide qué tipos aplica). La creación de una evaluación
  * permite asignar un BookletType de la Prueba seleccionada, o ninguno
@@ -419,11 +420,12 @@ model BookletType {
   order         Int         @default(0)
   createdAt     DateTime    @default(now())
 
-  evaluations Evaluation[]
+  evaluations     Evaluation[]
   evaluationRules EvaluationRule[]
+  bundles         EvaluationBundle[]
   // Back-relation agregada con la migración sep 2026 (Student.bookletTypeId).
   // El docente asigna el cuadernillo por defecto del estudiante al importar.
-  students Student[]
+  students        Student[]
 
   @@unique([institutionId, periodId, name])
   @@index([institutionId, periodId])
@@ -437,28 +439,28 @@ model BookletType {
  * a revisión / publicación de evaluaciones que no coincidan.
  * - bookletTypeId es REQUERIDO: no hay evaluaciones sin tipo de cuadernillo.
  * - onDelete: Cascade para Period (sigue a la prueba); Restrict para
- *   Course/Subject/BookletType (forzar limpieza manual).
+ * Course/Subject/BookletType (forzar limpieza manual).
  * Ver src/modules/evaluation-rules/ para los use cases.
  */
 model EvaluationRule {
-  id             String       @id @default(uuid(7)) @db.Uuid
-  institutionId  String       @db.Uuid
-  institution    Institution  @relation(fields: [institutionId], references: [id])
-  periodId       String       @db.Uuid
-  period         Period       @relation(fields: [periodId], references: [id], onDelete: Cascade)
-  courseId       String       @db.Uuid
-  course         Course       @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  subjectId      String       @db.Uuid
-  subject        Subject      @relation(fields: [subjectId], references: [id], onDelete: Restrict)
-  bookletTypeId  String       @db.Uuid
-  bookletType    BookletType  @relation(fields: [bookletTypeId], references: [id], onDelete: Restrict)
+  id             String      @id @default(uuid(7)) @db.Uuid
+  institutionId  String      @db.Uuid
+  institution    Institution @relation(fields: [institutionId], references: [id])
+  periodId       String      @db.Uuid
+  period         Period      @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  courseId       String      @db.Uuid
+  course         Course      @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  subjectId      String      @db.Uuid
+  subject        Subject     @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  bookletTypeId  String      @db.Uuid
+  bookletType    BookletType @relation(fields: [bookletTypeId], references: [id], onDelete: Restrict)
   // Conteo exacto de preguntas requerido. Rango válido lo enforza el use case
   // (ver MIN_EXACT_QUESTIONS / MAX_EXACT_QUESTIONS en evaluation-rule.ts).
   exactQuestions Int
-  createdById    String       @db.Uuid
-  createdBy      User         @relation("EvaluationRuleCreatedBy", fields: [createdById], references: [id])
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdById    String      @db.Uuid
+  createdBy      User        @relation("EvaluationRuleCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
   @@unique([institutionId, periodId, courseId, subjectId, bookletTypeId])
   @@index([institutionId, periodId])
@@ -482,13 +484,13 @@ model EvaluationGroup {
 }
 
 model EvaluationSection {
-  id           String     @id @default(uuid(7)) @db.Uuid
-  evaluationId String     @db.Uuid
-  evaluation   Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
-  title        String?
-  content      Json // TipTap JSON (rich text con KaTeX, imágenes, tablas)
-  order        Int
-  createdAt    DateTime   @default(now())
+  id                   String     @id @default(uuid(7)) @db.Uuid
+  evaluationId         String     @db.Uuid
+  evaluation           Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  title                String?
+  content              Json // TipTap JSON (rich text con KaTeX, imágenes, tablas)
+  order                Int
+  createdAt            DateTime   @default(now())
   /// Override del layout de impresión por sección. NULL = "auto" (heurística
   /// decide). Valores: "1col" = forzar 1 columna, "2col" = forzar 2 columnas.
   /// Sprint de baja densidad (ago 2026).
@@ -617,27 +619,38 @@ enum BundleStatus {
 }
 
 model EvaluationBundle {
-  id              String       @id @default(uuid(7)) @db.Uuid
-  institutionId   String       @db.Uuid
-  institution     Institution  @relation(fields: [institutionId], references: [id])
-  name            String // "Simulacro ICFES — Periodo I"
-  bookletNumber   Int? // correlativo por institución (opcional; único si definido)
+  id                     String       @id @default(uuid(7)) @db.Uuid
+  institutionId          String       @db.Uuid
+  institution            Institution  @relation(fields: [institutionId], references: [id])
+  name                   String // "Simulacro ICFES — Periodo I"
+  bookletNumber          Int? // correlativo por institución (opcional; único si definido)
   // Curso al que pertenece el compendio. Opcional: null = compendio
   // cross-course (simulacro institucional multi-grado). Si está definido,
   // TODOS los items deben ser evaluations de ese curso (validado en los use
   // cases CreateBundle / AddEvaluationToBundle / UpdateBundle). La portada
   // del PDF preimprime el grado en lugar de dejar la línea en blanco.
-  courseId        String?      @db.Uuid
-  course          Course?      @relation(fields: [courseId], references: [id], onDelete: SetNull)
-  status          BundleStatus @default(DRAFT)
+  courseId               String?      @db.Uuid
+  course                 Course?      @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  // --- Sprint Bundle-Period (sep 2026) ---
+  // Identifican a qué Prueba (Period) y Tipo de cuadernillo (BookletType)
+  // pertenece el compendio. Opcionales para compat con bundles existentes
+  // en prod. Si bookletTypeId está set, debe pertenecer al mismo periodId
+  // (validado en use cases) y todos los items deben tener ese BookletType.
+  // Si se borra el Period/BookletType referenciado, falla — intencional
+  // para no perder integridad.
+  periodId               String?      @db.Uuid
+  period                 Period?      @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  bookletTypeId          String?      @db.Uuid
+  bookletType            BookletType? @relation(fields: [bookletTypeId], references: [id], onDelete: Restrict)
+  status                 BundleStatus @default(DRAFT)
   // Override del tema institucional. Mismo shape que Evaluation.theme; se
   // combina con Institution.theme en runtime. Ver src/modules/theme/.
-  theme           Json?
+  theme                  Json?
   // Override textual del contenido de la portada (instrucciones, callout,
   // cómo marcar, bullets, prohibido). Se combina en runtime con
   // Institution.coverContent (PR 2 vía getResolvedCoverContent).
   // Ver src/modules/bundle-cover/domain/cover-content.ts.
-  coverContent    Json?
+  coverContent           Json?
   // Geometría OMR de la hoja de respuestas, MEDIDA del render real
   // (ver modules/printing/domain/sheet-template.ts). Se captura de forma
   // perezosa la primera vez que se escanea una hoja del compendio y se
@@ -651,17 +664,17 @@ model EvaluationBundle {
   // revisión en vez de calificarla mal en silencio. Un caso real: una hoja
   // impresa con reparto de columnas 40/40/30 se escaneó cuando el código ya
   // repartía 37/37/36.
-  sheetTemplate   Json?
+  sheetTemplate          Json?
   // Cuándo se capturó `sheetTemplate`, para poder invalidarla a mano.
-  sheetTemplateAt DateTime?
+  sheetTemplateAt        DateTime?
   // --- Cover designer (ago 2026) ---
   // Variante de plantilla de portada seleccionada: ej. "secundaria-v1",
   // "primaria-v1". Si null, se usa DEFAULT_COVER_TEMPLATE_KEY.
-  coverTemplateKey String?
+  coverTemplateKey       String?
   // HTML con variables Mustache que reemplaza al built-in de la misma key.
   // Si null, se carga el archivo templates/cover/{key}.html. Se borra (≠ key)
   // para restablecer el built-in sin cambiar de variante.
-  coverTemplateBody String?
+  coverTemplateBody      String?
   // Última vez que se guardó el body (override). Null si nunca se editó o
   // si está cayendo al built-in.
   coverTemplateUpdatedAt DateTime?
@@ -673,10 +686,10 @@ model EvaluationBundle {
   // Ver src/modules/cover-html/ y src/app/(dashboard)/admin/bundles/[id]/cover-html/.
   coverLiveProject       Json?
   coverLiveUpdatedAt     DateTime?
-  createdById     String       @db.Uuid
-  createdBy       User         @relation("BundleCreatedBy", fields: [createdById], references: [id])
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdById            String       @db.Uuid
+  createdBy              User         @relation("BundleCreatedBy", fields: [createdById], references: [id])
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
 
   items       EvaluationBundleItem[]
   sheets      AnswerSheet[]
@@ -686,6 +699,7 @@ model EvaluationBundle {
   @@index([institutionId])
   @@index([institutionId, status])
   @@index([institutionId, courseId])
+  @@index([institutionId, periodId])
 }
 
 model EvaluationBundleItem {

@@ -1,12 +1,7 @@
 import * as XLSX from "xlsx";
 
 import type { StudentImportRow } from "../domain/student";
-import {
-  canonicalHeaders,
-  missingRequired,
-  rowToStudentRow,
-  type ParsedCsv,
-} from "./csv";
+import { canonicalHeaders, missingRequired, rowToStudentRow, type ParsedCsv } from "./csv";
 
 /**
  * Parser XLSX institucional para estudiantes. Acepta la planilla que el

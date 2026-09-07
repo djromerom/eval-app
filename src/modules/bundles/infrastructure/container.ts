@@ -1,4 +1,9 @@
-import { PrismaCourseRepository } from "@/modules/academic/infrastructure/prisma-academic-repositories";
+import {
+  PrismaAcademicYearRepository,
+  PrismaCourseRepository,
+  PrismaPeriodRepository,
+} from "@/modules/academic/infrastructure/prisma-academic-repositories";
+import { PrismaBookletTypeRepository } from "@/modules/booklet-types/infrastructure/prisma-booklet-type-repository";
 import { PrismaLeaderAssignmentRepository } from "@/modules/leader-assignments/infrastructure/prisma-leader-assignment-repository";
 import { AddEvaluationToBundle } from "../application/add-evaluation-to-bundle";
 import { CreateBundle } from "../application/create-bundle";
@@ -24,11 +29,19 @@ const repository = new PrismaBundleRepository();
 const courses = new PrismaCourseRepository();
 // feat/lider-ecu: scope filter del ECU_LIDER.
 const leaderAssignments = new PrismaLeaderAssignmentRepository();
+// Sprint Bundle-Period (sep 2026): CreateBundle inyecta el periodo actual del
+// año académico vigente y valida bookletTypeId contra la Prueba del bundle.
+// UpdateBundle valida la consistencia al reasignar periodo/tipo.
+const years = new PrismaAcademicYearRepository();
+const periods = new PrismaPeriodRepository();
+const bookletTypes = new PrismaBookletTypeRepository();
 
-export const makeCreateBundle = () => new CreateBundle(repository, courses);
+export const makeCreateBundle = () =>
+  new CreateBundle(repository, courses, years, periods, bookletTypes);
 export const makeListBundles = () => new ListBundles(repository, leaderAssignments);
 export const makeGetBundle = () => new GetBundle(repository);
-export const makeUpdateBundle = () => new UpdateBundle(repository, courses);
+export const makeUpdateBundle = () =>
+  new UpdateBundle(repository, courses, periods, bookletTypes);
 export const makeDeleteBundle = () => new DeleteBundle(repository);
 export const makeAddEvaluationToBundle = () => new AddEvaluationToBundle(repository);
 export const makeRemoveFromBundle = () => new RemoveFromBundle(repository);

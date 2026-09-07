@@ -58,7 +58,12 @@ export class PrismaStudentRepository implements StudentRepository {
   async findByGroup(institutionId: string, groupId: string): Promise<Student[]> {
     const rows = await prisma.student.findMany({
       where: { institutionId, groupId, ...notDeleted },
-      orderBy: [{ lastName1: "asc" }, { lastName2: "asc" }, { firstName1: "asc" }, { firstName2: "asc" }],
+      orderBy: [
+        { lastName1: "asc" },
+        { lastName2: "asc" },
+        { firstName1: "asc" },
+        { firstName2: "asc" },
+      ],
     });
     return rows.map(toStudent);
   }
@@ -66,7 +71,12 @@ export class PrismaStudentRepository implements StudentRepository {
   async findAll(institutionId: string): Promise<Student[]> {
     const rows = await prisma.student.findMany({
       where: { institutionId, ...notDeleted },
-      orderBy: [{ lastName1: "asc" }, { lastName2: "asc" }, { firstName1: "asc" }, { firstName2: "asc" }],
+      orderBy: [
+        { lastName1: "asc" },
+        { lastName2: "asc" },
+        { firstName1: "asc" },
+        { firstName2: "asc" },
+      ],
     });
     return rows.map(toStudent);
   }
