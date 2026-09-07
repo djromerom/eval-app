@@ -7,7 +7,18 @@ import type {
   Student,
   StudentRepository,
 } from "@/modules/students/domain/student";
-import type { Group, GroupRepository } from "@/modules/academic/domain/types";
+import type {
+  Group,
+  GroupRepository,
+  Period,
+  PeriodRepository,
+} from "@/modules/academic/domain/types";
+import type {
+  BookletType,
+  BookletTypeRepository,
+  CreateBookletTypeData,
+  UpdateBookletTypeData,
+} from "@/modules/booklet-types/domain/booklet-type";
 
 class InMemoryStudents implements StudentRepository {
   items: Student[] = [];
@@ -41,7 +52,10 @@ class InMemoryStudents implements StudentRepository {
     id: string,
     data: {
       groupId: string;
-      name: string;
+      lastName1: string;
+      lastName2: string;
+      firstName1: string;
+      firstName2: string;
       idType: string;
       idNumber: string;
       enrollmentYear: number;
@@ -84,24 +98,124 @@ class InMemoryGroups implements GroupRepository {
   }
 }
 
+class InMemoryBookletTypes implements BookletTypeRepository {
+  /** Test-only: pre-cargar matches de bookletType por nombre para tests
+   *  específicos; por defecto vacío para no interferir con los tests
+   *  legacy de CSV. */
+  items: BookletType[] = [];
+  async findById() {
+    return null;
+  }
+  async listByPeriod() {
+    return [];
+  }
+  async listByInstitution() {
+    return [];
+  }
+  async findByName(_institutionId: string, name: string) {
+    const trimmed = name.trim().toLowerCase();
+    return this.items.filter(
+      (b) => b.institutionId === _institutionId && b.name.trim().toLowerCase() === trimmed,
+    );
+  }
+  async findByNameAndPeriod(_institutionId: string, name: string, periodId: string) {
+    const trimmed = name.trim().toLowerCase();
+    return this.items.filter(
+      (b) =>
+        b.institutionId === _institutionId &&
+        b.periodId === periodId &&
+        b.name.trim().toLowerCase() === trimmed,
+    );
+  }
+  async create(_institutionId: string, _data: CreateBookletTypeData): Promise<BookletType> {
+    throw new Error("no usado");
+  }
+  async update(
+    _institutionId: string,
+    _id: string,
+    _data: UpdateBookletTypeData,
+  ): Promise<BookletType | null> {
+    return null;
+  }
+  async delete() {
+    /* noop */
+  }
+}
+
+class InMemoryPeriods implements PeriodRepository {
+  constructor(private readonly items: Period[] = []) {}
+  async findAll(institutionId: string, academicYearId?: string) {
+    return this.items.filter(
+      (p) =>
+        p.institutionId === institutionId &&
+        (!academicYearId || p.academicYearId === academicYearId),
+    );
+  }
+  async findById(institutionId: string, id: string) {
+    return this.items.find((p) => p.institutionId === institutionId && p.id === id) ?? null;
+  }
+  async findByName(institutionId: string, name: string) {
+    const trimmed = name.trim().toLowerCase();
+    const matches = this.items.filter(
+      (p) => p.institutionId === institutionId && p.name.trim().toLowerCase() === trimmed,
+    );
+    matches.sort((a, b) => a.order - b.order);
+    return matches[0] ?? null;
+  }
+  async create(): Promise<Period> {
+    throw new Error("no usado");
+  }
+  async update(): Promise<Period | null> {
+    return null;
+  }
+  async delete(): Promise<void> {
+    /* noop */
+  }
+  async setCurrent(): Promise<void> {
+    /* noop */
+  }
+}
+
 const admin: AuthenticatedUser = { userId: "u", institutionId: "i1", roles: ["ECU_MASTER"] };
 const groups: Group[] = [{ id: "g1", institutionId: "i1", courseId: "c1", name: "11-03" }];
 
-const CSV = `nombre;tipo_doc;num_doc;codigo;grupo;anio_ingreso
-Ana Pérez;T.I.;123;EST-001;11-03;2026
-Luis Gómez;C.C.;456;EST-002;11-03;2026`;
+const CSV = `apellido1;apellido2;nombre1;nombre2;tipo_doc;num_doc;codigo;grupo;anio_ingreso
+Pérez;Gómez;Ana;;T.I.;123;EST-001;11-03;2026
+García;;Luis;Carlos;C.C.;456;EST-002;11-03;2026`;
 
 describe("parseStudentsCsv", () => {
   it("parsea encabezados con tildes y separador ;", () => {
     const { rows, missing } = parseStudentsCsv(CSV);
     expect(missing).toHaveLength(0);
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({ name: "Ana Pérez", code: "EST-001", groupName: "11-03" });
+    expect(rows[0]).toMatchObject({
+      lastName1: "Pérez",
+      lastName2: "Gómez",
+      firstName1: "Ana",
+      firstName2: "",
+      code: "EST-001",
+      groupName: "11-03",
+    });
     expect(rows[0]!.enrollmentYear).toBe(2026);
   });
 
+  it("acepta columnas legacy 'nombre' y parte por whitespace", () => {
+    const { rows, missing } = parseStudentsCsv(
+      `nombre;tipo_doc;num_doc;codigo;grupo;anio_ingreso
+Pérez Gómez Ana;T.I.;1;EST-1;11-03;2026`,
+    );
+    expect(missing).toHaveLength(0);
+    expect(rows[0]).toMatchObject({
+      lastName1: "Pérez",
+      lastName2: "Gómez",
+      firstName1: "Ana",
+      firstName2: "",
+    });
+  });
+
   it("reporta columnas faltantes", () => {
-    const { missing } = parseStudentsCsv("nombre,codigo\nAna,EST-1");
+    const { missing } = parseStudentsCsv("apellido1,codigo\nPérez,EST-1");
+    expect(missing).toContain("firstName1");
     expect(missing).toContain("groupName");
     expect(missing).toContain("idType");
   });
@@ -109,18 +223,25 @@ describe("parseStudentsCsv", () => {
 
 describe("ImportStudents", () => {
   let students: InMemoryStudents;
+  let bookletTypes: InMemoryBookletTypes;
   let uc: ImportStudents;
   beforeEach(() => {
     students = new InMemoryStudents();
-    uc = new ImportStudents(students, new InMemoryGroups(groups));
+    bookletTypes = new InMemoryBookletTypes();
+    uc = new ImportStudents(
+      students,
+      new InMemoryGroups(groups),
+      new InMemoryPeriods(),
+      bookletTypes,
+    );
   });
 
   it("importa filas válidas y reporta errores por fila", async () => {
     const { rows } = parseStudentsCsv(
-      `nombre;tipo_doc;num_doc;codigo;grupo;anio_ingreso
-Ana;T.I.;1;EST-001;11-03;2026
-SinGrupo;C.C.;2;EST-002;99-99;2026
-Dup;C.C.;3;EST-001;11-03;2026`,
+      `apellido1;apellido2;nombre1;nombre2;tipo_doc;num_doc;codigo;grupo;anio_ingreso
+Pérez;;Ana;;T.I.;1;EST-001;11-03;2026
+Sin;;Grupo;;C.C.;2;EST-002;99-99;2026
+Dup;;Otro;;C.C.;3;EST-001;11-03;2026`,
     );
     const r = await uc.execute({ actor: admin, rows });
     expect(r.ok).toBe(true);

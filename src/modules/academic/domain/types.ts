@@ -133,6 +133,12 @@ export interface GroupRepository {
 export interface PeriodRepository {
   findAll(institutionId: string, academicYearId?: string): Promise<Period[]>;
   findById(institutionId: string, id: string): Promise<Period | null>;
+  /** Match case-insensitive por nombre dentro de la institución. Usado por
+   *  el import XLSX de estudiantes para resolver la columna PRUEBA del
+   *  archivo. Si hay varias Pruebas con el mismo nombre en distintos años
+   *  académicos, devuelve la primera por `order` asc (determinista, pero
+   *  ambiguo: el docente debería renombrar). */
+  findByName(institutionId: string, name: string): Promise<Period | null>;
   create(institutionId: string, data: CreatePeriodData): Promise<Period>;
   update(institutionId: string, id: string, data: UpdatePeriodData): Promise<Period | null>;
   delete(institutionId: string, id: string): Promise<void>;

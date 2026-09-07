@@ -247,6 +247,9 @@ const noPeriods: PeriodRepository = {
   async findById() {
     return null;
   },
+  async findByName() {
+    return null;
+  },
   async create(): Promise<Period> {
     throw new Error("no usado");
   },
@@ -271,6 +274,12 @@ const noBookletTypes: BookletTypeRepository = {
     return [];
   },
   async listByInstitution() {
+    return [];
+  },
+  async findByName() {
+    return [];
+  },
+  async findByNameAndPeriod() {
     return [];
   },
   async create() {
@@ -859,6 +868,12 @@ describe("CreateEvaluation — unicidad con bookletTypeId", () => {
       return [];
     },
     async listByInstitution() {
+      return [];
+    },
+    async findByName() {
+      return [];
+    },
+    async findByNameAndPeriod() {
       return [];
     },
     async create() {

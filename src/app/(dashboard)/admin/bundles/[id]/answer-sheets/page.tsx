@@ -57,10 +57,18 @@ export default async function BundleAnswerSheetsPage({
   // curso (CourseSubject) si el bundle lo requiere; por ahora todos.
   const students = await prisma.student.findMany({
     where: { institutionId: actor.institutionId, isActive: true },
-    orderBy: { name: "asc" },
+    orderBy: [
+      { lastName1: "asc" },
+      { lastName2: "asc" },
+      { firstName1: "asc" },
+      { firstName2: "asc" },
+    ],
     select: {
       id: true,
-      name: true,
+      lastName1: true,
+      lastName2: true,
+      firstName1: true,
+      firstName2: true,
       code: true,
       group: { select: { name: true } },
     },
@@ -103,7 +111,11 @@ export default async function BundleAnswerSheetsPage({
                 <label className="hover:bg-accent flex cursor-pointer items-center gap-3 rounded-md p-2 text-sm">
                   <input type="checkbox" name="students" value={s.id} className="mt-1" />
                   <div className="flex-1">
-                    <div className="font-medium">{s.name}</div>
+                    <div className="font-medium">
+                      {`${s.lastName1} ${s.lastName2} ${s.firstName1} ${s.firstName2}`
+                        .replace(/\s+/g, " ")
+                        .trim()}
+                    </div>
                     <div className="text-muted-foreground text-xs">
                       {s.code} · {s.group?.name ?? "Sin grado"}
                     </div>
