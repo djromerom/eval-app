@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,19 @@ interface CourseOption {
   name: string;
 }
 
+interface PeriodOption {
+  id: string;
+  name: string;
+  academicYearId: string;
+  isCurrent: boolean;
+}
+
+interface BookletTypeOption {
+  id: string;
+  periodId: string;
+  name: string;
+}
+
 function SubmitButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
   return (
@@ -31,17 +44,28 @@ function SubmitButton({ disabled }: { disabled: boolean }) {
 }
 
 /**
- * Wizard de creación. Step 1: nombre + bookletNumber. Step 2: selección de
- * formulaciones (checkbox list con búsqueda por título/asignatura). El submit
- * envía un solo FormData al server action createBundleAction con todos los
- * evaluationIds seleccionados.
+ * Wizard de creación. Step 1: nombre + bookletNumber + (Prueba, Tipo opcional)
+ * + grado. Step 2: selección de formulaciones (checkbox list con búsqueda por
+ * título/asignatura). El submit envía un solo FormData al server action
+ * `createBundleAction` con todos los `evaluationIds` seleccionados.
+ *
+ * Sprint Bundle-Period (sep 2026): el select de Prueba se preselecciona y
+ * bloquea con el periodo actual del año académico vigente (mismo patrón que
+ * `create-evaluation-form.tsx`). El select de Tipo de cuadernillo se filtra
+ * en cliente por la Prueba seleccionada. "" en el Tipo = sin tipo (opcional:
+ * si la Prueba seleccionada no tiene tipos configurados, el select queda
+ * disabled con hint).
  */
 export function CreateBundleWizard({
   evaluations,
   courses,
+  periods,
+  bookletTypes,
 }: {
   evaluations: CandidateEvaluation[];
   courses: CourseOption[];
+  periods: PeriodOption[];
+  bookletTypes: BookletTypeOption[];
 }) {
   const [state, formAction] = useActionState(createBundleAction, {} as BundleFormState);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -49,6 +73,32 @@ export function CreateBundleWizard({
   // "" = cuadernillo cross-course: admite formulaciones de cualquier grado.
   const [courseId, setCourseId] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
+
+  // Sprint Bundle-Period: preselección de la Prueba actual (mismo patrón que
+  // create-evaluation-form.tsx). Si la institución tiene un periodo con
+  // isCurrent=true, lo preseleccionamos y bloqueamos.
+  const currentPeriod = useMemo(() => periods.find((p) => p.isCurrent) ?? null, [periods]);
+  const [periodId, setPeriodId] = useState(() => currentPeriod?.id ?? "");
+  const [bookletTypeId, setBookletTypeId] = useState("");
+  const periodLocked = !!currentPeriod;
+
+  // BookletTypes disponibles para la Prueba seleccionada.
+  const filteredTypes = useMemo(
+    () => (periodId ? bookletTypes.filter((bt) => bt.periodId === periodId) : []),
+    [periodId, bookletTypes],
+  );
+
+  // Si cambia la Prueba seleccionada, descartamos el Tipo seleccionado si ya
+  // no es válido. Caso edge: el admin elige Tipo y luego cambia de Prueba.
+  useEffect(() => {
+    if (!periodId) {
+      if (bookletTypeId) setBookletTypeId("");
+      return;
+    }
+    if (bookletTypeId && !filteredTypes.find((bt) => bt.id === bookletTypeId)) {
+      setBookletTypeId("");
+    }
+  }, [periodId, filteredTypes, bookletTypeId]);
 
   // Filtro por curso (duro: el use case rechaza mezclas) + búsqueda libre.
   const filtered = evaluations.filter((e) => {
@@ -124,6 +174,70 @@ export function CreateBundleWizard({
             />
           </div>
         </div>
+
+        {/* Sprint Bundle-Period: Prueba preseleccionada y bloqueada cuando
+            hay un periodo "actual" en la institución. */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1">
+            <label htmlFor="periodId" className="text-sm font-medium">
+              Prueba
+            </label>
+            <select
+              id="periodId"
+              // Cuando el periodo viene bloqueado, el <select> pierde el `name`
+              // (los form controls disabled NO se serializan en FormData) y
+              // añadimos un <input type="hidden"> gemelo. Cuando no hay
+              // periodo actual, el select es editable y conserva su `name`.
+              name={periodLocked ? undefined : "periodId"}
+              required={!periodLocked}
+              value={periodId}
+              onChange={(e) => setPeriodId(e.target.value)}
+              disabled={periodLocked}
+              aria-readonly={periodLocked ? true : undefined}
+              className="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none disabled:opacity-60"
+            >
+              <option value="">Seleccione</option>
+              {periods.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            {periodLocked && <input type="hidden" name="periodId" value={periodId} />}
+            <p className="text-muted-foreground text-xs">
+              {currentPeriod
+                ? "Prueba en curso del año académico vigente. Puedes cambiarla desde la edición del cuadernillo."
+                : "Selecciona la Prueba a la que pertenece este cuadernillo."}
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <label htmlFor="bookletTypeId" className="text-sm font-medium">
+              Tipo de cuadernillo (opcional)
+            </label>
+            <select
+              id="bookletTypeId"
+              name="bookletTypeId"
+              value={bookletTypeId}
+              onChange={(e) => setBookletTypeId(e.target.value)}
+              disabled={!periodId || filteredTypes.length === 0}
+              className="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none disabled:opacity-60"
+            >
+              <option value="">Sin tipo (todas las formulaciones)</option>
+              {filteredTypes.map((bt) => (
+                <option key={bt.id} value={bt.id}>
+                  {bt.name}
+                </option>
+              ))}
+            </select>
+            {periodId && filteredTypes.length === 0 && (
+              <p className="text-muted-foreground text-xs">
+                La Prueba seleccionada no tiene tipos configurados.
+              </p>
+            )}
+          </div>
+        </div>
+
         <div className="space-y-1">
           <label htmlFor="courseId" className="text-sm font-medium">
             Grado (opcional)

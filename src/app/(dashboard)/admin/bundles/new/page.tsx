@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/page-header";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { makeListEvaluations } from "@/modules/evaluations/infrastructure/container";
-import { makeListCourses } from "@/modules/academic/infrastructure/container";
+import { makeListCourses, makeListPeriods } from "@/modules/academic/infrastructure/container";
+import { makeListBookletTypesByInstitution } from "@/modules/booklet-types/infrastructure/container";
 import { CreateBundleWizard } from "./wizard-form";
 
 export const metadata: Metadata = { title: "Nuevo cuadernillo" };
@@ -13,14 +14,20 @@ export const dynamic = "force-dynamic";
  * Wizard de creación de cuadernillos. Lista las formulaciones APPROVED/PUBLISHED
  * de la institución (las únicas que se pueden incluir) y deja al SUPER_ADMIN
  * armar la selección, asignar nombre y bookletNumber.
+ *
+ * Sprint Bundle-Period (sep 2026): carga también periodos + tipos de cuadernillo
+ * para que el wizard pueda preseleccionar la Prueba actual y aplicar la cascada
+ * Period → BookletType.
  */
 export default async function NewBundlePage() {
   const actor = await requireAuthenticatedUser("ECU_MASTER", "ECU_LIDER");
 
-  const [approved, published, coursesRes] = await Promise.all([
+  const [approved, published, coursesRes, periodsRes, bookletTypesRes] = await Promise.all([
     makeListEvaluations().execute({ actor, status: "APPROVED" }),
     makeListEvaluations().execute({ actor, status: "PUBLISHED" }),
     makeListCourses().execute({ actor }),
+    makeListPeriods().execute({ actor }),
+    makeListBookletTypesByInstitution().execute({ actor }),
   ]);
 
   const candidates = [
@@ -37,6 +44,17 @@ export default async function NewBundlePage() {
   });
 
   const courses = coursesRes.ok ? coursesRes.value.map((c) => ({ id: c.id, name: c.name })) : [];
+  const periods = periodsRes.ok
+    ? periodsRes.value.map((p) => ({
+        id: p.id,
+        name: p.name,
+        academicYearId: p.academicYearId,
+        isCurrent: p.isCurrent,
+      }))
+    : [];
+  const bookletTypes = bookletTypesRes.ok
+    ? bookletTypesRes.value.map((bt) => ({ id: bt.id, periodId: bt.periodId, name: bt.name }))
+    : [];
 
   return (
     <>
@@ -44,7 +62,12 @@ export default async function NewBundlePage() {
         title="Nuevo cuadernillo"
         description="Agrupa formulaciones aprobadas o publicadas en un cuadernillo único."
       />
-      <CreateBundleWizard evaluations={evaluations} courses={courses} />
+      <CreateBundleWizard
+        evaluations={evaluations}
+        courses={courses}
+        periods={periods}
+        bookletTypes={bookletTypes}
+      />
     </>
   );
 }
