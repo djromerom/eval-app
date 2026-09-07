@@ -7,10 +7,13 @@ import { Input } from "@/components/ui/input";
 import {
   type EvaluationTheme,
   type ResolvedTheme,
+  type QuestionFontSize,
   DENSITIES,
   DENSITY_LABELS,
   QUESTION_COLUMNS,
   QUESTION_COLUMNS_LABELS,
+  QUESTION_FONT_SIZES,
+  QUESTION_FONT_SIZE_LABELS,
   FONT_FAMILIES,
   FONT_FAMILY_LABELS,
   SECTION_DIVIDERS,
@@ -53,6 +56,12 @@ export function BundleThemeSection({ bundleId, initial, resolved, editable }: Pr
   const [density, setDensity] = useState(safeInitial.density ?? resolved.density);
   const [questionColumns, setQuestionColumns] = useState(
     safeInitial.questionColumns ?? resolved.questionColumns,
+  );
+  // Tamaño de fuente de los items (sep 2026). Resuelto = heredado del tema
+  // institucional; override = valor del bundle (si el admin lo guardó).
+  // El default global es 10pt (coincide con `.booklet { font-size: 10pt }`).
+  const [questionFontSize, setQuestionFontSize] = useState<QuestionFontSize>(
+    safeInitial.questionFontSize ?? resolved.questionFontSize,
   );
   const [footerText, setFooterText] = useState(safeInitial.footerText ?? resolved.footerText);
   const [coverSubtitle, setCoverSubtitle] = useState(
@@ -153,6 +162,40 @@ export function BundleThemeSection({ bundleId, initial, resolved, editable }: Pr
           </select>
           <p className="text-muted-foreground mt-1 text-xs">
             A dos columnas, las preguntas con imagen o tabla siguen ocupando el ancho completo.
+          </p>
+        </Field>
+
+        {/* Tamaño de fuente de los items (sep 2026). Afecta al cuerpo de las
+            preguntas y al título/contenido del contexto (.questions-flow) —
+            NO a la portada, ni a la hoja de respuestas, ni a la tabla de
+            competencias, ni al "RESPONDA LAS PREGUNTAS..." (que mantiene su
+            10pt por ser instrucción estructural). */}
+        <Field label="Tamaño de fuente de los items">
+          <div className="flex items-center gap-2">
+            <select
+              name="questionFontSize"
+              value={questionFontSize}
+              onChange={(e) => setQuestionFontSize(Number(e.target.value) as QuestionFontSize)}
+              className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+            >
+              {QUESTION_FONT_SIZES.map((s) => (
+                <option key={s} value={s}>
+                  {QUESTION_FONT_SIZE_LABELS[s]}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setQuestionFontSize(resolved.questionFontSize)}
+            >
+              Heredar
+            </Button>
+          </div>
+          <p className="text-muted-foreground mt-1 text-xs">
+            Default 10pt (igual que el PDF de referencia). Escala el cuerpo de las preguntas y el
+            contexto. No afecta a la portada ni a la hoja de respuestas.
           </p>
         </Field>
 

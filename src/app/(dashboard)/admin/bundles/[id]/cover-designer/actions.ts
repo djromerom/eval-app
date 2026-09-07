@@ -81,6 +81,12 @@ export async function saveBundleThemeAction(
       ? (String(formData.get("density")) as "compact" | "normal" | "airy")
       : undefined,
     questionColumns: String(formData.get("questionColumns") ?? "") === "2" ? 2 : 1,
+    // Tamaño de fuente de los items (sep 2026). "" = heredar del tema
+    // institucional (cae al default 10pt). Solo se acepta el set canónico
+    // para no escribir valores fuera de `QUESTION_FONT_SIZES`.
+    questionFontSize: [9, 10, 11, 12, 14, 16].includes(Number(formData.get("questionFontSize")))
+      ? (Number(formData.get("questionFontSize")) as 9 | 10 | 11 | 12 | 14 | 16)
+      : undefined,
     footerText: String(formData.get("footerText") ?? "").trim() || undefined,
     coverSubtitle: String(formData.get("coverSubtitle") ?? "").trim() || undefined,
     sectionDivider: ["line", "double", "dots"].includes(
@@ -107,9 +113,7 @@ export async function saveBundleThemeAction(
  * Limpia el override de portada y vuelve al built-in de la variante actual.
  * NO cambia la key del bundle.
  */
-export async function resetCoverTemplateAction(
-  bundleId: string,
-): Promise<CoverDesignerFormState> {
+export async function resetCoverTemplateAction(bundleId: string): Promise<CoverDesignerFormState> {
   const actor = await requireAuthenticatedUser("ECU_MASTER", "ECU_LIDER");
   const result = await makeResetCoverTemplate().execute({ actor, bundleId });
   if (!result.ok) return { error: result.error.message };
@@ -152,7 +156,10 @@ export async function changeCoverTemplateKeyAction(
  * override — debe caer al default en runtime). Trunca al `max` del schema.
  */
 function readBulletArray(formData: FormData, field: string, max: number): string[] {
-  const raw = formData.getAll(field).map((v) => String(v).trim()).filter((v) => v.length > 0);
+  const raw = formData
+    .getAll(field)
+    .map((v) => String(v).trim())
+    .filter((v) => v.length > 0);
   return raw.slice(0, max);
 }
 

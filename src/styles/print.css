@@ -421,9 +421,11 @@
 
 /* Título del contexto: primera letra en mayúscula, resto en minúscula,
    negrilla y centrado. El case se aplica por CSS para que un cambio
-   futuro de política solo toque el estilo y no el JSX. */
+   futuro de política solo toque el estilo y no el JSX. NO tiene
+   `font-size` propio — hereda de `.questions-flow` para que el select
+   "Tamaño de fuente de los items" del Diseñar estilos también lo
+   escale (sep 2026). */
 .block-text-title {
-  font-size: 10pt;
   font-weight: 700;
   text-align: center;
   margin: 0.4rem 0;
@@ -436,6 +438,18 @@
 .context-paragraph {
   text-align: justify;
   margin-bottom: 0.5rem;
+}
+
+/* El componente `RichText` añade `prose-eval` al wrapper del contexto
+ * (ver globals.css:.prose-eval). En pantalla ese `font-size: 0.875rem`
+ * es coherente con la UI; pero en impresión debe heredar del
+ * `.questions-flow` para que el selector "Tamaño de fuente de los items"
+ * escale también el CUERPO del contexto, no solo su título.
+ *
+ * Sin esta regla, el body del contexto se queda en 14px fijo y rompe la
+ * jerarquía visual (sep 2026, sprint font-size de items). */
+.questions-flow .prose-eval {
+  font-size: inherit;
 }
 
 /* Imágenes del contenido (contextos, enunciados y opciones).
@@ -524,6 +538,19 @@
   column-count: var(--print-question-columns, 1);
   column-gap: 1.2rem;
   column-fill: auto;
+  /* Tamaño de fuente del cuerpo de las preguntas y del contexto (sep 2026).
+   * El default 10pt coincide con `.booklet { font-size: 10pt }` que tenían
+   * los items antes de este campo (print.css:59). La variable la emite
+   * `themeToCssVars()` desde el módulo theme y se sobreescribe a nivel de
+   * bundle/institución desde el "Diseñar estilos". Aplica a TODO lo que
+   * está dentro del flujo de preguntas: el `.block-intro` (título y
+   * contenido del contexto) y el `.questions-list` (las preguntas).
+   *
+   * NO afecta a `.cover-*`, ni a la hoja de respuestas (`.as-*`), ni a la
+   * tabla de competencias, ni al `.block-lead` ("RESPONDA LAS PREGUNTAS
+   * X A LA Y..."), que mantiene su `font-size: 10pt` explícito por ser
+   * una instrucción estructural. */
+  font-size: var(--print-question-font-size, 10pt);
 }
 
 /* El encabezado de cada contexto cruza ambas columnas: es común a todas sus

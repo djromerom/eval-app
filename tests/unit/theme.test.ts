@@ -171,3 +171,52 @@ describe("questionColumns", () => {
     expect(parsed.fontFamily).toBe("sans");
   });
 });
+
+/**
+ * Tamaño de fuente de los items (sep 2026). Igual cascada que
+ * `questionColumns`: institucional → evaluación → default 10pt. La variable
+ * CSS `--print-question-font-size` la consume `.questions-flow` (print.css)
+ * y solo afecta al cuerpo de las preguntas — NO a la portada.
+ */
+describe("questionFontSize", () => {
+  it("por defecto es 10pt (replica `.booklet { font-size: 10pt }`)", () => {
+    expect(mergeTheme(null, null).questionFontSize).toBe(10);
+  });
+
+  it("la institución fija el valor y la evaluación lo hereda", () => {
+    expect(mergeTheme({ questionFontSize: 12 }, null).questionFontSize).toBe(12);
+    expect(mergeTheme({ questionFontSize: 12 }, {}).questionFontSize).toBe(12);
+  });
+
+  it("la evaluación puede sobreescribir el institucional en ambos sentidos", () => {
+    expect(mergeTheme({ questionFontSize: 10 }, { questionFontSize: 14 }).questionFontSize).toBe(
+      14,
+    );
+    expect(mergeTheme({ questionFontSize: 14 }, { questionFontSize: 10 }).questionFontSize).toBe(
+      10,
+    );
+  });
+
+  it("llega a la variable CSS de impresión como `${n}pt`", () => {
+    const vars = themeToCssVars(mergeTheme({ questionFontSize: 12 }, null));
+    expect(vars["--print-question-font-size"]).toBe("12pt");
+    const varsDefault = themeToCssVars(mergeTheme(null, null));
+    expect(varsDefault["--print-question-font-size"]).toBe("10pt");
+  });
+
+  it("se lee del JSON guardado en la BD (regresión: si el parser omite el campo, el valor guardado se descarta en silencio)", () => {
+    expect(parseInstitutionalTheme({ questionFontSize: 14 }).questionFontSize).toBe(14);
+    expect(parseEvaluationTheme({ questionFontSize: 16 }).questionFontSize).toBe(16);
+  });
+
+  it("un valor fuera del set canónico se descarta sin romper el resto del tema", () => {
+    const parsed = parseInstitutionalTheme({ questionFontSize: 13, fontFamily: "sans" });
+    expect(parsed.questionFontSize).toBeUndefined();
+    expect(parsed.fontFamily).toBe("sans");
+  });
+
+  it("un valor string en vez de número se descarta", () => {
+    const parsed = parseInstitutionalTheme({ questionFontSize: "12pt" });
+    expect(parsed.questionFontSize).toBeUndefined();
+  });
+});
