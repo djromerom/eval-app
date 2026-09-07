@@ -63,6 +63,34 @@ export const QUESTION_COLUMNS_LABELS: Record<QuestionColumns, string> = {
   2: "Dos columnas (estilo ICFES)",
 };
 
+/**
+ * Tamaño de fuente por defecto del cuerpo de las preguntas y del contexto
+ * (sep 2026). El set incluye los tamaños que ya se usan en `print.css`
+ * y `answer-sheet.css` para distintos elementos (9pt en
+ * `.bundle-eval-band-part`, 10pt en `.booklet`, 11pt en `.cover-grade`,
+ * 12pt en `.cover-test-title`, 14pt en `.cover-institution`) más dos
+ * valores grandes (14pt y 16pt) explícitamente pedidos por el docente.
+ *
+ * Aplica a `.questions-flow`, lo que cubre tanto el `.block-intro`
+ * (título + contenido del contexto) como el `.questions-list` (cuerpo
+ * de las preguntas). NO toca `.cover-*`, ni la hoja de respuestas, ni
+ * la tabla de competencias, ni el `.block-lead` ("RESPONDA LAS
+ * PREGUNTAS..." — instrucción estructural que mantiene su 10pt fijo).
+ * El default 10pt replica el comportamiento actual (heredado de
+ * `.booklet { font-size: 10pt }`).
+ */
+export const QUESTION_FONT_SIZES = [9, 10, 11, 12, 14, 16] as const;
+export type QuestionFontSize = (typeof QUESTION_FONT_SIZES)[number];
+export const DEFAULT_QUESTION_FONT_SIZE: QuestionFontSize = 10;
+export const QUESTION_FONT_SIZE_LABELS: Record<QuestionFontSize, string> = {
+  9: "Pequeño — 9pt",
+  10: "Normal — 10pt",
+  11: "Grande — 11pt",
+  12: "Muy grande — 12pt",
+  14: "Extra grande — 14pt",
+  16: "Máximo — 16pt",
+};
+
 export const SECTION_DIVIDERS = ["line", "double", "dots"] as const;
 export type SectionDivider = (typeof SECTION_DIVIDERS)[number];
 export const SECTION_DIVIDER_LABELS: Record<SectionDivider, string> = {
@@ -74,6 +102,18 @@ export const SECTION_DIVIDER_LABELS: Record<SectionDivider, string> = {
 /** Hex color en formato #RRGGBB (sin alpha, sin shorthand). */
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
+// Schema reutilizable para el tamaño de fuente de los items (sep 2026).
+// Se mantiene como `const` local para que `InstitutionalThemeSchema` y
+// `parseInstitutionalTheme` lo compartan sin re-evaluar el union.
+const QuestionFontSizeSchema = z.union([
+  z.literal(9),
+  z.literal(10),
+  z.literal(11),
+  z.literal(12),
+  z.literal(14),
+  z.literal(16),
+]);
+
 // ===== Schemas =====
 
 export const InstitutionalThemeSchema = z.object({
@@ -82,6 +122,10 @@ export const InstitutionalThemeSchema = z.object({
   density: z.enum(DENSITIES).default("normal"),
   // Union de literales en vez de z.enum: los valores son números, no strings.
   questionColumns: z.union([z.literal(1), z.literal(2)]).default(1),
+  // Tamaño de fuente de los items (sep 2026). Union de literales porque
+  // los valores son números. Default 10pt replica el `.booklet { font-size: 10pt }`
+  // que tenían los items antes de este campo (ver `print.css:59`).
+  questionFontSize: QuestionFontSizeSchema.default(DEFAULT_QUESTION_FONT_SIZE),
   footerText: z.string().max(200).optional(),
   showLogo: z.boolean().default(true),
 });
@@ -103,6 +147,8 @@ export interface ResolvedTheme {
   fontFamily: FontFamily;
   density: Density;
   questionColumns: QuestionColumns;
+  /** Tamaño de fuente de los items en pt (sep 2026). */
+  questionFontSize: QuestionFontSize;
   footerText: string;
   showLogo: boolean;
   coverSubtitle: string;
@@ -124,6 +170,10 @@ export const INSTITUTIONAL_DEFAULT: InstitutionalTheme = {
   // Una columna por defecto: cambiar la maquetación de las formulaciones ya
   // creadas al desplegar sería una sorpresa. Quien quiera dos, lo activa.
   questionColumns: 1,
+  // 10pt replica el `.booklet { font-size: 10pt }` que tenían los items
+  // antes de este campo (sep 2026). Cambiarlo institucionalmente afecta a
+  // TODOS los cuadernillos que no override-en este campo.
+  questionFontSize: DEFAULT_QUESTION_FONT_SIZE,
   footerText: "",
   showLogo: true,
 };
@@ -144,6 +194,7 @@ export const THEME_PRESETS: Record<
       fontFamily: "serif",
       density: "normal",
       questionColumns: 2,
+      questionFontSize: DEFAULT_QUESTION_FONT_SIZE,
       footerText: "",
       showLogo: true,
     },
@@ -157,6 +208,7 @@ export const THEME_PRESETS: Record<
       fontFamily: "sans",
       density: "airy",
       questionColumns: 1,
+      questionFontSize: DEFAULT_QUESTION_FONT_SIZE,
       footerText: "",
       showLogo: true,
     },
@@ -170,6 +222,7 @@ export const THEME_PRESETS: Record<
       fontFamily: "serif",
       density: "compact",
       questionColumns: 2,
+      questionFontSize: DEFAULT_QUESTION_FONT_SIZE,
       footerText: "",
       showLogo: true,
     },
@@ -205,6 +258,7 @@ export function mergeTheme(
     fontFamily: ev.fontFamily ?? ins.fontFamily ?? base.fontFamily!,
     density: ev.density ?? ins.density ?? base.density!,
     questionColumns: ev.questionColumns ?? ins.questionColumns ?? base.questionColumns!,
+    questionFontSize: ev.questionFontSize ?? ins.questionFontSize ?? base.questionFontSize!,
     footerText: ev.footerText ?? ins.footerText ?? base.footerText!,
     showLogo: ev.showLogo ?? ins.showLogo ?? base.showLogo!,
     coverSubtitle: ev.coverSubtitle ?? "",
@@ -233,6 +287,7 @@ const DENSITY_SCHEMA = z.enum(DENSITIES);
 const BOOL_SCHEMA = z.boolean();
 const DIVIDER_SCHEMA = z.enum(SECTION_DIVIDERS);
 const COLUMNS_SCHEMA = z.union([z.literal(1), z.literal(2)]);
+const FONT_SIZE_SCHEMA = QuestionFontSizeSchema;
 
 function pickString(o: RawTheme, key: string, max?: number): string | undefined {
   const v = o[key];
@@ -260,6 +315,8 @@ export function parseInstitutionalTheme(raw: unknown): Partial<InstitutionalThem
   if (d !== undefined) out.density = d;
   const qc = pickAndValidate(o, "questionColumns", COLUMNS_SCHEMA);
   if (qc !== undefined) out.questionColumns = qc;
+  const qfs = pickAndValidate(o, "questionFontSize", FONT_SIZE_SCHEMA);
+  if (qfs !== undefined) out.questionFontSize = qfs;
   const ft = pickString(o, "footerText", 200);
   if (ft !== undefined) out.footerText = ft;
   const sl = pickAndValidate(o, "showLogo", BOOL_SCHEMA);
@@ -305,6 +362,14 @@ export function themeToCssVars(theme: ResolvedTheme): Record<string, string> {
         : "'Liberation Sans', Arial, Helvetica, sans-serif",
     "--print-line-height": String(DENSITY_LINE_HEIGHTS[theme.density]),
     "--print-question-columns": String(theme.questionColumns),
+    // Tamaño de fuente del cuerpo de las preguntas y del contexto
+    // (sep 2026). Default 10pt coincide con `.booklet { font-size: 10pt }`
+    // (print.css:59). La variable la consume `.questions-flow` en
+    // `print.css` (cubre tanto el `.block-intro` como el `.questions-list`).
+    // NO afecta a `.cover-*`, ni a la hoja de respuestas (`.as-*`), ni a
+    // la tabla de competencias, ni al `.block-lead` (instrucción
+    // estructural con su 10pt fijo).
+    "--print-question-font-size": `${theme.questionFontSize}pt`,
     "--print-footer-text": `"${(theme.footerText ?? "").replace(/"/g, '\\"')}"`,
     "--print-show-logo": theme.showLogo ? "block" : "none",
   };
