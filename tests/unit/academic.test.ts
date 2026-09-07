@@ -11,6 +11,12 @@ import {
   UpdatePeriod,
 } from "@/modules/academic/application/periods";
 import { CreateSubject } from "@/modules/academic/application/subjects";
+import type {
+  CreateStudentData,
+  Student,
+  StudentRepository,
+  UpdateStudentData,
+} from "@/modules/students/domain/student";
 import type { AuthenticatedUser } from "@/shared/application/authenticated-user";
 import type {
   AcademicYear,
@@ -246,6 +252,64 @@ describe("CreateSubject", () => {
     if (okGlobal.ok) expect(okGlobal.value.institutionId).toBeNull();
   });
 });
+
+/**
+ * Stub mínimo de StudentRepository para los tests de DeleteGroup. Solo
+ * importa `findByGroup` (lo demás lo dejamos como no-op o null).
+ */
+class InMemoryStudents implements StudentRepository {
+  items: Student[] = [];
+
+  async findById(institutionId: string, id: string) {
+    return this.items.find((s) => s.institutionId === institutionId && s.id === id) ?? null;
+  }
+  async findByCode() {
+    return null;
+  }
+  async findByCodeIncludingHistory() {
+    return null;
+  }
+  async findByGroup(institutionId: string, groupId: string) {
+    return this.items.filter((s) => s.institutionId === institutionId && s.groupId === groupId);
+  }
+  async findAll(institutionId: string) {
+    return this.items.filter((s) => s.institutionId === institutionId);
+  }
+  async create(institutionId: string, data: CreateStudentData): Promise<Student> {
+    const s: Student = {
+      id: `s-${this.items.length + 1}`,
+      institutionId,
+      isActive: true,
+      ...data,
+    };
+    this.items.push(s);
+    return s;
+  }
+  async createMany(institutionId: string, data: CreateStudentData[]) {
+    for (const d of data) await this.create(institutionId, d);
+    return data.length;
+  }
+  async changeCode() {}
+  async update(institutionId: string, id: string, data: UpdateStudentData): Promise<Student> {
+    const s = this.items.find((x) => x.institutionId === institutionId && x.id === id);
+    if (!s) {
+      const err = new Error("Not found") as Error & { code: string };
+      err.code = "P2025";
+      throw err;
+    }
+    Object.assign(s, data);
+    return s;
+  }
+  async softDelete(institutionId: string, id: string): Promise<void> {
+    const s = this.items.find((x) => x.institutionId === institutionId && x.id === id);
+    if (!s) {
+      const err = new Error("Not found") as Error & { code: string };
+      err.code = "P2025";
+      throw err;
+    }
+    s.isActive = false;
+  }
+}
 
 class InMemoryPeriods implements PeriodRepository {
   items: Period[] = [];
@@ -687,12 +751,14 @@ describe("DeleteGroup", () => {
   let groups: InMemoryGroups;
   let courses: InMemoryCourses;
   let years: InMemoryYears;
+  let students: InMemoryStudents;
   let uc: DeleteGroup;
   beforeEach(() => {
     groups = new InMemoryGroups();
     courses = new InMemoryCourses();
     years = new InMemoryYears();
-    uc = new DeleteGroup(groups);
+    students = new InMemoryStudents();
+    uc = new DeleteGroup(groups, students);
   });
 
   it("elimina un grupo existente", async () => {
@@ -729,6 +795,61 @@ describe("DeleteGroup", () => {
     const r = await uc.execute({ actor: teacher, groupId: "cualquiera" });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe("FORBIDDEN");
+  });
+
+  it("rechaza si el grupo tiene estudiantes asignados (FK Student.groupId)", async () => {
+    const y = await years.create(admin.institutionId, {
+      year: 2026,
+      startDate: new Date("2026-01-01"),
+      endDate: new Date("2026-12-31"),
+    });
+    const c = await new CreateCourse(courses, years).execute({
+      actor: admin,
+      data: { academicYearId: y.id, name: "11°", code: "G11" },
+    });
+    if (!c.ok) throw new Error("seed curso falló");
+
+    const g = await new CreateGroup(groups, courses).execute({
+      actor: admin,
+      data: { courseId: c.value.id, name: "11-03" },
+    });
+    if (!g.ok) throw new Error("seed grupo falló");
+
+    // Seed: 2 estudiantes asignados al grupo
+    await students.create(admin.institutionId, {
+      idType: "C.C.",
+      idNumber: "1001",
+      code: "S-1001",
+      groupId: g.value.id,
+      firstName1: "Ana",
+      firstName2: "",
+      lastName1: "Pérez",
+      lastName2: "",
+      enrollmentYear: 2026,
+    });
+    await students.create(admin.institutionId, {
+      idType: "C.C.",
+      idNumber: "1002",
+      code: "S-1002",
+      groupId: g.value.id,
+      firstName1: "Beto",
+      firstName2: "",
+      lastName1: "Gómez",
+      lastName2: "",
+      enrollmentYear: 2026,
+    });
+
+    const r = await uc.execute({ actor: admin, groupId: g.value.id });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe("VALIDATION");
+      expect(r.error.message).toMatch(/2 estudiante\(s\) asignado\(s\)/);
+      expect(r.error.message).toContain(g.value.name);
+    }
+
+    // El grupo sigue existiendo
+    const still = await groups.findById(admin.institutionId, g.value.id);
+    expect(still).not.toBeNull();
   });
 });
 
