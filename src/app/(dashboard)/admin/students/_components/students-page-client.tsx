@@ -97,7 +97,13 @@ export function StudentsPageClient({ students, groups, currentYear }: StudentsPa
       // search
       if (splitTerms.length === 0) return true;
       const groupName = (groups.byId[s.groupId] ?? "").toLowerCase();
-      const haystack = [s.name, s.code, `${s.idType} ${s.idNumber}`, s.idNumber, groupName]
+      const haystack = [
+        `${s.lastName1} ${s.lastName2} ${s.firstName1} ${s.firstName2}`.trim(),
+        s.code,
+        `${s.idType} ${s.idNumber}`,
+        s.idNumber,
+        groupName,
+      ]
         .join(" ")
         .toLowerCase();
       return splitTerms.every((t) => haystack.includes(t));
@@ -106,7 +112,7 @@ export function StudentsPageClient({ students, groups, currentYear }: StudentsPa
       if (sortBy === "year") {
         if (a.enrollmentYear !== b.enrollmentYear) return b.enrollmentYear - a.enrollmentYear;
       }
-      return a.name.localeCompare(b.name, "es");
+      return `${a.lastName1} ${a.firstName1}`.localeCompare(`${b.lastName1} ${b.firstName1}`, "es");
     });
     return sorted;
   }, [students, search, tab, sortBy, groups]);
@@ -160,11 +166,32 @@ export function StudentsPageClient({ students, groups, currentYear }: StudentsPa
                   options: groups.options,
                 },
                 {
-                  name: "name",
-                  label: "Nombre",
+                  name: "lastName1",
+                  label: "Apellido 1",
                   type: "text",
                   required: true,
-                  placeholder: "Ana Pérez",
+                  placeholder: "Pérez",
+                },
+                {
+                  name: "lastName2",
+                  label: "Apellido 2",
+                  type: "text",
+                  required: false,
+                  placeholder: "García",
+                },
+                {
+                  name: "firstName1",
+                  label: "Nombre 1",
+                  type: "text",
+                  required: true,
+                  placeholder: "Ana",
+                },
+                {
+                  name: "firstName2",
+                  label: "Nombre 2",
+                  type: "text",
+                  required: false,
+                  placeholder: "María",
                 },
                 {
                   name: "idType",
@@ -353,7 +380,11 @@ function StudentsTable({
         <tbody>
           {students.map((s) => (
             <tr key={s.id} className="hover:bg-muted/30 border-b transition-colors last:border-0">
-              <td className="px-4 py-3 font-medium">{s.name}</td>
+              <td className="px-4 py-3 font-medium">
+                {`${s.lastName1} ${s.lastName2} ${s.firstName1} ${s.firstName2}`
+                  .replace(/\s+/g, " ")
+                  .trim()}
+              </td>
               <td className="text-muted-foreground px-4 py-3 whitespace-nowrap">
                 {s.idType} {s.idNumber}
               </td>

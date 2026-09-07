@@ -32,12 +32,7 @@ const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%
  * Ver docs/cuadernillos.md §"Sprint 3 — Reporte comparativo" y §"Sprint 4".
  */
 export default async function BundleReportPage({ params }: { params: Promise<{ id: string }> }) {
-  const actor = await requireAuthenticatedUser(
-    "TEACHER",
-    "ECU_LIDER",
-    "ECU_MASTER",
-    "SUPER_ADMIN",
-  );
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER", "SUPER_ADMIN");
   const { id } = await params;
 
   const bundleRes = await makeGetBundle().execute({ actor, bundleId: id });
@@ -48,7 +43,17 @@ export default async function BundleReportPage({ params }: { params: Promise<{ i
   // a actor.institutionId por `makeGetBundle()` más arriba.
   const sheets = await prisma.answerSheet.findMany({
     where: { bundleId: id },
-    include: { student: { select: { name: true, code: true } } },
+    include: {
+      student: {
+        select: {
+          lastName1: true,
+          lastName2: true,
+          firstName1: true,
+          firstName2: true,
+          code: true,
+        },
+      },
+    },
   });
 
   // Cargar las questions de las evaluations del bundle en orden global.
@@ -130,8 +135,13 @@ export default async function BundleReportPage({ params }: { params: Promise<{ i
   // Etiquetas legibles de cada hoja (para el drill-down).
   const sheetLabels = new Map<string, { name: string | null; code: string | null }>();
   for (const sh of sheets) {
+    const sName = sh.student
+      ? `${sh.student.lastName1} ${sh.student.lastName2} ${sh.student.firstName1} ${sh.student.firstName2}`
+          .replace(/\s+/g, " ")
+          .trim()
+      : "";
     sheetLabels.set(sh.id, {
-      name: sh.student?.name ?? sh.studentName,
+      name: sName || sh.studentName,
       code: sh.student?.code ?? sh.studentCode,
     });
   }

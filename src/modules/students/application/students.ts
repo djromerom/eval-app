@@ -1,7 +1,8 @@
 import { type AuthenticatedUser, requireRole } from "@/shared/application/authenticated-user";
 import type { UseCase } from "@/shared/application/use-case";
 import { type Result, NotFoundError, ValidationError, fail, ok } from "@/shared/domain/result";
-import type { GroupRepository } from "@/modules/academic/domain/types";
+import type { GroupRepository, PeriodRepository } from "@/modules/academic/domain/types";
+import type { BookletTypeRepository } from "@/modules/booklet-types/domain/booklet-type";
 import {
   type CreateStudentData,
   type ImportResult,
@@ -14,12 +15,16 @@ import {
 } from "../domain/student";
 
 function validateBasics(data: {
-  name: string;
+  lastName1: string;
+  lastName2: string;
+  firstName1: string;
+  firstName2: string;
   idType: string;
   code: string;
   enrollmentYear: number;
 }): string | null {
-  if (!data.name.trim()) return "El nombre es obligatorio.";
+  if (!data.lastName1.trim()) return "El apellido 1 es obligatorio.";
+  if (!data.firstName1.trim()) return "El nombre 1 es obligatorio.";
   if (!isValidIdType(data.idType)) return `Tipo de documento inválido: "${data.idType}".`;
   if (!isValidStudentCode(data.code)) {
     return `Código inválido "${data.code}" (alfanumérico, sin espacios, máx. 32).`;
@@ -120,6 +125,8 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
   constructor(
     private readonly students: StudentRepository,
     private readonly groups: GroupRepository,
+    private readonly periods: PeriodRepository,
+    private readonly bookletTypes: BookletTypeRepository,
   ) {}
 
   async execute({ actor, rows }: ImportStudentsInput): Promise<Result<ImportResult>> {
@@ -148,6 +155,57 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
         result.errors.push({ row: line, message: `Grupo "${row.groupName}" no encontrado.` });
         continue;
       }
+
+      // Resolución de bookletTypeName → id. El docente DEBE traer la
+      // columna PRUEBA (periodName) si trae TIPO DE CUADERNILLO, porque
+      // un mismo nombre (ej. "ESTANDAR") puede existir en varias Pruebas
+      // y no queremos atar al estudiante a un periodo equivocado.
+      let bookletTypeId: string | null = null;
+      const bookletTypeName = row.bookletTypeName.trim();
+      if (bookletTypeName) {
+        const periodName = row.periodName.trim();
+        if (!periodName) {
+          result.errors.push({
+            row: line,
+            message: `Falta la Prueba (columna PRUEBA) para identificar el cuadernillo "${bookletTypeName}".`,
+          });
+          continue;
+        }
+
+        const period = await this.periods.findByName(actor.institutionId, periodName);
+        if (!period) {
+          result.errors.push({
+            row: line,
+            message: `Prueba "${periodName}" no encontrada en esta institución.`,
+          });
+          continue;
+        }
+
+        const matches = await this.bookletTypes.findByNameAndPeriod(
+          actor.institutionId,
+          bookletTypeName,
+          period.id,
+        );
+
+        if (matches.length === 0) {
+          result.errors.push({
+            row: line,
+            message: `Tipo de cuadernillo "${bookletTypeName}" no encontrado en la Prueba "${periodName}".`,
+          });
+          continue;
+        }
+        if (matches.length > 1) {
+          // Solo posible si hay duplicados dentro del mismo periodo (caso
+          // borde, el use case CreateBookletType lo evita).
+          result.errors.push({
+            row: line,
+            message: `Múltiples tipos de cuadernillo con nombre "${bookletTypeName}" en la Prueba "${periodName}".`,
+          });
+          continue;
+        }
+        bookletTypeId = matches[0]!.id;
+      }
+
       if (seenCodes.has(row.code)) {
         result.errors.push({ row: line, message: `Código "${row.code}" duplicado en el archivo.` });
         continue;
@@ -159,11 +217,16 @@ export class ImportStudents implements UseCase<ImportStudentsInput, ImportResult
       seenCodes.add(row.code);
       valid.push({
         groupId,
-        name: row.name.trim(),
+        lastName1: row.lastName1.trim(),
+        lastName2: row.lastName2.trim(),
+        firstName1: row.firstName1.trim(),
+        firstName2: row.firstName2.trim(),
         idType: row.idType.trim(),
         idNumber: row.idNumber.trim(),
         code: row.code,
         enrollmentYear: row.enrollmentYear,
+        grade: row.grade.trim() || null,
+        bookletTypeId,
       });
     }
 
@@ -220,7 +283,8 @@ export class UpdateStudent implements UseCase<UpdateStudentInput, Student> {
     const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
-    if (!data.name.trim()) return fail(new ValidationError("El nombre es obligatorio."));
+    if (!data.lastName1.trim()) return fail(new ValidationError("El apellido 1 es obligatorio."));
+    if (!data.firstName1.trim()) return fail(new ValidationError("El nombre 1 es obligatorio."));
     if (!data.idNumber.trim())
       return fail(new ValidationError("El número de documento es obligatorio."));
     if (!isValidIdType(data.idType)) {

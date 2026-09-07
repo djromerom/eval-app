@@ -3,13 +3,14 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { ID_TYPES } from "@/modules/students/domain/student";
 import { importStudentsAction, type ImportState } from "./actions";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" size="sm" variant="outline" disabled={pending}>
-      {pending ? "Importando…" : "Importar CSV"}
+      {pending ? "Importando…" : "Importar XLSX / CSV"}
     </Button>
   );
 }
@@ -20,20 +21,45 @@ export function ImportForm() {
   return (
     <form action={formAction} className="space-y-3">
       <p className="text-muted-foreground text-sm">
-        Sube un CSV con columnas:{" "}
-        <code>nombre, tipo_doc, num_doc, codigo, grupo, anio_ingreso</code>. Acepta separador{" "}
-        <code>,</code> o <code>;</code>.
+        Sube un archivo XLSX o CSV con columnas:{" "}
+        <code>
+          apellido1, apellido2, nombre1, nombre2, tipo_doc, num_doc, codigo, grupo, anio_ingreso
+        </code>
+        . Opcionales: <code>grado</code>. Si incluyes <code>tipo_cuadernillo</code> debes traer
+        también la columna <code>prueba</code> (Periodo) para identificarlo. Acepta separador{" "}
+        <code>,</code> o <code>;</code> en CSV.
       </p>
+      <details className="text-muted-foreground text-sm">
+        <summary className="cursor-pointer">Tipos de documento válidos</summary>
+        <ul className="mt-2 flex flex-wrap gap-2">
+          {ID_TYPES.map((t) => (
+            <li key={t} className="bg-muted rounded-md px-2 py-1 font-mono text-xs">
+              {t}
+            </li>
+          ))}
+        </ul>
+      </details>
       <div className="flex items-center gap-3">
         <input
           type="file"
           name="file"
-          accept=".csv,text/csv"
+          accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
           required
           className="file:border-input file:bg-background text-sm file:mr-3 file:rounded-md file:border file:px-3 file:py-1.5 file:text-sm"
         />
         <SubmitButton />
       </div>
+      <p className="text-muted-foreground text-xs">
+        ¿Necesitas una plantilla?{" "}
+        <a
+          href="/admin/students/template.xlsx"
+          download
+          className="text-primary underline underline-offset-2"
+        >
+          Descargar plantilla XLSX
+        </a>
+        .
+      </p>
 
       {state.error ? <p className="text-destructive text-sm">{state.error}</p> : null}
 

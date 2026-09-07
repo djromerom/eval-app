@@ -88,9 +88,7 @@ export class InMemoryAcademicYearRepository implements AcademicYearRepository {
     return this.items.find((y) => y.institutionId === institutionId && y.id === id) ?? null;
   }
   async findByYear(institutionId: string, year: number): Promise<AcademicYear | null> {
-    return (
-      this.items.find((y) => y.institutionId === institutionId && y.year === year) ?? null
-    );
+    return this.items.find((y) => y.institutionId === institutionId && y.year === year) ?? null;
   }
   async create(institutionId: string, data: CreateAcademicYearData): Promise<AcademicYear> {
     const y: AcademicYear = {
@@ -140,11 +138,7 @@ export class InMemoryPeriodRepository implements PeriodRepository {
     this.items.push(p);
     return p;
   }
-  async update(
-    institutionId: string,
-    id: string,
-    _data: UpdatePeriodData,
-  ): Promise<Period | null> {
+  async update(institutionId: string, id: string, _data: UpdatePeriodData): Promise<Period | null> {
     return this.items.find((p) => p.institutionId === institutionId && p.id === id) ?? null;
   }
   async delete(institutionId: string, id: string): Promise<void> {
@@ -173,10 +167,17 @@ export class InMemoryPeriodRepository implements PeriodRepository {
     return (
       this.items.find(
         (p) =>
-          p.institutionId === institutionId &&
-          p.academicYearId === academicYearId &&
-          p.isCurrent,
+          p.institutionId === institutionId && p.academicYearId === academicYearId && p.isCurrent,
       ) ?? null
+    );
+  }
+  // Match case-insensitive por nombre dentro de la institución. Merge origin/main
+  // (a519866): usado por el import XLSX para resolver `PRUEBA` a Period.id.
+  async findByName(institutionId: string, name: string): Promise<Period | null> {
+    const lower = name.toLowerCase();
+    return (
+      this.items.find((p) => p.institutionId === institutionId && p.name.toLowerCase() === lower) ??
+      null
     );
   }
 }
@@ -187,12 +188,31 @@ export class InMemoryBookletTypeRepository implements BookletTypeRepository {
     return this.items.find((b) => b.institutionId === institutionId && b.id === id) ?? null;
   }
   async listByPeriod(institutionId: string, periodId: string): Promise<BookletType[]> {
-    return this.items.filter(
-      (b) => b.institutionId === institutionId && b.periodId === periodId,
-    );
+    return this.items.filter((b) => b.institutionId === institutionId && b.periodId === periodId);
   }
   async listByInstitution(institutionId: string): Promise<BookletType[]> {
     return this.items.filter((b) => b.institutionId === institutionId);
+  }
+  // Merge origin/main (a519866): usado por el import XLSX para resolver
+  // `TIPO DE CUADERNILLO` a BookletType.id dentro de la Prueba elegida.
+  async findByName(institutionId: string, name: string): Promise<BookletType[]> {
+    const lower = name.toLowerCase();
+    return this.items.filter(
+      (b) => b.institutionId === institutionId && b.name.toLowerCase() === lower,
+    );
+  }
+  async findByNameAndPeriod(
+    institutionId: string,
+    name: string,
+    periodId: string,
+  ): Promise<BookletType[]> {
+    const lower = name.toLowerCase();
+    return this.items.filter(
+      (b) =>
+        b.institutionId === institutionId &&
+        b.periodId === periodId &&
+        b.name.toLowerCase() === lower,
+    );
   }
   async create(institutionId: string, data: CreateBookletTypeData): Promise<BookletType> {
     const bt: BookletType = {
@@ -413,10 +433,7 @@ export class InMemoryBundleRepository implements BundleRepository {
     return Array.from(this.bundles.values()).filter((b) => {
       if (b.institutionId !== institutionId) return false;
       if (filters?.periodId !== undefined && b.periodId !== filters.periodId) return false;
-      if (
-        filters?.bookletTypeId !== undefined &&
-        b.bookletTypeId !== filters.bookletTypeId
-      )
+      if (filters?.bookletTypeId !== undefined && b.bookletTypeId !== filters.bookletTypeId)
         return false;
       if (filters?.status !== undefined && b.status !== filters.status) return false;
       return true;
@@ -426,7 +443,8 @@ export class InMemoryBundleRepository implements BundleRepository {
   async findByCourseIds(institutionId: string, courseIds: string[]): Promise<Bundle[]> {
     if (courseIds.length === 0) return [];
     return Array.from(this.bundles.values()).filter(
-      (b) => b.institutionId === institutionId && b.courseId !== null && courseIds.includes(b.courseId),
+      (b) =>
+        b.institutionId === institutionId && b.courseId !== null && courseIds.includes(b.courseId),
     );
   }
 

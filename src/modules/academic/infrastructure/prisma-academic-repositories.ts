@@ -229,6 +229,15 @@ export class PrismaPeriodRepository implements PeriodRepository {
     const row = await prisma.period.findFirst({ where: { id, institutionId } });
     return row && toPeriod(row);
   }
+  async findByName(institutionId: string, name: string): Promise<Period | null> {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const row = await prisma.period.findFirst({
+      where: { institutionId, name: { equals: trimmed, mode: "insensitive" } },
+      orderBy: [{ order: "asc" }],
+    });
+    return row && toPeriod(row);
+  }
   async create(institutionId: string, data: CreatePeriodData): Promise<Period> {
     return toPeriod(await prisma.period.create({ data: { institutionId, ...data } }));
   }
@@ -272,10 +281,7 @@ export class PrismaPeriodRepository implements PeriodRepository {
     // mismo año académico puede quedar en otra Prueba (o en ninguna).
     await prisma.period.update({ where: { id: periodId }, data: { isCurrent: false } });
   }
-  async findCurrent(
-    institutionId: string,
-    academicYearId: string,
-  ): Promise<Period | null> {
+  async findCurrent(institutionId: string, academicYearId: string): Promise<Period | null> {
     const row = await prisma.period.findFirst({
       where: { institutionId, academicYearId, isCurrent: true },
     });

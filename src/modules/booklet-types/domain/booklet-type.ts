@@ -45,6 +45,20 @@ export interface BookletTypeRepository {
    *  `periodId`. Tabla chica (decenas de filas por institución), no
    *  justifica un endpoint `/api/booklet-types?periodId=X`. */
   listByInstitution(institutionId: string): Promise<BookletType[]>;
+  /** Match case-insensitive por nombre dentro de la institución. Devuelve
+   *  TODOS los matches (uno por Period si el docente reutilizó el nombre).
+   *  El caller decide qué hacer si hay varios — típicamente, error por fila
+   *  en el import XLSX. */
+  findByName(institutionId: string, name: string): Promise<BookletType[]>;
+  /** Match case-insensitive por (nombre + periodId). Usado por el import XLSX
+   *  para resolver `TIPO DE CUADERNILLO` dentro de la Prueba que el
+   *  docente eligió explícitamente en la columna PRUEBA. Sin match =
+   *  error por fila. */
+  findByNameAndPeriod(
+    institutionId: string,
+    name: string,
+    periodId: string,
+  ): Promise<BookletType[]>;
   create(institutionId: string, data: CreateBookletTypeData): Promise<BookletType>;
   update(
     institutionId: string,
