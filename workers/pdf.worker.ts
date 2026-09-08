@@ -261,9 +261,18 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
       // que sí produce el pliego apaisado.
       out = await renderLinearPdf(url);
       log.info({ jobId: job.id, bytes: out.length }, "PDF cover-only generado");
+    } else if (kind === "answer-sheets" || kind === "answer-sheets-bundle") {
+      // sep 2026 — sprint "imprimir en carta": las hojas de respuesta NO se
+      // imponen como cuadernillo (saddle-stitch sobre tabloid apaisado) — son
+      // hojas sueltas para escanear con OMR, no se doblan ni graparon. Salida
+      // directa en carta portrait (8.5×11in), 1 página PDF por hoja de
+      // respuesta del estudiante. Imposition solo aplica a `booklet` /
+      // `bundle` / `answer-key` / `answer-key-bundle` (que sí van a imprenta).
+      out = await renderLinearPdf(url);
+      log.info({ jobId: job.id, bytes: out.length }, "PDF answer-sheets (carta) generado");
     } else {
-      // Flujo legacy: booklet / answer-sheets / answer-key / sus -bundle.
-      // 1 render + imposeBooklet (coverPages: 0 — toda la página es body).
+      // Flujo legacy: booklet / answer-key / answer-key-bundle — sí se
+      // imponen como cuadernillo saddle-stitch sobre pliego doble carta.
       const linear = await renderLinearPdf(url);
       log.info({ jobId: job.id, linearBytes: linear.length }, "PDF lineal generado");
       out = await imposeBooklet(linear, { coverPages: 0 });

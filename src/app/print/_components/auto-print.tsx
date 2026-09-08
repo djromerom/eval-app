@@ -5,13 +5,19 @@ import { useEffect } from "react";
 /**
  * Auto-imprime la página cuando la URL lleva `?autoprint=1`.
  *
- * Usado por el botón "Descargar PDF" del answer-sheets student picker (sep
- * 2026): en lugar de descargar un HTML con extensión `.pdf` (que el visor
- * PDF del navegador no puede parsear → "Failed to load PDF document"),
- * abrimos la ruta /print en una ventana popup y disparamos `window.print()`
- * desde DENTRO de la propia popup. El diálogo del navegador ofrece
- * "Guardar como PDF" como destino, así el docente obtiene un PDF real sin
- * pasar por la cola asíncrona del worker PDF (puppeteer+BullMQ).
+ * Usado por:
+ * - el botón "Descargar PDF" del answer-sheets student picker (sep 2026)
+ *   para los bundles: en lugar de descargar un HTML con extensión `.pdf`
+ *   (que el visor PDF del navegador no puede parsear → "Failed to load PDF
+ *   document"), abrimos la ruta /print en una ventana popup y disparamos
+ *   `window.print()` desde DENTRO de la propia popup. El diálogo del
+ *   navegador ofrece "Guardar como PDF" como destino, así el docente
+ *   obtiene un PDF real sin pasar por la cola asíncrona del worker PDF
+ *   (puppeteer+BullMQ).
+ * - el botón "Generar hojas de respuestas" del teacher dashboard (sep
+ *   2026): la server action redirige a /print/bulk-answer-sheets con
+ *   `&autoprint=1` y esta misma página abre el diálogo de impresión al
+ *   cargar, sin paso manual de "ir al HTML y pulsar Imprimir".
  *
  * Por qué se llama desde dentro y no desde la opener: Chrome bloquea
  * `popup.print()` invocado desde la ventana padre por políticas anti-popup

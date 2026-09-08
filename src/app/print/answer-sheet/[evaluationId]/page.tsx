@@ -17,14 +17,26 @@ export const metadata: Metadata = { title: "Hoja de respuestas" };
  *  restantes en blanco. Ver evaluations/domain/evaluation.ts. */
 const KEYS = ANSWER_KEYS_ORDER;
 
-/** Reparte las preguntas en 3 columnas verticales (estilo PDF institucional
- *  María Doraliza). Si sobran preguntas, la tercera columna las absorbe;
- *  con 110 preguntas: 37 / 37 / 36 — la distribución exacta no importa
- *  mientras las preguntas fluyan en orden 1..N a través de las columnas. */
+/** Reparte en 1–3 columnas (sep 2026). Regla del docente:
+ *  - chunks de 40 preguntas por columna (no equitativo)
+ *  - máximo 3 columnas
+ *  - la última columna absorbe el resto (puede tener < 40 si no se llega,
+ *    o > 40 si se supera el cap de 3 × 40 = 120)
+ *
+ *  Antes: siempre 3 columnas equitativas (`Math.ceil(N/3)` cada una).
+ *  Estilo PDF institucional María Doraliza: las preguntas fluyen en orden
+ *  1..N a través de las columnas. */
 function splitIntoColumns<T>(items: T[]): T[][] {
-  if (items.length === 0) return [[], [], []];
-  const perCol = Math.ceil(items.length / 3);
-  return [items.slice(0, perCol), items.slice(perCol, perCol * 2), items.slice(perCol * 2)];
+  if (items.length === 0) return [[]];
+  const CHUNK = 40;
+  const MAX_COLS = 3;
+  const cols: T[][] = [];
+  for (let i = 0; i < MAX_COLS && i * CHUNK < items.length; i++) {
+    const isLastSlot = i === MAX_COLS - 1 || (i + 1) * CHUNK >= items.length;
+    const end = isLastSlot ? items.length : (i + 1) * CHUNK;
+    cols.push(items.slice(i * CHUNK, end));
+  }
+  return cols;
 }
 
 interface Props {
@@ -89,8 +101,12 @@ export default async function AnswerSheetPage({ params }: Props) {
             </div>
           </div>
 
-          {/* 3 columnas de burbujas (estilo PDF institucional) */}
-          <div className="as-grid">
+          {/* 1–3 columnas de burbujas según `splitIntoColumns` (sep 2026).
+              Estilo PDF institucional María Doraliza. */}
+          <div
+            className="as-grid"
+            style={{ gridTemplateColumns: `repeat(${columns.length}, 1fr)` }}
+          >
             {columns.map((col, colIdx) => (
               <div key={colIdx} className="as-col">
                 {col.map((q) => (

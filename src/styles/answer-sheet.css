@@ -8,7 +8,11 @@
 
 .as-header {
   text-align: center;
-  margin-bottom: 0.8rem;
+  /* sep 2026 — margen inferior más generoso (1.5rem) para que el QR,
+   * los campos del estudiante y el grid de burbujas empiecen más abajo
+   * y respiren del header institucional. Antes 0.8rem quedaba muy
+   * pegado al título del cuadernillo. */
+  margin-bottom: 1.5rem;
 }
 
 .as-institution {
@@ -98,16 +102,27 @@
 
 .as-col-row {
   display: grid;
-  grid-template-columns: 1.5rem repeat(8, 1fr);
+  /* sep 2026 — columnas de ancho FIJO (5.5mm = tamaño exacto de la
+   * burbuja, sin auto-stretch con `1fr`) + `align-self: flex-start`
+   * para que la fila no se estire al ancho del contenedor flex.
+   * Antes la regla `1fr` hacía que las 8 celdas se repartieran el
+   * ancho disponible y las burbujas quedaran visualmente más
+   * separadas; ahora cada celda mide lo que mide la burbuja y la
+   * separación entre ellas es solo el `column-gap` (0.25rem). */
+  grid-template-columns: 1.5rem repeat(8, 5.5mm);
   align-items: center;
   padding: 0.12rem 0;
+  column-gap: 0.25rem;
+  align-self: flex-start;
 }
 
 .as-col-num {
   font-size: 8pt;
   color: #555;
   text-align: right;
-  padding-right: 0.25rem;
+  /* sep 2026 — sprint "separar burbujas y números": más aire entre el
+   * número y la primera burbuja (0.75rem ≈ 12px). */
+  padding-right: 0.75rem;
 }
 
 .as-col-bubble {
@@ -151,8 +166,18 @@
 }
 
 @media screen {
+  /* sep 2026 — Igualar la vista HTML al tamaño carta del @page (print.css
+   * línea 27: `size: letter portrait`). 8.5in × 11in con aspect-ratio
+   * para escalar en pantallas chicas. Mismo patrón que `.sheet.cover` en
+   * print.css. */
   .answer-sheet-content {
-    width: 100%;
-    max-width: 900px;
+    width: 8.5in;
+    max-width: 100%;
+    min-height: 11in;
+    aspect-ratio: 8.5 / 11;
+    background: #fff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    padding: 0.5in;
+    box-sizing: border-box;
   }
 }

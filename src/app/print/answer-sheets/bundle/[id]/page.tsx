@@ -12,7 +12,7 @@ import {
   generateQrDataUrl,
 } from "@/modules/printing/infrastructure/qr-generator";
 import { normalizeStudentIds } from "../../../_lib/search-params";
-import { AutoPrint } from "./_components/auto-print";
+import { AutoPrint } from "@/app/print/_components/auto-print";
 
 export const metadata: Metadata = { title: "Hojas de respuestas del cuadernillo" };
 
@@ -26,13 +26,29 @@ const dateFmtShort = new Intl.DateTimeFormat("es-CO", {
   year: "numeric",
 });
 
-/** Reparte en 3 columnas. La hoja unificada del bundle trata TODAS las
- *  preguntas como una sola lista plana, ignorando secciones y formulaciones:
- *  la numeración va 1..N de corrido de izquierda a derecha y de arriba abajo. */
+/** Reparte en 1–3 columnas (sep 2026). Regla del docente:
+ *  - chunks de 40 preguntas por columna (no equitativo)
+ *  - máximo 3 columnas
+ *  - la última columna absorbe el resto
+ *
+ *  Antes: siempre 3 columnas equitativas (`Math.ceil(N/3)` cada una).
+ *
+ *  La hoja unificada del bundle trata TODAS las preguntas como una sola
+ *  lista plana, ignorando secciones y formulaciones: la numeración va
+ *  1..N de corrido de izquierda a derecha y de arriba abajo. */
 function splitIntoColumns<T>(items: T[]): T[][] {
-  if (items.length === 0) return [[], [], []];
-  const perCol = Math.ceil(items.length / 3);
-  return [items.slice(0, perCol), items.slice(perCol, perCol * 2), items.slice(perCol * 2)];
+  if (items.length === 0) return [[]];
+  const CHUNK = 40;
+  const MAX_COLS = 3;
+  const cols: T[][] = [];
+  for (let i = 0; i < MAX_COLS && i * CHUNK < items.length; i++) {
+    // Última iteración posible (cap 3) o última con datos: absorbe todo
+    // el resto en lugar de cortar exactamente en CHUNK.
+    const isLastSlot = i === MAX_COLS - 1 || (i + 1) * CHUNK >= items.length;
+    const end = isLastSlot ? items.length : (i + 1) * CHUNK;
+    cols.push(items.slice(i * CHUNK, end));
+  }
+  return cols;
 }
 
 interface BundleQuestionRow {
@@ -161,7 +177,7 @@ export default async function BundleAnswerSheetsPage({
         </span>
       </div>
 
-      {sheets.map(({ student, qrDataUrl }, idx) => (
+      {sheets.map(({ student, qrDataUrl }) => (
         <section key={student.id} className="sheet answer-sheet-content">
           <div className="as-header">
             <div className="as-institution">{institutionName}</div>
@@ -223,7 +239,10 @@ export default async function BundleAnswerSheetsPage({
 
             {/* Grid de burbujas (3 columnas, estilo PDF institucional).
                 Numeración 1..N plana — sin separadores por sección/formulación. */}
-            <div className="as-grid">
+            <div
+              className="as-grid"
+              style={{ gridTemplateColumns: `repeat(${columns.length}, 1fr)` }}
+            >
               {columns.map((col, colIdx) => (
                 <div key={colIdx} className="as-col">
                   {col.map((q) => (
@@ -246,10 +265,6 @@ export default async function BundleAnswerSheetsPage({
                 </div>
               ))}
             </div>
-          </div>
-
-          <div className="as-footer">
-            Hoja {idx + 1} de {sheets.length} · Cuadernillo {bundle.name}
           </div>
         </section>
       ))}
