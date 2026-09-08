@@ -59,13 +59,16 @@ export default async function BundleAnswerSheetsPage({
     );
   }
 
-  // Filtramos por el grado (courseId) del cuadernillo. Course nullable
-  // significa "varios grados" → en ese caso no filtramos y mostramos todos.
+  // Filtramos por el grado (courseId) y el tipo de cuadernillo (bookletTypeId)
+  // del cuadernillo. Ambos nullable: si alguno viene null NO filtramos por
+  // ese eje (courseId null = "varios grados", bookletTypeId null = sin
+  // tipo asignado al bundle).
   const students = await prisma.student.findMany({
     where: {
       institutionId: actor.institutionId,
       isActive: true,
       ...(bundle.courseId ? { group: { courseId: bundle.courseId } } : {}),
+      ...(bundle.bookletTypeId ? { bookletTypeId: bundle.bookletTypeId } : {}),
     },
     orderBy: [
       { lastName1: "asc" },
@@ -84,16 +87,17 @@ export default async function BundleAnswerSheetsPage({
     },
   });
 
+  // Texto del PageHeader según la combinación de filtros activos (espejo
+  // de la lógica del where de arriba). Si ninguno está set, mensaje neutro.
+  const filterParts: string[] = [];
+  if (bundle.courseId) filterParts.push("grado");
+  if (bundle.bookletTypeId) filterParts.push("tipo de cuadernillo");
+  const filterPhrase = filterParts.length > 0 ? ` del ${filterParts.join(" y ")}` : "";
+  const description = `Selecciona los estudiantes${filterPhrase} a los que se les imprimirá la hoja de respuestas unificada${filterParts.length > 0 ? "" : " del cuadernillo"}. Cada hoja incluye un QR firmado con el id del cuadernillo (no de la formulación).`;
+
   return (
     <>
-      <PageHeader
-        title={`Hojas de respuesta — ${bundle.name}`}
-        description={
-          bundle.courseId
-            ? "Selecciona los estudiantes del grado del cuadernillo a los que se les imprimirá la hoja de respuestas unificada. Cada hoja incluye un QR firmado con el id del cuadernillo (no de la formulación)."
-            : "Selecciona los estudiantes a los que se les imprimirá la hoja de respuestas unificada del cuadernillo. Cada hoja incluye un QR firmado con el id del cuadernillo (no de la formulación)."
-        }
-      />
+      <PageHeader title={`Hojas de respuesta — ${bundle.name}`} description={description} />
 
       <AnswerSheetsStudentPicker
         bundleId={bundle.id}
