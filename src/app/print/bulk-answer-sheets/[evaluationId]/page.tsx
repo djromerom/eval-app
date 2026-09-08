@@ -53,6 +53,11 @@ export default async function BulkAnswerSheetsPage({ params, searchParams }: Pro
     ids.length > 0
       ? await prisma.student.findMany({
           where: { id: { in: ids }, institutionId: actor.institutionId },
+          // Grupo + curso del grupo: la hoja bulk muestra
+          // "Grado: {course} - {group}" (sep 2026).
+          include: {
+            group: { include: { course: { select: { name: true } } } },
+          },
         })
       : [];
 
@@ -106,6 +111,17 @@ export default async function BulkAnswerSheetsPage({ params, searchParams }: Pro
                       .trim()}
                   </span>
                 </div>
+                {/* Grado + Grupo concatenados (sep 2026). Si el estudiante no
+                    tiene grupo asignado o el grupo no tiene curso, se omite
+                    la línea entera en vez de mostrar un campo a medias. */}
+                {student.group?.course?.name && student.group.name ? (
+                  <div className="as-field">
+                    <span>Grado:</span>
+                    <span className="as-line-filled">
+                      {`${student.group.course.name} - ${student.group.name}`}
+                    </span>
+                  </div>
+                ) : null}
                 <div className="as-field">
                   <span>Código:</span>
                   <span className="as-line-filled">{student.code}</span>
