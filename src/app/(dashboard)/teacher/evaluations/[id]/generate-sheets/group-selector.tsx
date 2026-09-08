@@ -9,7 +9,7 @@ interface Student {
   code: string;
 }
 
-interface GroupData {
+export interface GroupData {
   group: { id: string; name: string };
   students: Student[];
 }

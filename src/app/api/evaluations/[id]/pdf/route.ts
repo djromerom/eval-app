@@ -33,6 +33,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
   const kind = kindParam as (typeof KINDS)[number];
 
+  // sep 2026 — sprint "descargar de una": `students=<csv>` filtra la hoja
+  // de respuestas a los IDs dados (solo aplica a `kind=answer-sheets`,
+  // que se renderiza desde /print/bulk-answer-sheets y ya sabe filtrar).
+  // Se pasa al worker como `extraQuery` para que Puppeteer lo concatene a
+  // la URL (ver `pdf.worker.ts:159`). Sin `students`, el worker genera
+  // hojas para todos los estudiantes activos de la institución.
+  const studentsParam = new URL(request.url).searchParams.get("students");
+  const extraQuery =
+    kind === "answer-sheets" && studentsParam && studentsParam.length > 0
+      ? `students=${encodeURIComponent(studentsParam)}`
+      : undefined;
+
   // Verifica que la formulación exista y pertenezca a la institución del actor.
   const evalRes = await makeGetEvaluation().execute({ actor, id });
   if (!evalRes.ok) {
@@ -65,6 +77,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       institutionId: actor.institutionId,
       kind,
       pageHeader,
+      ...(extraQuery ? { extraQuery } : {}),
     } satisfies PdfGenerationJob,
     { removeOnComplete: true, removeOnFail: 50 },
   );

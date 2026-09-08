@@ -2,7 +2,6 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +32,8 @@ export function AnswerSheetsStudentPicker({
   students: PickerStudent[];
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const allSelected = students.length > 0 && selected.size === students.length;
   const noneSelected = selected.size === 0;
@@ -56,66 +56,50 @@ export function AnswerSheetsStudentPicker({
     }
   }
 
-  /** Sprint PDF download (sep 2026): el botón ahora abre la ruta
-   *  `/print/answer-sheets/bundle/${id}?autoprint=1&students=...` en una
-   *  ventana popup. La propia página de impresión trae un componente cliente
-   *  (`AutoPrint`) que detecta `?autoprint=1` y dispara `window.print()`
-   *  desde DENTRO de la popup. El diálogo del navegador ofrece "Guardar
-   *  como PDF" como destino, así el docente obtiene un PDF real sin pasar
-   *  por la cola asíncrona del worker PDF (puppeteer+BullMQ). Tras guardar
-   *  y cerrar el diálogo, el admin cierra la popup manualmente y
-   *  `router.back()` le devuelve al cuadernillo.
+  /** Sprint PDF download (sep 2026): el botón hace fetch directo a
+   *  `/api/bundles/${id}/answer-sheets/pdf?students=<csv>` y descarga el
+   *  blob como `${id}-answer-sheets-bundle.pdf`. Sin diálogo de impresión,
+   *  sin HTML intermedio, sin popup.
    *
-   *  Por qué `?autoprint=1` desde dentro y no `popup.print()` desde el
-   *  padre: Chrome bloquea `popup.print()` invocado desde la opener por
-   *  políticas anti-popup. Solo permite `print()` cuando lo llama la propia
-   *  popup en respuesta al gesto del usuario.
-   *
-   *  Por qué no descargar el HTML como `.pdf` directamente: el browser
-   *  intenta parsearlo como PDF y falla ("Failed to load PDF document")
-   *  porque el contenido es HTML imprimible, no un PDF generado. */
-  function handleDownload(e: FormEvent<HTMLFormElement>) {
+   *  Antes (sep 2026 sprint "imprimir de una vez"): abría la ruta /print
+   *  en popup con `?autoprint=1` y dejaba que el `AutoPrint` de la página
+   *  disparara `window.print()`. El admin tenía que pulsar "Guardar como
+   *  PDF" en el diálogo del navegador. Ahora: descarga directa. */
+  async function handleDownload(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (noneSelected) return;
+    if (noneSelected || loading) return;
+    setError(null);
 
-    const params = new URLSearchParams();
-    for (const id of selected) params.append("students", id);
-    params.set("autoprint", "1");
-    const url = `/print/answer-sheets/bundle/${bundleId}?${params.toString()}`;
+    const studentsParam = Array.from(selected).join(",");
+    const url = `/api/bundles/${bundleId}/answer-sheets/pdf?students=${encodeURIComponent(
+      studentsParam,
+    )}`;
 
-    const popup = window.open(url, "_blank", "noopener,noreferrer");
-    if (!popup) {
-      // Popup bloqueado por el navegador → fallback: abrimos en la misma
-      // pestaña para que el admin pueda disparar Ctrl/Cmd+P manualmente.
-      window.location.href = url;
-      return;
-    }
-
-    // Cuando la popup se cierre (después de guardar el PDF y cerrarla),
-    // volvemos al cuadernillo del que vinimos.
-    const timer = setInterval(() => {
-      if (popup.closed) {
-        clearInterval(timer);
-        router.back();
+    setLoading(true);
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? "No se pudo generar el PDF.");
       }
-    }, 500);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = `${bundleId}-answer-sheets-bundle.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <form
-      // Sin `action` ni `target` — el submit se intercepta en `handleDownload`
-      // para disparar la descarga vía anchor programático + `router.back()`.
-      onSubmit={handleDownload}
-      className="bg-card space-y-4 rounded-xl border p-6"
-    >
-      <input type="hidden" name="t" value="" disabled />
-      {/* El token HMAC no se puede pre-firmar desde el cliente (secreto en
-          servidor); el flujo real es via API+worker. Este form queda como
-          fallback para previsualización rápida: */}
-      <p className="text-muted-foreground text-xs">
-        Previsualiza o imprime directamente desde el navegador (sin pasar por el worker PDF).
-      </p>
-
+    <form onSubmit={handleDownload} className="bg-card space-y-4 rounded-xl border p-6">
       {students.length > 0 ? (
         <div className="flex items-center justify-between gap-2">
           <span className="text-muted-foreground text-xs">
@@ -172,6 +156,12 @@ export function AnswerSheetsStudentPicker({
         )}
       </ul>
 
+      {error ? (
+        <p className="text-destructive text-sm" role="alert">
+          {error}
+        </p>
+      ) : null}
+
       <div className="flex items-center justify-between gap-2">
         <Link
           href={`/admin/bundles/${bundleId}`}
@@ -182,9 +172,9 @@ export function AnswerSheetsStudentPicker({
         <button
           type="submit"
           className={cn(buttonVariants({ size: "sm" }))}
-          disabled={noneSelected}
+          disabled={noneSelected || loading}
         >
-          Descargar PDF
+          {loading ? "Generando PDF…" : "Descargar PDF"}
         </button>
       </div>
     </form>
