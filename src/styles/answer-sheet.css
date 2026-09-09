@@ -1,5 +1,9 @@
 /* Hoja de respuestas OMR — burbujas, QR (§11) */
 
+/* (sep 2026) La hoja de respuestas NO lleva número de página al pie:
+ * El paginado al pie ya no se resetea acá: `print.css` dejo de traerlo.
+ * Vive en `print-page-number.css`, que estas rutas no importan. */
+
 .answer-sheet-content {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 10pt;

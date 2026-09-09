@@ -17,30 +17,18 @@
    * "Descargar PDF", que produce un PDF server-side (Puppeteer + pdf-lib)
    * listo para llevar a imprenta.
    *
-   * Paginado centrado al pie: número encerrado en un círculo (border +
-   * border-radius: 50%). El soporte real del círculo depende del motor
-   * de impresión: Chrome ignora `border-radius` en @page margin boxes
-   * (sale un cuadrado con borde en su lugar). Si más adelante migramos a
-   * un motor que sí respete el círculo real (Prince, PDFreactor), basta
-   * el mismo CSS.
+   * El paginado al pie NO vive acá: está en `print-page-number.css`, que
+   * importan solo las rutas que deben numerar (cuadernillo y evaluación).
+   * Estaba en este @page, que importan las ocho rutas /print/*, y por eso
+   * salía también en las hojas de respuestas — donde además el círculo
+   * negro tiene el tamaño y el color de una burbuja marcada, a centímetros
+   * de la rejilla que lee el OMR. Los resets que intentaban taparlo desde
+   * las rutas perdían el cascade: React hoistea los <style> al <head> y el
+   * reset terminaba ANTES de este archivo (medido con Chromium: el reset
+   * solo gana si va después).
    */
   size: letter portrait;
   margin: 1.5cm 2cm;
-  @bottom-center {
-    content: counter(page);
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 10pt;
-    font-weight: 700;
-    color: #fff;
-    background: #000;
-    border-radius: 50%;
-    display: inline-block;
-    width: 24pt;
-    height: 24pt;
-    line-height: 22pt;
-    text-align: center;
-    vertical-align: middle;
-  }
 }
 
 /* ===== Contenedor y hoja (tipografía común) =====
