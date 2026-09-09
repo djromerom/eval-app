@@ -106,14 +106,19 @@
 
 .as-col-row {
   display: grid;
-  /* sep 2026 — columnas de ancho FIJO (5.5mm = tamaño exacto de la
+  /* sep 2026 — columnas de ancho FIJO (4.5mm = tamaño exacto de la
    * burbuja, sin auto-stretch con `1fr`) + `align-self: flex-start`
    * para que la fila no se estire al ancho del contenedor flex.
    * Antes la regla `1fr` hacía que las 8 celdas se repartieran el
    * ancho disponible y las burbujas quedaran visualmente más
    * separadas; ahora cada celda mide lo que mide la burbuja y la
-   * separación entre ellas es solo el `column-gap` (0.25rem). */
-  grid-template-columns: 1.5rem repeat(8, 5.5mm);
+   * separación entre ellas es solo el `column-gap` (0.25rem).
+   *
+   * 4.5mm (era 5.5mm): la versión de 5.5mm desbordaba la hoja carta
+   * cuando había 1 o 2 columnas — 40 preguntas × ~6mm de fila =
+   * ~245mm, justo en el borde. A 4.5mm caben ~55 preguntas por
+   * columna con holgura. */
+  grid-template-columns: 1.5rem repeat(8, 4.5mm);
   align-items: center;
   padding: 0.12rem 0;
   column-gap: 0.25rem;
@@ -137,10 +142,11 @@
 
 .as-col-bubble .omr-bubble {
   /* Burbuja con la letra de la opción centrada dentro — estilo del PDF
-   * institucional. Tamaño pensado para que 8 burbujas quepan en el ancho
-   * de una columna con la letra legible (≥ 6pt). */
-  width: 5.5mm;
-  height: 5.5mm;
+   * institucional. 4.5mm (era 5.5mm, sep 2026) para que 1 o 2 columnas
+   * quepan en una hoja carta sin desbordar; la letra 7pt sigue legible
+   * dentro del área de contenido 3.9mm. */
+  width: 4.5mm;
+  height: 4.5mm;
   border: 0.3mm solid #000;
   border-radius: 50%;
   display: flex;
