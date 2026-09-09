@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import type { Metadata } from "next";
 import "@/styles/print.css";
+import "@/styles/print-page-number.css";
 import { notFound } from "next/navigation";
 import { resolvePrintActor } from "@/lib/print-access";
 import { isPrintable } from "@/modules/evaluations/domain/evaluation-status";
@@ -149,7 +150,7 @@ export default async function PrintEvaluationPage({
                   <ul className="questions-list" data-density={density}>
                     {sectionsInGroup.flatMap((s) =>
                       s.questions.map((q) => (
-                        <div key={q.id} className={`question${isWideQuestion(q) ? " wide" : ""}`}>
+                        <div key={q.id} className={`question${isWideQuestion(q) ? "wide" : ""}`}>
                           <p className="question-text">
                             <span className="item-number">{q.number}.</span>{" "}
                             <RichTextInline value={q.text} />
