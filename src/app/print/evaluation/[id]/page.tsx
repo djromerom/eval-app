@@ -150,7 +150,7 @@ export default async function PrintEvaluationPage({
                   <ul className="questions-list" data-density={density}>
                     {sectionsInGroup.flatMap((s) =>
                       s.questions.map((q) => (
-                        <div key={q.id} className={`question${isWideQuestion(q) ? "wide" : ""}`}>
+                        <div key={q.id} className={`question${isWideQuestion(q) ? " wide" : ""}`}>
                           <p className="question-text">
                             <span className="item-number">{q.number}.</span>{" "}
                             <RichTextInline value={q.text} />
