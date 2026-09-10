@@ -11,7 +11,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from omr_reader import analyze_sheet, read_qr
+from omr_reader import analyze_sheet, check_structure, read_qr
 
 
 def build_sheet_data(data: bytes, suffix: str = ".jpg",
@@ -69,6 +69,11 @@ def build_sheet_data(data: bytes, suffix: str = ".jpg",
         "qr": qr,
         "aviso": thr_warn,
         "rotacion": rotation,
+        # Verificacion estructural (huecos entre filas, bloques desparejos).
+        # Es la red contra la falla silenciosa: una fila no leida corre la
+        # numeracion y produce una lectura completa y verosimil pero mal
+        # asignada. Lista vacia = la estructura cierra.
+        "estructura": check_structure(questions),
     }
 
 

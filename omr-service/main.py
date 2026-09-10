@@ -17,9 +17,16 @@ Arranque (solo loopback, nunca expuesto públicamente):
 
 El contrato de `/analyze` es exactamente el que produce `build_sheet_data`:
     { "thr": float, "questions": [ { "n": int, "ans": str,
-        "fills": [ {"l": str, "f": float, "m": bool}, ... ],
-        "crop": "<base64 jpeg>" }, ... ] }
+        "fills": [ {"l": str, "f": float, "m": bool,
+                    "x": int, "y": int, "r": int}, ... ],
+        "crop": "<base64 jpeg>" }, ... ],
+      "student": str, "sheet": str, "qr": dict|null,
+      "aviso": str, "rotacion": int, "estructura": [str, ...] }
 donde `ans` ∈ { "A".."H", "BLANCO", "MULTIPLE:XY" }.
+
+`estructura` no vacía significa que la lectura NO es de fiar aunque traiga el
+número de preguntas correcto: hay filas no leídas y la numeración está corrida.
+Vale la pena que el lado TS la mire y mande la hoja a REVIEW.
 
 `/qr` es un endpoint aparte, mucho más barato (solo decodifica el QR, sin
 detección de burbujas): lo usa el lado TS como fallback cuando su propio

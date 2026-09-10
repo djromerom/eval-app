@@ -477,7 +477,7 @@ export default async function PrintBundlePage({
                             s.questions.map((q) => (
                               <div
                                 key={q.id}
-                                className={`question${isWideQuestion(q) ? "wide" : ""}`}
+                                className={`question${isWideQuestion(q) ? " wide" : ""}`}
                               >
                                 <p className="question-text">
                                   <span className="item-number">
