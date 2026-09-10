@@ -23,7 +23,7 @@ import argparse
 import json
 import sys
 
-VERSION = "9"          # subir al cambiar el motor: invalida cachés aguas arriba
+VERSION = "11"         # subir al cambiar el motor: invalida cachés aguas arriba
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -120,7 +120,8 @@ def _ink_density(gray: np.ndarray, r_ref: float) -> np.ndarray:
     return cv2.blur((binimg > 0).astype(np.float32), (win, win))
 
 
-def dense_graphic_mask(gray: np.ndarray, r_ref: float) -> np.ndarray:
+def dense_graphic_mask(gray: np.ndarray, r_ref: float,
+                       margin: float = 3.0) -> np.ndarray:
     """
     Máscara de las zonas que NO son rejilla de respuestas: gráficos densos
     (QR, códigos de barras, logos).
@@ -133,12 +134,22 @@ def dense_graphic_mask(gray: np.ndarray, r_ref: float) -> np.ndarray:
     La rejilla de óvalos deja mucho papel entre burbujas (densidad <= 0.40
     incluso con todas marcadas); el interior de un QR ronda 0.5-0.7.
     """
-    return ((_ink_density(gray, r_ref) > 0.45).astype(np.uint8)) * 255
+    mask = ((_ink_density(gray, r_ref) > 0.45).astype(np.uint8)) * 255
+    if margin > 0:
+        # La densidad cae por debajo del umbral en el BORDE del bloque, justo
+        # donde el patrón de búsqueda del QR deja blobs que Hough lee como
+        # burbujas. Sin margen quedaban candidatos pegados al QR, y con una
+        # sola detección espuria a media altura entre dos filas basta para
+        # fusionarlas y perder ítems.
+        k = max(3, int(r_ref * margin) | 1)
+        mask = cv2.dilate(mask, np.ones((k, k), np.uint8))
+    return mask
 
 
 def dense_regions(gray: np.ndarray, r_ref: float, min_side: float = 4.0):
     """Bounding boxes (x, y, w, h) de los bloques de gráfico denso."""
-    mask = dense_graphic_mask(gray, r_ref)
+    # sin margen: aquí interesa el contorno real del bloque, para recortarlo
+    mask = dense_graphic_mask(gray, r_ref, margin=0.0)
     n, _, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
     out = []
     for i in range(1, n):
@@ -522,6 +533,96 @@ def cluster_1d(values, tol):
     return groups
 
 
+def cluster_rows(values, tol, max_span):
+    """
+    Como `cluster_1d`, pero parte los grupos demasiado anchos.
+
+    `cluster_1d` es de enlace simple: compara cada valor con el anterior, así
+    que una cadena de saltos pequeños fusiona valores arbitrariamente lejanos.
+    Con una sola detección espuria a media altura entre dos filas, las dos
+    filas se vuelven una sola pregunta, se pierden ítems y la numeración se
+    corre de ahí en adelante. `max_span` acota cuánto puede medir una fila; lo
+    que se pasa se reparte por cercanía al centro de cada subfila.
+    """
+    groups = cluster_1d(values, tol)
+    if not max_span:
+        return groups
+    out = []
+    for g in groups:
+        vs = sorted(g, key=lambda i: values[i])
+        span = values[vs[-1]] - values[vs[0]]
+        if span <= max_span:
+            out.append(g)
+            continue
+        n = max(2, int(round(span / max_span)) + 1)
+        centers = np.linspace(values[vs[0]], values[vs[-1]], n)
+        buckets = [[] for _ in range(n)]
+        for i in g:
+            buckets[int(np.argmin(np.abs(centers - values[i])))].append(i)
+        out.extend([b for b in buckets if b])
+    return out
+
+
+def check_structure(questions: list, expected: int = 0) -> list:
+    """
+    Verificación estructural de la lectura. Devuelve una lista de avisos.
+
+    Es la red que faltaba: cuando se pierde una fila (una detección espuria que
+    fusiona dos filas, un óvalo que no se detecta), el resultado sale completo y
+    verosímil pero con la numeración corrida — y hasta ahora nada lo decía. El
+    conteo de ítems por sí solo no basta: se han visto lecturas con el número
+    correcto de preguntas y 13 burbujas de menos.
+
+    Tres comprobaciones, todas internas a la hoja:
+
+      1. `expected`, si se conoce (por plantilla o por `--esperadas`).
+      2. Huecos dentro de cada bloque: se mide el paso entre filas en el
+         bloque mismo (mediana de las diferencias entre filas contiguas) y se
+         busca cualquier salto de ~2 pasos o más, que es una fila no leída.
+         Medir el paso por bloque y no en toda la hoja es deliberado: un 2.5 %
+         de error en un paso global, a lo largo de 39 filas, inventa una fila
+         fantasma y produce falsos positivos.
+      3. Bloques con distinta cantidad de filas: solo el último puede tener
+         menos.
+    """
+    avisos = []
+    if not questions:
+        return ["no se detectó ninguna pregunta"]
+
+    if expected and len(questions) != expected:
+        avisos.append("se esperaban %d preguntas y se leyeron %d: la numeración "
+                      "no es de fiar" % (expected, len(questions)))
+
+    # agrupar por bloque según la x de la primera burbuja
+    r_med = float(np.median([b.r for q in questions for b in q.bubbles]))
+    xs = np.array([q.bubbles[0].x for q in questions])
+    blocks = cluster_1d(xs, tol=r_med * 6)
+
+    counts = []
+    for g in sorted(blocks, key=lambda g: float(np.mean([xs[i] for i in g]))):
+        ys = sorted(float(np.mean([b.y for b in questions[i].bubbles])) for i in g)
+        counts.append(len(g))
+        if len(ys) < 3:
+            continue
+        # Huecos dentro del bloque: el paso se mide en el bloque mismo, así que
+        # no depende de estimarlo bien a lo largo de toda la hoja. Un salto de
+        # ~2 pasos entre filas contiguas es una fila que no se leyó.
+        diffs = [b - a for a, b in zip(ys, ys[1:])]
+        pitch = float(np.median(diffs))
+        faltan = sum(int(round(d / pitch)) - 1 for d in diffs
+                     if round(d / pitch) >= 2)
+        if faltan:
+            avisos.append("bloque en x~%d: falta(n) %d fila(s) entre filas "
+                          "contiguas; la numeración a partir de ahí queda "
+                          "corrida" % (int(np.mean([xs[i] for i in g])), faltan))
+
+    if len(counts) > 2 and len(set(counts[:-1])) > 1:
+        avisos.append("los bloques no tienen la misma cantidad de filas (%s): "
+                      "solo el último debería tener menos"
+                      % ", ".join(str(c) for c in counts))
+    return avisos
+
+
 def build_questions(bubbles: list, letters: str) -> list:
     if not bubbles:
         return []
@@ -563,7 +664,7 @@ def build_questions(bubbles: list, letters: str) -> list:
 
     # --- filas: clustering por Y (con burbujas ya depuradas) ---
     ys = np.array([b.y for b in bubbles])
-    row_groups = cluster_1d(ys, tol=r_med * 1.2)
+    row_groups = cluster_rows(ys, tol=r_med * 1.2, max_span=r_med * 1.1)
     split_gap = gap_opt * 1.5                    # gap mayor => nueva pregunta
 
     # --- dentro de cada fila, separar en preguntas por gaps en X ---
@@ -772,7 +873,8 @@ def analyze_sheet(path: str, letters: str = "ABCDEFGH"):
     return gray, questions, thr, qr, thr_warn, rotation
 
 
-def process_sheet(path: str, letters: str = "ABCDEFGH", debug_path: str = None) -> dict:
+def process_sheet(path: str, letters: str = "ABCDEFGH", debug_path: str = None,
+                  expected: int = 0) -> dict:
     gray, questions, thr, qr, thr_warn, rotation = analyze_sheet(path, letters)
 
     result = {
@@ -788,6 +890,8 @@ def process_sheet(path: str, letters: str = "ABCDEFGH", debug_path: str = None) 
             if q.warning or q.answer == "BLANCO" or q.answer.startswith("MULTIPLE")
         ],
     }
+    for a in check_structure(questions, expected):
+        result["advertencias"].insert(0, a)
     result["rotacion_aplicada"] = rotation
     if rotation:
         result["advertencias"].insert(0, "hoja girada %d grados al procesar" % rotation)
@@ -822,9 +926,13 @@ def main():
     ap.add_argument("--debug", help="Imagen de depuración con detecciones")
     ap.add_argument("--letters", default="ABCDEFGH",
                     help="Alfabeto de opciones en orden (default ABCDEFGH)")
+    ap.add_argument("--esperadas", type=int, default=0,
+                    help="Nº de preguntas que debe tener la hoja; si no coincide "
+                         "se reporta como advertencia")
     args = ap.parse_args()
 
-    res = process_sheet(args.imagen, letters=args.letters, debug_path=args.debug)
+    res = process_sheet(args.imagen, letters=args.letters, debug_path=args.debug,
+                        expected=args.esperadas)
 
     if args.json:
         with open(args.json, "w", encoding="utf-8") as f:
