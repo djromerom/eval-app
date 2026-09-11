@@ -23,7 +23,7 @@ import argparse
 import json
 import sys
 
-VERSION = "11"         # subir al cambiar el motor: invalida cachés aguas arriba
+VERSION = "12"         # subir al cambiar el motor: invalida cachés aguas arriba
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -716,6 +716,14 @@ def build_questions(bubbles: list, letters: str) -> list:
     # Filtro de filas aisladas: una fila real de la rejilla tiene otra fila a
     # ~1 paso vertical; texto del encabezado alineado por azar queda aislado
     # y con pocas burbujas, y se descarta.
+    #
+    # Sobre una hoja de 50 items, el subtitulo "Estandar Sesion 3 Grado 5"
+    # aportaba tres glifos redondos (la "o" de Sesion, el "3" y la "G") que
+    # sobrevivian como pregunta 1 y corrian la numeracion de las 50 restantes:
+    # una lectura completa y verosimil, con cada respuesta en el item
+    # equivocado. Pasaban porque, tras la recuperacion por rejilla, la fila
+    # llegaba a 3 miembros y el umbral de descarte exigia menos del 60% de una
+    # fila tipica (2.4 sobre 4).
     row_y = sorted({round(float(np.mean([b.y for b in q])) / (r_med * 0.8))
                     * (r_med * 0.8) for q in raw_questions})
     if len(row_y) > 2:
@@ -726,11 +734,26 @@ def build_questions(bubbles: list, letters: str) -> list:
             yq = round(float(np.mean([b.y for b in q])) / (r_med * 0.8)) * (r_med * 0.8)
             counts[yq] = counts.get(yq, 0) + len(q)
         modal_row = float(np.median(list(counts.values())))
+        completas = [oy for oy in row_y if counts[oy] >= modal_row]
         keep_q = []
         for q in raw_questions:
             yq = round(float(np.mean([b.y for b in q])) / (r_med * 0.8)) * (r_med * 0.8)
             near = min((abs(yq - oy) for oy in row_y if oy != yq), default=0)
-            if near > 1.8 * pitch and counts[yq] < modal_row * 0.6:
+            # Tres condiciones, y la tercera es la que evita danos colaterales:
+            #   1. aislada -- ninguna otra fila a menos de 1.8 pasos,
+            #   2. incompleta -- MENOS miembros que una fila tipica (tras la
+            #      recuperacion por rejilla la basura del encabezado llegaba a
+            #      3 contra 4 de una fila real, y pasaba un umbral del 60%),
+            #   3. FUERA del rango vertical de la rejilla. Sin esto se caian
+            #      filas interiores legitimas de hojas a 3 columnas, donde las
+            #      ultimas filas de un bloque tienen menos miembros porque los
+            #      otros bloques ya terminaron (medido: -4 items en dos hojas
+            #      de 110). El encabezado y el pie siempre quedan afuera.
+            # El rango se define con filas COMPLETAS (>= modal), no con el
+            # 60%: la propia fila basura de 3 miembros pasaba el 60% y se
+            # metia en la lista, definiendo ella misma el minimo del rango.
+            fuera = bool(completas) and (yq < min(completas) or yq > max(completas))
+            if fuera and near > 1.8 * pitch and counts[yq] < modal_row:
                 continue
             keep_q.append(q)
         raw_questions = keep_q

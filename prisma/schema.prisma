@@ -296,24 +296,24 @@ model Period {
 }
 
 model Student {
-  id             String      @id @default(uuid(7)) @db.Uuid
+  id             String       @id @default(uuid(7)) @db.Uuid
   // Nombre partido en 4 campos según convención colombiana. APELLIDO1 +
   // NOMBRE1 obligatorios (validados en use case); APELLIDO2 + NOMBRE2
   // opcionales. Docente acepta pérdida de datos de la antigua columna
   // `name` y rellena manualmente.
-  lastName1      String      @default("")
-  lastName2      String      @default("")
-  firstName1     String      @default("")
-  firstName2     String      @default("")
+  lastName1      String       @default("")
+  lastName2      String       @default("")
+  firstName1     String       @default("")
+  firstName2     String       @default("")
   idType         String // T.I., C.C., NUI, R.C.
   idNumber       String
   code           String // código estudiantil único por institución (va en el QR)
-  groupId        String      @db.Uuid
-  group          Group       @relation(fields: [groupId], references: [id])
-  institutionId  String      @db.Uuid
-  institution    Institution @relation(fields: [institutionId], references: [id])
+  groupId        String       @db.Uuid
+  group          Group        @relation(fields: [groupId], references: [id])
+  institutionId  String       @db.Uuid
+  institution    Institution  @relation(fields: [institutionId], references: [id])
   enrollmentYear Int
-  isActive       Boolean     @default(true)
+  isActive       Boolean      @default(true)
   deletedAt      DateTime?
   // Pedido del docente (5 sep 2026): grado como texto libre (ej. "11", "2")
   // para reportes institucionales. NO es FK porque el course ya está implícito
@@ -322,10 +322,10 @@ model Student {
   grade          String?
   // Cuadernillo por defecto del estudiante al armar hojas de respuesta.
   // Nullable para mantener compat con filas existentes.
-  bookletTypeId  String?  @db.Uuid
+  bookletTypeId  String?      @db.Uuid
   bookletType    BookletType? @relation(fields: [bookletTypeId], references: [id], onDelete: SetNull)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   answerSheets AnswerSheet[]
   codeHistory  StudentCodeHistory[]
@@ -774,6 +774,11 @@ model AnswerSheet {
   qrContent           String // contenido completo del QR (JSON)
   qrSignature         String // HMAC-SHA256 para verificar integridad
   scannedImage        String? // ruta de la imagen escaneada original
+  /// Nombre del archivo tal como lo subio el usuario (p. ej. "20260909163256931_0051.tif").
+  /// La subida renombra los archivos a sheet_NNN.ext, asi que sin esto no hay forma
+  /// de rastrear una hoja hasta el archivo que salio del escaner. Null en los lotes
+  /// anteriores a este campo, donde el nombre original ya se habia perdido.
+  originalFilename    String?
   processedImage      String? // ruta de la imagen procesada (binaria, con detecciones)
   scanBatchId         String?           @db.Uuid
   scanBatch           ScanBatch?        @relation(fields: [scanBatchId], references: [id])

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { nombreDeArchivo } from "@/modules/scanning/domain/scan-filename";
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import { getOmrScanQueue } from "@/shared/infrastructure/queue/queues";
@@ -120,6 +121,8 @@ async function createBundleScanBatch(
  *  hoja es de formulación o bundle, y `targetId` se guarda en AnswerSheet
  *  para que el reporte comparativo del cuadernillo pueda drill-dowmear
  *  (student/hoja × item). */
+
+
 async function enqueueSheets(
   actor: Awaited<ReturnType<typeof requireAuthenticatedUser>>,
   batchId: string,
@@ -130,12 +133,16 @@ async function enqueueSheets(
   const queue = getOmrScanQueue();
   const batchDir = `scans/${batchId}`;
 
+  // Nombres ya usados en este lote. El timestamp solo da unicidad si dos
+  // archivos no caen en el mismo milisegundo, y un lote se sube en rafaga: sin
+  // esto dos hojas podrian pisarse en silencio, que es exactamente el modo de
+  // falla que ya nos costo un lote entero de artefactos.
+  const usados = new Set<string>();
+
   for (let i = 0; i < files.length; i++) {
     const file = files[i]!;
     const bytes = Buffer.from(await file.arrayBuffer());
-    const ext = file.name.split(".").pop() ?? "png";
-    const filename = `sheet_${String(i + 1).padStart(3, "0")}.${ext}`;
-    const relativePath = `${batchDir}/${filename}`;
+    const relativePath = `${batchDir}/${nombreDeArchivo(file.name, i, usados)}`;
     await localStorage.save(relativePath, bytes);
 
     const sheet = await prisma.answerSheet.create({
@@ -146,6 +153,11 @@ async function enqueueSheets(
         qrContent: "",
         qrSignature: "",
         scannedImage: relativePath,
+        // El archivo se guarda renombrado a sheet_NNN.ext, asi que sin esto el
+        // nombre que salio del escaner se perderia y no habria forma de
+        // rastrear una hoja hasta su origen. `file.name` puede venir vacio si
+        // el cliente sube un Blob sin nombre: en ese caso se deja null.
+        originalFilename: file.name || null,
         scanBatchId: batchId,
         status: "PENDING",
       },
