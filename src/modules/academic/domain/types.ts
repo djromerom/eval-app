@@ -108,6 +108,12 @@ export interface AcademicYearRepository {
   create(institutionId: string, data: CreateAcademicYearData): Promise<AcademicYear>;
   /** Marca uno como actual y desmarca el resto de la institución. */
   setCurrent(institutionId: string, id: string): Promise<void>;
+  /** Sprint Bundle-Period (sep 2026): devuelve el año académico con
+   *  `isCurrent=true` en la institución, o `null` si ninguno está marcado.
+   *  Usado por `CreateBundle` para resolver el periodo vigente por
+   *  defecto. Una sola año por institución puede tener `isCurrent=true`
+   *  (constraint enforced por `setCurrent`). */
+  findCurrent(institutionId: string): Promise<AcademicYear | null>;
 }
 
 export interface CourseRepository {
@@ -133,6 +139,12 @@ export interface GroupRepository {
 export interface PeriodRepository {
   findAll(institutionId: string, academicYearId?: string): Promise<Period[]>;
   findById(institutionId: string, id: string): Promise<Period | null>;
+  /** Match case-insensitive por nombre dentro de la institución. Usado por
+   *  el import XLSX de estudiantes para resolver la columna PRUEBA del
+   *  archivo. Si hay varias Pruebas con el mismo nombre en distintos años
+   *  académicos, devuelve la primera por `order` asc (determinista, pero
+   *  ambiguo: el docente debería renombrar). */
+  findByName(institutionId: string, name: string): Promise<Period | null>;
   create(institutionId: string, data: CreatePeriodData): Promise<Period>;
   update(institutionId: string, id: string, data: UpdatePeriodData): Promise<Period | null>;
   delete(institutionId: string, id: string): Promise<void>;
@@ -146,6 +158,12 @@ export interface PeriodRepository {
     periodId: string,
     isCurrent: boolean,
   ): Promise<void>;
+  /** Sprint Bundle-Period (sep 2026): devuelve el Period con `isCurrent=true`
+   *  dentro del año académico indicado, o `null` si no hay ninguno marcado.
+   *  Usado por `CreateBundle` para inyectar el default del periodo del
+   *  cuadernillo. Una sola Prueba por año puede tener `isCurrent=true`
+   *  (constraint enforced por `setCurrent`). */
+  findCurrent(institutionId: string, academicYearId: string): Promise<Period | null>;
 }
 
 export interface UpdatePeriodData {

@@ -26,6 +26,9 @@ function item(
     // El curso no participa en el cómputo de la portada; valor fijo.
     courseId: partial.courseId ?? "course-6",
     courseName: partial.courseName ?? "6°",
+    // El tipo de cuadernillo tampoco participa en la portada; valor fijo null.
+    bookletTypeId: null,
+    bookletTypeName: null,
   };
 }
 

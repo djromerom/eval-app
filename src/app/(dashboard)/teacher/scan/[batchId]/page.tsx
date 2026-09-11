@@ -19,7 +19,8 @@ async function readGrid(
   sheetId: string,
 ): Promise<{ thr: number | null; answers: { n: number; ans: string }[] }> {
   try {
-    const buf = await localStorage.read(`scans/${batchId}/sheet_${sheetId.slice(0, 8)}_grid.json`);
+    // Id completo: ver el comentario en process-answer-sheet.ts (persistCells).
+    const buf = await localStorage.read(`scans/${batchId}/sheet_${sheetId}_grid.json`);
     const g = JSON.parse(buf.toString()) as {
       thr: number;
       answers: { n: number; ans: string }[];
@@ -56,6 +57,9 @@ export default async function BatchReviewPage({ params }: Props) {
           score: true,
           totalCorrect: true,
           totalQuestions: true,
+          qrContent: true,
+          scannedImage: true,
+          originalFilename: true,
         },
       },
     },
@@ -77,6 +81,13 @@ export default async function BatchReviewPage({ params }: Props) {
         totalQuestions: s.totalQuestions,
         thr: grid.thr,
         answers: grid.answers,
+        // "" cuando el QR no se pudo leer (la hoja quedo sin identificar).
+        qrContent: s.qrContent || null,
+        // El nombre con el que se subio, si se conoce. Los lotes anteriores a
+        // la columna `originalFilename` caen al nombre ya renombrado
+        // (sheet_NNN.ext), que es lo unico que quedo de ellos.
+        fileName:
+          s.originalFilename ?? (s.scannedImage ? s.scannedImage.split("/").pop()! : null),
       };
     }),
   );

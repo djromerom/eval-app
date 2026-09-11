@@ -113,6 +113,12 @@ export class PrismaAcademicYearRepository implements AcademicYearRepository {
       prisma.academicYear.update({ where: { id }, data: { isCurrent: true } }),
     ]);
   }
+  async findCurrent(institutionId: string): Promise<AcademicYear | null> {
+    const row = await prisma.academicYear.findFirst({
+      where: { institutionId, isCurrent: true },
+    });
+    return row && toYear(row);
+  }
 }
 
 export class PrismaCourseRepository implements CourseRepository {
@@ -223,6 +229,15 @@ export class PrismaPeriodRepository implements PeriodRepository {
     const row = await prisma.period.findFirst({ where: { id, institutionId } });
     return row && toPeriod(row);
   }
+  async findByName(institutionId: string, name: string): Promise<Period | null> {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const row = await prisma.period.findFirst({
+      where: { institutionId, name: { equals: trimmed, mode: "insensitive" } },
+      orderBy: [{ order: "asc" }],
+    });
+    return row && toPeriod(row);
+  }
   async create(institutionId: string, data: CreatePeriodData): Promise<Period> {
     return toPeriod(await prisma.period.create({ data: { institutionId, ...data } }));
   }
@@ -265,5 +280,11 @@ export class PrismaPeriodRepository implements PeriodRepository {
     // Unmark: solo desmarca esta. No tocamos las demás — la marca en el
     // mismo año académico puede quedar en otra Prueba (o en ninguna).
     await prisma.period.update({ where: { id: periodId }, data: { isCurrent: false } });
+  }
+  async findCurrent(institutionId: string, academicYearId: string): Promise<Period | null> {
+    const row = await prisma.period.findFirst({
+      where: { institutionId, academicYearId, isCurrent: true },
+    });
+    return row && toPeriod(row);
   }
 }

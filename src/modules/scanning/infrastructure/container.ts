@@ -4,6 +4,7 @@ import { PrismaEvaluationRepository } from "@/modules/evaluations/infrastructure
 import type { AnswerKey } from "@/modules/evaluations/domain/evaluation";
 import { PrismaScanningRepository } from "./prisma-scanning-repository";
 import { sharpQrDecoder } from "./qr-decoder";
+import { OmrServiceQrDecoder, chainQrDecoders } from "./omr-service-qr-decoder";
 import { HttpOmrDetector } from "./http-omr-detector";
 import {
   ProcessAnswerSheet,
@@ -41,7 +42,10 @@ const questionsProvider: EvaluationQuestionsProvider = {
             sections: {
               orderBy: { order: "asc" },
               include: {
-                questions: { orderBy: { number: "asc" }, include: { options: true } },
+                questions: {
+                  orderBy: { number: "asc" },
+                  include: { options: { orderBy: { key: "asc" } } },
+                },
               },
             },
           },
@@ -76,7 +80,9 @@ const questionsProvider: EvaluationQuestionsProvider = {
 export const makeProcessAnswerSheet = () =>
   new ProcessAnswerSheet(
     scanningRepo,
-    sharpQrDecoder,
+    // QR: primero el decoder local (sin red, y aporta finder patterns); si no
+    // lee el escaneo, cae al decodificador WeChat del omr-service.
+    chainQrDecoders(sharpQrDecoder, new OmrServiceQrDecoder(env.OMR_SERVICE_URL)),
     questionsProvider,
     // Detección delegada al microservicio Python (omr-service) por HTTP.
     new HttpOmrDetector(env.OMR_SERVICE_URL),

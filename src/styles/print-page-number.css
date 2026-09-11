@@ -1,0 +1,28 @@
+/*
+ * Paginado al pie: número de página en un círculo negro, centrado.
+ *
+ * Vive aparte de `print.css` a propósito: ese lo importan las ocho rutas
+ * /print/*, incluidas las hojas de respuestas, que NO deben numerarse — un
+ * círculo negro de 24pt al pie es indistinguible de una burbuja marcada para
+ * el lector OMR. Importá este archivo solo donde el número se quiere.
+ *
+ * Chrome sí respeta `border-radius` en las cajas de margen de @page (el
+ * círculo sale redondo, no cuadrado).
+ */
+@page {
+  @bottom-center {
+    content: counter(page);
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10pt;
+    font-weight: 700;
+    color: #fff;
+    background: #000;
+    border-radius: 50%;
+    display: inline-block;
+    width: 24pt;
+    height: 24pt;
+    line-height: 22pt;
+    text-align: center;
+    vertical-align: middle;
+  }
+}

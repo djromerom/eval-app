@@ -65,7 +65,7 @@ export default async function BundleAnswerKeyPage({
           include: {
             questions: {
               orderBy: { number: "asc" },
-              include: { options: true },
+              include: { options: { orderBy: { key: "asc" } } },
             },
           },
         },

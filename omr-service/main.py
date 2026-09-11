@@ -17,9 +17,20 @@ Arranque (solo loopback, nunca expuesto públicamente):
 
 El contrato de `/analyze` es exactamente el que produce `build_sheet_data`:
     { "thr": float, "questions": [ { "n": int, "ans": str,
-        "fills": [ {"l": str, "f": float, "m": bool}, ... ],
-        "crop": "<base64 jpeg>" }, ... ] }
+        "fills": [ {"l": str, "f": float, "m": bool,
+                    "x": int, "y": int, "r": int}, ... ],
+        "crop": "<base64 jpeg>" }, ... ],
+      "student": str, "sheet": str, "qr": dict|null,
+      "aviso": str, "rotacion": int, "estructura": [str, ...] }
 donde `ans` ∈ { "A".."H", "BLANCO", "MULTIPLE:XY" }.
+
+`estructura` no vacía significa que la lectura NO es de fiar aunque traiga el
+número de preguntas correcto: hay filas no leídas y la numeración está corrida.
+Vale la pena que el lado TS la mire y mande la hoja a REVIEW.
+
+`/qr` es un endpoint aparte, mucho más barato (solo decodifica el QR, sin
+detección de burbujas): lo usa el lado TS como fallback cuando su propio
+decoder no logra leer el QR de un escaneo degradado.
 """
 
 from pathlib import Path
@@ -27,7 +38,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
-from omr_web_data import build_sheet_data
+from omr_web_data import build_sheet_data, decode_qr
 
 app = FastAPI(title="ecognIA — omr-service", version="1.0.0")
 
@@ -55,6 +66,31 @@ async def analyze(
         result = build_sheet_data(data, suffix, letters or LETTERS)
         return JSONResponse(result)
     except Exception as e:  # hoja ilegible / formato no soportado
+        return JSONResponse({"error": str(e)}, status_code=422)
+
+
+@app.post("/qr")
+async def qr(file: UploadFile = File(...)):
+    """Decodifica solo el QR de identificación de la hoja.
+
+    Fallback del decoder del lado TS (`sharpQrDecoder`): este usa el
+    decodificador WeChat de opencv-contrib, que sobre escaneos degradados lee
+    hojas que aquel no. No corre detección de burbujas, así que es varias veces
+    más barato que `/analyze` — importa porque en ese punto del flujo TS aún no
+    conoce el número de opciones de la hoja y no podría pedir un `/analyze` útil.
+
+    Responde 200 con `{found: false, text: ""}` si la hoja es legible pero no
+    tiene QR decodificable — eso NO es un error del servicio, es información
+    que el llamador necesita para decidir. Solo una imagen ilegible da 422.
+
+    `text` es el contenido crudo impreso en el QR: el lado TS verifica la firma
+    HMAC sobre él, así que no puede ser una re-serialización.
+    """
+    data = await file.read()
+    suffix = Path(file.filename or "scan.jpg").suffix or ".jpg"
+    try:
+        return JSONResponse(decode_qr(data, suffix))
+    except Exception as e:  # imagen ilegible / formato no soportado
         return JSONResponse({"error": str(e)}, status_code=422)
 
 

@@ -161,6 +161,14 @@ class InMemoryPeriods {
   async findById(institutionId: string, id: string) {
     return this.items.find((p) => p.institutionId === institutionId && p.id === id) ?? null;
   }
+  async findByName(institutionId: string, name: string) {
+    const trimmed = name.trim().toLowerCase();
+    const matches = this.items.filter(
+      (p) => p.institutionId === institutionId && p.name.trim().toLowerCase() === trimmed,
+    );
+    matches.sort((a, b) => a.order - b.order);
+    return matches[0] ?? null;
+  }
   // Stubs para satisfacer la interfaz completa de PeriodRepository.
   async findAll(): Promise<Period[]> {
     return [];
@@ -176,6 +184,9 @@ class InMemoryPeriods {
   }
   async setCurrent(): Promise<void> {
     /* noop */
+  }
+  async findCurrent(): Promise<Period | null> {
+    return null;
   }
 }
 
@@ -215,6 +226,12 @@ class InMemoryBookletTypes implements BookletTypeRepository {
     return [];
   }
   async listByInstitution() {
+    return [];
+  }
+  async findByName() {
+    return [];
+  }
+  async findByNameAndPeriod() {
     return [];
   }
   async create(): Promise<BookletType> {

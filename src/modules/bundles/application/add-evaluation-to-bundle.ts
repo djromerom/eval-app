@@ -10,7 +10,11 @@ import {
 } from "@/shared/domain/result";
 import { type AddItemInput, type BundleItem, type BundleRepository } from "../domain/bundle";
 import { isLocked } from "../domain/bundle-status";
-import { evaluationMatchesBundleCourse, isPrintableEvaluationStatus } from "../domain/bundle-rules";
+import {
+  evaluationMatchesBundleBookletType,
+  evaluationMatchesBundleCourse,
+  isPrintableEvaluationStatus,
+} from "../domain/bundle-rules";
 
 export interface AddEvaluationToBundleInput {
   actor: AuthenticatedUser;
@@ -27,6 +31,9 @@ export interface AddEvaluationToBundleInput {
  *     @@unique([bundleId, evaluationId])).
  *   - Si el bundle tiene courseId (Sprint 9), la evaluation debe ser de
  *     ese curso. Bundle cross-course (courseId null) acepta cualquiera.
+ *   - Si el bundle tiene bookletTypeId (Sprint Bundle-Period, sep 2026),
+ *     la evaluation debe tener ese mismo BookletType. Bundle sin
+ *     bookletTypeId acepta cualquiera (compat con bundles legacy).
  *   - Si order no se da, se añade al final (siguiente posición libre).
  */
 export class AddEvaluationToBundle implements UseCase<AddEvaluationToBundleInput, BundleItem> {
@@ -71,6 +78,13 @@ export class AddEvaluationToBundle implements UseCase<AddEvaluationToBundleInput
       return fail(
         new ValidationError(
           `El cuadernillo es del curso ${bundle.courseName ?? bundle.courseId} y la formulación "${ev.title}" es del curso ${ev.courseName}.`,
+        ),
+      );
+    }
+    if (!evaluationMatchesBundleBookletType(bundle.bookletTypeId, ev.bookletTypeId)) {
+      return fail(
+        new ValidationError(
+          `El cuadernillo es del tipo ${bundle.bookletTypeName ?? "(sin tipo)"} y la formulación "${ev.title}" es del tipo ${ev.bookletTypeName ?? "(sin tipo)"}.`,
         ),
       );
     }

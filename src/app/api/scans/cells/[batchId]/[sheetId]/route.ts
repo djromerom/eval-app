@@ -36,7 +36,8 @@ export async function GET(
   }
 
   try {
-    const rel = `scans/${batchId}/sheet_${sheetId.slice(0, 8)}_cells.json`;
+    // Id completo: ver el comentario en process-answer-sheet.ts (persistCells).
+    const rel = `scans/${batchId}/sheet_${sheetId}_cells.json`;
     const buf = await localStorage.read(rel);
     return new NextResponse(new Uint8Array(buf), {
       headers: {

@@ -7,6 +7,7 @@ import { requireAuthenticatedUser } from "@/lib/session";
 import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import { cn } from "@/lib/utils";
+import { AnswerSheetsStudentPicker } from "./_components/answer-sheets-student-picker";
 
 export const metadata: Metadata = { title: "Hojas de respuesta del cuadernillo" };
 
@@ -18,6 +19,11 @@ export const dynamic = "force-dynamic";
  * del cuadernillo. Tras seleccionar + click en "Imprimir", se redirige a
  * `/print/answer-sheets/bundle/[id]?students=<csv>` que es la ruta que el
  * navegador (o el worker) usa para generar el PDF.
+ *
+ * Sprint Bundle-Period (sep 2026): filtramos por `bundle.courseId` para que
+ * solo aparezcan estudiantes del grado del cuadernillo. Si el bundle es
+ * "varios grados" (courseId=null), se muestran todos los activos de la
+ * institución como antes.
  */
 export default async function BundleAnswerSheetsPage({
   params,
@@ -53,83 +59,58 @@ export default async function BundleAnswerSheetsPage({
     );
   }
 
-  // Lista de estudiantes de la institución. En el futuro se filtrará por
-  // curso (CourseSubject) si el bundle lo requiere; por ahora todos.
+  // Filtramos por el grado (courseId) y el tipo de cuadernillo (bookletTypeId)
+  // del cuadernillo. Ambos nullable: si alguno viene null NO filtramos por
+  // ese eje (courseId null = "varios grados", bookletTypeId null = sin
+  // tipo asignado al bundle).
   const students = await prisma.student.findMany({
-    where: { institutionId: actor.institutionId, isActive: true },
-    orderBy: { name: "asc" },
+    where: {
+      institutionId: actor.institutionId,
+      isActive: true,
+      ...(bundle.courseId ? { group: { courseId: bundle.courseId } } : {}),
+      ...(bundle.bookletTypeId ? { bookletTypeId: bundle.bookletTypeId } : {}),
+    },
+    orderBy: [
+      { lastName1: "asc" },
+      { lastName2: "asc" },
+      { firstName1: "asc" },
+      { firstName2: "asc" },
+    ],
     select: {
       id: true,
-      name: true,
+      lastName1: true,
+      lastName2: true,
+      firstName1: true,
+      firstName2: true,
       code: true,
       group: { select: { name: true } },
     },
   });
 
+  // Texto del PageHeader según la combinación de filtros activos (espejo
+  // de la lógica del where de arriba). Si ninguno está set, mensaje neutro.
+  const filterParts: string[] = [];
+  if (bundle.courseId) filterParts.push("grado");
+  if (bundle.bookletTypeId) filterParts.push("tipo de cuadernillo");
+  const filterPhrase = filterParts.length > 0 ? ` del ${filterParts.join(" y ")}` : "";
+  const description = `Selecciona los estudiantes${filterPhrase} a los que se les imprimirá la hoja de respuestas unificada${filterParts.length > 0 ? "" : " del cuadernillo"}. Cada hoja incluye un QR firmado con el id del cuadernillo (no de la formulación).`;
+
   return (
     <>
-      <PageHeader
-        title={`Hojas de respuesta — ${bundle.name}`}
-        description={
-          <>
-            Selecciona los estudiantes a los que se les imprimirá la hoja de respuestas unificada
-            del cuadernillo. Cada hoja incluye un QR firmado con el id del cuadernillo (no de la
-            formulación).
-          </>
-        }
+      <PageHeader title={`Hojas de respuesta — ${bundle.name}`} description={description} />
+
+      <AnswerSheetsStudentPicker
+        bundleId={bundle.id}
+        students={students.map((s) => ({
+          id: s.id,
+          lastName1: s.lastName1,
+          lastName2: s.lastName2,
+          firstName1: s.firstName1,
+          firstName2: s.firstName2,
+          code: s.code,
+          groupName: s.group?.name ?? null,
+        }))}
       />
-
-      <form
-        action={`/print/answer-sheets/bundle/${bundle.id}`}
-        method="GET"
-        target="_blank"
-        className="bg-card space-y-4 rounded-xl border p-6"
-      >
-        <input type="hidden" name="t" value="" disabled />
-        {/* El token HMAC no se puede pre-firmar desde el cliente (secreto en
-            servidor); el flujo real es via API+worker. Este form queda como
-            fallback para previsualización rápida: */}
-        <p className="text-muted-foreground text-xs">
-          Previsualiza o imprime directamente desde el navegador (sin pasar por el worker PDF).
-        </p>
-        <ul className="max-h-96 space-y-1 overflow-y-auto rounded-md border p-2">
-          {students.length === 0 ? (
-            <li className="text-muted-foreground p-4 text-center text-sm">
-              No hay estudiantes activos en la institución.
-            </li>
-          ) : (
-            students.map((s) => (
-              <li key={s.id}>
-                <label className="hover:bg-accent flex cursor-pointer items-center gap-3 rounded-md p-2 text-sm">
-                  <input type="checkbox" name="students" value={s.id} className="mt-1" />
-                  <div className="flex-1">
-                    <div className="font-medium">{s.name}</div>
-                    <div className="text-muted-foreground text-xs">
-                      {s.code} · {s.group?.name ?? "Sin grado"}
-                    </div>
-                  </div>
-                </label>
-              </li>
-            ))
-          )}
-        </ul>
-
-        <div className="flex items-center justify-between gap-2">
-          <Link
-            href={`/admin/bundles/${bundle.id}`}
-            className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
-          >
-            ← Volver al cuadernillo
-          </Link>
-          <button
-            type="submit"
-            className={cn(buttonVariants({ size: "sm" }))}
-            disabled={students.length === 0}
-          >
-            Abrir en nueva pestaña
-          </button>
-        </div>
-      </form>
 
       <div className="text-muted-foreground mt-4 text-xs">
         <strong>Nota:</strong> esta previsualización abre la página <code>/print/...</code>

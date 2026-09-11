@@ -1,4 +1,9 @@
-opencv-python-headless>=4.9.0
+# contrib (no el headless "pelado"): trae el decodificador WeChat de QR, el
+# unico que lee de forma fiable los QR de estas hojas escaneadas. Con el
+# headless normal, 2 de cada 5 hojas quedan sin identificar.
+# Variante -headless porque el servicio corre sin display; no instalar tambien
+# opencv-python-headless: entran en conflicto.
+opencv-contrib-python-headless>=4.9.0,<6
 numpy>=1.26.0
 fastapi>=0.109.0
 uvicorn>=0.27.0

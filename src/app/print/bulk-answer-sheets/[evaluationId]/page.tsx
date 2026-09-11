@@ -11,6 +11,7 @@ import {
   buildSignedQrContent,
   generateQrDataUrl,
 } from "@/modules/printing/infrastructure/qr-generator";
+import { normalizeStudentIds } from "../../_lib/search-params";
 
 export const metadata: Metadata = { title: "Hojas de respuestas" };
 
@@ -18,17 +19,32 @@ export const metadata: Metadata = { title: "Hojas de respuestas" };
  *  restantes en blanco. Ver evaluations/domain/evaluation.ts. */
 const KEYS = ANSWER_KEYS_ORDER;
 
-/** Reparte las preguntas en 3 columnas verticales (estilo PDF institucional).
- *  Ver /print/answer-sheet/[evaluationId]/page.tsx para la rationale. */
+/** Reparte en 1–3 columnas (sep 2026). Regla del docente:
+ *  - chunks de 40 preguntas por columna (no equitativo)
+ *  - máximo 3 columnas
+ *  - la última columna absorbe el resto (puede tener < 40 si no se llega,
+ *    o > 40 si se supera el cap de 3 × 40 = 120)
+ *
+ *  Antes: siempre 3 columnas equitativas (`Math.ceil(N/3)` cada una).
+ *  Estilo PDF institucional: las preguntas fluyen en orden 1..N de arriba
+ *  abajo y de izquierda a derecha. Ver /print/answer-sheet/[evaluationId]
+ *  para la otra implementación del mismo patrón. */
 function splitIntoColumns<T>(items: T[]): T[][] {
-  if (items.length === 0) return [[], [], []];
-  const perCol = Math.ceil(items.length / 3);
-  return [items.slice(0, perCol), items.slice(perCol, perCol * 2), items.slice(perCol * 2)];
+  if (items.length === 0) return [[]];
+  const CHUNK = 40;
+  const MAX_COLS = 3;
+  const cols: T[][] = [];
+  for (let i = 0; i < MAX_COLS && i * CHUNK < items.length; i++) {
+    const isLastSlot = i === MAX_COLS - 1 || (i + 1) * CHUNK >= items.length;
+    const end = isLastSlot ? items.length : (i + 1) * CHUNK;
+    cols.push(items.slice(i * CHUNK, end));
+  }
+  return cols;
 }
 
 interface Props {
   params: Promise<{ evaluationId: string }>;
-  searchParams: Promise<{ students?: string; t?: string }>;
+  searchParams: Promise<{ students?: string | string[]; t?: string }>;
 }
 
 export default async function BulkAnswerSheetsPage({ params, searchParams }: Props) {
@@ -47,11 +63,16 @@ export default async function BulkAnswerSheetsPage({ params, searchParams }: Pro
   const institutionName = instRes.ok ? instRes.value.name : "";
   const institutionCode = instRes.ok ? instRes.value.code : "";
 
-  const ids = studentIds?.split(",").filter(Boolean) ?? [];
+  const ids = normalizeStudentIds(studentIds);
   const students =
     ids.length > 0
       ? await prisma.student.findMany({
           where: { id: { in: ids }, institutionId: actor.institutionId },
+          // Grupo + curso del grupo: la hoja bulk muestra
+          // "Grado: {course} - {group}" (sep 2026).
+          include: {
+            group: { include: { course: { select: { name: true } } } },
+          },
         })
       : [];
 
@@ -99,8 +120,23 @@ export default async function BulkAnswerSheetsPage({ params, searchParams }: Pro
               <div className="as-student-fields">
                 <div className="as-field">
                   <span>Nombre:</span>
-                  <span className="as-line-filled">{student.name}</span>
+                  <span className="as-line-filled">
+                    {`${student.lastName1} ${student.lastName2} ${student.firstName1} ${student.firstName2}`
+                      .replace(/\s+/g, " ")
+                      .trim()}
+                  </span>
                 </div>
+                {/* Grado + Grupo concatenados (sep 2026). Si el estudiante no
+                    tiene grupo asignado o el grupo no tiene curso, se omite
+                    la línea entera en vez de mostrar un campo a medias. */}
+                {student.group?.course?.name && student.group.name ? (
+                  <div className="as-field">
+                    <span>Grado:</span>
+                    <span className="as-line-filled">
+                      {`${student.group.course.name} - ${student.group.name}`}
+                    </span>
+                  </div>
+                ) : null}
                 <div className="as-field">
                   <span>Código:</span>
                   <span className="as-line-filled">{student.code}</span>
@@ -112,8 +148,12 @@ export default async function BulkAnswerSheetsPage({ params, searchParams }: Pro
               </div>
             </div>
 
-            {/* 3 columnas de burbujas (estilo PDF institucional) */}
-            <div className="as-grid">
+            {/* 1–3 columnas de burbujas según `splitIntoColumns` (sep 2026).
+                Estilo PDF institucional. */}
+            <div
+              className="as-grid"
+              style={{ gridTemplateColumns: `repeat(${columns.length}, 1fr)` }}
+            >
               {columns.map((col, colIdx) => (
                 <div key={colIdx} className="as-col">
                   {col.map((q) => (

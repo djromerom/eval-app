@@ -1,9 +1,15 @@
 import { type AuthenticatedUser, requireRole } from "@/shared/application/authenticated-user";
 import type { UseCase } from "@/shared/application/use-case";
 import { ConflictError, type Result, ValidationError, fail, ok } from "@/shared/domain/result";
-import type { CourseRepository } from "@/modules/academic/domain/types";
+import type {
+  AcademicYearRepository,
+  CourseRepository,
+  PeriodRepository,
+} from "@/modules/academic/domain/types";
+import type { BookletTypeRepository } from "@/modules/booklet-types/domain/booklet-type";
 import { type Bundle, type BundleRepository, type CreateBundleData } from "../domain/bundle";
 import {
+  evaluationMatchesBundleBookletType,
   evaluationMatchesBundleCourse,
   isPrintableEvaluationStatus,
   isValidBookletNumber,
@@ -29,11 +35,20 @@ export interface CreateBundleInput {
  *   - courseId (Sprint 9, opcional): si está definido debe existir en la
  *     institución y TODAS las evaluations deben pertenecer a ese curso.
  *     `null`/omitido = cuadernillo cross-course (simulacro multi-grado).
+ *   - periodId / bookletTypeId (Sprint Bundle-Period, sep 2026, opcional):
+ *     si vienen deben existir; si bookletTypeId viene debe pertenecer al
+ *     periodId; TODAS las evaluations deben tener ese BookletType cuando
+ *     bookletTypeId está set. Si periodId NO viene se inyecta el periodo
+ *     actual del año académico vigente (o `null` si la institución no
+ *     tiene año actual).
  */
 export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
   constructor(
     private readonly bundles: BundleRepository,
     private readonly courses: CourseRepository,
+    private readonly years: AcademicYearRepository,
+    private readonly periods: PeriodRepository,
+    private readonly bookletTypes: BookletTypeRepository,
   ) {}
 
   async execute({ actor, data }: CreateBundleInput): Promise<Result<Bundle>> {
@@ -64,6 +79,49 @@ export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
       const course = await this.courses.findById(actor.institutionId, courseId);
       if (!course) {
         return fail(new ValidationError("El grado no existe en tu institución."));
+      }
+    }
+
+    // Resolver periodId del cuadernillo (Sprint Bundle-Period):
+    // - `undefined` → inyectar el periodo actual del año académico vigente.
+    // - string → validar que exista en la institución.
+    // - `null` explícito → sin prueba (caso borde: bundles legacy sin Prueba).
+    let periodId: string | null;
+    if (data.periodId === undefined) {
+      const currentYear = await this.years.findCurrent(actor.institutionId);
+      if (!currentYear) {
+        periodId = null;
+      } else {
+        const currentPeriod = await this.periods.findCurrent(
+          actor.institutionId,
+          currentYear.id,
+        );
+        periodId = currentPeriod?.id ?? null;
+      }
+    } else {
+      periodId = data.periodId;
+      if (periodId !== null) {
+        const period = await this.periods.findById(actor.institutionId, periodId);
+        if (!period) {
+          return fail(new ValidationError("La Prueba no existe en tu institución."));
+        }
+      }
+    }
+
+    // Resolver bookletTypeId (Sprint Bundle-Period): si viene debe existir
+    // y pertenecer al periodId resuelto. Validamos items abajo.
+    const bookletTypeId: string | null = data.bookletTypeId ?? null;
+    if (bookletTypeId !== null) {
+      const bt = await this.bookletTypes.findById(actor.institutionId, bookletTypeId);
+      if (!bt) {
+        return fail(new ValidationError("El tipo de cuadernillo no existe en tu institución."));
+      }
+      if (periodId !== null && bt.periodId !== periodId) {
+        return fail(
+          new ValidationError(
+            "El tipo de cuadernillo no pertenece a la Prueba seleccionada.",
+          ),
+        );
       }
     }
 
@@ -99,6 +157,13 @@ export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
           ),
         );
       }
+      if (!evaluationMatchesBundleBookletType(bookletTypeId, ev.bookletTypeId)) {
+        return fail(
+          new ValidationError(
+            `La formulación "${ev.title}" es del tipo ${ev.bookletTypeName ?? "(sin tipo)"} y no coincide con el tipo del cuadernillo.`,
+          ),
+        );
+      }
     }
 
     // Validar bookletNumber único
@@ -113,7 +178,8 @@ export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
       }
     }
 
-    // Construir el map que el repo espera
+    // Construir el map que el repo espera (incluyendo el periodId/bookletTypeId
+    // ya resueltos por el use case, no los del input original).
     const evaluationsById = new Map(
       evaluations.map((e) => [
         e.id,
@@ -130,6 +196,8 @@ export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
           parentSubjectName: e.parentSubjectName,
           courseId: e.courseId,
           courseName: e.courseName,
+          bookletTypeId: e.bookletTypeId,
+          bookletTypeName: e.bookletTypeName,
         },
       ]),
     );
@@ -137,7 +205,7 @@ export class CreateBundle implements UseCase<CreateBundleInput, Bundle> {
     const bundle = await this.bundles.create(
       actor.institutionId,
       actor.userId,
-      data,
+      { ...data, periodId, bookletTypeId },
       evaluationsById,
     );
 

@@ -22,6 +22,8 @@ Uso:
 import argparse
 import json
 import sys
+
+VERSION = "12"         # subir al cambiar el motor: invalida cachés aguas arriba
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -47,6 +49,7 @@ class Bubble:
 class Question:
     number: int = 0
     bubbles: list = field(default_factory=list)
+    warning: str = ""
 
     @property
     def marked_letters(self):
@@ -102,7 +105,205 @@ def _ring_signature_ok(binimg, cx, cy, r, h, w, min_coverage=0.72):
     if valid.sum() < 30:
         return False
     light = sum(1 for x, y in zip(xs[valid], ys[valid]) if not binimg[y, x])
-    return light / valid.sum() >= 0.65
+    # 0.40 y no 0.65: con 0.65 cualquier óvalo rodeado de burbujas MARCADAS
+    # (arriba, abajo y al lado) cae por debajo y se pierde. La población de
+    # burbujas reales llega a 0.50 en el peor caso; el interior del QR queda
+    # muy por debajo y además lo matan el filtro de componente conexo y el
+    # consenso de columnas.
+    return light / valid.sum() >= 0.40
+
+def _ink_density(gray: np.ndarray, r_ref: float) -> np.ndarray:
+    """Fracción de tinta en una ventana de ~8 r alrededor de cada píxel."""
+    blur = cv2.GaussianBlur(gray, (5, 5), 1.2)
+    _, binimg = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    win = max(3, int(r_ref * 8) | 1)
+    return cv2.blur((binimg > 0).astype(np.float32), (win, win))
+
+
+def dense_graphic_mask(gray: np.ndarray, r_ref: float,
+                       margin: float = 3.0) -> np.ndarray:
+    """
+    Máscara de las zonas que NO son rejilla de respuestas: gráficos densos
+    (QR, códigos de barras, logos).
+
+    El patrón de búsqueda de un QR son cuadrados concéntricos: a la escala
+    equivocada Hough lo lee como un círculo perfecto del tamaño de una
+    burbuja, y ninguna prueba fotométrica por candidato lo distingue de un
+    óvalo. Por eso se excluye la REGIÓN completa antes de mirar candidatos.
+
+    La rejilla de óvalos deja mucho papel entre burbujas (densidad <= 0.40
+    incluso con todas marcadas); el interior de un QR ronda 0.5-0.7.
+    """
+    mask = ((_ink_density(gray, r_ref) > 0.45).astype(np.uint8)) * 255
+    if margin > 0:
+        # La densidad cae por debajo del umbral en el BORDE del bloque, justo
+        # donde el patrón de búsqueda del QR deja blobs que Hough lee como
+        # burbujas. Sin margen quedaban candidatos pegados al QR, y con una
+        # sola detección espuria a media altura entre dos filas basta para
+        # fusionarlas y perder ítems.
+        k = max(3, int(r_ref * margin) | 1)
+        mask = cv2.dilate(mask, np.ones((k, k), np.uint8))
+    return mask
+
+
+def dense_regions(gray: np.ndarray, r_ref: float, min_side: float = 4.0):
+    """Bounding boxes (x, y, w, h) de los bloques de gráfico denso."""
+    # sin margen: aquí interesa el contorno real del bloque, para recortarlo
+    mask = dense_graphic_mask(gray, r_ref, margin=0.0)
+    n, _, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
+    out = []
+    for i in range(1, n):
+        x, y, w, h, _ = stats[i]
+        if w >= r_ref * min_side and h >= r_ref * min_side:
+            out.append((int(x), int(y), int(w), int(h)))
+    return out
+
+
+def qr_backends() -> dict:
+    """
+    Qué decodificadores de QR hay en este entorno, y por qué falta el que falte.
+
+    Importa saberlo: con solo `opencv-python` queda el decodificador integrado,
+    que sobre estas hojas escaneadas lee unas sí y otras no de forma errática.
+    `opencv-contrib-python` trae el decodificador WeChat, que las lee todas.
+
+    `motivo` distingue los tres casos que se confunden fácil: contrib no
+    instalado, contrib instalado pero el constructor falla (faltan los modelos),
+    o el proceso todavía tiene cargado el cv2 viejo porque no se reinició.
+    """
+    try:
+        import pyzbar.pyzbar  # noqa: F401
+        zbar = True
+    except Exception:
+        zbar = False
+
+    motivo = ""
+    if not hasattr(cv2, "wechat_qrcode_WeChatQRCode"):
+        motivo = ("este cv2 no trae el módulo contrib (%s, %s). Si acabás de "
+                  "instalar opencv-contrib-python, el proceso sigue con el cv2 "
+                  "viejo cargado: hay que reiniciarlo por completo."
+                  % (cv2.__version__, cv2.__file__))
+    elif _wechat() is None:
+        motivo = ("cv2 trae el módulo contrib pero WeChatQRCode no se puede "
+                  "inicializar (suelen faltar los modelos del detector).")
+    return {"wechat": _wechat() is not None, "zbar": zbar,
+            "integrado": True, "motivo": motivo,
+            "cv2": cv2.__version__, "cv2_path": cv2.__file__,
+            "python": sys.executable}
+
+
+_WECHAT = None
+
+
+def _wechat():
+    """Decodificador WeChat de opencv-contrib (mucho más tolerante que el
+    integrado). Se crea una sola vez; si no está disponible, se ignora."""
+    global _WECHAT
+    if _WECHAT is None:
+        try:
+            _WECHAT = cv2.wechat_qrcode_WeChatQRCode()
+        except Exception:
+            _WECHAT = False
+    return _WECHAT or None
+
+
+def _decode_qr_roi(roi: np.ndarray):
+    """
+    Escalera de preprocesos y decodificadores para un QR de escaneo degradado.
+
+    Dos cosas resultaron decisivas midiendo sobre hojas reales:
+
+    1. **Desenfocar antes del Otsu.** Suaviza el tramado del escáner y los
+       módulos binarizan limpios. Es la variante que funciona casi siempre.
+    2. **El decodificador de opencv-contrib (WeChat).** El integrado de OpenCV
+       es marginal a esta resolución (~2.6 px por módulo): sobre cinco hojas
+       reales acertó en 0-2 combinaciones de ~30, y en una hoja en ninguna.
+       WeChat y zbar decodifican las cinco. WeChat viene en
+       `opencv-contrib-python` (solo pip, sin librería del sistema), así que
+       se prueba primero.
+    """
+    if roi.size == 0:
+        return None
+    builtin = cv2.QRCodeDetector()
+    wechat = _wechat()
+    try:
+        from pyzbar.pyzbar import decode as zdecode
+    except Exception:
+        zdecode = None
+
+    for f in (2, 1, 3, 4, 6):
+        up = roi if f == 1 else cv2.resize(roi, None, fx=f, fy=f,
+                                           interpolation=cv2.INTER_CUBIC)
+        variants = [up]
+        for kb in (3, 5, 7):
+            variants.append(cv2.threshold(cv2.GaussianBlur(up, (kb, kb), 0), 0, 255,
+                                          cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1])
+        variants.append(cv2.threshold(cv2.medianBlur(up, 3), 0, 255,
+                                      cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1])
+        for v in variants:
+            if wechat is not None:
+                try:
+                    res, _ = wechat.detectAndDecode(v)
+                    if res and res[0]:
+                        return res[0]
+                except Exception:
+                    pass
+            if zdecode is not None:
+                try:
+                    z = zdecode(v)
+                    if z:
+                        return z[0].data.decode("utf-8", "replace")
+                except Exception:
+                    pass
+            try:
+                txt = builtin.detectAndDecode(v)[0]
+            except cv2.error:
+                txt = ""
+            if txt:
+                return txt
+    return None
+
+
+def read_qr(gray: np.ndarray):
+    """
+    Localiza y decodifica el QR de identificación de la hoja.
+
+    Devuelve (payload, bbox, raw) donde `payload` es el dict del JSON embebido
+    (o el texto crudo si no es JSON, o None si no se pudo leer), `bbox` es
+    (x, y, w, h) o None, y `raw` es el texto decodificado tal cual venia en el
+    QR (o None). `raw` importa aguas arriba: la firma HMAC se verifica sobre el
+    contenido impreso, asi que re-serializar el dict no sirve.
+
+    En los escaneos reales `cv2.QRCodeDetector().detect()` **no encuentra el
+    QR** sobre la imagen completa, así que la región se localiza por densidad
+    de tinta (el QR es el único bloque denso de la hoja) y se decodifica sobre
+    ese recorte, con desenfoque previo al Otsu.
+    """
+    h, w = gray.shape
+    r_ref = max(5.0, w * 0.008)          # radio típico de burbuja según el ancho
+    boxes = []
+    try:
+        ok, pts = cv2.QRCodeDetector().detect(gray)
+        if ok and pts is not None:
+            q = np.asarray(pts).reshape(-1, 2)
+            x0, y0 = q.min(0)
+            x1, y1 = q.max(0)
+            boxes.append((int(x0), int(y0), int(x1 - x0), int(y1 - y0)))
+    except cv2.error:
+        pass
+    boxes.extend(dense_regions(gray, r_ref))
+    pad = int(r_ref * 2.5)
+    for (x, y, bw, bh) in boxes:
+        roi = gray[max(0, y - pad):min(h, y + bh + pad),
+                   max(0, x - pad):min(w, x + bw + pad)]
+        txt = _decode_qr_roi(roi)
+        if txt:
+            try:
+                return json.loads(txt), (x, y, bw, bh), txt
+            except ValueError:
+                return txt, (x, y, bw, bh), txt
+    return None, (boxes[0] if boxes else None), None
+
 
 def detect_bubbles(gray: np.ndarray) -> list:
     """
@@ -154,6 +355,12 @@ def detect_bubbles(gray: np.ndarray) -> list:
     r_mode = float(np.median(radii))
     cands = [c for c in cands if 0.6 * r_mode <= c[2] <= 1.5 * r_mode]
 
+    # Zonas de gráfico denso (QR, códigos de barras): fuera antes de validar.
+    dense = dense_graphic_mask(gray, r_mode)
+    cands = [c for c in cands if not dense[int(c[1]), int(c[0])]]
+    if not cands:
+        return []
+
     # Binario global (Otsu) para las validaciones: a diferencia del binario
     # adaptativo, conserva los discos sólidos como componentes llenos.
     _, otsu = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
@@ -186,9 +393,28 @@ def detect_bubbles(gray: np.ndarray) -> list:
     # con muchos miembros; el ruido disperso (QR, manchas) no.
     xs = np.array([c[0] for c in cands])
     col_groups = cluster_1d(xs, tol=r_mode * 0.6)
+    col_x = [float(np.mean([xs[i] for i in g])) for g in col_groups]
+    # paso típico entre columnas contiguas de opciones
+    diffs = [b - a for a, b in zip(sorted(col_x), sorted(col_x)[1:])]
+    near = [d for d in diffs if d <= r_mode * 4]
+    step = float(np.median(near)) if near else r_mode * 2.5
+    # Se parte de las columnas FUERTES (>=3 miembros) y se encadena hacia los
+    # lados a ~1 paso: así sobreviven las opciones E-H, que solo existen en 1-2
+    # ítems por bloque, sin admitir cualquier par de manchas alineadas por azar
+    # (que era el efecto de aceptar toda columna con una vecina cualquiera).
+    accepted = {i for i, g in enumerate(col_groups) if len(g) >= 3}
+    changed = True
+    while changed:
+        changed = False
+        for i in range(len(col_x)):
+            if i not in accepted and any(
+                    0.70 * step <= abs(col_x[i] - col_x[j]) <= 1.35 * step
+                    for j in accepted):
+                accepted.add(i)
+                changed = True
     keep_idx = set()
-    for g in col_groups:
-        if len(g) >= 3:
+    for i, g in enumerate(col_groups):
+        if i in accepted:
             keep_idx.update(g)
     cands = [c for i, c in enumerate(cands) if i in keep_idx]
 
@@ -211,52 +437,82 @@ def detect_bubbles(gray: np.ndarray) -> list:
 # --------------------------------------------------------------------------
 
 def measure_fill(gray: np.ndarray, bubbles: list) -> None:
-    """Ratio de píxeles oscuros dentro de cada burbuja (umbral Otsu global)."""
-    _, binimg = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    """
+    Ratio de tinta dentro de cada burbuja, medido **contra el papel local**.
+
+    El Otsu global anterior tenía un acantilado: con marcas de lápiz suave o
+    tramadas por el escáner, la población clara arrastraba el umbral y TODAS
+    las marcas desaparecían de golpe (hoja entera reportada en BLANCO), sin
+    error. Aquí el nivel de papel se estima con un cierre morfológico de
+    kernel mayor que una burbuja —que borra los óvalos y deja el papel, con su
+    sombreado— y es tinta el píxel sensiblemente más oscuro que su propio
+    fondo. Eso también absorbe la iluminación despareja.
+    """
+    if not bubbles:
+        return
+    r_med = float(np.median([b.r for b in bubbles]))
+    k = max(3, int(r_med * 4) | 1)
+    paper = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, np.ones((k, k), np.uint8))
+    ink = (gray.astype(np.int16) < paper.astype(np.int16) - 40)
+
+    h, w = gray.shape
     for b in bubbles:
-        r = int(b.r * 0.85)                     # margen para excluir el borde impreso
-        mask = np.zeros_like(gray)
-        cv2.circle(mask, (int(b.x), int(b.y)), r, 255, -1)
-        total = cv2.countNonZero(mask)
-        dark = cv2.countNonZero(cv2.bitwise_and(binimg, mask))
-        b.fill = dark / total if total else 0.0
-
-
-def adaptive_mark_threshold(bubbles: list) -> float:
-    """
-    Umbral de marcado por Otsu 1-D sobre los ratios de relleno:
-    separa la población 'vacías' (solo tinta del borde) de 'marcadas'.
-    Con salvaguardas para hojas totalmente vacías o totalmente llenas.
-    """
-    fills = np.array([b.fill for b in bubbles], dtype=np.float64)
-    if len(fills) < 4:
-        return 0.5
-    hist, edges = np.histogram(fills, bins=64, range=(0, 1))
-    total = hist.sum()
-    best_t, best_var = 0.5, -1.0
-    cum, cum_mean = 0.0, 0.0
-    mean_all = (hist * ((edges[:-1] + edges[1:]) / 2)).sum() / total
-    centers = (edges[:-1] + edges[1:]) / 2
-    for i in range(64):
-        cum += hist[i]
-        if cum == 0 or cum == total:
+        r = max(1, int(b.r * 0.85))             # margen para excluir el borde impreso
+        y0, y1 = max(0, int(b.y) - r), min(h, int(b.y) + r + 1)
+        x0, x1 = max(0, int(b.x) - r), min(w, int(b.x) + r + 1)
+        sub = ink[y0:y1, x0:x1]
+        if sub.size == 0:
+            b.fill = 0.0
             continue
-        cum_mean += hist[i] * centers[i]
-        w0 = cum / total
-        w1 = 1 - w0
-        m0 = cum_mean / cum
-        m1 = (mean_all * total - cum_mean) / (total - cum)
-        var = w0 * w1 * (m0 - m1) ** 2
-        if var > best_var:
-            best_var, best_t = var, centers[i]
-    # Refinamiento: punto medio entre el máximo de la población 'vacías' y el
-    # mínimo de la población 'marcadas' (evita cortes justo sobre una marca).
-    lo = fills[fills < best_t]
-    hi = fills[fills >= best_t]
-    if len(lo) and len(hi):
-        best_t = (lo.max() + hi.min()) / 2
-    # Salvaguardas: nunca aceptar umbral absurdo
-    return float(np.clip(best_t, 0.30, 0.85))
+        yy, xx = np.ogrid[y0:y1, x0:x1]
+        disc = (yy - b.y) ** 2 + (xx - b.x) ** 2 <= r * r
+        total = int(disc.sum())
+        b.fill = float((sub & disc).sum()) / total if total else 0.0
+
+
+def adaptive_mark_threshold(questions: list):
+    """
+    Umbral de marcado separando dos poblaciones bien definidas:
+
+      - "vacías": todas las burbujas de cada pregunta MENOS la más oscura
+      - "marcadas": la más oscura de cada pregunta
+
+    Es mucho más estable que un Otsu sobre todos los rellenos juntos: la
+    población de marcadas es ancha (una marca a lápiz tramada por el escáner
+    va de 0.3 a 0.9) y arrastraba el corte hacia arriba, perdiendo las marcas
+    más débiles. Aquí el corte cae en la frontera real entre ambas.
+
+    Devuelve (umbral, aviso). El aviso no es vacío cuando las dos poblaciones
+    se solapan: en ese caso NO hay un corte fiable y la hoja entera debe ir a
+    revisión manual, en vez de producir un resultado de apariencia normal.
+    """
+    tops, rest = [], []
+    for q in questions:
+        f = sorted((b.fill for b in q.bubbles), reverse=True)
+        if not f:
+            continue
+        tops.append(f[0])
+        rest.extend(f[1:])
+    if len(tops) < 4 or not rest:
+        return 0.5, ""
+    tops = np.array(tops, dtype=np.float64)
+    rest = np.array(rest, dtype=np.float64)
+
+    hi_empty = float(np.percentile(rest, 98))     # la vacía más oscura (robusto)
+    lo_mark = float(np.percentile(tops, 2))       # la marca más débil (robusto)
+
+    warn = ""
+    if lo_mark <= hi_empty:
+        # Las poblaciones se tocan: puede ser una hoja con ítems en blanco
+        # (su "más oscura" es en realidad una vacía) o una hoja ilegible.
+        gap = hi_empty - lo_mark
+        thr = (hi_empty + float(np.percentile(tops, 50))) / 2
+        if gap > 0.10:
+            warn = ("separación pobre entre marcadas y vacías "
+                    "(%.2f vs %.2f): revisar la hoja completa" % (lo_mark, hi_empty))
+    else:
+        thr = (hi_empty + lo_mark) / 2
+    return float(np.clip(thr, 0.18, 0.85)), warn
 
 
 # --------------------------------------------------------------------------
@@ -275,6 +531,96 @@ def cluster_1d(values, tol):
             cur = [i]
     groups.append(cur)
     return groups
+
+
+def cluster_rows(values, tol, max_span):
+    """
+    Como `cluster_1d`, pero parte los grupos demasiado anchos.
+
+    `cluster_1d` es de enlace simple: compara cada valor con el anterior, así
+    que una cadena de saltos pequeños fusiona valores arbitrariamente lejanos.
+    Con una sola detección espuria a media altura entre dos filas, las dos
+    filas se vuelven una sola pregunta, se pierden ítems y la numeración se
+    corre de ahí en adelante. `max_span` acota cuánto puede medir una fila; lo
+    que se pasa se reparte por cercanía al centro de cada subfila.
+    """
+    groups = cluster_1d(values, tol)
+    if not max_span:
+        return groups
+    out = []
+    for g in groups:
+        vs = sorted(g, key=lambda i: values[i])
+        span = values[vs[-1]] - values[vs[0]]
+        if span <= max_span:
+            out.append(g)
+            continue
+        n = max(2, int(round(span / max_span)) + 1)
+        centers = np.linspace(values[vs[0]], values[vs[-1]], n)
+        buckets = [[] for _ in range(n)]
+        for i in g:
+            buckets[int(np.argmin(np.abs(centers - values[i])))].append(i)
+        out.extend([b for b in buckets if b])
+    return out
+
+
+def check_structure(questions: list, expected: int = 0) -> list:
+    """
+    Verificación estructural de la lectura. Devuelve una lista de avisos.
+
+    Es la red que faltaba: cuando se pierde una fila (una detección espuria que
+    fusiona dos filas, un óvalo que no se detecta), el resultado sale completo y
+    verosímil pero con la numeración corrida — y hasta ahora nada lo decía. El
+    conteo de ítems por sí solo no basta: se han visto lecturas con el número
+    correcto de preguntas y 13 burbujas de menos.
+
+    Tres comprobaciones, todas internas a la hoja:
+
+      1. `expected`, si se conoce (por plantilla o por `--esperadas`).
+      2. Huecos dentro de cada bloque: se mide el paso entre filas en el
+         bloque mismo (mediana de las diferencias entre filas contiguas) y se
+         busca cualquier salto de ~2 pasos o más, que es una fila no leída.
+         Medir el paso por bloque y no en toda la hoja es deliberado: un 2.5 %
+         de error en un paso global, a lo largo de 39 filas, inventa una fila
+         fantasma y produce falsos positivos.
+      3. Bloques con distinta cantidad de filas: solo el último puede tener
+         menos.
+    """
+    avisos = []
+    if not questions:
+        return ["no se detectó ninguna pregunta"]
+
+    if expected and len(questions) != expected:
+        avisos.append("se esperaban %d preguntas y se leyeron %d: la numeración "
+                      "no es de fiar" % (expected, len(questions)))
+
+    # agrupar por bloque según la x de la primera burbuja
+    r_med = float(np.median([b.r for q in questions for b in q.bubbles]))
+    xs = np.array([q.bubbles[0].x for q in questions])
+    blocks = cluster_1d(xs, tol=r_med * 6)
+
+    counts = []
+    for g in sorted(blocks, key=lambda g: float(np.mean([xs[i] for i in g]))):
+        ys = sorted(float(np.mean([b.y for b in questions[i].bubbles])) for i in g)
+        counts.append(len(g))
+        if len(ys) < 3:
+            continue
+        # Huecos dentro del bloque: el paso se mide en el bloque mismo, así que
+        # no depende de estimarlo bien a lo largo de toda la hoja. Un salto de
+        # ~2 pasos entre filas contiguas es una fila que no se leyó.
+        diffs = [b - a for a, b in zip(ys, ys[1:])]
+        pitch = float(np.median(diffs))
+        faltan = sum(int(round(d / pitch)) - 1 for d in diffs
+                     if round(d / pitch) >= 2)
+        if faltan:
+            avisos.append("bloque en x~%d: falta(n) %d fila(s) entre filas "
+                          "contiguas; la numeración a partir de ahí queda "
+                          "corrida" % (int(np.mean([xs[i] for i in g])), faltan))
+
+    if len(counts) > 2 and len(set(counts[:-1])) > 1:
+        avisos.append("los bloques no tienen la misma cantidad de filas (%s): "
+                      "solo el último debería tener menos"
+                      % ", ".join(str(c) for c in counts))
+    return avisos
 
 
 def build_questions(bubbles: list, letters: str) -> list:
@@ -318,7 +664,7 @@ def build_questions(bubbles: list, letters: str) -> list:
 
     # --- filas: clustering por Y (con burbujas ya depuradas) ---
     ys = np.array([b.y for b in bubbles])
-    row_groups = cluster_1d(ys, tol=r_med * 1.2)
+    row_groups = cluster_rows(ys, tol=r_med * 1.2, max_span=r_med * 1.1)
     split_gap = gap_opt * 1.5                    # gap mayor => nueva pregunta
 
     # --- dentro de cada fila, separar en preguntas por gaps en X ---
@@ -370,6 +716,14 @@ def build_questions(bubbles: list, letters: str) -> list:
     # Filtro de filas aisladas: una fila real de la rejilla tiene otra fila a
     # ~1 paso vertical; texto del encabezado alineado por azar queda aislado
     # y con pocas burbujas, y se descarta.
+    #
+    # Sobre una hoja de 50 items, el subtitulo "Estandar Sesion 3 Grado 5"
+    # aportaba tres glifos redondos (la "o" de Sesion, el "3" y la "G") que
+    # sobrevivian como pregunta 1 y corrian la numeracion de las 50 restantes:
+    # una lectura completa y verosimil, con cada respuesta en el item
+    # equivocado. Pasaban porque, tras la recuperacion por rejilla, la fila
+    # llegaba a 3 miembros y el umbral de descarte exigia menos del 60% de una
+    # fila tipica (2.4 sobre 4).
     row_y = sorted({round(float(np.mean([b.y for b in q])) / (r_med * 0.8))
                     * (r_med * 0.8) for q in raw_questions})
     if len(row_y) > 2:
@@ -380,11 +734,26 @@ def build_questions(bubbles: list, letters: str) -> list:
             yq = round(float(np.mean([b.y for b in q])) / (r_med * 0.8)) * (r_med * 0.8)
             counts[yq] = counts.get(yq, 0) + len(q)
         modal_row = float(np.median(list(counts.values())))
+        completas = [oy for oy in row_y if counts[oy] >= modal_row]
         keep_q = []
         for q in raw_questions:
             yq = round(float(np.mean([b.y for b in q])) / (r_med * 0.8)) * (r_med * 0.8)
             near = min((abs(yq - oy) for oy in row_y if oy != yq), default=0)
-            if near > 1.8 * pitch and counts[yq] < modal_row * 0.6:
+            # Tres condiciones, y la tercera es la que evita danos colaterales:
+            #   1. aislada -- ninguna otra fila a menos de 1.8 pasos,
+            #   2. incompleta -- MENOS miembros que una fila tipica (tras la
+            #      recuperacion por rejilla la basura del encabezado llegaba a
+            #      3 contra 4 de una fila real, y pasaba un umbral del 60%),
+            #   3. FUERA del rango vertical de la rejilla. Sin esto se caian
+            #      filas interiores legitimas de hojas a 3 columnas, donde las
+            #      ultimas filas de un bloque tienen menos miembros porque los
+            #      otros bloques ya terminaron (medido: -4 items en dos hojas
+            #      de 110). El encabezado y el pie siempre quedan afuera.
+            # El rango se define con filas COMPLETAS (>= modal), no con el
+            # 60%: la propia fila basura de 3 miembros pasaba el 60% y se
+            # metia en la lista, definiendo ella misma el minimo del rango.
+            fuera = bool(completas) and (yq < min(completas) or yq > max(completas))
+            if fuera and near > 1.8 * pitch and counts[yq] < modal_row:
                 continue
             keep_q.append(q)
         raw_questions = keep_q
@@ -395,16 +764,41 @@ def build_questions(bubbles: list, letters: str) -> list:
     # ordenar bloques de izquierda a derecha
     col_groups.sort(key=lambda g: float(np.mean([x_starts[i] for i in g])))
 
+    # Un bloque de respuestas tiene muchas preguntas apiladas. Un grupo con una
+    # o dos "preguntas" sueltas es ruido (QR, logo, casillas del encabezado); si
+    # se colara, además de inventar ítems correría la numeración de todo lo que
+    # viene después.
+    if len(col_groups) > 1:
+        biggest = max(len(g) for g in col_groups)
+        min_q = max(3, int(biggest * 0.15))
+        filtered = [g for g in col_groups if len(g) >= min_q]
+        if filtered:
+            col_groups = filtered
+
     # --- numeración columna-mayor: bloque 1 arriba->abajo, luego bloque 2... ---
     questions = []
     n = 0
     for g in col_groups:
         qs = sorted((raw_questions[i] for i in g), key=lambda q: q[0].y)
+        # Origen de la rejilla de opciones del bloque: la columna 'A' es la
+        # posición inicial más frecuente entre las preguntas del bloque.
+        x0 = float(np.median([q[0].x for q in qs]))
         for q in qs:
             n += 1
             qq = Question(number=n, bubbles=q)
-            for j, b in enumerate(q):
-                b.letter = letters[j] if j < len(letters) else "?"
+            # La letra se deduce de la COLUMNA de la rejilla, no del índice en
+            # la lista: si falla la detección de una opción extrema (la A), las
+            # demás conservan su letra correcta en vez de correrse una posición.
+            for b in q:
+                k = int(round((b.x - x0) / gap_opt))
+                k = max(0, k)
+                b.letter = letters[k] if k < len(letters) else "?"
+            # Opciones ausentes dentro del rango leído -> se reportan
+            got = [b.letter for b in q]
+            if len(set(got)) != len(got):
+                qq.warning = "letras ambiguas"
+            elif got and got[0] != letters[0]:
+                qq.warning = "falta la opción %s" % letters[0]
             questions.append(qq)
     return questions
 
@@ -453,14 +847,40 @@ def deskew(gray: np.ndarray) -> np.ndarray:
 
 def analyze_sheet(path: str, letters: str = "ABCDEFGH"):
     """
-    Analiza una hoja y devuelve (gray, questions, thr): la imagen enderezada,
-    las preguntas con burbujas (coordenadas, relleno, marcado) y el umbral.
+    Analiza una hoja y devuelve (gray, questions, thr, qr, aviso, rotacion): la imagen
+    enderezada y orientada, las preguntas con burbujas (coordenadas, relleno,
+    marcado), el umbral y el payload del QR de identificación (o None).
     Es la base tanto de process_sheet como de interfaces de revisión.
     """
     img = cv2.imread(path)
     if img is None:
         raise FileNotFoundError(path)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Orientación: el QR va arriba a la izquierda. Si aparece en la mitad
+    # inferior derecha, la hoja entró al revés — se gira 180° y se relee.
+    # Sin esto una hoja invertida produce una lectura completa y plausible
+    # pero equivocada, sin una sola advertencia.
+    # El QR va arriba a la izquierda. Su posición dice en cuál de las cuatro
+    # orientaciones entró la hoja; se gira para dejarlo en su esquina. Sin
+    # esto, una hoja invertida produce una lectura completa y plausible pero
+    # equivocada, y una hoja de costado devuelve basura.
+    qr, box, _ = read_qr(gray)
+    rotation = 0
+    if box is not None:
+        cx_ = (box[0] + box[2] / 2.0) / gray.shape[1]
+        cy_ = (box[1] + box[3] / 2.0) / gray.shape[0]
+        turn = None
+        if cx_ > 0.5 and cy_ <= 0.5:        # QR arriba a la derecha
+            turn, rotation = cv2.ROTATE_90_COUNTERCLOCKWISE, 90
+        elif cx_ > 0.5 and cy_ > 0.5:       # QR abajo a la derecha
+            turn, rotation = cv2.ROTATE_180, 180
+        elif cx_ <= 0.5 and cy_ > 0.5:      # QR abajo a la izquierda
+            turn, rotation = cv2.ROTATE_90_CLOCKWISE, 270
+        if turn is not None:
+            gray = cv2.rotate(gray, turn)
+            qr, box, _ = read_qr(gray)
+
     gray = deskew(gray)
 
     bubbles = detect_bubbles(gray)
@@ -470,27 +890,42 @@ def analyze_sheet(path: str, letters: str = "ABCDEFGH"):
     questions = build_questions(bubbles, letters)
     all_bubbles = [b for q in questions for b in q.bubbles]
     measure_fill(gray, all_bubbles)
-    thr = adaptive_mark_threshold(all_bubbles)
+    thr, thr_warn = adaptive_mark_threshold(questions)
     for b in all_bubbles:
         b.marked = b.fill >= thr
-    return gray, questions, thr
+    return gray, questions, thr, qr, thr_warn, rotation
 
 
-def process_sheet(path: str, letters: str = "ABCDEFGH", debug_path: str = None) -> dict:
-    gray, questions, thr = analyze_sheet(path, letters)
+def process_sheet(path: str, letters: str = "ABCDEFGH", debug_path: str = None,
+                  expected: int = 0) -> dict:
+    gray, questions, thr, qr, thr_warn, rotation = analyze_sheet(path, letters)
 
     result = {
         "archivo": path,
+        "identificacion": qr,
         "umbral_marcado": round(thr, 3),
         "total_burbujas": sum(len(q.bubbles) for q in questions),
         "total_preguntas": len(questions),
         "respuestas": {q.number: q.answer for q in questions},
         "advertencias": [
-            f"Pregunta {q.number}: {q.answer}"
+            f"Pregunta {q.number}: {q.warning or q.answer}"
             for q in questions
-            if q.answer == "BLANCO" or q.answer.startswith("MULTIPLE")
+            if q.warning or q.answer == "BLANCO" or q.answer.startswith("MULTIPLE")
         ],
     }
+    for a in check_structure(questions, expected):
+        result["advertencias"].insert(0, a)
+    result["rotacion_aplicada"] = rotation
+    if rotation:
+        result["advertencias"].insert(0, "hoja girada %d grados al procesar" % rotation)
+    if thr_warn:
+        result["advertencias"].insert(0, thr_warn)
+    if not qr:
+        result["advertencias"].insert(0, "QR no legible: hoja sin identificar")
+        if not qr_backends()["wechat"]:
+            result["advertencias"].insert(
+                0, "falta opencv-contrib-python (decodificador WeChat): "
+                   "sin él muchos QR de escaneo no se leen")
 
     if debug_path:
         dbg = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
@@ -514,9 +949,13 @@ def main():
     ap.add_argument("--debug", help="Imagen de depuración con detecciones")
     ap.add_argument("--letters", default="ABCDEFGH",
                     help="Alfabeto de opciones en orden (default ABCDEFGH)")
+    ap.add_argument("--esperadas", type=int, default=0,
+                    help="Nº de preguntas que debe tener la hoja; si no coincide "
+                         "se reporta como advertencia")
     args = ap.parse_args()
 
-    res = process_sheet(args.imagen, letters=args.letters, debug_path=args.debug)
+    res = process_sheet(args.imagen, letters=args.letters, debug_path=args.debug,
+                        expected=args.esperadas)
 
     if args.json:
         with open(args.json, "w", encoding="utf-8") as f:

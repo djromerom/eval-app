@@ -203,7 +203,10 @@ async function main() {
       data: {
         institutionId: institution.id,
         code: studentCode,
-        name: "Estudiante E2E",
+        lastName1: "ESTUDIANTE",
+        lastName2: "E2E",
+        firstName1: "ESTUDIANTE",
+        firstName2: "",
         idType: "T.I.",
         idNumber: "1000000001",
         groupId: groupRow.id,

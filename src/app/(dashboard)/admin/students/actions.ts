@@ -11,7 +11,7 @@ import {
   makeImportStudents,
   makeUpdateStudent,
 } from "@/modules/students/infrastructure/container";
-import { parseStudentsCsv } from "@/modules/students/infrastructure/csv";
+import { parseStudentsImport } from "@/modules/students/infrastructure/import-parser";
 
 const PATH = "/admin/students";
 
@@ -28,7 +28,10 @@ export async function createStudentAction(
     actor,
     data: {
       groupId: str(formData, "groupId"),
-      name: str(formData, "name"),
+      lastName1: str(formData, "lastName1"),
+      lastName2: str(formData, "lastName2"),
+      firstName1: str(formData, "firstName1"),
+      firstName2: str(formData, "firstName2"),
       idType: str(formData, "idType"),
       idNumber: str(formData, "idNumber"),
       code: str(formData, "code"),
@@ -58,7 +61,10 @@ export async function updateStudentAction(
     studentId: str(formData, "studentId"),
     data: {
       groupId: str(formData, "groupId"),
-      name: str(formData, "name"),
+      lastName1: str(formData, "lastName1"),
+      lastName2: str(formData, "lastName2"),
+      firstName1: str(formData, "firstName1"),
+      firstName2: str(formData, "firstName2"),
       idType: str(formData, "idType"),
       idNumber: str(formData, "idNumber"),
       enrollmentYear: Number(str(formData, "enrollmentYear")),
@@ -95,7 +101,7 @@ export interface ImportState {
   done?: boolean;
 }
 
-/** Importación masiva: recibe el archivo CSV, lo parsea y lo procesa. */
+/** Importación masiva: recibe el archivo XLSX o CSV, lo parsea y lo procesa. */
 export async function importStudentsAction(
   _prev: ImportState,
   formData: FormData,
@@ -104,15 +110,20 @@ export async function importStudentsAction(
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
-    return { error: "Selecciona un archivo CSV." };
+    return { error: "Selecciona un archivo XLSX o CSV." };
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    return { error: "El archivo excede 5 MB." };
   }
 
-  const { rows, missing } = parseStudentsCsv(await file.text());
-  if (missing.length > 0) {
-    return { error: `Faltan columnas en el CSV: ${missing.join(", ")}.` };
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const parsed = parseStudentsImport(buffer, file.name);
+  if (parsed.error) return { error: parsed.error };
+  if (parsed.missing.length > 0) {
+    return { error: `Faltan columnas en el archivo: ${parsed.missing.join(", ")}.` };
   }
 
-  const result = await makeImportStudents().execute({ actor, rows });
+  const result = await makeImportStudents().execute({ actor, rows: parsed.rows });
   if (!result.ok) return { error: result.error.message };
 
   revalidatePath(PATH);

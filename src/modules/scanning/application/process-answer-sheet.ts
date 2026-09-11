@@ -380,7 +380,14 @@ export class ProcessAnswerSheet {
     detected: DetectedSheet,
   ): Promise<void> {
     try {
-      const base = `scans/${scanBatchId}/sheet_${answerSheetId.slice(0, 8)}`;
+      // Id COMPLETO, no `slice(0, 8)`: los ids son uuid v7, cuyos primeros
+      // bits son el timestamp de creacion. Todas las hojas de un lote se
+      // crean en el mismo instante, asi que compartian prefijo y cada hoja
+      // pisaba los artefactos de la anterior: un lote de 68 hojas dejaba un
+      // unico grid.json, y la matriz de revision mostraba la misma fila 68
+      // veces. Si se cambia aca, cambiar tambien los dos lectores:
+      // teacher/scan/[batchId]/page.tsx y api/scans/cells/[batchId]/[sheetId].
+      const base = `scans/${scanBatchId}/sheet_${answerSheetId}`;
       await localStorage.save(`${base}_cells.json`, Buffer.from(JSON.stringify(detected)));
       const grid = {
         thr: detected.thr,

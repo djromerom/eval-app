@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import type { Metadata } from "next";
 import "@/styles/print.css";
+import "@/styles/print-page-number.css";
 import { readFile } from "node:fs/promises";
 import { notFound } from "next/navigation";
 import { resolvePrintActor } from "@/lib/print-access";
@@ -390,12 +391,8 @@ export default async function PrintBundlePage({
       {/* ===== Páginas 2+: booklet de cada evaluation ===== */}
       {validEvaluations.map(({ item, evaluation }) => {
         const competencyRows = buildCompetencyRows(evaluation.sections);
-        // Header de página: ECU + grado + asignatura + N° cuadernillo de
-        // esta evaluación. Mismo formato que en el booklet individual.
         const cs = csById.get(evaluation.courseSubjectId);
         const area = cs?.subjectName ?? "";
-        const grade = cs?.courseName ?? "";
-        const bookletLabel = evaluation.bookletNumber != null ? ` ${evaluation.bookletNumber}` : "";
         return (
           <div key={item.id} className="bundle-eval-section">
             {/* UN solo contenedor por formulación, igual que en el booklet de
@@ -403,10 +400,6 @@ export default async function PrintBundlePage({
                 izquierda a la derecha y de ahí a la página siguiente. Con un
                 contenedor por contexto, Chrome balancea mal al fragmentar. */}
             <section className="sheet questions">
-              <div className="print-page-header">
-                ECU {grade}
-                {bookletLabel}
-              </div>
               {area ? <p className="subject-title">{area}</p> : null}
               <div className="questions-flow" data-columns={theme.questionColumns}>
                 {groupSectionsForPrint(evaluation.sections).map((group) => {
@@ -456,7 +449,10 @@ export default async function PrintBundlePage({
                       >
                         {/* Agrupado para que el contexto no se separe de su 1ª
                             pregunta. En `none-merged`, solo el head emite intro. */}
-                        <div className="block-intro">
+                        <div
+                          className="block-intro"
+                          data-empty={!headSection.title && !headHasContext ? "true" : undefined}
+                        >
                           {showLead && (
                             <p className="block-lead">
                               RESPONDA LAS PREGUNTAS {first} A LA {last} DE ACUERDO CON LA SIGUIENTE

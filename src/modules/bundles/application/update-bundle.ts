@@ -8,10 +8,15 @@ import {
   fail,
   ok,
 } from "@/shared/domain/result";
-import type { CourseRepository } from "@/modules/academic/domain/types";
+import type {
+  CourseRepository,
+  PeriodRepository,
+} from "@/modules/academic/domain/types";
+import type { BookletTypeRepository } from "@/modules/booklet-types/domain/booklet-type";
 import { type Bundle, type BundleRepository, type UpdateBundleData } from "../domain/bundle";
 import { isLocked } from "../domain/bundle-status";
 import {
+  evaluationMatchesBundleBookletType,
   evaluationMatchesBundleCourse,
   isValidBookletNumber,
   isValidBundleName,
@@ -34,11 +39,18 @@ export interface UpdateBundleInput {
  *     mantiene la invariante "bundle con curso ⇒ items homogéneos".
  *   - `courseId: null` limpia el curso (vuelve a cross-course) sin
  *     validar los items: relajar la restricción siempre es seguro.
+ *
+ * Sprint Bundle-Period (sep 2026) — asignar/cambiar `periodId` /
+ * `bookletTypeId`: misma semántica que `courseId`: validar existencia y
+ * consistencia con los items existentes; `null` explícito relaja la
+ * restricción sin validar items.
  */
 export class UpdateBundle implements UseCase<UpdateBundleInput, Bundle> {
   constructor(
     private readonly bundles: BundleRepository,
     private readonly courses: CourseRepository,
+    private readonly periods: PeriodRepository,
+    private readonly bookletTypes: BookletTypeRepository,
   ) {}
 
   async execute({ actor, bundleId, data }: UpdateBundleInput): Promise<Result<Bundle>> {
@@ -93,6 +105,46 @@ export class UpdateBundle implements UseCase<UpdateBundleInput, Bundle> {
         return fail(
           new ValidationError(
             `No puedes asignar el curso ${course.name}: el cuadernillo ya tiene items de otros cursos (p. ej. "${mismatch.evaluationTitle}" es de ${mismatch.courseName}). Quítalos primero.`,
+          ),
+        );
+      }
+    }
+
+    // Sprint Bundle-Period — periodId / bookletTypeId.
+    // Resolvemos los valores FINALES (input gana sobre existing) y validamos
+    // existencia + consistencia con los items.
+    const finalPeriodId: string | null =
+      data.periodId !== undefined ? data.periodId : existing.periodId;
+    const finalBookletTypeId: string | null =
+      data.bookletTypeId !== undefined ? data.bookletTypeId : existing.bookletTypeId;
+
+    if (data.periodId !== undefined && data.periodId !== null) {
+      const period = await this.periods.findById(actor.institutionId, data.periodId);
+      if (!period) {
+        return fail(new ValidationError("La Prueba no existe en tu institución."));
+      }
+    }
+
+    if (data.bookletTypeId !== undefined && data.bookletTypeId !== null) {
+      const bt = await this.bookletTypes.findById(actor.institutionId, data.bookletTypeId);
+      if (!bt) {
+        return fail(new ValidationError("El tipo de cuadernillo no existe en tu institución."));
+      }
+      if (finalPeriodId !== null && bt.periodId !== finalPeriodId) {
+        return fail(
+          new ValidationError("El tipo de cuadernillo no pertenece a la Prueba del cuadernillo."),
+        );
+      }
+      // Consistencia con los items: si el cuadernillo pasa a tener
+      // bookletTypeId, todos los items deben matchear.
+      const items = await this.bundles.listItemsOrdered(bundleId);
+      const mismatch = items.find(
+        (i) => !evaluationMatchesBundleBookletType(finalBookletTypeId, i.bookletTypeId),
+      );
+      if (mismatch) {
+        return fail(
+          new ValidationError(
+            `No puedes asignar el tipo "${bt.name}": el cuadernillo ya tiene items de otro tipo (p. ej. "${mismatch.evaluationTitle}" es de ${mismatch.bookletTypeName ?? "(sin tipo)"}). Quítalos primero.`,
           ),
         );
       }

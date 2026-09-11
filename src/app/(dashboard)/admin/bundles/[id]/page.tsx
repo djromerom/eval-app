@@ -6,8 +6,9 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
-import { makeListCourses } from "@/modules/academic/infrastructure/container";
+import { makeListCourses, makeListPeriods } from "@/modules/academic/infrastructure/container";
 import { makeListEvaluations } from "@/modules/evaluations/infrastructure/container";
+import { makeListBookletTypesByInstitution } from "@/modules/booklet-types/infrastructure/container";
 import { computeCoverTable, formatDuration } from "@/modules/bundles/domain/cover-table";
 import { BundleActionPanel } from "./action-buttons";
 import { BundleEditForm } from "./edit-form";
@@ -16,6 +17,13 @@ import { ItemsManager } from "./items-manager";
 export const metadata: Metadata = { title: "Detalle del cuadernillo" };
 
 const dateFmt = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
+
+/** Convierte `Bundle.evaluationDate: Date | null` al formato `yyyy-mm-dd`
+ *  que requiere `<input type="date">`. Devuelve "" si es null. */
+function dateToInput(d: Date | null): string {
+  if (!d) return "";
+  return d.toISOString().slice(0, 10);
+}
 
 export default async function BundleDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const actor = await requireAuthenticatedUser("ECU_MASTER", "ECU_LIDER");
@@ -27,13 +35,20 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
   const isDraft = bundle.status === "DRAFT";
   const coverTable = computeCoverTable(bundle.items);
 
-  // Lista de evaluations aprobadas/publicadas disponibles para añadir.
-  const [approved, published, coursesRes] = await Promise.all([
+  // Lista de evaluations aprobadas/publicadas disponibles para añadir +
+  // cursos + periodos + bookletTypes para los selects del edit form.
+  const [approved, published, coursesRes, periodsRes, bookletTypesRes] = await Promise.all([
     makeListEvaluations().execute({ actor, status: "APPROVED" }),
     makeListEvaluations().execute({ actor, status: "PUBLISHED" }),
     makeListCourses().execute({ actor }),
+    makeListPeriods().execute({ actor }),
+    makeListBookletTypesByInstitution().execute({ actor }),
   ]);
   const courses = coursesRes.ok ? coursesRes.value.map((c) => ({ id: c.id, name: c.name })) : [];
+  const periods = periodsRes.ok ? periodsRes.value.map((p) => ({ id: p.id, name: p.name })) : [];
+  const bookletTypes = bookletTypesRes.ok
+    ? bookletTypesRes.value.map((bt) => ({ id: bt.id, periodId: bt.periodId, name: bt.name }))
+    : [];
   const candidatesRaw = [
     ...(approved.ok ? approved.value : []),
     ...(published.ok ? published.value : []),
@@ -56,6 +71,8 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
         title={bundle.name}
         description={
           <>
+            {bundle.periodName ? `${bundle.periodName} · ` : ""}
+            {bundle.bookletTypeName ? `${bundle.bookletTypeName} · ` : ""}
             {bundle.courseName ? `${bundle.courseName} · ` : ""}
             N° de cuadernillo {bundle.bookletNumber ?? "—"} ·{" "}
             <span
@@ -84,14 +101,21 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
               initialName={bundle.name}
               initialBookletNumber={bundle.bookletNumber}
               initialCourseId={bundle.courseId}
+              initialPeriodId={bundle.periodId}
+              initialBookletTypeId={bundle.bookletTypeId}
+              initialEvaluationDate={dateToInput(bundle.evaluationDate)}
               courses={courses}
+              periods={periods}
+              bookletTypes={bookletTypes}
             />
           ) : (
             <div className="bg-card space-y-2 rounded-xl border p-6">
               <h2 className="font-semibold">Metadatos</h2>
               <p className="text-muted-foreground text-sm">
                 <strong>{bundle.name}</strong> — cuadernillo{" "}
-                <strong>{bundle.bookletNumber ?? "—"}</strong> — grado{" "}
+                <strong>{bundle.bookletNumber ?? "—"}</strong> — Prueba{" "}
+                <strong>{bundle.periodName ?? "sin Prueba"}</strong>
+                {bundle.bookletTypeName ? ` — tipo ${bundle.bookletTypeName}` : ""} — grado{" "}
                 <strong>{bundle.courseName ?? "sin grado específico"}</strong>
               </p>
               <p className="text-muted-foreground text-xs">

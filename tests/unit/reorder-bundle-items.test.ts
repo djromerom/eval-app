@@ -5,6 +5,9 @@ import { ReorderBundleItems } from "@/modules/bundles/application/reorder-bundle
 import {
   InMemoryBundleRepository,
   courses,
+  years,
+  periods,
+  bookletTypes,
   seedEvaluationGrado6,
   superAdmin,
 } from "./bundles-shared";
@@ -17,7 +20,7 @@ describe("ReorderBundleItems", () => {
 
   beforeEach(() => {
     repo = new InMemoryBundleRepository();
-    createBundle = new CreateBundle(repo, courses);
+    createBundle = new CreateBundle(repo, courses, years, periods, bookletTypes);
     reorder = new ReorderBundleItems(repo);
     markReady = new MarkBundleReady(repo);
   });
