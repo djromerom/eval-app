@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import { requireAuthenticatedUser } from "@/lib/session";
+import { safeReturnPath } from "@/shared/domain/return-path";
+import { hasRole } from "@/shared/application/authenticated-user";
 import { PageHeader } from "@/components/page-header";
 import { ScanStatusBadge } from "@/components/evaluations/scan-status-badge";
 import { renderRichText, unwrapSingleParagraph } from "@/components/editor/render";
@@ -11,11 +13,34 @@ import type { BubbleCellRecord, GridLayoutRecord } from "@/modules/scanning/doma
 
 interface PageProps {
   params: Promise<{ batchId: string; sheetId: string }>;
+  /** `volver`: a dónde apunta el enlace de retorno. A esta pantalla se llega
+   *  desde el lote y también desde la consulta de calificaciones; sin esto el
+   *  "Volver" siempre devolvía al módulo de escaneo, dejando al usuario en
+   *  otro lado del que venía. Se valida (ver `safeReturnPath`).
+   *
+   *  `soloLectura`: oculta las acciones que modifican la hoja. Es una bandera
+   *  propia y no se deduce de `volver` a propósito — mezclar "de dónde vengo"
+   *  con "qué puedo hacer" haría que agregar un enlace desde otra pantalla
+   *  cambiara los permisos aparentes sin que nadie lo pida. */
+  searchParams?: Promise<{ volver?: string; soloLectura?: string }>;
 }
 
-export default async function SheetDetailPage({ params }: PageProps) {
+export default async function SheetDetailPage({ params, searchParams }: PageProps) {
   const { batchId, sheetId } = await params;
-  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  const sp = (await searchParams) ?? {};
+  const volverA = safeReturnPath(sp.volver, "/teacher/scan");
+  // ECU_MASTER incluido para igualar la pantalla del lote, que ya lo admite:
+  // sin esto, abrir el detalle desde la consulta de calificaciones lo
+  // redirigia a "/" sin explicacion.
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
+
+  // Dos motivos para no ofrecer el reproceso, y conviene que sean explícitos:
+  //   1. Se llegó en modo consulta: ahí se viene a leer, no a operar el lote.
+  //   2. El actor no tiene el rol que exige `reprocessSheetAction`. Sin esto
+  //      un ECU_MASTER veía el botón y la acción se lo rechazaba — ocultar el
+  //      botón NO es la barrera (esa la pone la action), pero mostrar uno que
+  //      no funciona es peor que no mostrarlo.
+  const puedeReprocesar = sp.soloLectura !== "1" && hasRole(actor, "TEACHER", "ECU_LIDER");
 
   // Multi-tenant: el sheet debe pertenecer a la institución del actor y a
   // un lote que sea del docente actual (evaluation) o de la institución
@@ -149,13 +174,15 @@ export default async function SheetDetailPage({ params }: PageProps) {
               Layout calibrado (fallback)
             </span>
           )}
-          <span className="ml-auto">
-            <ReprocessButton
-              sheetId={sheet.id}
-              batchId={sheet.scanBatchId ?? batchId}
-              disabled={isProcessing}
-            />
-          </span>
+          {puedeReprocesar && (
+            <span className="ml-auto">
+              <ReprocessButton
+                sheetId={sheet.id}
+                batchId={sheet.scanBatchId ?? batchId}
+                disabled={isProcessing}
+              />
+            </span>
+          )}
         </div>
         {sheet.notes && (
           <div className="bg-muted/30 text-muted-foreground rounded p-3 text-xs">
@@ -164,10 +191,10 @@ export default async function SheetDetailPage({ params }: PageProps) {
         )}
         <div>
           <Link
-            href="/teacher/scan"
+            href={volverA}
             className="text-muted-foreground hover:text-foreground text-sm underline"
           >
-            ← Volver al listado
+            ← Volver
           </Link>
         </div>
       </section>

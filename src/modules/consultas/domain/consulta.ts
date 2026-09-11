@@ -1,3 +1,5 @@
+import type { Role } from "@/shared/application/authenticated-user";
+
 /**
  * Una "Consulta" en el módulo es un listado parametrizable sobre datos
  * institucionales. La UI `/admin/consultas` muestra las disponibles y
@@ -21,4 +23,9 @@ export interface ConsultaConfig {
    *  UI ↔ dominio. La UI puede ignorar columnas y añadir otras (sortable,
    *  filtros extra). */
   columns: readonly string[];
+  /** Roles que pueden abrir esta consulta. No es la barrera de seguridad — el
+   *  use case tiene su propio `requireRole` — sino lo que decide qué cards ve
+   *  cada quien en `/admin/consultas`. Un líder ECU no tiene por qué ver
+   *  siquiera que existe el listado de formulaciones. */
+  roles: readonly Role[];
 }
