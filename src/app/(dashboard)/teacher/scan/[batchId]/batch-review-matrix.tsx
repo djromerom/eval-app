@@ -1,5 +1,6 @@
 "use client";
 
+import { Download } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +14,10 @@ export interface SheetRow {
   thr: number | null;
   /** Respuestas detectadas en orden (n 1-based). `ans` ∈ {"A".."H","BLANCO","MULTIPLE:XY"}. */
   answers: { n: number; ans: string }[];
+  /** Contenido crudo del QR tal como se leyó del papel; `null` si fue ilegible. */
+  qrContent: string | null;
+  /** Nombre del escaneo tal como quedó guardado (no el nombre original subido). */
+  fileName: string | null;
 }
 
 interface Fill {
@@ -38,6 +43,45 @@ function shortAns(a: string): string {
   if (a === "BLANCO") return "BL";
   if (a.startsWith("MULTIPLE:")) return "(" + a.slice(9).split("").join(",") + ")";
   return a;
+}
+
+/** Contenido completo del QR de la hoja seleccionada.
+ *
+ *  Se muestra crudo, tal como venía impreso: es lo que permite auditar a qué
+ *  cuadernillo y a qué hoja física pertenece la que se está revisando, y es el
+ *  mismo texto sobre el que se verifica la firma HMAC. Si el payload no es
+ *  JSON se muestra el texto tal cual en vez de fallar. */
+function QrPanel({ qrContent }: { qrContent: string | null }) {
+  let campos: [string, string][] | null = null;
+  if (qrContent) {
+    try {
+      const parsed: unknown = JSON.parse(qrContent);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        campos = Object.entries(parsed as Record<string, unknown>).map(([k, v]) => [k, String(v)]);
+      }
+    } catch {
+      // no es JSON: cae al render crudo de abajo
+    }
+  }
+  return (
+    <div className="bg-muted/40 mt-3 rounded-md border p-2.5 font-mono text-[11px] leading-relaxed break-all">
+      <span className="text-muted-foreground mb-1 block font-sans text-[10px] font-bold tracking-wide uppercase">
+        QR
+      </span>
+      {!qrContent ? (
+        <span className="font-sans text-amber-600">no se pudo leer</span>
+      ) : campos ? (
+        campos.map(([k, v]) => (
+          <div key={k}>
+            <span className="text-muted-foreground inline-block w-[64px]">{k}</span>
+            {v}
+          </div>
+        ))
+      ) : (
+        qrContent
+      )}
+    </div>
+  );
 }
 
 export function BatchReviewMatrix({ batchId, rows }: { batchId: string; rows: SheetRow[] }) {
@@ -267,6 +311,23 @@ export function BatchReviewMatrix({ batchId, rows }: { batchId: string; rows: Sh
               <p className="font-display text-base font-semibold">
                 {selSheet.label} — Ítem {selQ?.n ?? sel.c + 1}
               </p>
+              {selSheet.fileName && (
+                <p className="text-muted-foreground mt-0.5 flex items-center gap-1.5 font-mono text-xs">
+                  <span className="truncate">{selSheet.fileName}</span>
+                  {/* `download` sin valor: el nombre lo pone la cabecera
+                      Content-Disposition de la ruta, que conoce el nombre
+                      original con el que se subio el archivo. */}
+                  <a
+                    href={`/api/scans/file/${batchId}/${selSheet.id}`}
+                    download
+                    title={`Descargar ${selSheet.fileName}`}
+                    aria-label={`Descargar ${selSheet.fileName}`}
+                    className="hover:bg-muted hover:text-foreground shrink-0 rounded p-1 transition-colors"
+                  >
+                    <Download className="size-3.5" aria-hidden />
+                  </a>
+                </p>
+              )}
               <p className="mt-1">
                 Detectado:{" "}
                 <span className="font-semibold">{selSheet.answers[sel.c]?.ans ?? "—"}</span>
@@ -297,6 +358,7 @@ export function BatchReviewMatrix({ batchId, rows }: { batchId: string; rows: Sh
                   </span>
                 ))}
               </div>
+              <QrPanel qrContent={selSheet.qrContent} />
             </>
           ) : (
             <p className="text-muted-foreground">Selecciona una celda…</p>
