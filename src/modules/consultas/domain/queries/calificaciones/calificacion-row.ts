@@ -1,3 +1,5 @@
+import type { EstadoCalificacion } from "./estado";
+
 /**
  * DTO de una fila de la consulta "Calificaciones": **una hoja calificada**
  * (o pendiente) de un estudiante en una prueba.
@@ -6,14 +8,36 @@
  * presentó dos cuadernillos aparece dos veces, y una hoja re-escaneada
  * aparece por cada escaneo. Es lo que permite auditar el lote contra el papel.
  *
- * Solo hojas **identificadas**: si el QR no se pudo resolver, la hoja no es
- * una calificación de nadie y se atiende en la revisión del lote, no acá. Por
- * eso estudiante, grado y grupo nunca son null — el camino
- * `Student -> Group -> Course` es obligatorio en el esquema.
+ * Solo hojas **identificadas**, y **una por estudiante y prueba**: la última
+ * modificada, cualquiera sea su estado. Una hoja sin QR resuelto no es la
+ * calificación de nadie y se atiende en la revisión del lote.
  *
- * Sí siguen siendo nullables `totalCorrect`/`puntaje`: una hoja identificada
- * puede estar todavía sin calificar (`graded === false`).
+ * Que la fila sea siempre la última importa: si un estudiante tiene una
+ * calificación vieja y un reescaneo reciente sin procesar, lo que se reporta
+ * es el reescaneo pendiente. Es la única forma de que el filtro de estado
+ * sirva para lo que se pidió — encontrar a quién le falta algo — en vez de
+ * esconder el problema detrás de una nota anterior.
+ *
+ * Estudiante, grado y grupo nunca son null porque `Student -> Group -> Course`
+ * es obligatorio en el esquema. El puntaje y los conteos sí lo son: una hoja
+ * pendiente todavía no los tiene.
  */
+/** Una hoja del historial de ese estudiante en esa prueba. La fila de la
+ *  consulta muestra la vigente; el resto queda acá para poder responder "¿por
+ *  qué esta nota y no la otra?" sin salir de la consulta. */
+export interface EntradaHistorial {
+  sheetId: string;
+  batchId: string | null;
+  /** `updatedAt`: el mismo reloj con el que se eligió la vigente. */
+  fecha: Date;
+  estado: EstadoCalificacion;
+  puntaje: number | null;
+  totalCorrect: number | null;
+  totalQuestions: number | null;
+  /** `true` en la que la consulta está reportando. */
+  vigente: boolean;
+}
+
 export interface CalificacionRow {
   /** Id de la `AnswerSheet`. Estable, sirve de key en la UI. */
   sheetId: string;
@@ -45,16 +69,19 @@ export interface CalificacionRow {
   bookletTypeName: string | null;
 
   // --- resultado ---
-  /** Estado crudo del escaneo (`GRADED`, `REVIEW`, `PENDING`, ...). */
+  /** Estado crudo del escaneo, por trazabilidad. Para mostrar y filtrar se usa
+   *  `estado`, que lo cruza con el puntaje (ver `estadoDeHoja`). */
   status: string;
-  /** `true` solo si la hoja ya fue calificada. Precomputado para que la UI no
-   *  repita la regla. */
-  graded: boolean;
+  estado: EstadoCalificacion;
   totalCorrect: number | null;
   totalQuestions: number | null;
   /** Escala 0-10 con piso de 3 — ver `calcularPuntaje`. No es
-   *  `AnswerSheet.score`, que guarda el conteo crudo de aciertos. */
+   *  `AnswerSheet.score`, que guarda el conteo crudo de aciertos.
+   *  `null` mientras la hoja esté pendiente. */
   puntaje: number | null;
   /** Cuándo se creó la hoja en el lote (sirve de orden cronológico). */
   scannedAt: Date;
+  /** Todas las hojas de este estudiante en esta prueba, de la más reciente a
+   *  la más vieja. Incluye la vigente. Siempre tiene al menos un elemento. */
+  historial: EntradaHistorial[];
 }

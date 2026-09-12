@@ -1,3 +1,5 @@
+import { ESTADOS, type EstadoCalificacion } from "./estado";
+
 /**
  * Filtros de la consulta "Calificaciones". Todos opcionales.
  *
@@ -9,6 +11,10 @@
  * grados nunca salieron del servidor.
  */
 export interface CalificacionesFilters {
+  /** Estado de la ÚLTIMA hoja del estudiante. `"todas"` o ausente = sin
+   *  filtrar. Ojo: filtra la fila ya elegida, no elige cuál fila se muestra —
+   *  esa siempre es la última hoja del estudiante. */
+  estado?: EstadoCalificacion | "todas";
   /** Grado (`Course.id`). */
   courseId?: string;
   /** Grupo (`Group.id`). Si el grupo no pertenece al grado elegido, el
@@ -18,8 +24,6 @@ export interface CalificacionesFilters {
   periodId?: string;
   /** Tipo de cuadernillo (`BookletType.id`). */
   bookletTypeId?: string;
-  /** "calificadas" | "pendientes". Sin valor, muestra ambas. */
-  estado?: "calificadas" | "pendientes";
 }
 
 /** Construye el bag de filtros desde searchParams. Valores vacíos o fuera del
@@ -32,7 +36,9 @@ export function parseCalificacionesFilters(
   if (sp.groupId && sp.groupId.trim()) out.groupId = sp.groupId.trim();
   if (sp.periodId && sp.periodId.trim()) out.periodId = sp.periodId.trim();
   if (sp.bookletTypeId && sp.bookletTypeId.trim()) out.bookletTypeId = sp.bookletTypeId.trim();
-  if (sp.estado === "calificadas" || sp.estado === "pendientes") out.estado = sp.estado;
+  if (sp.estado === "todas" || ESTADOS.some((e) => e.valor === sp.estado)) {
+    out.estado = sp.estado as EstadoCalificacion | "todas";
+  }
   return out;
 }
 
@@ -43,7 +49,7 @@ export function applyCalificacionesFilters<
     groupId: string;
     periodId: string | null;
     bookletTypeId: string | null;
-    graded: boolean;
+    estado: EstadoCalificacion;
   },
 >(rows: T[], f: CalificacionesFilters): T[] {
   return rows.filter((r) => {
@@ -51,8 +57,7 @@ export function applyCalificacionesFilters<
     if (f.groupId && r.groupId !== f.groupId) return false;
     if (f.periodId && r.periodId !== f.periodId) return false;
     if (f.bookletTypeId && r.bookletTypeId !== f.bookletTypeId) return false;
-    if (f.estado === "calificadas" && !r.graded) return false;
-    if (f.estado === "pendientes" && r.graded) return false;
+    if (f.estado && f.estado !== "todas" && r.estado !== f.estado) return false;
     return true;
   });
 }

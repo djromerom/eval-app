@@ -35,9 +35,11 @@ function fila(over: Partial<CalificacionRow> = {}): CalificacionRow {
     assessmentName: "Simulacro",
     periodId: "p1", periodName: "I Periodo",
     bookletTypeId: "bt1", bookletTypeName: "Estándar",
-    status: "GRADED", graded: true,
+    status: "GRADED", estado: "calificada",
     totalCorrect: 8, totalQuestions: 10, puntaje: 8,
-    scannedAt: new Date("2026-09-01"), ...over,
+    scannedAt: new Date("2026-09-01"),
+    historial: [],
+    ...over,
   };
 }
 
@@ -103,10 +105,10 @@ describe("ListCalificaciones — acceso", () => {
 
 describe("filtros de calificaciones", () => {
   const filas = [
-    fila({ sheetId: "a", courseId: "c1", groupId: "g1", graded: true }),
-    fila({ sheetId: "b", courseId: "c1", groupId: "g2", graded: false }),
-    fila({ sheetId: "c", courseId: "c2", groupId: "g3", graded: true }),
-    fila({ sheetId: "d", courseId: "c3", groupId: "g4", graded: false }),
+    fila({ sheetId: "a", courseId: "c1", groupId: "g1" }),
+    fila({ sheetId: "b", courseId: "c1", groupId: "g2" }),
+    fila({ sheetId: "c", courseId: "c2", groupId: "g3" }),
+    fila({ sheetId: "d", courseId: "c3", groupId: "g4" }),
   ];
 
   it("filtra por grado", () => {
@@ -115,9 +117,18 @@ describe("filtros de calificaciones", () => {
   it("filtra por grupo", () => {
     expect(applyCalificacionesFilters(filas, { groupId: "g2" }).map((f) => f.sheetId)).toEqual(["b"]);
   });
-  it("filtra pendientes (identificadas pero aún sin puntaje)", () => {
-    expect(applyCalificacionesFilters(filas, { estado: "pendientes" }).map((f) => f.sheetId)).toEqual(["b", "d"]);
+  it("filtra por estado de la ultima hoja", () => {
+    const conEstados = [
+      fila({ sheetId: "ok", estado: "calificada" }),
+      fila({ sheetId: "obs", estado: "observaciones" }),
+      fila({ sheetId: "pend", estado: "pendiente", puntaje: null, totalCorrect: null }),
+    ];
+    expect(applyCalificacionesFilters(conEstados, { estado: "pendiente" }).map((f) => f.sheetId)).toEqual(["pend"]);
+    expect(applyCalificacionesFilters(conEstados, { estado: "observaciones" }).map((f) => f.sheetId)).toEqual(["obs"]);
+    // "todas" no filtra
+    expect(applyCalificacionesFilters(conEstados, { estado: "todas" })).toHaveLength(3);
   });
+
   it("filtra por prueba (periodo)", () => {
     const conPeriodos = [
       fila({ sheetId: "x", periodId: "p1" }),
@@ -144,9 +155,8 @@ describe("filtros de calificaciones", () => {
 
   it("parsea searchParams y descarta basura", () => {
     expect(
-      parseCalificacionesFilters({ courseId: " c1 ", groupId: "", periodId: " p1 ", estado: "raro" }),
+      parseCalificacionesFilters({ courseId: " c1 ", groupId: "", periodId: " p1 " }),
     ).toEqual({ courseId: "c1", periodId: "p1" });
-    expect(parseCalificacionesFilters({ estado: "pendientes" })).toEqual({ estado: "pendientes" });
   });
 });
 
