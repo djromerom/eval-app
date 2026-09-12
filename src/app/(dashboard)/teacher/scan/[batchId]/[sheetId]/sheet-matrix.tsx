@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { CellDiagnosticModal } from "./cell-diagnostic-modal";
 import type { BubbleCellRecord, AnswerKey } from "@/modules/scanning/domain/answer-sheet";
 
@@ -9,6 +9,9 @@ export interface MatrixRow {
   questionNumber: number | null;
   questionTextHtml: string;
   cells: BubbleCellRecord[];
+  /** Opciones que realmente tiene este ítem ("A".."D", o "A".."H"). Una hoja
+   *  mezcla preguntas de distinto número de opciones. */
+  optionKeys: string[];
   selectedKey: string | null;
   correctKey: string;
   isCorrect: boolean | null;
@@ -22,7 +25,16 @@ interface SheetMatrixProps {
   /** Ruta al overlay PNG con bboxes dibujados (recortado por color) —
    *  opcional; si falta, el modal no muestra la miniatura. */
   processedImagePath: string | null;
+  /** Para pedir los recortes por pregunta a /api/scans/cells/<batch>/<sheet>. */
+  batchId: string;
+  sheetId: string;
 }
+
+/** Recortes del escaneo por número de pregunta, en base64. Se piden una sola
+ *  vez, la primera vez que se abre un detalle: el JSON completo ronda el MB en
+ *  una hoja de 95 ítems y no tiene sentido cargarlo con la página cuando la
+ *  mayoría de las visitas solo miran la matriz. */
+type Recortes = Map<number, string>;
 
 type CellTone = "blank" | "wrong" | "right" | "multiple" | "ambiguous";
 
@@ -48,8 +60,51 @@ const toneClasses: Record<CellTone, string> = {
   ambiguous: "bg-amber-100 text-amber-900 border-amber-400 border-dashed hover:bg-amber-200",
 };
 
-export function SheetMatrix({ rows, answerKeys, processedImagePath }: SheetMatrixProps) {
-  const [openRow, setOpenRow] = useState<MatrixRow | null>(null);
+export function SheetMatrix({
+  rows,
+  answerKeys,
+  processedImagePath,
+  batchId,
+  sheetId,
+}: SheetMatrixProps) {
+  // Se guarda también el índice: es la clave de los recortes (ver `abrir`).
+  const [abierto, setAbierto] = useState<{ row: MatrixRow; idx: number } | null>(null);
+
+  // Columnas = unión de las opciones presentes, en el orden canónico. Si
+  // ninguna pregunta llega a E-H, esas columnas no se dibujan; si alguna sí,
+  // la columna existe pero las filas de 4 opciones la dejan vacía en vez de
+  // pintar una burbuja que en el papel no existe.
+  const columnas = answerKeys.filter((k) => rows.some((r) => r.optionKeys.includes(k)));
+  const [recortes, setRecortes] = useState<Recortes | null>(null);
+  const [cargandoRecortes, setCargandoRecortes] = useState(false);
+
+  /** `idx` es la POSICIÓN de la fila, y esa es la clave de los recortes.
+   *
+   *  No sirve `row.questionNumber`: en un cuadernillo ese campo es
+   *  `bundleItem.order` (qué formulación dentro del cuadernillo), así que se
+   *  repite en decenas de filas — en la hoja de prueba vale 1 para 35 de
+   *  ellas. El motor OMR, en cambio, numera de 1 a N por posición en el papel.
+   *  Las filas llegan ordenadas por `id` ascendente, que es el orden en que el
+   *  worker las creó recorriendo las preguntas detectadas, así que
+   *  `idx + 1 === n` del motor. */
+  const abrir = useCallback(
+    (row: MatrixRow, idx: number) => {
+      setAbierto({ row, idx });
+      if (recortes || cargandoRecortes) return;
+      setCargandoRecortes(true);
+      fetch(`/api/scans/cells/${batchId}/${sheetId}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { questions?: { n: number; crop?: string }[] } | null) => {
+          // Sin recortes el modal sigue sirviendo: solo no muestra la imagen.
+          setRecortes(
+            new Map((d?.questions ?? []).filter((q) => q.crop).map((q) => [q.n, q.crop!])),
+          );
+        })
+        .catch(() => setRecortes(new Map()))
+        .finally(() => setCargandoRecortes(false));
+    },
+    [batchId, sheetId, recortes, cargandoRecortes],
+  );
 
   if (rows.length === 0) {
     return (
@@ -75,7 +130,7 @@ export function SheetMatrix({ rows, answerKeys, processedImagePath }: SheetMatri
               >
                 Pregunta
               </th>
-              {answerKeys.map((k) => (
+              {columnas.map((k) => (
                 <th
                   key={k}
                   className="bg-muted/40 text-muted-foreground w-12 border-b px-2 py-2 text-center font-medium"
@@ -86,6 +141,9 @@ export function SheetMatrix({ rows, answerKeys, processedImagePath }: SheetMatri
               ))}
               <th className="bg-muted/40 text-muted-foreground w-24 border-b border-l px-3 py-2 text-left font-medium">
                 Correcta
+              </th>
+              <th className="bg-muted/40 text-muted-foreground w-24 border-b border-l px-3 py-2 text-center font-medium">
+                Marca
               </th>
             </tr>
           </thead>
@@ -107,7 +165,12 @@ export function SheetMatrix({ rows, answerKeys, processedImagePath }: SheetMatri
                       dangerouslySetInnerHTML={{ __html: row.questionTextHtml }}
                     />
                   </td>
-                  {answerKeys.map((k) => {
+                  {columnas.map((k) => {
+                    if (!row.optionKeys.includes(k)) {
+                      // El ítem no tiene esta opción: celda vacía, no una
+                      // burbuja "sin marcar" que no existe en el papel.
+                      return <td key={k} className="bg-muted/20 border-b" aria-hidden="true" />;
+                    }
                     const cell = cellsByKey.get(k);
                     const isMarked = !!cell?.isMarked;
                     const state = cell?.state ?? "EMPTY";
@@ -119,7 +182,7 @@ export function SheetMatrix({ rows, answerKeys, processedImagePath }: SheetMatri
                       <td key={k} className="border-b p-1 text-center">
                         <button
                           type="button"
-                          onClick={() => setOpenRow(row)}
+                          onClick={() => abrir(row, idx)}
                           aria-label={label}
                           title={label}
                           className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold transition-colors ${toneClasses[tone]}`}
@@ -145,6 +208,16 @@ export function SheetMatrix({ rows, answerKeys, processedImagePath }: SheetMatri
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
+                  <td className="border-b border-l px-3 py-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => abrir(row, idx)}
+                      className="text-muted-foreground hover:text-primary text-xs underline underline-offset-2"
+                      title="Ver el recorte del escaneo para este ítem"
+                    >
+                      {row.selectedKey ? `Ver ${row.selectedKey}` : "Ver marca"}
+                    </button>
+                  </td>
                 </tr>
               );
             })}
@@ -158,12 +231,14 @@ export function SheetMatrix({ rows, answerKeys, processedImagePath }: SheetMatri
         <Legend tone="blank" label="Sin marcar" />
       </div>
 
-      {openRow && (
+      {abierto && (
         <CellDiagnosticModal
-          row={openRow}
+          crop={recortes?.get(abierto.idx + 1) ?? null}
+          cropCargando={cargandoRecortes}
+          row={abierto.row}
           answerKeys={answerKeys}
           processedImagePath={processedImagePath}
-          onClose={() => setOpenRow(null)}
+          onClose={() => setAbierto(null)}
         />
       )}
     </>

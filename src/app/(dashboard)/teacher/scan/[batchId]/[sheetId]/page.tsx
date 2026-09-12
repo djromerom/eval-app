@@ -86,6 +86,7 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
     questionNumber: number | null;
     questionHtml: string;
     cells: BubbleCellRecord[];
+    optionKeys: string[];
     selectedKey: string | null;
     correctKey: string;
     isCorrect: boolean | null;
@@ -102,6 +103,10 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
       questionNumber: a.bundleItem?.order ?? null,
       questionHtml: "",
       cells: rawCells,
+      // Opciones reales del ítem. Una hoja mezcla preguntas de 4 y de 8
+      // opciones; sin esto la matriz pinta A-H en todas y sugiere que una
+      // pregunta de 4 tenía respuestas E-H que el estudiante dejó vacías.
+      optionKeys: a.question.options.map((o) => o.key),
       selectedKey: a.selectedKey,
       correctKey: a.question.correctAnswer,
       isCorrect: a.isCorrect,
@@ -206,11 +211,14 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
           ver el porcentaje de relleno. Haz click para abrir el detalle de la pregunta.
         </p>
         <SheetMatrix
+          batchId={batchId}
+          sheetId={sheet.id}
           rows={rows.map((r) => ({
             questionId: r.questionId,
             questionNumber: r.questionNumber,
             questionTextHtml: renderTextPreview(questionTexts.get(r.questionId)?.text),
             cells: r.cells,
+            optionKeys: r.optionKeys,
             selectedKey: r.selectedKey,
             correctKey: r.correctKey,
             isCorrect: r.isCorrect,
