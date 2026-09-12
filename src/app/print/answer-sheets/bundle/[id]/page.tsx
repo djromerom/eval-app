@@ -11,6 +11,7 @@ import {
   buildSignedQrContent,
   generateQrDataUrl,
 } from "@/modules/printing/infrastructure/qr-generator";
+import { listPositionByName } from "@/modules/students/domain/student";
 import { normalizeStudentIds } from "../../../_lib/search-params";
 import { AutoPrint } from "@/app/print/_components/auto-print";
 
@@ -112,6 +113,41 @@ export default async function BundleAnswerSheetsPage({
 
   if (students.length === 0) notFound();
 
+  // "Número de lista" prefijo en el campo Nombre. Misma estrategia batch
+  // por grupos que en bulk-answer-sheets (ver comentarios allá).
+  const numeroDeListaPorEstudiante = new Map<string, number>();
+  const gruposDistintos = [
+    ...new Set(students.map((s) => s.groupId).filter((g): g is string => !!g)),
+  ];
+  if (gruposDistintos.length > 0) {
+    const companeros = await prisma.student.findMany({
+      where: {
+        institutionId: actor.institutionId,
+        groupId: { in: gruposDistintos },
+      },
+      select: {
+        id: true,
+        groupId: true,
+        lastName1: true,
+        lastName2: true,
+        firstName1: true,
+        firstName2: true,
+      },
+    });
+    const companerosPorGrupo = new Map<string, typeof companeros>();
+    for (const c of companeros) {
+      const lista = companerosPorGrupo.get(c.groupId) ?? [];
+      lista.push(c);
+      companerosPorGrupo.set(c.groupId, lista);
+    }
+    for (const s of students) {
+      const mates = companerosPorGrupo.get(s.groupId);
+      if (!mates) continue;
+      const pos = listPositionByName(mates, s.id);
+      if (pos !== null) numeroDeListaPorEstudiante.set(s.id, pos);
+    }
+  }
+
   // Cargar questions de cada evaluation del bundle en orden y aplanarlas.
   // Numeramos de corrido 1..N ignorando secciones y formulaciones. Esto hace
   // N+1 queries; aceptable para una hoja de respuestas que se imprime una vez
@@ -199,9 +235,14 @@ export default async function BundleAnswerSheetsPage({
                 <div className="as-field">
                   <span>Nombre:</span>
                   <span className="as-line-filled">
-                    {`${student.lastName1} ${student.lastName2} ${student.firstName1} ${student.firstName2}`
-                      .replace(/\s+/g, " ")
-                      .trim()}
+                    {(() => {
+                      const base =
+                        `${student.lastName1} ${student.lastName2} ${student.firstName1} ${student.firstName2}`
+                          .replace(/\s+/g, " ")
+                          .trim();
+                      const num = numeroDeListaPorEstudiante.get(student.id);
+                      return num !== undefined ? `${num}. ${base}` : base;
+                    })()}
                   </span>
                 </div>
                 {/* Grado + Grupo concatenados (sep 2026). Si el estudiante no
@@ -209,7 +250,7 @@ export default async function BundleAnswerSheetsPage({
                     la línea entera en vez de mostrar un campo a medias. */}
                 {student.group?.course?.name && student.group.name ? (
                   <div className="as-field">
-                    <span>Grado:</span>
+                    <span>Grado - Grupo:</span>
                     <span className="as-line-filled">
                       {`${student.group.course.name} - ${student.group.name}`}
                     </span>

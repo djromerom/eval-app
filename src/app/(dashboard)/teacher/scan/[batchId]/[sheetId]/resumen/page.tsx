@@ -9,6 +9,7 @@ import {
   resumirPorAsignatura,
   totalizar,
 } from "@/modules/consultas/domain/queries/calificaciones/resumen-asignaturas";
+import { listPositionByName } from "@/modules/students/domain/student";
 
 export const metadata: Metadata = { title: "Resumen por asignatura" };
 
@@ -66,6 +67,8 @@ export default async function ResumenPorAsignaturaPage({ params, searchParams }:
       evaluation: { select: { title: true } },
       student: {
         select: {
+          id: true,
+          groupId: true,
           lastName1: true,
           lastName2: true,
           firstName1: true,
@@ -116,6 +119,29 @@ export default async function ResumenPorAsignaturaPage({ params, searchParams }:
         .filter(Boolean)
         .join(", ")
     : "Hoja sin identificar";
+
+  // "Número de lista" estilo colegio colombiano: la posición 1-based del
+  // estudiante dentro de su GRUPO (la sección), ordenada por apellido1,
+  // apellido2, nombre1, nombre2. NO se persiste: la planilla del salón
+  // cambia y forzaría reescribir el dato histórico. La planilla del grupo
+  // es chico (decenas de alumnos), así que el round-trip a la BD es
+  // aceptable — y el helper `listPositionByName` es puro y testeable.
+  // Hojas sin identificar (sin QR resuelto) no muestran número.
+  let numeroDeLista: number | null = null;
+  if (alumno) {
+    const companieros = await prisma.student.findMany({
+      where: { institutionId: actor.institutionId, groupId: alumno.groupId },
+      select: {
+        id: true,
+        lastName1: true,
+        lastName2: true,
+        firstName1: true,
+        firstName2: true,
+      },
+      orderBy: { lastName1: "asc" },
+    });
+    numeroDeLista = listPositionByName(companieros, alumno.id);
+  }
   const prueba = sheet.bundle?.name ?? sheet.evaluation?.title ?? "—";
   const ubicacion = alumno?.group
     ? `${alumno.group.course.name} · ${alumno.group.name}`
@@ -137,7 +163,11 @@ export default async function ResumenPorAsignaturaPage({ params, searchParams }:
   return (
     <>
       <PageHeader
-        title={`Estudiante: ${nombre}`}
+        title={
+          numeroDeLista !== null
+            ? `Estudiante: ${numeroDeLista}. ${nombre}`
+            : `Estudiante: ${nombre}`
+        }
         description={
           <>
             {prueba}
