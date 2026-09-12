@@ -22,7 +22,7 @@ interface PageProps {
    *  propia y no se deduce de `volver` a propósito — mezclar "de dónde vengo"
    *  con "qué puedo hacer" haría que agregar un enlace desde otra pantalla
    *  cambiara los permisos aparentes sin que nadie lo pida. */
-  searchParams?: Promise<{ volver?: string; soloLectura?: string }>;
+  searchParams?: Promise<{ volver?: string; soloLectura?: string; asignatura?: string }>;
 }
 
 export default async function SheetDetailPage({ params, searchParams }: PageProps) {
@@ -76,7 +76,13 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
       question: {
         include: { options: { orderBy: { key: "asc" } } },
       },
-      bundleItem: true,
+      bundleItem: {
+        include: {
+          evaluation: {
+            select: { courseSubject: { select: { subject: { select: { name: true } } } } },
+          },
+        },
+      },
     },
   });
 
@@ -86,6 +92,11 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
     questionNumber: number | null;
     questionHtml: string;
     cells: BubbleCellRecord[];
+    /** Posición del ítem en la hoja completa, 1-based. Es la clave de los
+     *  recortes del motor OMR y sobrevive a cualquier filtrado de la tabla —
+     *  por eso se fija acá y no se deriva del índice del array. */
+    posicion: number;
+    subjectName: string | null;
     optionKeys: string[];
     selectedKey: string | null;
     correctKey: string;
@@ -94,10 +105,14 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
     fillRatio: number | null;
   };
 
-  const rows: Row[] = answers.map((a) => {
+  const todasLasFilas: Row[] = answers.map((a, idx) => {
     const rawCells = (a.cells as unknown as BubbleCellRecord[] | null) ?? [];
     return {
       questionId: a.questionId,
+      // `answers` viene ordenado por id ascendente, que es el orden en que el
+      // worker recorrió las preguntas detectadas: idx + 1 === n del motor.
+      posicion: idx + 1,
+      subjectName: a.bundleItem?.evaluation?.courseSubject?.subject?.name ?? null,
       // En bundle el "número" humano vive en bundleItem.order; en legacy
       // lo derivaría de Question.number dentro de la sección.
       questionNumber: a.bundleItem?.order ?? null,
@@ -114,6 +129,15 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
       fillRatio: a.fillRatio,
     };
   });
+
+  // Filtro por asignatura: se aplica DESPUÉS de fijar `posicion`, para que los
+  // recortes del motor sigan apuntando al ítem correcto. Se filtra por nombre
+  // de materia y no por id de bundleItem porque así coincide exactamente con
+  // el agrupamiento del resumen, que también agrupa por nombre.
+  const asignatura = sp.asignatura?.trim() || null;
+  const rows = asignatura
+    ? todasLasFilas.filter((r) => (r.subjectName ?? "Sin asignatura") === asignatura)
+    : todasLasFilas;
 
   // Texto de cada pregunta (lazy-fetch del sub-set de preguntas que
   // necesitamos; el include ya vino, pero aquí proyectamos para enviar
@@ -210,6 +234,25 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
           Cada celda muestra la respuesta leída por el escáner. Pasa el cursor sobre las celdas para
           ver el porcentaje de relleno. Haz click para abrir el detalle de la pregunta.
         </p>
+        {asignatura && (
+          // Visible y con salida: sin esto, alguien que llega por un enlace
+          // filtrado cree que la hoja tiene 10 items en vez de 95.
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm">
+            <span>
+              Mostrando solo <strong>{asignatura}</strong> — {rows.length} de{" "}
+              {todasLasFilas.length} ítems de la hoja.
+            </span>
+            <Link
+              href={`/teacher/scan/${batchId}/${sheetId}?${new URLSearchParams({
+                ...(sp.soloLectura === "1" ? { soloLectura: "1" } : {}),
+                ...(sp.volver ? { volver: sp.volver } : {}),
+              }).toString()}`}
+              className="text-primary underline underline-offset-2"
+            >
+              Ver todas las asignaturas
+            </Link>
+          </div>
+        )}
         <SheetMatrix
           batchId={batchId}
           sheetId={sheet.id}
@@ -218,6 +261,7 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
             questionNumber: r.questionNumber,
             questionTextHtml: renderTextPreview(questionTexts.get(r.questionId)?.text),
             cells: r.cells,
+            posicion: r.posicion,
             optionKeys: r.optionKeys,
             selectedKey: r.selectedKey,
             correctKey: r.correctKey,

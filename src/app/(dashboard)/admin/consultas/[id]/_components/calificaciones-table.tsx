@@ -179,11 +179,11 @@ export function CalificacionesTable({
                           pantalla a la que ir. */}
                       {r.batchId ? (
                         <Link
-                          href={`/teacher/scan/${r.batchId}/${r.sheetId}?soloLectura=1&volver=${encodeURIComponent(
+                          href={`/teacher/scan/${r.batchId}/${r.sheetId}/resumen?soloLectura=1&volver=${encodeURIComponent(
                             "/admin/consultas/calificaciones",
                           )}`}
                           className="text-muted-foreground hover:text-primary text-xs underline underline-offset-2"
-                          title="Ver el detalle de la hoja: matriz de respuestas y recortes del escaneo"
+                          title="Ver el desglose por asignatura; desde ahí se llega a la matriz de respuestas"
                         >
                           Ver detalle
                         </Link>

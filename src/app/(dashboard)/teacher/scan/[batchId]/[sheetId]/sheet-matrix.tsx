@@ -9,6 +9,9 @@ export interface MatrixRow {
   questionNumber: number | null;
   questionTextHtml: string;
   cells: BubbleCellRecord[];
+  /** Posición del ítem en la hoja completa, 1-based. Es la clave de los
+   *  recortes y NO cambia aunque la tabla se filtre. */
+  posicion: number;
   /** Opciones que realmente tiene este ítem ("A".."D", o "A".."H"). Una hoja
    *  mezcla preguntas de distinto número de opciones. */
   optionKeys: string[];
@@ -68,7 +71,7 @@ export function SheetMatrix({
   sheetId,
 }: SheetMatrixProps) {
   // Se guarda también el índice: es la clave de los recortes (ver `abrir`).
-  const [abierto, setAbierto] = useState<{ row: MatrixRow; idx: number } | null>(null);
+  const [abierto, setAbierto] = useState<MatrixRow | null>(null);
 
   // Columnas = unión de las opciones presentes, en el orden canónico. Si
   // ninguna pregunta llega a E-H, esas columnas no se dibujan; si alguna sí,
@@ -78,18 +81,13 @@ export function SheetMatrix({
   const [recortes, setRecortes] = useState<Recortes | null>(null);
   const [cargandoRecortes, setCargandoRecortes] = useState(false);
 
-  /** `idx` es la POSICIÓN de la fila, y esa es la clave de los recortes.
-   *
-   *  No sirve `row.questionNumber`: en un cuadernillo ese campo es
-   *  `bundleItem.order` (qué formulación dentro del cuadernillo), así que se
-   *  repite en decenas de filas — en la hoja de prueba vale 1 para 35 de
-   *  ellas. El motor OMR, en cambio, numera de 1 a N por posición en el papel.
-   *  Las filas llegan ordenadas por `id` ascendente, que es el orden en que el
-   *  worker las creó recorriendo las preguntas detectadas, así que
-   *  `idx + 1 === n` del motor. */
+  /** La clave de los recortes es `row.posicion`, la posición del ítem en la
+   *  hoja COMPLETA — no el índice en el array, que cambia al filtrar por
+   *  asignatura, ni `row.questionNumber`, que en un cuadernillo es
+   *  `bundleItem.order` y se repite en decenas de filas. */
   const abrir = useCallback(
-    (row: MatrixRow, idx: number) => {
-      setAbierto({ row, idx });
+    (row: MatrixRow) => {
+      setAbierto(row);
       if (recortes || cargandoRecortes) return;
       setCargandoRecortes(true);
       fetch(`/api/scans/cells/${batchId}/${sheetId}`)
@@ -153,7 +151,7 @@ export function SheetMatrix({
               return (
                 <tr key={`${row.questionId}-${idx}`} className="align-middle">
                   <td className="text-muted-foreground border-r border-b px-3 py-1 text-center font-mono text-xs">
-                    {row.questionNumber ?? idx + 1}
+                    {row.posicion}
                   </td>
                   <td
                     className="border-r border-b px-3 py-2"
@@ -182,7 +180,7 @@ export function SheetMatrix({
                       <td key={k} className="border-b p-1 text-center">
                         <button
                           type="button"
-                          onClick={() => abrir(row, idx)}
+                          onClick={() => abrir(row)}
                           aria-label={label}
                           title={label}
                           className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold transition-colors ${toneClasses[tone]}`}
@@ -211,7 +209,7 @@ export function SheetMatrix({
                   <td className="border-b border-l px-3 py-2 text-center">
                     <button
                       type="button"
-                      onClick={() => abrir(row, idx)}
+                      onClick={() => abrir(row)}
                       className="text-muted-foreground hover:text-primary text-xs underline underline-offset-2"
                       title="Ver el recorte del escaneo para este ítem"
                     >
@@ -233,9 +231,9 @@ export function SheetMatrix({
 
       {abierto && (
         <CellDiagnosticModal
-          crop={recortes?.get(abierto.idx + 1) ?? null}
+          crop={recortes?.get(abierto.posicion) ?? null}
           cropCargando={cargandoRecortes}
-          row={abierto.row}
+          row={abierto}
           answerKeys={answerKeys}
           processedImagePath={processedImagePath}
           onClose={() => setAbierto(null)}
