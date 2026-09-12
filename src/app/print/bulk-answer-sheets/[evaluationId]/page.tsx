@@ -11,6 +11,7 @@ import {
   buildSignedQrContent,
   generateQrDataUrl,
 } from "@/modules/printing/infrastructure/qr-generator";
+import { listPositionByName } from "@/modules/students/domain/student";
 import { normalizeStudentIds } from "../../_lib/search-params";
 
 export const metadata: Metadata = { title: "Hojas de respuestas" };
@@ -78,6 +79,44 @@ export default async function BulkAnswerSheetsPage({ params, searchParams }: Pro
 
   if (students.length === 0) notFound();
 
+  // "Número de lista" prefijo en el campo Nombre. Se computa en una sola
+  // query batch por grupos: los N estudiantes seleccionados pueden venir
+  // de grupos distintos (decenas de grupos en una sola impresión masiva).
+  // Agrupamos por groupId, bajamos todos los compañeros en una sola query,
+  // y resolvemos la posición de cada estudiante en su grupo.
+  const numeroDeListaPorEstudiante = new Map<string, number>();
+  const gruposDistintos = [
+    ...new Set(students.map((s) => s.groupId).filter((g): g is string => !!g)),
+  ];
+  if (gruposDistintos.length > 0) {
+    const companeros = await prisma.student.findMany({
+      where: {
+        institutionId: actor.institutionId,
+        groupId: { in: gruposDistintos },
+      },
+      select: {
+        id: true,
+        groupId: true,
+        lastName1: true,
+        lastName2: true,
+        firstName1: true,
+        firstName2: true,
+      },
+    });
+    const companerosPorGrupo = new Map<string, typeof companeros>();
+    for (const c of companeros) {
+      const lista = companerosPorGrupo.get(c.groupId) ?? [];
+      lista.push(c);
+      companerosPorGrupo.set(c.groupId, lista);
+    }
+    for (const s of students) {
+      const mates = companerosPorGrupo.get(s.groupId);
+      if (!mates) continue;
+      const pos = listPositionByName(mates, s.id);
+      if (pos !== null) numeroDeListaPorEstudiante.set(s.id, pos);
+    }
+  }
+
   const allQuestions = evaluation.sections.flatMap((s) => s.questions);
   const columns = splitIntoColumns(allQuestions);
 
@@ -121,9 +160,13 @@ export default async function BulkAnswerSheetsPage({ params, searchParams }: Pro
                 <div className="as-field">
                   <span>Nombre:</span>
                   <span className="as-line-filled">
-                    {`${student.lastName1} ${student.lastName2} ${student.firstName1} ${student.firstName2}`
-                      .replace(/\s+/g, " ")
-                      .trim()}
+                    {(() => {
+                      const base = `${student.lastName1} ${student.lastName2} ${student.firstName1} ${student.firstName2}`
+                        .replace(/\s+/g, " ")
+                        .trim();
+                      const num = numeroDeListaPorEstudiante.get(student.id);
+                      return num !== undefined ? `${num}. ${base}` : base;
+                    })()}
                   </span>
                 </div>
                 {/* Grado + Grupo concatenados (sep 2026). Si el estudiante no
