@@ -236,9 +236,10 @@ export default async function BundleAnswerSheetsPage({
                   <span>Nombre:</span>
                   <span className="as-line-filled">
                     {(() => {
-                      const base = `${student.lastName1} ${student.lastName2} ${student.firstName1} ${student.firstName2}`
-                        .replace(/\s+/g, " ")
-                        .trim();
+                      const base =
+                        `${student.lastName1} ${student.lastName2} ${student.firstName1} ${student.firstName2}`
+                          .replace(/\s+/g, " ")
+                          .trim();
                       const num = numeroDeListaPorEstudiante.get(student.id);
                       return num !== undefined ? `${num}. ${base}` : base;
                     })()}
@@ -249,7 +250,7 @@ export default async function BundleAnswerSheetsPage({
                     la línea entera en vez de mostrar un campo a medias. */}
                 {student.group?.course?.name && student.group.name ? (
                   <div className="as-field">
-                    <span>Grado:</span>
+                    <span>Grado - Grupo:</span>
                     <span className="as-line-filled">
                       {`${student.group.course.name} - ${student.group.name}`}
                     </span>
