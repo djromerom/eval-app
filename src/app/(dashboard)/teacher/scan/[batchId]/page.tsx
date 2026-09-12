@@ -5,6 +5,7 @@ import { requireAuthenticatedUser } from "@/lib/session";
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import { BatchReviewMatrix, type SheetRow } from "./batch-review-matrix";
+import { nombreCompleto } from "@/modules/students/domain/nombre-completo";
 
 export const metadata: Metadata = { title: "Revisión de hojas" };
 
@@ -53,6 +54,18 @@ export default async function BatchReviewPage({ params }: Props) {
           id: true,
           studentName: true,
           studentCode: true,
+          // El QR resuelve `studentId`; el nombre vive en Student, no en las
+          // columnas de respaldo. Sin este join la matriz mostraba "Hoja 001"
+          // aunque la hoja estuviera perfectamente identificada.
+          student: {
+            select: {
+              code: true,
+              lastName1: true,
+              lastName2: true,
+              firstName1: true,
+              firstName2: true,
+            },
+          },
           status: true,
           score: true,
           totalCorrect: true,
@@ -71,7 +84,11 @@ export default async function BatchReviewPage({ params }: Props) {
   const rows: SheetRow[] = await Promise.all(
     batch.sheets.map(async (s, i) => {
       const grid = await readGrid(batchId, s.id);
-      const label = s.studentName ?? s.studentCode ?? `Hoja ${String(i + 1).padStart(3, "0")}`;
+      // Prioridad: el estudiante resuelto por QR, luego lo escrito a mano,
+      // y como ultimo recurso la posicion en el lote.
+      const delQr = s.student ? nombreCompleto(s.student) : "";
+      const label =
+        delQr || s.studentName || s.studentCode || `Hoja ${String(i + 1).padStart(3, "0")}`;
       return {
         id: s.id,
         label,
@@ -86,8 +103,7 @@ export default async function BatchReviewPage({ params }: Props) {
         // El nombre con el que se subio, si se conoce. Los lotes anteriores a
         // la columna `originalFilename` caen al nombre ya renombrado
         // (sheet_NNN.ext), que es lo unico que quedo de ellos.
-        fileName:
-          s.originalFilename ?? (s.scannedImage ? s.scannedImage.split("/").pop()! : null),
+        fileName: s.originalFilename ?? (s.scannedImage ? s.scannedImage.split("/").pop()! : null),
       };
     }),
   );

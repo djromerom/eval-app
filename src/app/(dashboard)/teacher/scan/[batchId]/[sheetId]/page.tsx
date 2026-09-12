@@ -9,6 +9,7 @@ import { ScanStatusBadge } from "@/components/evaluations/scan-status-badge";
 import { renderRichText, unwrapSingleParagraph } from "@/components/editor/render";
 import { SheetMatrix } from "./sheet-matrix";
 import { ReprocessButton } from "./reprocess-button";
+import { MarcarRevisadaButton } from "./marcar-revisada-button";
 import type { BubbleCellRecord, GridLayoutRecord } from "@/modules/scanning/domain/answer-sheet";
 
 interface PageProps {
@@ -203,8 +204,16 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
               Layout calibrado (fallback)
             </span>
           )}
-          {puedeReprocesar && (
+          {/* Solo tiene sentido confirmar una hoja observada y con nota: sin
+              puntaje no hay calificación que confirmar, y fuera de REVIEW no
+              hay observaciones que revisar. Mismas guardas que la action. */}
+          {puedeReprocesar && sheet.status === "REVIEW" && sheet.score !== null && (
             <span className="ml-auto">
+              <MarcarRevisadaButton sheetId={sheet.id} batchId={sheet.scanBatchId ?? batchId} />
+            </span>
+          )}
+          {puedeReprocesar && (
+            <span>
               <ReprocessButton
                 sheetId={sheet.id}
                 batchId={sheet.scanBatchId ?? batchId}
@@ -239,8 +248,8 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
           // filtrado cree que la hoja tiene 10 items en vez de 95.
           <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm">
             <span>
-              Mostrando solo <strong>{asignatura}</strong> — {rows.length} de{" "}
-              {todasLasFilas.length} ítems de la hoja.
+              Mostrando solo <strong>{asignatura}</strong> — {rows.length} de {todasLasFilas.length}{" "}
+              ítems de la hoja.
             </span>
             <Link
               href={`/teacher/scan/${batchId}/${sheetId}?${new URLSearchParams({

@@ -180,11 +180,7 @@ export class PrismaScanningRepository implements ScanningRepository {
         data: { qrSheetUuid: qrSheetUuid ?? null },
       });
     } catch (e) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === "P2002" &&
-        qrSheetUuid
-      ) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && qrSheetUuid) {
         return { studentId: null, duplicada: true };
       }
       throw e;
@@ -196,13 +192,23 @@ export class PrismaScanningRepository implements ScanningRepository {
         qrContent,
         qrSignature,
         ...(studentId ? { studentId } : {}),
-        // Mantener backup del código escrito a mano (si figura en la hoja).
-        // Si la hoja ya tiene studentCode y es distinto al del QR, no lo
-        // sobreescribimos — el QR es la fuente de verdad pero dejamos el
-        // handwriting como respaldo.
-        ...(studentCode ? {} : {}),
       },
     });
+
+    // Codigo del QR como respaldo legible. Antes esto era
+    // `...(studentCode ? {} : {})` dentro del update de arriba, que extiende
+    // {} en las dos ramas y no escribia nada: 22 de 22 hojas identificadas
+    // tenian studentCode en NULL pese a traerlo el QR.
+    //
+    // Va como updateMany con `studentCode: null` en el where para no pisar un
+    // codigo escrito a mano: si la hoja ya lo trae, ese gana. Expresar la
+    // condicion en el where lo hace atomico, en vez de leer-y-decidir.
+    if (studentCode) {
+      await prisma.answerSheet.updateMany({
+        where: { id: sheetId, studentCode: null },
+        data: { studentCode },
+      });
+    }
 
     return { studentId, duplicada: false };
   }

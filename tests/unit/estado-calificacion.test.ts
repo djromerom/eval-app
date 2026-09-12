@@ -27,6 +27,12 @@ describe("estadoDeHoja", () => {
     expect(estadoDeHoja(29, "REVIEW")).toBe("observaciones");
   });
 
+  it("COMPLETED es la salida de 'con observaciones'", () => {
+    // Cuando alguien confirma a mano una hoja observada, el estado pasa a
+    // COMPLETED y debe dejar de figurar como pendiente de revisar.
+    expect(estadoDeHoja(29, "COMPLETED")).toBe("calificada");
+  });
+
   it("las etiquetas son legibles", () => {
     expect(etiquetaEstado("observaciones")).toBe("Con observaciones");
     expect(etiquetaEstado("pendiente")).toBe("Pendientes");

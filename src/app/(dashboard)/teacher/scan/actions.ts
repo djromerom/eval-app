@@ -6,17 +6,53 @@ import { prisma } from "@/shared/infrastructure/db/prisma";
 import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import { getOmrScanQueue } from "@/shared/infrastructure/queue/queues";
 import { requireAuthenticatedUser } from "@/lib/session";
+import { nombreCompleto } from "@/modules/students/domain/nombre-completo";
+import { env } from "@/config/env";
+import { OmrServiceQrDecoder } from "@/modules/scanning/infrastructure/omr-service-qr-decoder";
+import { verifySignature, deriveInstitutionSecret } from "@/shared/infrastructure/crypto/hmac";
+import {
+  clasificarHojas,
+  MOTIVOS,
+  type LecturaDeHoja,
+  type MotivoSinClasificar,
+} from "@/modules/scanning/domain/clasificar-hojas";
 
 /** Tipo discriminado del "objetivo" del escaneo: o una formulación
  *  individual (legacy) o un cuadernillo. La invariante XOR vive aquí. */
 export type ScanTargetKind = "evaluation" | "bundle";
 
-export async function createScanBatchAction(formData: FormData) {
+/** Un lote creado por el modo automático, uno por cuadernillo detectado. */
+export interface LoteCreado {
+  batchId: string;
+  cuadernillo: string;
+  hojas: number;
+}
+
+/** Archivo que no se pudo atribuir a ningún cuadernillo. El archivo se guardó;
+ *  lo que no existe es su `AnswerSheet` (ver `createAutoScanBatches`). */
+export interface HojaRechazada {
+  nombre: string;
+  motivo: string;
+}
+
+export type CrearLoteResultado =
+  | { ok: true; batchId: string; lotes?: LoteCreado[]; rechazadas?: HojaRechazada[] }
+  | { ok: false; error: string };
+
+export async function createScanBatchAction(formData: FormData): Promise<CrearLoteResultado> {
   const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
-  const kind = formData.get("kind") as ScanTargetKind | null;
+  const kind = formData.get("kind") as ScanTargetKind | "auto" | null;
   const targetId = formData.get("id") as string | null;
   const files = formData.getAll("files") as File[];
+
+  // El modo automático no lleva objetivo: cada hoja lo trae en su QR.
+  if (kind === "auto") {
+    if (files.length === 0) {
+      return { ok: false as const, error: "Selecciona al menos un archivo." };
+    }
+    return createAutoScanBatches(actor, files);
+  }
 
   if (!kind || !targetId || files.length === 0) {
     return {
@@ -122,7 +158,6 @@ async function createBundleScanBatch(
  *  para que el reporte comparativo del cuadernillo pueda drill-dowmear
  *  (student/hoja × item). */
 
-
 async function enqueueSheets(
   actor: Awaited<ReturnType<typeof requireAuthenticatedUser>>,
   batchId: string,
@@ -224,6 +259,18 @@ export async function getBatchesAction(): Promise<BatchWithSheets[]> {
           status: true,
           studentName: true,
           studentCode: true,
+          // El QR resuelve `studentId`; el nombre vive en Student. Sin este
+          // join el listado mostraba "—" en Estudiante y Código aunque la
+          // hoja estuviera perfectamente identificada.
+          student: {
+            select: {
+              code: true,
+              lastName1: true,
+              lastName2: true,
+              firstName1: true,
+              firstName2: true,
+            },
+          },
           score: true,
           totalCorrect: true,
           totalQuestions: true,
@@ -253,8 +300,9 @@ export async function getBatchesAction(): Promise<BatchWithSheets[]> {
       sheets: b.sheets.map((s) => ({
         id: s.id,
         status: s.status,
-        studentName: s.studentName,
-        studentCode: s.studentCode,
+        // Prioridad: lo que resolvio el QR, luego el respaldo escrito a mano.
+        studentName: (s.student ? nombreCompleto(s.student) : "") || s.studentName,
+        studentCode: s.student?.code ?? s.studentCode,
         score: s.score,
         totalCorrect: s.totalCorrect,
         totalQuestions: s.totalQuestions,
@@ -263,4 +311,145 @@ export async function getBatchesAction(): Promise<BatchWithSheets[]> {
       })),
     };
   });
+}
+
+/** Cuántas hojas se leen a la vez al clasificar.
+ *
+ *  En serie, 200 hojas × ~185 ms del endpoint /qr son más de 30 segundos con
+ *  el usuario mirando un spinner. En paralelo sin límite, 200 peticiones
+ *  simultáneas ahogan al servicio, que corre con 2 workers. Seis es el punto
+ *  donde el tiempo baja a unos pocos segundos sin saturarlo. */
+const LECTURAS_EN_PARALELO = 6;
+
+/** Lee el QR de un archivo y decide a qué cuadernillo pertenece.
+ *
+ *  Verifica la firma además de decodificar: una hoja impresa en otro entorno
+ *  decodifica bien pero no valida, y dejarla entrar significaría crear un lote
+ *  con hojas que el worker va a rechazar una por una más tarde. Mejor saberlo
+ *  acá, donde se puede reportar el archivo por su nombre. */
+async function leerHoja(
+  file: File,
+  indice: number,
+  decoder: OmrServiceQrDecoder,
+  bundlesValidos: Map<string, { listo: boolean }>,
+): Promise<LecturaDeHoja> {
+  const base = { indice, nombre: file.name };
+  const fallo = (motivo: MotivoSinClasificar): LecturaDeHoja => ({
+    ...base,
+    bundleId: null,
+    motivo,
+  });
+
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const leido = await decoder.decode(bytes);
+  if (!leido) return fallo("qr-ilegible");
+
+  let payload: Record<string, unknown>;
+  let sig: string;
+  try {
+    const { sig: s, ...resto } = JSON.parse(leido.text) as Record<string, unknown> & {
+      sig: string;
+    };
+    payload = resto;
+    sig = s;
+  } catch {
+    return fallo("qr-invalido");
+  }
+
+  const inst = typeof payload.inst === "string" ? payload.inst : "";
+  if (!verifySignature(payload, sig, deriveInstitutionSecret(env.QR_SIGNING_SECRET, inst))) {
+    return fallo("firma-invalida");
+  }
+
+  const bundleId = typeof payload.bundle === "string" ? payload.bundle : null;
+  if (!bundleId) return fallo("sin-cuadernillo");
+
+  const estado = bundlesValidos.get(bundleId);
+  if (!estado) return fallo("cuadernillo-desconocido");
+  if (!estado.listo) return fallo("cuadernillo-no-listo");
+
+  return { ...base, bundleId, motivo: null };
+}
+
+/** Modo automático: un lote por cuadernillo, según el QR de cada hoja.
+ *
+ *  Las que no clasifican NO generan `AnswerSheet` — el check
+ *  `AnswerSheet_target_xor_chk` exige que toda hoja tenga formulación o
+ *  cuadernillo, y una hoja sin ninguno de los dos quedaría fuera de todos los
+ *  filtros por institución del módulo, es decir invisible e inalcanzable. Se
+ *  guarda el archivo igual y se reporta con su motivo, para poder reintentar
+ *  sin volver a escanear el papel. */
+async function createAutoScanBatches(
+  actor: Awaited<ReturnType<typeof requireAuthenticatedUser>>,
+  files: File[],
+) {
+  if (files.length > 200) {
+    return { ok: false as const, error: "Máximo 200 hojas por lote." };
+  }
+
+  // Un solo viaje a la base: el QR trae el id, y acá se comprueba que ese
+  // cuadernillo sea de esta institución y esté LISTO.
+  const bundles = await prisma.evaluationBundle.findMany({
+    where: { institutionId: actor.institutionId },
+    select: { id: true, name: true, status: true },
+  });
+  const porId = new Map(bundles.map((b) => [b.id, { listo: b.status === "READY" }]));
+  const nombres = new Map(bundles.map((b) => [b.id, b.name]));
+
+  const decoder = new OmrServiceQrDecoder(env.OMR_SERVICE_URL);
+  const lecturas: LecturaDeHoja[] = [];
+  for (let i = 0; i < files.length; i += LECTURAS_EN_PARALELO) {
+    const tanda = files.slice(i, i + LECTURAS_EN_PARALELO);
+    lecturas.push(...(await Promise.all(tanda.map((f, j) => leerHoja(f, i + j, decoder, porId)))));
+  }
+
+  const { grupos, sinClasificar } = clasificarHojas(lecturas);
+
+  if (grupos.length === 0) {
+    return {
+      ok: false as const,
+      error:
+        "Ninguna hoja pudo clasificarse por su QR. Revisá que sean hojas de un cuadernillo de esta institución y que el cuadernillo esté LISTO.",
+    };
+  }
+
+  const lotes: { batchId: string; cuadernillo: string; hojas: number }[] = [];
+  for (const g of grupos) {
+    const delGrupo = g.indices.map((i) => files[i]!);
+    const batch = await prisma.scanBatch.create({
+      data: {
+        institutionId: actor.institutionId,
+        evaluationId: null,
+        bundleId: g.bundleId,
+        uploadedBy: actor.userId,
+        status: "PENDING",
+        totalSheets: delGrupo.length,
+        processedSheets: 0,
+      },
+    });
+    await enqueueSheets(actor, batch.id, delGrupo, "bundle", g.bundleId);
+    lotes.push({
+      batchId: batch.id,
+      cuadernillo: nombres.get(g.bundleId) ?? g.bundleId.slice(0, 8),
+      hojas: delGrupo.length,
+    });
+  }
+
+  // Los archivos que no clasificaron se guardan igual, bajo el primer lote,
+  // para que se puedan recuperar sin volver a pasar el papel por el escáner.
+  const rechazadas: { nombre: string; motivo: string }[] = [];
+  if (sinClasificar.length > 0) {
+    const dir = `scans/${lotes[0]!.batchId}/sin-clasificar`;
+    for (const s of sinClasificar) {
+      const bytes = Buffer.from(await files[s.indice]!.arrayBuffer());
+      await localStorage.save(
+        `${dir}/${nombreDeArchivo(files[s.indice]!.name, s.indice, new Set())}`,
+        bytes,
+      );
+      rechazadas.push({ nombre: s.nombre, motivo: MOTIVOS[s.motivo] });
+    }
+  }
+
+  revalidatePath("/teacher/scan");
+  return { ok: true as const, batchId: lotes[0]!.batchId, lotes, rechazadas };
 }

@@ -129,3 +129,77 @@ export async function reprocessSheetAction(input: { sheetId: string; batchId: st
   revalidatePath(`/teacher/scan`);
   return { ok: true as const };
 }
+
+/**
+ * Marca una hoja como revisada por un humano: `REVIEW` -> `COMPLETED`.
+ *
+ * El worker deja en `REVIEW` cualquier hoja con al menos una marca ambigua
+ * (`process-answer-sheet.ts`: `answers.some(a => a.isAmbiguous) ? "REVIEW" :
+ * "GRADED"`). Hasta ahora no habia forma de salir de ese estado: reprocesar
+ * corre el mismo motor sobre la misma imagen y devuelve lo mismo, asi que una
+ * hoja revisada a mano figuraba "con observaciones" para siempre. El enum ya
+ * tenia `COMPLETED` declarado, pero nadie lo escribia.
+ *
+ * Dos guardas deliberadas:
+ *   - Solo desde `REVIEW`. Marcar una hoja que nunca fue observada no
+ *     significa nada, y desde `PENDING` o `PROCESSING` ocultaria trabajo sin
+ *     terminar.
+ *   - Solo con puntaje. Confirmar una hoja sin calificar la sacaria de la
+ *     lista de pendientes sin que exista una nota que confirmar.
+ *
+ * La condicion viaja en el `where` del updateMany: si dos revisores le dan al
+ * boton a la vez, el segundo no encuentra fila y se entera, en vez de pisar.
+ */
+export async function marcarRevisadaAction(input: { sheetId: string; batchId: string }) {
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+
+  const sheet = await prisma.answerSheet.findFirst({
+    where: {
+      id: input.sheetId,
+      scanBatchId: input.batchId,
+      OR: [
+        {
+          evaluation: {
+            institutionId: actor.institutionId,
+            teacherId: actor.userId,
+            deletedAt: null,
+          },
+        },
+        { bundle: { institutionId: actor.institutionId } },
+      ],
+    },
+    select: { id: true, status: true, score: true },
+  });
+  if (!sheet) {
+    return { ok: false as const, error: "Hoja no encontrada." };
+  }
+  if (sheet.status !== ScanStatus.REVIEW) {
+    return {
+      ok: false as const,
+      error: `Solo se puede confirmar una hoja en revisión (estado actual: ${sheet.status}).`,
+    };
+  }
+  if (sheet.score === null) {
+    return {
+      ok: false as const,
+      error: "La hoja todavía no tiene puntaje: no hay calificación que confirmar.",
+    };
+  }
+
+  const { count } = await prisma.answerSheet.updateMany({
+    where: { id: sheet.id, status: ScanStatus.REVIEW },
+    data: {
+      status: ScanStatus.COMPLETED,
+      reviewedBy: actor.userId,
+      reviewedAt: new Date(),
+    },
+  });
+  if (count === 0) {
+    return { ok: false as const, error: "Otra persona ya revisó esta hoja." };
+  }
+
+  revalidatePath(`/teacher/scan/${input.batchId}/${input.sheetId}`);
+  revalidatePath(`/teacher/scan/${input.batchId}`);
+  revalidatePath("/teacher/scan");
+  return { ok: true as const };
+}
