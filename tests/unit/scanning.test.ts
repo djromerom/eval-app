@@ -150,7 +150,12 @@ function inMemoryRepo(): RepoState {
       if (s) {
         sheets.set(sheetId, { ...s, qrContent });
       }
-      return { studentId: s?.studentId ?? null };
+      return { duplicada: false, studentId: s?.studentId ?? null };
+    },
+    async findSheetIdByQrSheetUuid() {
+      // El fake no simula duplicados: los tests que los cubren usan su propio
+      // repositorio (ver process-answer-sheet-duplicados.test.ts).
+      return null;
     },
     async saveAnswers(sheetId, ans) {
       answers.set(sheetId, ans);
