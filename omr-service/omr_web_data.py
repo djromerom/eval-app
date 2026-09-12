@@ -58,6 +58,9 @@ def build_sheet_data(data: bytes, suffix: str = ".jpg",
                        "x": int(round(b.x)), "y": int(round(b.y)),
                        "r": int(round(b.r))}
                       for b in q.bubbles],
+            # Aviso por item del motor (p. ej. "letras ambiguas", "falta la
+            # opcion A"). Aditivo: el lado TS lo ignora sin romperse.
+            "aviso": q.warning,
             "crop": base64.b64encode(buf).decode() if ok else "",
         })
     ident = qr if isinstance(qr, dict) else {}
