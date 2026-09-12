@@ -23,7 +23,7 @@ import argparse
 import json
 import sys
 
-VERSION = "14"         # subir al cambiar el motor: invalida cachés aguas arriba
+VERSION = "16"         # subir al cambiar el motor: invalida cachés aguas arriba
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -566,19 +566,35 @@ def apply_marks(questions: list, piso: float,
     maximos = [max(b.fill for b in q.bubbles) for q in questions if q.bubbles]
     con_marca = [m for m in maximos if m >= piso]
     nivel = float(np.median(con_marca)) if con_marca else piso
+    # Techo del ruido: percentil 95 de las burbujas NO ganadoras de cada
+    # pregunta (borde impreso + la letra que va dentro del óvalo).
+    resto = [b.fill for q in questions
+             for b in sorted(q.bubbles, key=lambda z: -z.fill)[1:]]
+    ruido = float(np.percentile(resto, 95)) if resto else 0.0
 
     for q in questions:
         if not q.bubbles:
             continue
-        mx = max(b.fill for b in q.bubbles)
-        if mx < piso:
+        fills = sorted((b.fill for b in q.bubbles), reverse=True)
+        mx = fills[0]
+        segundo = fills[1] if len(fills) > 1 else 0.0
+        # Una pregunta tiene marca si su burbuja más oscura llega al piso, o si
+        # —aun sin llegar— destaca claramente sobre las de su propio ítem: al
+        # menos vez y media la siguiente, y por encima del punto medio entre el
+        # ruido y el piso. En una hoja cuyas marcas rondan 0.77 el piso sube a
+        # 0.46, y una marca floja de 0.42 contra un 0.24 es inequívoca dentro de
+        # su ítem aunque no llegue a ese piso. El punto medio es lo que impide
+        # que la regla se dispare con ruido: un 0.17 contra un 0.11, en una hoja
+        # con ruido 0.15 y piso 0.28, no pasa.
+        destaca = mx >= (ruido + piso) / 2 and mx >= 1.5 * segundo
+        if mx < piso and not destaca:
             for b in q.bubbles:
                 b.marked = False
             continue
         # Con una marca confirmada, la comparación dentro del ítem manda sobre
         # el piso (acotada a 0.70·piso): una segunda marca floja no debe
         # perderse por quedar un pelo por debajo.
-        corte = max(rel * mx, 0.70 * piso)
+        corte = max(rel * mx, 0.70 * min(piso, mx))
         residuos = []
         for b in q.bubbles:
             b.marked = b.fill >= corte
@@ -849,9 +865,32 @@ def build_questions(bubbles: list, letters: str) -> list:
     # se colara, además de inventar ítems correría la numeración de todo lo que
     # viene después.
     if len(col_groups) > 1:
-        biggest = max(len(g) for g in col_groups)
-        min_q = max(3, int(biggest * 0.15))
-        filtered = [g for g in col_groups if len(g) >= min_q]
+        def _filas(g):
+            return sorted(float(np.mean([b.y for b in raw_questions[i]])) for i in g)
+
+        principal = max(col_groups, key=len)
+        filas_pral = _filas(principal)
+        pasos = [b - a for a, b in zip(filas_pral, filas_pral[1:])]
+        paso = float(np.median(pasos)) if pasos else 0.0
+        biggest = len(principal)
+        holgado = max(3, int(biggest * 0.15))
+
+        filtered = []
+        for g in col_groups:
+            if len(g) >= holgado:
+                filtered.append(g)
+                continue
+            # Un bloque CORTO es legítimo si sus filas caen sobre la rejilla del
+            # bloque principal: un bloque de 5 ítems a la derecha arranca a la
+            # misma altura que el ítem 1. El ruido (QR, logo, casillas del
+            # encabezado) cae en cualquier otra parte. Antes bastaba con ser
+            # corto para descartarlo, y eso se comió un bloque real de 5 ítems
+            # en una hoja de 45.
+            if len(g) < 2 or paso <= 0:
+                continue
+            if all(min(abs(y - py) for py in filas_pral) <= 0.35 * paso
+                   for y in _filas(g)):
+                filtered.append(g)
         if filtered:
             col_groups = filtered
 
