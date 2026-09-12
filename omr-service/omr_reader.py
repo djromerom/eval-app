@@ -23,7 +23,7 @@ import argparse
 import json
 import sys
 
-VERSION = "12"         # subir al cambiar el motor: invalida cachés aguas arriba
+VERSION = "14"         # subir al cambiar el motor: invalida cachés aguas arriba
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -472,19 +472,34 @@ def measure_fill(gray: np.ndarray, bubbles: list) -> None:
 
 def adaptive_mark_threshold(questions: list):
     """
-    Umbral de marcado separando dos poblaciones bien definidas:
+    Decide qué burbujas están marcadas. Devuelve (piso, aviso).
 
-      - "vacías": todas las burbujas de cada pregunta MENOS la más oscura
-      - "marcadas": la más oscura de cada pregunta
+    Un único umbral global para toda la hoja NO alcanza: la oscuridad de una
+    marca varía mucho dentro de la misma hoja (lápiz más o menos apretado,
+    tramado del escáner, zonas más claras del papel). Medido sobre una hoja
+    real, el umbral global cayó en 0.561 y dejó en BLANCO ocho ítems cuya
+    marca era inequívoca dentro de su propia pregunta:
 
-    Es mucho más estable que un Otsu sobre todos los rellenos juntos: la
-    población de marcadas es ancha (una marca a lápiz tramada por el escáner
-    va de 0.3 a 0.9) y arrastraba el corte hacia arriba, perdiendo las marcas
-    más débiles. Aquí el corte cae en la frontera real entre ambas.
+        ítem 45:  A 0.12  B 0.21  C 0.47  D 0.13   -> C, sin ninguna duda
+        ítem 41:  A 0.56  B 0.13  C ....  D ....   -> A, sin ninguna duda
 
-    Devuelve (umbral, aviso). El aviso no es vacío cuando las dos poblaciones
-    se solapan: en ese caso NO hay un corte fiable y la hoja entera debe ir a
-    revisión manual, en vez de producir un resultado de apariencia normal.
+    Así que la decisión es **relativa a cada pregunta**, con un piso absoluto
+    que evita inventar marcas en una pregunta vacía:
+
+      piso   nivel de tinta a partir del cual algo cuenta como marca. Se deriva
+             de la hoja misma: el percentil 95 de las burbujas NO ganadoras (el
+             techo del ruido: borde impreso más la letra que va dentro del
+             óvalo) más una fracción de la distancia hasta el nivel típico de
+             las marcas.
+      0.60   una burbuja está marcada si llega al 60 % de la más oscura de su
+             pregunta. Es lo que preserva los MULTIPLE reales (dos marcas
+             parejas) sin convertir el ruido en segunda marca. Una vez que la
+             pregunta tiene una marca confirmada, este criterio manda sobre el
+             piso (acotado a 0.70·piso), porque la comparación dentro de la
+             pregunta es más fiable que un corte global.
+
+    Una pregunta cuya burbuja más oscura no llega al piso queda en BLANCO
+    entera; ahí no hay nada que decidir.
     """
     tops, rest = [], []
     for q in questions:
@@ -498,21 +513,87 @@ def adaptive_mark_threshold(questions: list):
     tops = np.array(tops, dtype=np.float64)
     rest = np.array(rest, dtype=np.float64)
 
-    hi_empty = float(np.percentile(rest, 98))     # la vacía más oscura (robusto)
-    lo_mark = float(np.percentile(tops, 2))       # la marca más débil (robusto)
+    ruido = float(np.percentile(rest, 95))
+    nivel = float(np.median(tops))
+    piso = float(np.clip(ruido + 0.30 * (nivel - ruido), 0.15, 0.60))
 
-    warn = ""
-    if lo_mark <= hi_empty:
-        # Las poblaciones se tocan: puede ser una hoja con ítems en blanco
-        # (su "más oscura" es en realidad una vacía) o una hoja ilegible.
-        gap = hi_empty - lo_mark
-        thr = (hi_empty + float(np.percentile(tops, 50))) / 2
-        if gap > 0.10:
-            warn = ("separación pobre entre marcadas y vacías "
-                    "(%.2f vs %.2f): revisar la hoja completa" % (lo_mark, hi_empty))
-    else:
-        thr = (hi_empty + lo_mark) / 2
-    return float(np.clip(thr, 0.18, 0.85)), warn
+    aviso = ""
+    if nivel - ruido < 0.12:
+        aviso = ("marcas y vacías casi no se distinguen (ruido %.2f, marca "
+                 "típica %.2f): revisar la hoja completa" % (ruido, nivel))
+    return piso, aviso
+
+
+REL_SEGUNDA_MARCA = 0.60   # una 2ª marca debe llegar al 60 % de la 1ª de su ítem
+NIVEL_DOBLE = 0.80         # ...y al 80 % del nivel de marca de la propia hoja
+
+
+def apply_marks(questions: list, piso: float,
+                rel: float = None, doble: float = None) -> None:
+    """
+    Decide qué burbujas están marcadas, con dos criterios encadenados.
+
+    **Dentro del ítem** (`rel`): una burbuja está marcada si llega al 60 % de la
+    más oscura de su propia pregunta. Esto es lo que rescata marcas claras que
+    un umbral global de hoja dejaba en BLANCO.
+
+    **Contra la hoja** (`doble`): una SEGUNDA marca en el mismo ítem sólo cuenta
+    como marca doble real si además alcanza el 80 % del nivel de marca típico de
+    esa hoja (la mediana de la burbuja más oscura de cada pregunta). Si no llega,
+    es residuo de un borrado o una corrección: gana la más oscura y el ítem sale
+    con una advertencia, no como MULTIPLE.
+
+    El segundo criterio no es un ajuste al ojo. Midiendo todos los ítems con dos
+    marcas sobre nueve hojas reales, la razón entre la segunda marca y el nivel
+    de la hoja se parte en dos grupos sin zona gris:
+
+        borrados / correcciones   0.52  0.52  0.57  0.61  0.68
+        marcas dobles de verdad               0.92  0.93  0.99  1.00  1.01  1.03
+
+    Verificado mirando los recortes: en el primer grupo una marca es densa y la
+    otra un tramado tenue; en el segundo las dos son igual de densas. El corte
+    en 0.80 cae en el medio del hueco, con margen ancho de los dos lados.
+
+    La razón entre la 2ª y la 1ª marca del mismo ítem NO sirve para esto: los
+    dos grupos se solapan ahí (0.68 contra 0.63). Hace falta comparar con la
+    hoja, que es lo que distingue "marcó flojo" de "borró".
+    """
+    if rel is None:
+        rel = REL_SEGUNDA_MARCA
+    if doble is None:
+        doble = NIVEL_DOBLE
+
+    maximos = [max(b.fill for b in q.bubbles) for q in questions if q.bubbles]
+    con_marca = [m for m in maximos if m >= piso]
+    nivel = float(np.median(con_marca)) if con_marca else piso
+
+    for q in questions:
+        if not q.bubbles:
+            continue
+        mx = max(b.fill for b in q.bubbles)
+        if mx < piso:
+            for b in q.bubbles:
+                b.marked = False
+            continue
+        # Con una marca confirmada, la comparación dentro del ítem manda sobre
+        # el piso (acotada a 0.70·piso): una segunda marca floja no debe
+        # perderse por quedar un pelo por debajo.
+        corte = max(rel * mx, 0.70 * piso)
+        residuos = []
+        for b in q.bubbles:
+            b.marked = b.fill >= corte
+        marcadas = sorted((b for b in q.bubbles if b.marked),
+                          key=lambda b: -b.fill)
+        for b in marcadas[1:]:
+            if b.fill < doble * nivel:
+                b.marked = False
+                residuos.append((b.letter, b.fill))
+        if residuos:
+            aviso = ("posible borrado o corrección: %s frente a %s %.2f"
+                     % (", ".join("%s %.2f" % r for r in residuos),
+                        marcadas[0].letter, marcadas[0].fill))
+            # no pisar un aviso previo de build_questions (letras ambiguas, etc.)
+            q.warning = (q.warning + "; " + aviso) if q.warning else aviso
 
 
 # --------------------------------------------------------------------------
@@ -716,14 +797,6 @@ def build_questions(bubbles: list, letters: str) -> list:
     # Filtro de filas aisladas: una fila real de la rejilla tiene otra fila a
     # ~1 paso vertical; texto del encabezado alineado por azar queda aislado
     # y con pocas burbujas, y se descarta.
-    #
-    # Sobre una hoja de 50 items, el subtitulo "Estandar Sesion 3 Grado 5"
-    # aportaba tres glifos redondos (la "o" de Sesion, el "3" y la "G") que
-    # sobrevivian como pregunta 1 y corrian la numeracion de las 50 restantes:
-    # una lectura completa y verosimil, con cada respuesta en el item
-    # equivocado. Pasaban porque, tras la recuperacion por rejilla, la fila
-    # llegaba a 3 miembros y el umbral de descarte exigia menos del 60% de una
-    # fila tipica (2.4 sobre 4).
     row_y = sorted({round(float(np.mean([b.y for b in q])) / (r_med * 0.8))
                     * (r_med * 0.8) for q in raw_questions})
     if len(row_y) > 2:
@@ -734,26 +807,33 @@ def build_questions(bubbles: list, letters: str) -> list:
             yq = round(float(np.mean([b.y for b in q])) / (r_med * 0.8)) * (r_med * 0.8)
             counts[yq] = counts.get(yq, 0) + len(q)
         modal_row = float(np.median(list(counts.values())))
-        completas = [oy for oy in row_y if counts[oy] >= modal_row]
+
+        # Cuántas opciones tiene una pregunta COMPLETA en cada bloque. Hay que
+        # medirlo por bloque: cuando un bloque es más largo que otro, la moda
+        # global no sirve (en una hoja real, 18 filas de 8 burbujas arriba y 20
+        # de 4 abajo dan una mediana de 5.5, que no describe a ninguna fila).
+        qx = np.array([q[0].x for q in raw_questions])
+        completo = {}
+        for gb in cluster_1d(qx, tol=gap_opt * 3.0):
+            tallas = [len(raw_questions[i]) for i in gb]
+            moda = max(set(tallas), key=tallas.count)
+            for i in gb:
+                completo[i] = moda
+
         keep_q = []
-        for q in raw_questions:
+        for idx, q in enumerate(raw_questions):
             yq = round(float(np.mean([b.y for b in q])) / (r_med * 0.8)) * (r_med * 0.8)
             near = min((abs(yq - oy) for oy in row_y if oy != yq), default=0)
-            # Tres condiciones, y la tercera es la que evita danos colaterales:
-            #   1. aislada -- ninguna otra fila a menos de 1.8 pasos,
-            #   2. incompleta -- MENOS miembros que una fila tipica (tras la
-            #      recuperacion por rejilla la basura del encabezado llegaba a
-            #      3 contra 4 de una fila real, y pasaba un umbral del 60%),
-            #   3. FUERA del rango vertical de la rejilla. Sin esto se caian
-            #      filas interiores legitimas de hojas a 3 columnas, donde las
-            #      ultimas filas de un bloque tienen menos miembros porque los
-            #      otros bloques ya terminaron (medido: -4 items en dos hojas
-            #      de 110). El encabezado y el pie siempre quedan afuera.
-            # El rango se define con filas COMPLETAS (>= modal), no con el
-            # 60%: la propia fila basura de 3 miembros pasaba el 60% y se
-            # metia en la lista, definiendo ella misma el minimo del rango.
-            fuera = bool(completas) and (yq < min(completas) or yq > max(completas))
-            if fuera and near > 1.8 * pitch and counts[yq] < modal_row:
+            if near > 1.8 * pitch and counts[yq] < modal_row * 0.6:
+                continue
+            # Aislada Y con menos opciones de las que tiene una pregunta completa
+            # de su propio bloque: es ruido del encabezado o del pie. En una hoja
+            # real la "ó" de Sesión y la "G" de Grado del subtítulo formaron una
+            # pregunta de 3 opciones que se coló como ítem 1 y corrió la
+            # numeración del bloque entero. Una pregunta legítima a la que le
+            # falta una opción está pegada a sus vecinas, así que el criterio de
+            # distancia la protege.
+            if near > 1.8 * pitch and len(q) < completo.get(idx, len(q)):
                 continue
             keep_q.append(q)
         raw_questions = keep_q
@@ -891,8 +971,7 @@ def analyze_sheet(path: str, letters: str = "ABCDEFGH"):
     all_bubbles = [b for q in questions for b in q.bubbles]
     measure_fill(gray, all_bubbles)
     thr, thr_warn = adaptive_mark_threshold(questions)
-    for b in all_bubbles:
-        b.marked = b.fill >= thr
+    apply_marks(questions, thr)
     return gray, questions, thr, qr, thr_warn, rotation
 
 
