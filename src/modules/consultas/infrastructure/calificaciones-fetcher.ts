@@ -39,26 +39,11 @@ import type {
 } from "../domain/queries/calificaciones/calificacion-row";
 import { calcularPuntaje } from "../domain/queries/calificaciones/puntaje";
 import { estadoDeHoja } from "../domain/queries/calificaciones/estado";
+import { nombreCompleto } from "@/modules/students/domain/nombre-completo";
 import type { CalificacionesReader } from "../application/list-calificaciones";
 
-/** "APELLIDO1 APELLIDO2, NOMBRE1 NOMBRE2" sin dobles espacios ni comas sueltas
- *  cuando faltan los campos opcionales. */
-function nombreCompleto(s: {
-  lastName1: string;
-  lastName2: string;
-  firstName1: string;
-  firstName2: string;
-}): string {
-  const apellidos = [s.lastName1, s.lastName2].filter(Boolean).join(" ").trim();
-  const nombres = [s.firstName1, s.firstName2].filter(Boolean).join(" ").trim();
-  return [apellidos, nombres].filter(Boolean).join(", ");
-}
-
 export class PrismaCalificacionesReader implements CalificacionesReader {
-  async listByInstitution(
-    institutionId: string,
-    courseIds?: string[],
-  ): Promise<CalificacionRow[]> {
+  async listByInstitution(institutionId: string, courseIds?: string[]): Promise<CalificacionRow[]> {
     const delTenant: Prisma.AnswerSheetWhereInput = {
       OR: [{ bundle: { institutionId } }, { evaluation: { institutionId } }],
       // Sin estudiante no hay calificación que reportar (ver cabecera).

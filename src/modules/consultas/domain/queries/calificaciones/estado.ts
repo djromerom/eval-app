@@ -24,6 +24,8 @@ export const ESTADOS: readonly { valor: EstadoCalificacion; etiqueta: string }[]
 export function estadoDeHoja(score: number | null, scanStatus: string): EstadoCalificacion {
   if (score === null) return "pendiente";
   // El motor deja en REVIEW lo que necesita ojo humano aunque ya tenga nota.
+  // COMPLETED es justamente "alguien ya la miró y la confirmó", asi que
+  // vuelve a contar como calificada: es la salida de "con observaciones".
   return scanStatus === "REVIEW" ? "observaciones" : "calificada";
 }
 

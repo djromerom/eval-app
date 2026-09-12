@@ -5,6 +5,7 @@ import { prisma } from "@/shared/infrastructure/db/prisma";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { safeReturnPath } from "@/shared/domain/return-path";
 import { PageHeader } from "@/components/page-header";
+import { nombreCompleto } from "@/modules/students/domain/nombre-completo";
 import {
   resumirPorAsignatura,
   totalizar,
@@ -111,14 +112,7 @@ export default async function ResumenPorAsignaturaPage({ params, searchParams }:
   const total = totalizar(filas);
 
   const alumno = sheet.student;
-  const nombre = alumno
-    ? [
-        [alumno.lastName1, alumno.lastName2].filter(Boolean).join(" "),
-        [alumno.firstName1, alumno.firstName2].filter(Boolean).join(" "),
-      ]
-        .filter(Boolean)
-        .join(", ")
-    : "Hoja sin identificar";
+  const nombre = alumno ? nombreCompleto(alumno) : "Hoja sin identificar";
 
   // "Número de lista" estilo colegio colombiano: la posición 1-based del
   // estudiante dentro de su GRUPO (la sección), ordenada por apellido1,
@@ -143,9 +137,7 @@ export default async function ResumenPorAsignaturaPage({ params, searchParams }:
     numeroDeLista = listPositionByName(companieros, alumno.id);
   }
   const prueba = sheet.bundle?.name ?? sheet.evaluation?.title ?? "—";
-  const ubicacion = alumno?.group
-    ? `${alumno.group.course.name} · ${alumno.group.name}`
-    : null;
+  const ubicacion = alumno?.group ? `${alumno.group.course.name} · ${alumno.group.name}` : null;
 
   // El enlace a la matriz arrastra el mismo `volver`, para que desde allá se
   // regrese al resumen y no al origen de toda la cadena.
@@ -260,7 +252,10 @@ export default async function ResumenPorAsignaturaPage({ params, searchParams }:
       )}
 
       <div className="mt-4">
-        <Link href={volverA} className="text-muted-foreground hover:text-foreground text-sm underline">
+        <Link
+          href={volverA}
+          className="text-muted-foreground hover:text-foreground text-sm underline"
+        >
           ← Volver
         </Link>
       </div>
