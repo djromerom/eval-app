@@ -1,11 +1,17 @@
 "use client";
 
+import {
+  ESTADOS,
+  type EstadoCalificacion,
+} from "@/modules/consultas/domain/queries/calificaciones/estado";
+
 export interface CalificacionesFilterState {
   courseId: string; // "" = todos los grados
   groupId: string; // "" = todos los grupos
   periodId: string; // "" = todas las pruebas
   bookletTypeId: string; // "" = todos los tipos
-  estado: "" | "calificadas" | "pendientes"; // "" = ambas
+  /** Estado de la última hoja del estudiante. "todas" no filtra. */
+  estado: EstadoCalificacion | "todas";
 }
 
 export const EMPTY_CALIFICACIONES_FILTERS: CalificacionesFilterState = {
@@ -13,7 +19,10 @@ export const EMPTY_CALIFICACIONES_FILTERS: CalificacionesFilterState = {
   groupId: "",
   periodId: "",
   bookletTypeId: "",
-  estado: "",
+  // Arranca en "calificada" a propósito: el uso normal de la consulta es el
+  // boletín. Los otros estados son para ir a buscar problemas, y el
+  // desplegable muestra cuál está activo — no es un filtro escondido.
+  estado: "calificada",
 };
 
 export interface OpcionGrado {
@@ -141,9 +150,12 @@ export function CalificacionesFilterRow({
             onChange({ ...filters, estado: e.target.value as CalificacionesFilterState["estado"] })
           }
         >
-          <option value="">Todas</option>
-          <option value="calificadas">Calificadas</option>
-          <option value="pendientes">Pendientes</option>
+          {ESTADOS.map((e) => (
+            <option key={e.valor} value={e.valor}>
+              {e.etiqueta}
+            </option>
+          ))}
+          <option value="todas">Todas</option>
         </select>
       </label>
 
@@ -151,7 +163,7 @@ export function CalificacionesFilterRow({
         filters.groupId ||
         filters.periodId ||
         filters.bookletTypeId ||
-        filters.estado) && (
+        filters.estado !== "calificada") && (
         <button
           type="button"
           onClick={() => onChange(EMPTY_CALIFICACIONES_FILTERS)}

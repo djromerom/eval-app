@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { CalificacionRow } from "@/modules/consultas/domain/queries/calificaciones/calificacion-row";
 import { PageHeader } from "@/components/page-header";
+import { etiquetaEstado } from "@/modules/consultas/domain/queries/calificaciones/estado";
+import { HistorialModal } from "./historial-modal";
 import {
   CalificacionesFilterRow,
   EMPTY_CALIFICACIONES_FILTERS,
@@ -35,6 +37,7 @@ export function CalificacionesTable({
   actions?: ReactNode;
 }) {
   const [filters, setFilters] = useState<CalificacionesFilterState>(EMPTY_CALIFICACIONES_FILTERS);
+  const [historial, setHistorial] = useState<CalificacionRow | null>(null);
 
   const { gradoOptions, grupoOptions, pruebaOptions, tipoOptions } = useMemo(() => {
     const grados = new Map<string, OpcionGrado>();
@@ -66,21 +69,18 @@ export function CalificacionesTable({
         if (filters.groupId && r.groupId !== filters.groupId) return false;
         if (filters.periodId && r.periodId !== filters.periodId) return false;
         if (filters.bookletTypeId && r.bookletTypeId !== filters.bookletTypeId) return false;
-        if (filters.estado === "calificadas" && !r.graded) return false;
-        if (filters.estado === "pendientes" && r.graded) return false;
+        if (filters.estado !== "todas" && r.estado !== filters.estado) return false;
         return true;
       }),
     [rows, filters],
   );
 
-  // Promedio solo sobre las calificadas: incluir las pendientes como 0 daría
-  // un número que baja solo porque falta procesar hojas.
-  const resumen = useMemo(() => {
-    const calificadas = visible.filter((r) => r.puntaje !== null);
-    const promedio = calificadas.length
-      ? Math.round((calificadas.reduce((s, r) => s + r.puntaje!, 0) / calificadas.length) * 10) / 10
-      : null;
-    return { calificadas: calificadas.length, pendientes: visible.length - calificadas.length, promedio };
+  // El promedio ignora las pendientes: contarlas como 0 haría bajar la media
+  // solo porque falta procesar hojas.
+  const promedio = useMemo(() => {
+    const conNota = visible.filter((r) => r.puntaje !== null);
+    if (conNota.length === 0) return null;
+    return Math.round((conNota.reduce((s, r) => s + r.puntaje!, 0) / conNota.length) * 10) / 10;
   }, [visible]);
 
   return (
@@ -98,9 +98,8 @@ export function CalificacionesTable({
         />
 
         <p className="text-muted-foreground text-sm">
-          Mostrando {visible.length} de {rows.length} hojas · {resumen.calificadas} calificadas ·{" "}
-          {resumen.pendientes} pendientes
-          {resumen.promedio !== null && <> · puntaje promedio {resumen.promedio}</>}
+          Mostrando {visible.length} de {rows.length} estudiantes
+          {promedio !== null && <> · puntaje promedio {promedio}</>}
         </p>
 
         <div className="bg-card overflow-x-auto rounded-xl border">
@@ -117,7 +116,9 @@ export function CalificacionesTable({
                 <th className="px-3 py-2 text-left">Estado</th>
                 <th className="px-3 py-2 text-right">Correctas</th>
                 <th className="px-3 py-2 text-right">Total</th>
-                <th className="px-3 py-2 text-right">Puntaje</th>
+                <th className="px-3 py-2 text-right">
+                  <span className="sr-only">Historial</span>
+                </th>
                 <th className="px-3 py-2 text-right">
                   <span className="sr-only">Detalle</span>
                 </th>
@@ -129,7 +130,7 @@ export function CalificacionesTable({
                   <td colSpan={12} className="text-muted-foreground px-3 py-6 text-center text-sm">
                     {rows.length === 0
                       ? "No hay hojas identificadas en los grados a los que tienes acceso."
-                      : "Ninguna hoja coincide con los filtros aplicados."}
+                      : "Ningún estudiante coincide con los filtros aplicados."}
                   </td>
                 </tr>
               ) : (
@@ -147,18 +148,23 @@ export function CalificacionesTable({
                       {r.bookletTypeName ?? <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2">
-                      {r.graded ? (
-                        <span className="rounded-md border border-green-600/40 bg-green-600/10 px-2 py-0.5 text-xs font-medium text-green-700">
-                          Calificada
-                        </span>
-                      ) : (
-                        <span
-                          className="rounded-md border border-amber-600/40 bg-amber-600/10 px-2 py-0.5 text-xs font-medium text-amber-700"
-                          title={`Estado del escaneo: ${r.status}`}
-                        >
-                          Pendiente
-                        </span>
-                      )}
+                      <span
+                        className={
+                          "rounded-md border px-2 py-0.5 text-xs font-medium " +
+                          (r.estado === "calificada"
+                            ? "border-green-600/40 bg-green-600/10 text-green-700"
+                            : r.estado === "observaciones"
+                              ? "border-amber-600/40 bg-amber-600/10 text-amber-700"
+                              : "border-border text-muted-foreground")
+                        }
+                        title={
+                          r.estado === "observaciones"
+                            ? "Tiene puntaje, pero el motor marcó respuestas ambiguas: conviene revisar el papel"
+                            : `Estado del escaneo: ${r.status}`
+                        }
+                      >
+                        {etiquetaEstado(r.estado)}
+                      </span>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {r.totalCorrect ?? <span className="text-muted-foreground">—</span>}
@@ -166,12 +172,17 @@ export function CalificacionesTable({
                     <td className="px-3 py-2 text-right tabular-nums">
                       {r.totalQuestions ?? <span className="text-muted-foreground">—</span>}
                     </td>
-                    <td className="px-3 py-2 text-right font-medium tabular-nums">
-                      {r.puntaje !== null ? (
-                        r.puntaje.toFixed(1)
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                      {/* El número dice de un vistazo quién tiene reescaneos:
+                          es la señal de que hubo problemas con esa hoja. */}
+                      <button
+                        type="button"
+                        onClick={() => setHistorial(r)}
+                        className="text-muted-foreground hover:text-primary text-xs underline underline-offset-2"
+                        title="Ver todas las hojas cargadas de este estudiante, con sus fechas"
+                      >
+                        Historial ({r.historial.length})
+                      </button>
                     </td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       {/* Discreto a propósito: la consulta es para leer en bloque,
@@ -198,6 +209,8 @@ export function CalificacionesTable({
           </table>
         </div>
       </div>
+
+      {historial && <HistorialModal fila={historial} onClose={() => setHistorial(null)} />}
     </>
   );
 }

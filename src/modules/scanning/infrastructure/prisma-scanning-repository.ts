@@ -122,12 +122,24 @@ export class PrismaScanningRepository implements ScanningRepository {
     });
   }
 
+  async findSheetIdByQrSheetUuid(
+    qrSheetUuid: string,
+    exceptoSheetId: string,
+  ): Promise<string | null> {
+    const otra = await prisma.answerSheet.findFirst({
+      where: { qrSheetUuid, id: { not: exceptoSheetId } },
+      select: { id: true },
+    });
+    return otra?.id ?? null;
+  }
+
   async saveDecodedQr(
     sheetId: string,
     qrContent: string,
     qrSignature: string,
     studentCode: string | null,
-  ): Promise<{ studentId: string | null }> {
+    qrSheetUuid?: string | null,
+  ): Promise<{ studentId: string | null; duplicada: boolean }> {
     // Buscar el estudiante por código (incluyendo histórico de códigos viejos).
     let studentId: string | null = null;
     if (studentCode) {
@@ -158,6 +170,26 @@ export class PrismaScanningRepository implements ScanningRepository {
       }
     }
 
+    // El indice unico es la red contra la carrera entre workers: dos hojas
+    // duplicadas procesandose a la vez pasan ambas el chequeo previo, pero
+    // solo una puede escribir el uuid. La otra cae acá y se reporta duplicada
+    // en vez de reventar el job.
+    try {
+      await prisma.answerSheet.update({
+        where: { id: sheetId },
+        data: { qrSheetUuid: qrSheetUuid ?? null },
+      });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === "P2002" &&
+        qrSheetUuid
+      ) {
+        return { studentId: null, duplicada: true };
+      }
+      throw e;
+    }
+
     await prisma.answerSheet.update({
       where: { id: sheetId },
       data: {
@@ -172,7 +204,7 @@ export class PrismaScanningRepository implements ScanningRepository {
       },
     });
 
-    return { studentId };
+    return { studentId, duplicada: false };
   }
 
   async saveAnswers(sheetId: string, answers: StudentAnswerRecord[]): Promise<void> {

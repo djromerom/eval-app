@@ -38,7 +38,7 @@ export const CONSULTAS: readonly ConsultaConfig[] = [
     id: "calificaciones",
     title: "Calificaciones por grado y grupo",
     description:
-      "Una fila por hoja escaneada e identificada: estudiante, grado, grupo, prueba y puntaje en escala 0-10 con piso de 3. Incluye las que aún no tienen puntaje, marcadas como pendientes. Las hojas cuyo QR no se pudo resolver no aparecen: se atienden en la revisión del lote. El líder ECU ve solo los grados que tiene asignados.",
+      "Una fila por estudiante y prueba: la última calificación cargada, con grado, grupo y puntaje en escala 0-10 con piso de 3. Las hojas sin calificar y las que no se pudieron identificar no aparecen: se atienden en la revisión del lote. El líder ECU ve solo los grados que tiene asignados.",
     columns: [
       "Estudiante",
       "Código",
@@ -47,7 +47,6 @@ export const CONSULTAS: readonly ConsultaConfig[] = [
       "Cuadernillo",
       "Prueba",
       "Tipo",
-      "Estado",
       "Correctas",
       "Total",
       "Puntaje",

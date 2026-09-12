@@ -773,6 +773,12 @@ model AnswerSheet {
   studentCode         String? // respaldo: código escrito en la hoja
   qrContent           String // contenido completo del QR (JSON)
   qrSignature         String // HMAC-SHA256 para verificar integridad
+  /// Campo `sheet` del QR: identifica el PAPEL, no al estudiante ni la prueba.
+  /// Se genera con crypto.randomUUID() al imprimir, uno por hoja física.
+  /// Con indice unico: si el mismo papel vuelve a pasar por el alimentador, la
+  /// segunda pasada se rechaza en vez de crear una calificacion nueva.
+  /// Null en hojas sin QR resuelto y en las anteriores a este campo.
+  qrSheetUuid         String?           @unique
   scannedImage        String? // ruta de la imagen escaneada original
   /// Nombre del archivo tal como lo subio el usuario (p. ej. "20260909163256931_0051.tif").
   /// La subida renombra los archivos a sheet_NNN.ext, asi que sin esto no hay forma

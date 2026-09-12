@@ -107,7 +107,17 @@ export interface ScanningRepository {
     qrContent: string,
     qrSignature: string,
     studentCode: string | null,
-  ): Promise<{ studentId: string | null }>;
+    /** Campo `sheet` del QR: el id del PAPEL. Se guarda con índice único para
+     *  que el mismo papel no pueda calificarse dos veces. */
+    qrSheetUuid?: string | null,
+  ): Promise<{ studentId: string | null; duplicada: boolean }>;
+
+  /** ¿Ya hay OTRA hoja procesada con este id de papel? `exceptoSheetId` es la
+   *  que se está procesando: reprocesar la misma hoja no es un duplicado. */
+  findSheetIdByQrSheetUuid(
+    qrSheetUuid: string,
+    exceptoSheetId: string,
+  ): Promise<string | null>;
   updateSheetStatus(
     sheetId: string,
     status: AnswerSheetStatus,

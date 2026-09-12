@@ -128,6 +128,7 @@ export type ProcessAnswerSheetError =
   | { code: "NOT_FOUND"; message: string }
   | { code: "QR_DECODE_FAILED"; message: string }
   | { code: "QR_SIGNATURE_INVALID"; message: string }
+  | { code: "DUPLICATE_SHEET"; message: string }
   | { code: "EVALUATION_NOT_FOUND"; message: string }
   | { code: "PROCESSING_ERROR"; message: string };
 
@@ -264,9 +265,54 @@ export class ProcessAnswerSheet {
       };
     }
 
+    // Hoja duplicada: el campo `sheet` del QR identifica el PAPEL, no al
+    // estudiante ni la prueba. Si ya hay otra hoja con ese id, este papel ya
+    // pasó por el alimentador y volver a calificarlo crearía una segunda nota
+    // para el mismo examen físico, sin ninguna señal de que ocurrió.
+    //
+    // Se corta ANTES de puntuar: calificar y después descartar gastaría una
+    // llamada al motor OMR y dejaría respuestas huérfanas en la base.
+    const qrSheetUuid = typeof parsedQr.data.sheet === "string" ? parsedQr.data.sheet : null;
+    if (qrSheetUuid) {
+      const otra = await this.repository.findSheetIdByQrSheetUuid(qrSheetUuid, answerSheetId);
+      if (otra) {
+        await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
+          notes: `Hoja duplicada: este papel ya fue procesado (hoja ${otra.slice(0, 8)}).`,
+        });
+        return {
+          ok: false,
+          error: {
+            code: "DUPLICATE_SHEET",
+            message: "Este papel ya fue escaneado y calificado antes",
+          },
+        };
+      }
+    }
+
     // Persistir el QR decodificado + asociar al estudiante por código.
     const studentCode = typeof parsedQr.data.student === "string" ? parsedQr.data.student : null;
-    await this.repository.saveDecodedQr(answerSheetId, decoded.text, qrSignature, studentCode);
+    const guardado = await this.repository.saveDecodedQr(
+      answerSheetId,
+      decoded.text,
+      qrSignature,
+      studentCode,
+      qrSheetUuid,
+    );
+    // El chequeo de arriba deja una ventana: dos duplicados procesándose a la
+    // vez lo pasan los dos. El índice único cierra esa ventana y el repo lo
+    // reporta acá.
+    if (guardado.duplicada) {
+      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
+        notes: "Hoja duplicada: este papel ya fue procesado.",
+      });
+      return {
+        ok: false,
+        error: {
+          code: "DUPLICATE_SHEET",
+          message: "Este papel ya fue escaneado y calificado antes",
+        },
+      };
+    }
 
     const isBundle = Boolean(parsedQr.data.bundle);
     const correctAnswers = isBundle
