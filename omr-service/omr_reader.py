@@ -23,7 +23,7 @@ import argparse
 import json
 import sys
 
-VERSION = "16"         # subir al cambiar el motor: invalida cachés aguas arriba
+VERSION = "18"         # subir al cambiar el motor: invalida cachés aguas arriba
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -41,6 +41,7 @@ class Bubble:
     y: float
     r: float
     fill: float = 0.0          # ratio de píxeles oscuros dentro del círculo
+    ring: float = 0.0          # ratio de tinta en el ANILLO exterior del óvalo
     marked: bool = False
     letter: str = ""
 
@@ -462,12 +463,20 @@ def measure_fill(gray: np.ndarray, bubbles: list) -> None:
         x0, x1 = max(0, int(b.x) - r), min(w, int(b.x) + r + 1)
         sub = ink[y0:y1, x0:x1]
         if sub.size == 0:
-            b.fill = 0.0
+            b.fill = b.ring = 0.0
             continue
         yy, xx = np.ogrid[y0:y1, x0:x1]
-        disc = (yy - b.y) ** 2 + (xx - b.x) ** 2 <= r * r
+        d2 = (yy - b.y) ** 2 + (xx - b.x) ** 2
+        disc = d2 <= r * r
         total = int(disc.sum())
         b.fill = float((sub & disc).sum()) / total if total else 0.0
+        # Cobertura del ANILLO exterior (0.55 r a r). Una marca hecha a
+        # propósito cubre el óvalo entero, borde incluido; el residuo de un
+        # borrado queda concentrado en el centro y ralo en la orilla. Es lo
+        # único que distingue los dos casos cuando el relleno no alcanza.
+        anillo = (d2 > (r * 0.55) ** 2) & disc
+        na = int(anillo.sum())
+        b.ring = float((sub & anillo).sum()) / na if na else 0.0
 
 
 def adaptive_mark_threshold(questions: list):
@@ -525,43 +534,61 @@ def adaptive_mark_threshold(questions: list):
 
 
 REL_SEGUNDA_MARCA = 0.60   # una 2ª marca debe llegar al 60 % de la 1ª de su ítem
-NIVEL_DOBLE = 0.80         # ...y al 80 % del nivel de marca de la propia hoja
+RING_RESIDUO = 0.60        # por DEBAJO de esto la 2ª marca es residuo de borrado.
+RING_DUDOSA = 0.85         # entre ambos se reporta MULTIPLE pero marcado como
+                           # dudoso, para que lo mire una persona (ver apply_marks)
 
 
-def apply_marks(questions: list, piso: float,
-                rel: float = None, doble: float = None) -> None:
+def apply_marks(questions: list, piso: float, rel: float = None) -> None:
     """
-    Decide qué burbujas están marcadas, con dos criterios encadenados.
+    Decide qué burbujas están marcadas, con tres criterios encadenados.
 
     **Dentro del ítem** (`rel`): una burbuja está marcada si llega al 60 % de la
-    más oscura de su propia pregunta. Esto es lo que rescata marcas claras que
-    un umbral global de hoja dejaba en BLANCO.
+    más oscura de su propia pregunta. Esto rescata marcas claras que un umbral
+    global de hoja dejaba en BLANCO.
 
-    **Contra la hoja** (`doble`): una SEGUNDA marca en el mismo ítem sólo cuenta
-    como marca doble real si además alcanza el 80 % del nivel de marca típico de
-    esa hoja (la mediana de la burbuja más oscura de cada pregunta). Si no llega,
-    es residuo de un borrado o una corrección: gana la más oscura y el ítem sale
-    con una advertencia, no como MULTIPLE.
+    **El piso**, con una excepción: una pregunta cuya burbuja más oscura no
+    llega al piso queda en BLANCO, salvo que esa burbuja destaque claramente
+    sobre las de su propio ítem (ver más abajo).
 
-    El segundo criterio no es un ajuste al ojo. Midiendo todos los ítems con dos
-    marcas sobre nueve hojas reales, la razón entre la segunda marca y el nivel
-    de la hoja se parte en dos grupos sin zona gris:
+    **Doble real o borrado** (`RING_DOBLE`): una SEGUNDA marca en el mismo ítem
+    sólo cuenta si cubre el BORDE del óvalo tanto como lo cubren las marcas
+    únicas de esa misma hoja. Si no, es residuo de un borrado: gana la más
+    oscura y el ítem sale con una advertencia, no como MULTIPLE.
 
-        borrados / correcciones   0.52  0.52  0.57  0.61  0.68
-        marcas dobles de verdad               0.92  0.93  0.99  1.00  1.01  1.03
+    El tercer criterio necesita explicación, porque es el que más ha costado.
 
-    Verificado mirando los recortes: en el primer grupo una marca es densa y la
-    otra un tramado tenue; en el segundo las dos son igual de densas. El corte
-    en 0.80 cae en el medio del hueco, con margen ancho de los dos lados.
+    **El relleno no separa los dos casos.** Probado y descartado: valor absoluto;
+    fracción del nivel de marca de la hoja; razón contra la primera marca del
+    mismo ítem; percentil bajo de las marcas únicas. En todos, los rangos se
+    cruzan:
 
-    La razón entre la 2ª y la 1ª marca del mismo ítem NO sirve para esto: los
-    dos grupos se solapan ahí (0.68 contra 0.63). Hace falta comparar con la
-    hoja, que es lo que distingue "marcó flojo" de "borró".
+        hoja _0011 ítem 36   2ª marca 0.66   -> doble real
+        hoja _0029 ítem 38   2ª marca 0.54   -> borrado
+
+    **La cobertura del borde separa mejor, pero tampoco del todo.** Una marca
+    hecha a propósito cubre el óvalo entero, borde incluido; el residuo de un
+    borrado queda concentrado en el centro. Midiendo el anillo exterior
+    (0.55 r a r) normalizado por el de las marcas únicas de la misma hoja, sobre
+    doce casos verificados a ojo:
+
+        borrados          0.46  0.49  0.49  0.58  0.66
+        dobles de verdad                          0.66  0.71  0.92  0.97  1.02  1.04
+
+    Se tocan en 0.66: ahí hay un borrado y una doble real con el mismo número.
+    Ningún corte los separa, porque lo que se está tratando de adivinar es la
+    INTENCIÓN del estudiante, y la tinta no siempre la contiene.
+
+    **Por eso la decisión es asimétrica.** Resolver a una sola respuesta cambia
+    una nota en silencio; reportar MULTIPLE sólo cuesta que una persona mire la
+    celda y pulse una tecla. Así que sólo se descarta la segunda marca cuando es
+    residuo con holgura (`RING_RESIDUO`, por debajo del cual los cuatro casos
+    medidos son borrados y ninguna doble se acerca). Entre `RING_RESIDUO` y
+    `RING_DUDOSA` sale MULTIPLE con la advertencia de que puede ser un borrado.
+    En la zona de solapamiento, el lector no adivina: avisa.
     """
     if rel is None:
         rel = REL_SEGUNDA_MARCA
-    if doble is None:
-        doble = NIVEL_DOBLE
 
     maximos = [max(b.fill for b in q.bubbles) for q in questions if q.bubbles]
     con_marca = [m for m in maximos if m >= piso]
@@ -595,21 +622,46 @@ def apply_marks(questions: list, piso: float,
         # el piso (acotada a 0.70·piso): una segunda marca floja no debe
         # perderse por quedar un pelo por debajo.
         corte = max(rel * mx, 0.70 * min(piso, mx))
-        residuos = []
         for b in q.bubbles:
             b.marked = b.fill >= corte
         marcadas = sorted((b for b in q.bubbles if b.marked),
                           key=lambda b: -b.fill)
+        q._marcadas = marcadas
+    # --- segunda pasada: marca doble real o residuo de borrado ---
+    # La referencia es la cobertura de anillo de las marcas ÚNICAS de esta misma
+    # hoja, así que se adapta a lo fuerte que marque cada estudiante.
+    unicas = [q._marcadas[0] for q in questions
+              if getattr(q, "_marcadas", None) and len(q._marcadas) == 1]
+    ref = float(np.median([b.ring for b in unicas])) if unicas else 0.0
+    for q in questions:
+        marcadas = getattr(q, "_marcadas", None)
+        if not marcadas or len(marcadas) < 2:
+            continue
+        residuos, dudosas = [], []
         for b in marcadas[1:]:
-            if b.fill < doble * nivel:
+            rel = (b.ring / ref) if ref > 0 else 1.0
+            if rel < RING_RESIDUO:
                 b.marked = False
-                residuos.append((b.letter, b.fill))
+                residuos.append((b.letter, b.fill, rel * 100))
+            elif rel < RING_DUDOSA:
+                dudosas.append((b.letter, b.fill, rel * 100))
+        avisos = []
         if residuos:
-            aviso = ("posible borrado o corrección: %s frente a %s %.2f"
-                     % (", ".join("%s %.2f" % r for r in residuos),
-                        marcadas[0].letter, marcadas[0].fill))
+            avisos.append("posible borrado o corrección: %s frente a %s %.2f"
+                          % (", ".join("%s %.2f (borde %.0f%% del normal)" % r
+                                       for r in residuos),
+                             marcadas[0].letter, marcadas[0].fill))
+        if dudosas:
+            avisos.append("doble marcación con una marca floja: %s — puede ser "
+                          "un borrado, conviene mirarla"
+                          % ", ".join("%s %.2f (borde %.0f%% del normal)" % d
+                                      for d in dudosas))
+        if avisos:
             # no pisar un aviso previo de build_questions (letras ambiguas, etc.)
-            q.warning = (q.warning + "; " + aviso) if q.warning else aviso
+            q.warning = "; ".join(([q.warning] if q.warning else []) + avisos)
+    for q in questions:
+        if hasattr(q, "_marcadas"):
+            del q._marcadas
 
 
 # --------------------------------------------------------------------------
