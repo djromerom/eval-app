@@ -203,3 +203,114 @@ export async function marcarRevisadaAction(input: { sheetId: string; batchId: st
   revalidatePath("/teacher/scan");
   return { ok: true as const };
 }
+
+/** Asocia manualmente una hoja huérfana (QR no detectado) a un estudiante.
+ *  Se usa desde el detalle de la hoja cuando el worker escribió algo como
+ *  "QR could not be decoded" en `notes` y la hoja quedó sin `studentId`.
+ *
+ *  Validaciones, todas adentro del bloque try para distinguir 404 (hoja ya
+ *  no existe) de 403/400:
+ *    - tenant + lote del docente o de la institución
+ *    - la hoja NO tiene estudiante todavía (no pisa una asociación buena)
+ *    - el lote viene de un Cuadernillo (los formularios sueltos no ofrecen
+ *      este flujo — la página no monta el botón en ese caso)
+ *    - el estudiante pertenece a la misma institución
+ *    - el estudiante está en un curso que el cuadernillo cubre (sus
+ *      `bundleItem.evaluation.courseSubject.courseId` ∈ cursos del bundle)
+ *
+ *  Solo escribe `studentId`. NO toca `studentName`/`studentCode`: esos siguen
+ *  siendo respaldo legible del QR o del handwriting; el nombre se reconstruye
+ *  desde `Student` cuando hace falta.
+ *
+ *  Devuelve ok=true si asoció, ok=false con código estable en cualquier otro
+ *  caso (la página muestra el `error`).
+ */
+export async function asignarEstudianteHojaAction(input: {
+  sheetId: string;
+  batchId: string;
+  studentId: string;
+}) {
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER");
+
+  const sheet = await prisma.answerSheet.findFirst({
+    where: {
+      id: input.sheetId,
+      scanBatchId: input.batchId,
+      OR: [
+        {
+          evaluation: {
+            institutionId: actor.institutionId,
+            teacherId: actor.userId,
+            deletedAt: null,
+          },
+        },
+        { bundle: { institutionId: actor.institutionId } },
+      ],
+    },
+    select: {
+      id: true,
+      studentId: true,
+      bundle: { select: { id: true } },
+    },
+  });
+  if (!sheet) {
+    return { ok: false as const, code: "NOT_FOUND" as const, error: "Hoja no encontrada." };
+  }
+  if (sheet.studentId) {
+    return {
+      ok: false as const,
+      code: "ALREADY_ASSIGNED" as const,
+      error: "Esta hoja ya tiene un estudiante asociado.",
+    };
+  }
+  if (!sheet.bundle) {
+    return {
+      ok: false as const,
+      code: "NOT_A_BUNDLE" as const,
+      error: "Solo se puede asignar manualmente en hojas de un Cuadernillo.",
+    };
+  }
+
+  // Cursos del cuadernillo = unión de courseId de cada bundleItem.evaluation.
+  const items = await prisma.evaluationBundleItem.findMany({
+    where: { bundleId: sheet.bundle.id },
+    select: {
+      evaluation: {
+        select: { courseSubject: { select: { courseId: true } } },
+      },
+    },
+  });
+  const courseIds = [...new Set(items.map((i) => i.evaluation.courseSubject.courseId))];
+  if (courseIds.length === 0) {
+    return {
+      ok: false as const,
+      code: "EMPTY_BUNDLE" as const,
+      error: "El cuadernillo no tiene formulaciones; no se puede inferir el curso.",
+    };
+  }
+
+  const student = await prisma.student.findFirst({
+    where: {
+      id: input.studentId,
+      institutionId: actor.institutionId,
+      isActive: true,
+      group: { courseId: { in: courseIds } },
+    },
+    select: { id: true },
+  });
+  if (!student) {
+    return {
+      ok: false as const,
+      code: "STUDENT_NOT_IN_COURSE" as const,
+      error: "El estudiante no pertenece a un curso cubierto por este cuadernillo.",
+    };
+  }
+
+  await prisma.answerSheet.update({
+    where: { id: sheet.id },
+    data: { studentId: student.id },
+  });
+
+  revalidatePath(`/teacher/scan/${input.batchId}/${input.sheetId}`);
+  return { ok: true as const };
+}
