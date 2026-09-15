@@ -10,6 +10,7 @@ import { renderRichText, unwrapSingleParagraph } from "@/components/editor/rende
 import { SheetMatrix } from "./sheet-matrix";
 import { ReprocessButton } from "./reprocess-button";
 import { MarcarRevisadaButton } from "./marcar-revisada-button";
+import { AsignarEstudianteButton, type StudentOption } from "./asignar-estudiante-button";
 import type { BubbleCellRecord, GridLayoutRecord } from "@/modules/scanning/domain/answer-sheet";
 
 interface PageProps {
@@ -62,10 +63,66 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
       ],
     },
     include: {
-      scanBatch: { include: { evaluation: true, bundle: true } },
+      scanBatch: {
+        include: {
+          evaluation: true,
+          bundle: {
+            include: {
+              items: {
+                select: {
+                  evaluation: { select: { courseSubject: { select: { courseId: true } } } },
+                },
+              },
+            },
+          },
+        },
+      },
     },
   });
   if (!sheet) notFound();
+
+  // Selector de estudiante manual: cuando el worker no detectó el QR y la hoja
+  // quedó sin `studentId`, y el lote viene de un Cuadernillo (los formularios
+  // sueltos no ofrecen este flujo). La lista se trae solo si hace falta para
+  // no pagar la query en cada render del detalle.
+  const mostrarPicker =
+    !sheet.studentId && sheet.scanBatch?.bundle != null;
+  const courseIds = mostrarPicker
+    ? [
+        ...new Set(
+          sheet.scanBatch!.bundle!.items.map(
+            (i) => i.evaluation.courseSubject.courseId,
+          ),
+        ),
+      ]
+    : [];
+  const studentsForPicker: StudentOption[] = mostrarPicker
+    ? (
+        await prisma.student.findMany({
+          where: {
+            institutionId: actor.institutionId,
+            isActive: true,
+            deletedAt: null,
+            group: { courseId: { in: courseIds } },
+          },
+          select: {
+            id: true,
+            code: true,
+            lastName1: true,
+            lastName2: true,
+            firstName1: true,
+            firstName2: true,
+            group: { select: { name: true } },
+          },
+          orderBy: [{ lastName1: "asc" }, { lastName2: "asc" }, { firstName1: "asc" }],
+        })
+      ).map((s) => ({
+        id: s.id,
+        code: s.code,
+        name: nombreCompleto(s),
+        groupName: s.group.name,
+      }))
+    : [];
 
   // Traemos las respuestas + la pregunta (texto + opciones) + el ítem de
   // bundle si aplica. Ordenamos por el orden natural (createdAt) para
@@ -227,6 +284,13 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
             <span className="font-semibold">Notas del worker:</span> {sheet.notes}
           </div>
         )}
+        {mostrarPicker && (
+          <AsignarEstudianteButton
+            sheetId={sheet.id}
+            batchId={sheet.scanBatchId ?? batchId}
+            students={studentsForPicker}
+          />
+        )}
         <div>
           <Link
             href={volverA}
@@ -292,4 +356,19 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
 function renderTextPreview(text: unknown): string {
   const html = unwrapSingleParagraph(renderRichText(text));
   return html.length > 280 ? `${html.slice(0, 280)}…` : html;
+}
+
+/** Formato legible "APELLIDO1 APELLIDO2, NOMBRE1 NOMBRE2". Mismo criterio que
+ *  calificaciones-fetcher.ts: cualquier parte vacía se omite, sin coma colgante.
+ *  Lo necesitamos acá porque el selector de estudiante manual es server-rendered
+ *  y debe mostrar el nombre antes del click. */
+function nombreCompleto(s: {
+  lastName1: string;
+  lastName2: string;
+  firstName1: string;
+  firstName2: string;
+}): string {
+  const apellidos = [s.lastName1, s.lastName2].filter(Boolean).join(" ").trim();
+  const nombres = [s.firstName1, s.firstName2].filter(Boolean).join(" ").trim();
+  return [apellidos, nombres].filter(Boolean).join(", ");
 }
