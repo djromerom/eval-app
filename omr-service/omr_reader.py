@@ -23,7 +23,7 @@ import argparse
 import json
 import sys
 
-VERSION = "18"         # subir al cambiar el motor: invalida cachés aguas arriba
+VERSION = "19"         # subir al cambiar el motor: invalida cachés aguas arriba
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -527,9 +527,15 @@ def adaptive_mark_threshold(questions: list):
     piso = float(np.clip(ruido + 0.30 * (nivel - ruido), 0.15, 0.60))
 
     aviso = ""
-    if nivel - ruido < 0.12:
-        aviso = ("marcas y vacías casi no se distinguen (ruido %.2f, marca "
-                 "típica %.2f): revisar la hoja completa" % (ruido, nivel))
+    if not separables(ruido, nivel):
+        if nivel < 2.0 * ruido and nivel < 0.35:
+            aviso = ("HOJA SIN MARCAR: ninguna burbuja destaca sobre el resto "
+                     "(ruido %.2f, burbuja más oscura típica %.2f). No se "
+                     "emiten respuestas." % (ruido, nivel))
+        else:
+            aviso = ("HOJA ILEGIBLE: no hay separación entre marcas y vacías "
+                     "(ruido %.2f, marca típica %.2f). No se emiten respuestas."
+                     % (ruido, nivel))
     return piso, aviso
 
 
@@ -537,6 +543,23 @@ REL_SEGUNDA_MARCA = 0.60   # una 2ª marca debe llegar al 60 % de la 1ª de su �
 RING_RESIDUO = 0.60        # por DEBAJO de esto la 2ª marca es residuo de borrado.
 RING_DUDOSA = 0.85         # entre ambos se reporta MULTIPLE pero marcado como
                            # dudoso, para que lo mire una persona (ver apply_marks)
+
+
+def separables(ruido: float, nivel: float) -> bool:
+    """
+    ¿Hay separación suficiente entre marcas y vacías para decidir algo?
+
+    Es la comprobación que distingue una hoja legible de una en blanco. Sobre
+    doce hojas reales la distancia entre el techo del ruido y la marca típica
+    va de 0.32 a 0.73, y la razón entre ambos de 2.0 a 4.5. En una hoja sin
+    marcar valen 0.01 y 1.06. El margen es tan amplio que no hay zona gris.
+
+    Importa porque las reglas relativas (60 % de la más oscura del ítem, etc.)
+    están pensadas para preguntas que SÍ tienen una marca: aplicadas sobre puro
+    ruido producen respuestas verosímiles salidas de la nada. En una hoja en
+    blanco real, el lector llegó a reportar 15 respuestas y 9 MULTIPLE.
+    """
+    return (nivel - ruido) >= 0.12 and nivel >= 1.5 * ruido
 
 
 def apply_marks(questions: list, piso: float, rel: float = None) -> None:
@@ -598,6 +621,14 @@ def apply_marks(questions: list, piso: float, rel: float = None) -> None:
     resto = [b.fill for q in questions
              for b in sorted(q.bubbles, key=lambda z: -z.fill)[1:]]
     ruido = float(np.percentile(resto, 95)) if resto else 0.0
+
+    # Sin separación entre marcas y vacías no hay nada que decidir: se deja
+    # todo sin marcar en vez de inventar respuestas a partir del ruido.
+    if maximos and not separables(ruido, float(np.median(maximos))):
+        for q in questions:
+            for b in q.bubbles:
+                b.marked = False
+        return
 
     for q in questions:
         if not q.bubbles:
