@@ -86,6 +86,7 @@ model User {
   auditLogs              AuditLog[]
   notifications          Notification[]
   leaderAssignments      LeaderCourseAssignment[]
+  disabledBundleQuestions DisabledBundleQuestion[]
 
   @@index([institutionId])
 }
@@ -520,6 +521,7 @@ model Question {
 
   options QuestionOption[]
   answers StudentAnswer[]
+  disabledFromBundles DisabledBundleQuestion[]
 
   @@index([sectionId, number])
 }
@@ -701,6 +703,7 @@ model EvaluationBundle {
   items       EvaluationBundleItem[]
   sheets      AnswerSheet[]
   scanBatches ScanBatch[]
+  disabledQuestions DisabledBundleQuestion[]
 
   @@unique([institutionId, bookletNumber])
   @@index([institutionId])
@@ -724,6 +727,46 @@ model EvaluationBundleItem {
   @@unique([bundleId, evaluationId]) // una eval no se repite en el mismo bundle
   @@unique([bundleId, order]) // un solo item por posición
   @@index([evaluationId])
+}
+
+// =====================================================
+// Sprint Preguntas inhabitadas del Cuadernillo (sep 2026)
+// =====================================================
+//
+// Marca preguntas individuales de un cuadernillo para que NO cuenten en la
+// calificación (clave mal impresa, pregunta retirada post-print, redacción
+// ambigua, etc.). Granularidad por pregunta — no por `EvaluationBundleItem`
+// entero — porque las preguntas dentro de una evaluación siguen contando.
+//
+// Decisiones de diseño confirmadas con el docente (sep 2026):
+//   - Por pregunta individual del bundle (no por evaluation completa).
+//   - Lock pre-scan: toggling se bloquea cuando ya existe un `ScanBatch`
+//     apuntando al bundle. Cero re-procesamiento de hojas viejas.
+//   - Efecto solo en próximos escaneos: las hojas ya escaneadas conservan
+//     su score original y muestran un badge "(no recalculado)" si después
+//     se inhabita una pregunta. Decisión deliberada: NO se persiste
+//     `StudentAnswer.notCounted` — el cómputo es query-time con join.
+//   - UX: la UI bloquea al docente si intenta inhabitarlas todas (debe
+//     quedar al menos 1 pregunta efectiva).
+//
+// Re-habilitar no borra la fila: solo se flaguea `disabled = false`. Esto
+// conserva la auditoría (sabemos qué preguntas fueron inhabitadas en
+// algún momento) sin perder el historial.
+//
+model DisabledBundleQuestion {
+  id               String           @id @default(uuid(7)) @db.Uuid
+  bundleId         String           @db.Uuid
+  bundle           EvaluationBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  questionId       String           @db.Uuid
+  question         Question         @relation(fields: [questionId], references: [id])
+  disabledAt       DateTime         @default(now())
+  disabledByUserId String           @db.Uuid
+  disabledByUser   User             @relation(fields: [disabledByUserId], references: [id])
+  // Re-habilitar no borra la fila; baja este flag a false.
+  disabled         Boolean          @default(true)
+
+  @@unique([bundleId, questionId])
+  @@index([bundleId])
 }
 
 // ========== ANSWER SHEETS & GRADING ==========
