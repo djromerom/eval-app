@@ -21,7 +21,10 @@ export interface EvaluationQuestionsProvider {
   /** Hoja de un cuadernillo: une en orden todas las questions de cada item.
    *  `number` es la posición global en la hoja unificada (1-based).
    *  `bundleItemId` permite drill-down del reporte comparativo por item
-   *  (Sprint 4). */
+   *  (Sprint 4).
+   *  `disabled` (sprint Preguntas inhabitadas, sep 2026): la pregunta fue
+   *  inhabilitada en el cuadernillo y no cuenta para la nota. Sigue en la
+   *  lista porque la hoja impresa la tiene y el mapeo es posicional. */
   getCorrectAnswersForBundle(
     institutionId: string,
     bundleId: string,
@@ -32,6 +35,7 @@ export interface EvaluationQuestionsProvider {
       bundleItemId: string;
       correctAnswer: AnswerKey;
       optionsLength: number;
+      disabled?: boolean;
     }[]
   >;
 }
@@ -373,8 +377,14 @@ export class ProcessAnswerSheet {
       };
     }
 
+    // Sprint Preguntas inhabitadas (sep 2026): la respuesta a una pregunta
+    // inhabilitada se guarda tal cual (lo que marcó y si acertó), pero no suma
+    // a la nota ni al total, y una marca múltiple en ella no manda la hoja a
+    // revisión: no puede cambiar la nota.
     const answers: StudentAnswerRecord[] = [];
     let totalCorrect = 0;
+    let effectiveQuestions = 0;
+    let needsReview = false;
     for (let idx = 0; idx < correctAnswers.length; idx++) {
       const q = correctAnswers[idx]!;
       const bundleItemId = isBundle
@@ -387,17 +397,22 @@ export class ProcessAnswerSheet {
         bundleItemId,
         detected.thr,
       );
-      if (record.isCorrect === true) totalCorrect++;
+      const counts = !("disabled" in q && q.disabled === true);
+      if (counts) {
+        effectiveQuestions++;
+        if (record.isCorrect === true) totalCorrect++;
+        if (record.isAmbiguous) needsReview = true;
+      }
       answers.push(record);
     }
 
-    const status = answers.some((a) => a.isAmbiguous) ? "REVIEW" : "GRADED";
+    const status = needsReview ? "REVIEW" : "GRADED";
 
     await this.repository.saveAnswers(answerSheetId, answers);
     await this.repository.updateSheetStatus(answerSheetId, status, {
       score: totalCorrect,
       totalCorrect,
-      totalQuestions: correctAnswers.length,
+      totalQuestions: effectiveQuestions,
       notes:
         status === "REVIEW"
           ? "Algunas preguntas con marca múltiple o ambigua; revisión recomendada"
