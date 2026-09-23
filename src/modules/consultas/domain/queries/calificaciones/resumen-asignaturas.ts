@@ -12,6 +12,11 @@
  * `correctas + incorrectas + faltantes === total` — sin inventar una cuarta
  * columna que la maqueta no tiene. Si algún día importa distinguirlas, el
  * dato está en `isAmbiguous` y se agrega una columna aparte.
+ *
+ * **Las preguntas inhabilitadas del cuadernillo no cuentan** (sprint Preguntas
+ * inhabitadas, sep 2026): se saltan en todos los conteos, igual que en la nota
+ * guardada de la hoja, para que el Total coincida con la consulta. Una materia
+ * con todas sus preguntas inhabilitadas no aparece.
  */
 import { calcularPuntaje } from "./puntaje";
 
@@ -25,6 +30,8 @@ export interface RespuestaParaResumen {
   selectedKey: string | null;
   isCorrect: boolean | null;
   isAmbiguous: boolean;
+  /** Pregunta inhabilitada en el cuadernillo: no entra en ningún conteo. */
+  disabled?: boolean;
 }
 
 export interface FilaAsignatura {
@@ -46,6 +53,7 @@ export function resumirPorAsignatura(
   const acc = new Map<string, FilaAsignatura & { orden: number }>();
 
   for (const r of respuestas) {
+    if (r.disabled === true) continue;
     const nombre = r.subjectName?.trim() || SIN_ASIGNATURA;
     const fila =
       acc.get(nombre) ??

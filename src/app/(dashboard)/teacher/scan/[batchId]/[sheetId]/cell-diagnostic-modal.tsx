@@ -110,24 +110,24 @@ export function CellDiagnosticModal({
                 {answerKeys
                   .filter((k) => row.optionKeys.includes(k))
                   .map((k) => {
-                  const c = cellsByKey.get(k);
-                  const fill = c ? Math.round(c.fillRatio * 100) : 0;
-                  const state: BubbleState = c?.state ?? "EMPTY";
-                  const isSelected = row.selectedKey === k;
-                  return (
-                    <tr key={k} className={isSelected ? "bg-amber-50" : ""}>
-                      <td className="py-1 font-mono">{k}</td>
-                      <td className="py-1 text-right">
-                        <FillBar value={fill} tone={stateBarTone(state, k === row.correctKey)} />
-                      </td>
-                      <td className="py-1 text-right">
-                        <StateBadge
-                          state={state}
-                          isSelected={isSelected}
-                          isCorrectKey={k === row.correctKey}
-                        />
-                      </td>
-                    </tr>
+                    const c = cellsByKey.get(k);
+                    const fill = c ? Math.round(c.fillRatio * 100) : 0;
+                    const state: BubbleState = c?.state ?? "EMPTY";
+                    const isSelected = row.selectedKey === k;
+                    return (
+                      <tr key={k} className={isSelected ? "bg-amber-50" : ""}>
+                        <td className="py-1 font-mono">{k}</td>
+                        <td className="py-1 text-right">
+                          <FillBar value={fill} tone={stateBarTone(state, k === row.correctKey)} />
+                        </td>
+                        <td className="py-1 text-right">
+                          <StateBadge
+                            state={state}
+                            isSelected={isSelected}
+                            isCorrectKey={k === row.correctKey}
+                          />
+                        </td>
+                      </tr>
                     );
                   })}
               </tbody>
@@ -151,7 +151,11 @@ export function CellDiagnosticModal({
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Resultado</dt>
                 <dd>
-                  {row.isAmbiguous ? (
+                  {row.disabled ? (
+                    <span className="bg-muted text-muted-foreground rounded px-2 py-0.5 text-xs">
+                      No cuenta
+                    </span>
+                  ) : row.isAmbiguous ? (
                     <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">
                       Múltiple marca
                     </span>

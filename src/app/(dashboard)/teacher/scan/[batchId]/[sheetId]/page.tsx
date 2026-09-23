@@ -12,6 +12,7 @@ import { ReprocessButton } from "./reprocess-button";
 import { MarcarRevisadaButton } from "./marcar-revisada-button";
 import { AsignarEstudianteButton, type StudentOption } from "./asignar-estudiante-button";
 import type { BubbleCellRecord, GridLayoutRecord } from "@/modules/scanning/domain/answer-sheet";
+import { loadDisabledQuestionIds } from "@/modules/bundles/infrastructure/container";
 
 interface PageProps {
   params: Promise<{ batchId: string; sheetId: string }>;
@@ -85,16 +86,9 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
   // quedó sin `studentId`, y el lote viene de un Cuadernillo (los formularios
   // sueltos no ofrecen este flujo). La lista se trae solo si hace falta para
   // no pagar la query en cada render del detalle.
-  const mostrarPicker =
-    !sheet.studentId && sheet.scanBatch?.bundle != null;
+  const mostrarPicker = !sheet.studentId && sheet.scanBatch?.bundle != null;
   const courseIds = mostrarPicker
-    ? [
-        ...new Set(
-          sheet.scanBatch!.bundle!.items.map(
-            (i) => i.evaluation.courseSubject.courseId,
-          ),
-        ),
-      ]
+    ? [...new Set(sheet.scanBatch!.bundle!.items.map((i) => i.evaluation.courseSubject.courseId))]
     : [];
   const studentsForPicker: StudentOption[] = mostrarPicker
     ? (
@@ -123,6 +117,12 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
         groupName: s.group.name,
       }))
     : [];
+
+  // Preguntas inhabilitadas del cuadernillo: se muestran con "No cuenta" en
+  // lugar de ✓/✗, porque no suman a la nota guardada de la hoja.
+  const disabledIds = sheet.bundleId
+    ? await loadDisabledQuestionIds(sheet.bundleId)
+    : new Set<string>();
 
   // Traemos las respuestas + la pregunta (texto + opciones) + el ítem de
   // bundle si aplica. Ordenamos por el orden natural (createdAt) para
@@ -161,6 +161,7 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
     isCorrect: boolean | null;
     isAmbiguous: boolean;
     fillRatio: number | null;
+    disabled: boolean;
   };
 
   const todasLasFilas: Row[] = answers.map((a, idx) => {
@@ -185,6 +186,7 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
       isCorrect: a.isCorrect,
       isAmbiguous: a.isAmbiguous,
       fillRatio: a.fillRatio,
+      disabled: disabledIds.has(a.questionId),
     };
   });
 
@@ -341,6 +343,7 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
             isCorrect: r.isCorrect,
             isAmbiguous: r.isAmbiguous,
             fillRatio: r.fillRatio,
+            disabled: r.disabled,
           }))}
           answerKeys={answerKeys}
           processedImagePath={sheet.processedImage ? `/api/scans/${sheet.processedImage}` : null}

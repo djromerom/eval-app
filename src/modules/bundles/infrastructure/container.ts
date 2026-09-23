@@ -63,3 +63,10 @@ export const makeToggleDisabledBundleQuestion = () =>
 // (no extiende `findDetail` — ese lo comparten GetBundle/Print/MarkReady).
 export const makeGetBundleQuestionsForToggle = () =>
   new GetBundleQuestionsForToggle(repository, new PrismaDisabledBundleQuestionRepository());
+// PR #4: ids de las preguntas inhabilitadas de un cuadernillo, para que los
+// reportes y la matriz de la hoja las excluyan y las marquen "No cuenta".
+// El caller ya validó el tenant al cargar la hoja o el cuadernillo.
+export const loadDisabledQuestionIds = async (bundleId: string): Promise<Set<string>> => {
+  const rows = await new PrismaDisabledBundleQuestionRepository().listActiveByBundle(bundleId);
+  return new Set(rows.map((r) => r.questionId));
+};
