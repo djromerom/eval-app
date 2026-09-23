@@ -338,6 +338,23 @@ export class ProcessAnswerSheet {
       };
     }
 
+    // Cuadernillo con todas sus preguntas inhabilitadas: no hay nada que
+    // calificar y la hoja saldría GRADED 0/0 sin nota. MarkBundleReady ya lo
+    // impide, esta es la defensa por si el cuadernillo llegó así igual. Se
+    // corta antes de la detección para no gastar la llamada al motor.
+    if (isBundle && !correctAnswers.some((q) => !("disabled" in q && q.disabled === true))) {
+      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
+        notes: "El cuadernillo no tiene preguntas efectivas: todas están inhabilitadas.",
+      });
+      return {
+        ok: false,
+        error: {
+          code: "EVALUATION_NOT_FOUND",
+          message: "Bundle has no effective questions",
+        },
+      };
+    }
+
     // ===== Detección de burbujas (omr-service, Python) =====
     // Reemplaza la antigua pipeline de visión en TS: el servicio hace deskew,
     // detección y agrupación en preguntas. Aquí solo mapeamos su salida al

@@ -243,4 +243,38 @@ describe("ProcessAnswerSheet - preguntas inhabilitadas", () => {
     expect(g.score).toBe(3);
     expect(g.totalQuestions).toBe(3);
   });
+
+  it("con todas las preguntas inhabilitadas la hoja va a REVIEW sin nota", async () => {
+    const signed = buildSignedQrContent({
+      inst: "test-inst",
+      bundle: BUNDLE_ID,
+      student: "STU001",
+      sheet: "00000000-0000-0000-0000-000000000078",
+      ts: 1700000000,
+    });
+    const qr: QrDecoder = {
+      async decode() {
+        return { text: JSON.stringify(signed) };
+      },
+    };
+    const { repo, guardado } = hacerRepo(JSON.stringify(signed), signed.sig, pngPath);
+    const provider = {
+      getCorrectAnswers: vi.fn(async () => []),
+      getCorrectAnswersForBundle: vi.fn(async () => clave({ q1: true, q2: true, q3: true })),
+    };
+    const analyze = vi.fn();
+    const useCase = new ProcessAnswerSheet(repo, qr, provider, { analyze });
+    const r = await useCase.execute({
+      answerSheetId: "hoja-1",
+      scanBatchId: "lote-1",
+      institutionId: "inst-1",
+      imagePath: pngPath,
+    });
+    expect(r.ok).toBe(false);
+    expect(guardado.status).toBe("REVIEW");
+    expect(guardado.score).toBeUndefined();
+    expect(guardado.answers).toEqual([]);
+    // Corta antes de llamar al motor OMR.
+    expect(analyze).not.toHaveBeenCalled();
+  });
 });
