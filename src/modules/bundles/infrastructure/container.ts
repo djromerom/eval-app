@@ -49,7 +49,8 @@ export const makeAddEvaluationToBundle = () => new AddEvaluationToBundle(reposit
 export const makeRemoveFromBundle = () => new RemoveFromBundle(repository);
 export const makeReorderBundleItems = () => new ReorderBundleItems(repository);
 export const makeUpdateBundleTheme = () => new UpdateBundleTheme(repository);
-export const makeMarkBundleReady = () => new MarkBundleReady(repository);
+export const makeMarkBundleReady = () =>
+  new MarkBundleReady(repository, new PrismaDisabledBundleQuestionRepository());
 export const makeUnmarkBundleReady = () => new UnmarkBundleReady(repository);
 // Sprint Preguntas inhabitadas (sep 2026). Repos separados por DDD; el
 // repo de bundle es solo para findById (validación de existencia + tenant)

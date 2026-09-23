@@ -74,8 +74,12 @@ export class ToggleDisabledBundleQuestion implements UseCase<
     }
 
     // (5) Después de este toggle queda ≥1 efectiva.
+    // Solo cuentan las inhabilitaciones de preguntas que SIGUEN en el
+    // cuadernillo: al quitar una formulación sus filas quedan huérfanas, y
+    // contarlas restaría efectivas que ya no existen (rechazos falsos).
+    const enBundle = new Set(preguntas);
     const activas = await this.disabledRepo.listActiveByBundle(bundleId);
-    const idsActivos = new Set(activas.map((r) => r.questionId));
+    const idsActivos = new Set(activas.map((r) => r.questionId).filter((id) => enBundle.has(id)));
     const guard = assertDejaAlMenosUnaEfectiva({
       totalPreguntasBundle: preguntas.length,
       idsYaInhabilitados: idsActivos,
