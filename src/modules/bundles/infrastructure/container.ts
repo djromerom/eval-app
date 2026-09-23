@@ -9,6 +9,7 @@ import { AddEvaluationToBundle } from "../application/add-evaluation-to-bundle";
 import { CreateBundle } from "../application/create-bundle";
 import { DeleteBundle } from "../application/delete-bundle";
 import { GetBundle } from "../application/get-bundle";
+import { GetBundleQuestionsForToggle } from "../application/get-bundle-questions-for-toggle";
 import { ListBundles } from "../application/list-bundles";
 import { MarkBundleReady } from "../application/mark-bundle-ready";
 import { RemoveFromBundle } from "../application/remove-from-bundle";
@@ -56,3 +57,9 @@ export const makeUnmarkBundleReady = () => new UnmarkBundleReady(repository);
 // ScanBatch, que es la regla que evita re-procesar hojas viejas).
 export const makeToggleDisabledBundleQuestion = () =>
   new ToggleDisabledBundleQuestion(repository, new PrismaDisabledBundleQuestionRepository());
+// PR #3 del sprint Preguntas inhabitadas: vista de solo-lectura que hidrata
+// enunciado + posición + flags de inhabitación para que el panel del
+// cuadernillo pueda listar y togglear. Reutiliza el repo de inhabitaciones
+// (no extiende `findDetail` — ese lo comparten GetBundle/Print/MarkReady).
+export const makeGetBundleQuestionsForToggle = () =>
+  new GetBundleQuestionsForToggle(repository, new PrismaDisabledBundleQuestionRepository());
