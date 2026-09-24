@@ -20,6 +20,9 @@ export interface MatrixRow {
   isCorrect: boolean | null;
   isAmbiguous: boolean;
   fillRatio: number | null;
+  /** Pregunta inhabilitada en el cuadernillo: no suma a la nota, así que se
+   *  muestra "No cuenta" en lugar de ✓/✗ y sin verde/rojo en la burbuja. */
+  disabled?: boolean;
 }
 
 interface SheetMatrixProps {
@@ -39,17 +42,19 @@ interface SheetMatrixProps {
  *  mayoría de las visitas solo miran la matriz. */
 type Recortes = Map<number, string>;
 
-type CellTone = "blank" | "wrong" | "right" | "multiple" | "ambiguous";
+type CellTone = "blank" | "wrong" | "right" | "multiple" | "ambiguous" | "notCounted";
 
 function toneFor(
   isMarked: boolean,
   isCorrect: boolean | null,
   isSelected: boolean,
   state: BubbleCellRecord["state"],
+  disabled = false,
 ): CellTone {
   if (!isMarked) return "blank";
   if (state === "AMBIGUOUS") return "ambiguous";
   if (!isSelected) return "blank";
+  if (disabled) return "notCounted";
   if (isCorrect === true) return "right";
   if (isCorrect === false) return "wrong";
   return "blank";
@@ -61,6 +66,7 @@ const toneClasses: Record<CellTone, string> = {
   wrong: "bg-rose-500 text-white border-rose-600 hover:bg-rose-600",
   multiple: "bg-amber-400 text-amber-900 border-amber-500 hover:bg-amber-500",
   ambiguous: "bg-amber-100 text-amber-900 border-amber-400 border-dashed hover:bg-amber-200",
+  notCounted: "bg-slate-400 text-white border-slate-500 hover:bg-slate-500",
 };
 
 export function SheetMatrix({
@@ -149,7 +155,12 @@ export function SheetMatrix({
             {rows.map((row, idx) => {
               const cellsByKey = new Map(row.cells.map((c) => [c.key, c]));
               return (
-                <tr key={`${row.questionId}-${idx}`} className="align-middle">
+                <tr
+                  key={`${row.questionId}-${idx}`}
+                  className={
+                    row.disabled ? "bg-muted/40 text-muted-foreground align-middle" : "align-middle"
+                  }
+                >
                   <td className="text-muted-foreground border-r border-b px-3 py-1 text-center font-mono text-xs">
                     {row.posicion}
                   </td>
@@ -173,7 +184,7 @@ export function SheetMatrix({
                     const isMarked = !!cell?.isMarked;
                     const state = cell?.state ?? "EMPTY";
                     const isSelected = row.selectedKey === k;
-                    const tone = toneFor(isMarked, row.isCorrect, isSelected, state);
+                    const tone = toneFor(isMarked, row.isCorrect, isSelected, state, row.disabled);
                     const fillPct = cell ? Math.round(cell.fillRatio * 100) : 0;
                     const label = `${k}: ${fillPct}% relleno${state !== "EMPTY" ? ` (${state})` : ""}`;
                     return (
@@ -191,7 +202,14 @@ export function SheetMatrix({
                     );
                   })}
                   <td className="border-b border-l px-3 py-2 text-center">
-                    {row.isAmbiguous ? (
+                    {row.disabled ? (
+                      <span
+                        className="bg-muted text-muted-foreground inline-block rounded px-2 py-0.5 text-xs"
+                        title="Pregunta inhabilitada en el cuadernillo: no suma a la nota"
+                      >
+                        No cuenta
+                      </span>
+                    ) : row.isAmbiguous ? (
                       <span
                         className="inline-block rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900"
                         title="Marcó varias respuestas"
@@ -227,6 +245,7 @@ export function SheetMatrix({
         <Legend tone="wrong" label="Incorrecta" />
         <Legend tone="ambiguous" label="Ambigua (revisar manualmente)" />
         <Legend tone="blank" label="Sin marcar" />
+        {rows.some((r) => r.disabled) ? <Legend tone="notCounted" label="No cuenta" /> : null}
       </div>
 
       {abierto && (
