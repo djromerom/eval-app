@@ -189,6 +189,24 @@ export function bubbleCenter(
   return { cx, cy };
 }
 
+/** A qué se califica la hoja: el cuadernillo o la formulación. */
+type ObjetivoHoja = { kind: "bundle"; id: string } | { kind: "evaluation"; id: string };
+
+/** Objetivo del lote, para calificar sin QR. `null` si la hoja no lo tiene. */
+function objetivoDelLote(sheet: {
+  bundleId: string | null;
+  evaluationId: string | null;
+}): ObjetivoHoja | null {
+  if (sheet.bundleId) return { kind: "bundle", id: sheet.bundleId };
+  if (sheet.evaluationId) return { kind: "evaluation", id: sheet.evaluationId };
+  return null;
+}
+
+export const NOTA_SIN_QR_CUADERNILLO =
+  "QR ilegible: se calificó con el cuadernillo del lote. Verifica el estudiante y marca la hoja como revisada.";
+export const NOTA_SIN_QR_FORMULACION =
+  "QR ilegible: se calificó con la formulación del lote. Verifica el estudiante y marca la hoja como revisada.";
+
 export class ProcessAnswerSheet {
   constructor(
     private readonly repository: ScanningRepository,
@@ -221,110 +239,36 @@ export class ProcessAnswerSheet {
       return { ok: false, error: { code: "PROCESSING_ERROR", message: "Failed to load image" } };
     }
 
+    // Identificación: por el QR firmado; si el QR no se puede leer y el lote ya
+    // dice a qué cuadernillo o formulación pertenece la hoja, se califica con
+    // eso (sin estudiante: se asigna a mano) para que la matriz muestre las
+    // marcas. La hoja queda en Revisión hasta que alguien la verifique.
     const decoded = await this.qrDecoder.decode(imageBuffer);
-    if (!decoded) {
-      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
-        notes: "QR could not be decoded",
-      });
-      return { ok: false, error: { code: "QR_DECODE_FAILED", message: "QR could not be decoded" } };
-    }
-
-    let qrData: Record<string, unknown>;
-    let qrSignature: string;
-    try {
-      const parsed = JSON.parse(decoded.text);
-      const { sig, ...payload } = parsed;
-      qrData = payload;
-      qrSignature = sig;
-    } catch {
-      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
-        notes: "QR content is not valid JSON",
-      });
-      return {
-        ok: false,
-        error: { code: "QR_DECODE_FAILED", message: "QR content is not valid JSON" },
-      };
-    }
-
-    const institutionCode = qrData.inst as string;
-    const secret = deriveInstitutionSecret(env.QR_SIGNING_SECRET, institutionCode);
-    if (!verifySignature(qrData, qrSignature, secret)) {
-      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
-        notes: "QR signature invalid",
-      });
-      return {
-        ok: false,
-        error: { code: "QR_SIGNATURE_INVALID", message: "QR signature does not match" },
-      };
-    }
-
-    const parsedQr = signedQrSchema.safeParse({ ...qrData, sig: qrSignature });
-    if (!parsedQr.success) {
-      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
-        notes: "QR payload validation failed",
-      });
-      return {
-        ok: false,
-        error: { code: "QR_DECODE_FAILED", message: "QR payload did not match expected schema" },
-      };
-    }
-
-    // Hoja duplicada: el campo `sheet` del QR identifica el PAPEL, no al
-    // estudiante ni la prueba. Si ya hay otra hoja con ese id, este papel ya
-    // pasó por el alimentador y volver a calificarlo crearía una segunda nota
-    // para el mismo examen físico, sin ninguna señal de que ocurrió.
-    //
-    // Se corta ANTES de puntuar: calificar y después descartar gastaría una
-    // llamada al motor OMR y dejaría respuestas huérfanas en la base.
-    const qrSheetUuid = typeof parsedQr.data.sheet === "string" ? parsedQr.data.sheet : null;
-    if (qrSheetUuid) {
-      const otra = await this.repository.findSheetIdByQrSheetUuid(qrSheetUuid, answerSheetId);
-      if (otra) {
+    let objetivo: ObjetivoHoja;
+    let sinQr = false;
+    if (decoded) {
+      const porQr = await this.identificarPorQr(answerSheetId, decoded.text);
+      if ("ok" in porQr) return porQr;
+      objetivo = porQr;
+    } else {
+      const delLote = objetivoDelLote(sheet);
+      if (!delLote) {
         await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
-          notes: `Hoja duplicada: este papel ya fue procesado (hoja ${otra.slice(0, 8)}).`,
+          notes: "QR could not be decoded",
         });
         return {
           ok: false,
-          error: {
-            code: "DUPLICATE_SHEET",
-            message: "Este papel ya fue escaneado y calificado antes",
-          },
+          error: { code: "QR_DECODE_FAILED", message: "QR could not be decoded" },
         };
       }
+      objetivo = delLote;
+      sinQr = true;
     }
 
-    // Persistir el QR decodificado + asociar al estudiante por código.
-    const studentCode = typeof parsedQr.data.student === "string" ? parsedQr.data.student : null;
-    const guardado = await this.repository.saveDecodedQr(
-      answerSheetId,
-      decoded.text,
-      qrSignature,
-      studentCode,
-      qrSheetUuid,
-    );
-    // El chequeo de arriba deja una ventana: dos duplicados procesándose a la
-    // vez lo pasan los dos. El índice único cierra esa ventana y el repo lo
-    // reporta acá.
-    if (guardado.duplicada) {
-      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
-        notes: "Hoja duplicada: este papel ya fue procesado.",
-      });
-      return {
-        ok: false,
-        error: {
-          code: "DUPLICATE_SHEET",
-          message: "Este papel ya fue escaneado y calificado antes",
-        },
-      };
-    }
-
-    const isBundle = Boolean(parsedQr.data.bundle);
+    const isBundle = objetivo.kind === "bundle";
     const correctAnswers = isBundle
-      ? await this.questionsProvider.getCorrectAnswersForBundle(
-          institutionId,
-          parsedQr.data.bundle!,
-        )
-      : await this.questionsProvider.getCorrectAnswers(institutionId, parsedQr.data.eval!);
+      ? await this.questionsProvider.getCorrectAnswersForBundle(institutionId, objetivo.id)
+      : await this.questionsProvider.getCorrectAnswers(institutionId, objetivo.id);
     if (correctAnswers.length === 0) {
       await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
         notes: isBundle ? "Bundle has no questions" : "Evaluation has no questions",
@@ -423,16 +367,22 @@ export class ProcessAnswerSheet {
       answers.push(record);
     }
 
-    const status = needsReview ? "REVIEW" : "GRADED";
+    // Sin QR la identidad no está verificada: siempre queda en Revisión.
+    const status = sinQr || needsReview ? "REVIEW" : "GRADED";
+    const notaAmbigua = "Algunas preguntas con marca múltiple o ambigua; revisión recomendada";
+    const notaSinQr = isBundle ? NOTA_SIN_QR_CUADERNILLO : NOTA_SIN_QR_FORMULACION;
 
     await this.repository.saveAnswers(answerSheetId, answers);
     await this.repository.updateSheetStatus(answerSheetId, status, {
       score: totalCorrect,
       totalCorrect,
       totalQuestions: effectiveQuestions,
-      notes:
-        status === "REVIEW"
-          ? "Algunas preguntas con marca múltiple o ambigua; revisión recomendada"
+      notes: sinQr
+        ? needsReview
+          ? `${notaSinQr} ${notaAmbigua}.`
+          : notaSinQr
+        : needsReview
+          ? notaAmbigua
           : undefined,
     });
     await this.repository.updateBatchProgress(scanBatchId, 0);
@@ -443,6 +393,108 @@ export class ProcessAnswerSheet {
       status,
       score: totalCorrect,
     };
+  }
+
+  /** Valida el QR firmado (JSON, firma HMAC de la institución, schema,
+   *  anti-duplicado por papel) y asocia al estudiante por su código. Devuelve
+   *  el cuadernillo o formulación del QR, o el resultado de error ya
+   *  registrado en la hoja. */
+  private async identificarPorQr(
+    answerSheetId: string,
+    qrText: string,
+  ): Promise<ObjetivoHoja | ProcessAnswerSheetResult> {
+    let qrData: Record<string, unknown>;
+    let qrSignature: string;
+    try {
+      const parsed = JSON.parse(qrText);
+      const { sig, ...payload } = parsed;
+      qrData = payload;
+      qrSignature = sig;
+    } catch {
+      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
+        notes: "QR content is not valid JSON",
+      });
+      return {
+        ok: false,
+        error: { code: "QR_DECODE_FAILED", message: "QR content is not valid JSON" },
+      };
+    }
+
+    const institutionCode = qrData.inst as string;
+    const secret = deriveInstitutionSecret(env.QR_SIGNING_SECRET, institutionCode);
+    if (!verifySignature(qrData, qrSignature, secret)) {
+      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
+        notes: "QR signature invalid",
+      });
+      return {
+        ok: false,
+        error: { code: "QR_SIGNATURE_INVALID", message: "QR signature does not match" },
+      };
+    }
+
+    const parsedQr = signedQrSchema.safeParse({ ...qrData, sig: qrSignature });
+    if (!parsedQr.success) {
+      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
+        notes: "QR payload validation failed",
+      });
+      return {
+        ok: false,
+        error: { code: "QR_DECODE_FAILED", message: "QR payload did not match expected schema" },
+      };
+    }
+
+    // Hoja duplicada: el campo `sheet` del QR identifica el PAPEL, no al
+    // estudiante ni la prueba. Si ya hay otra hoja con ese id, este papel ya
+    // pasó por el alimentador y volver a calificarlo crearía una segunda nota
+    // para el mismo examen físico, sin ninguna señal de que ocurrió.
+    //
+    // Se corta ANTES de puntuar: calificar y después descartar gastaría una
+    // llamada al motor OMR y dejaría respuestas huérfanas en la base.
+    const qrSheetUuid = typeof parsedQr.data.sheet === "string" ? parsedQr.data.sheet : null;
+    if (qrSheetUuid) {
+      const otra = await this.repository.findSheetIdByQrSheetUuid(qrSheetUuid, answerSheetId);
+      if (otra) {
+        await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
+          notes: `Hoja duplicada: este papel ya fue procesado (hoja ${otra.slice(0, 8)}).`,
+        });
+        return {
+          ok: false,
+          error: {
+            code: "DUPLICATE_SHEET",
+            message: "Este papel ya fue escaneado y calificado antes",
+          },
+        };
+      }
+    }
+
+    // Persistir el QR decodificado + asociar al estudiante por código.
+    const studentCode = typeof parsedQr.data.student === "string" ? parsedQr.data.student : null;
+    const guardado = await this.repository.saveDecodedQr(
+      answerSheetId,
+      qrText,
+      qrSignature,
+      studentCode,
+      qrSheetUuid,
+    );
+    // El chequeo de arriba deja una ventana: dos duplicados procesándose a la
+    // vez lo pasan los dos. El índice único cierra esa ventana y el repo lo
+    // reporta acá.
+    if (guardado.duplicada) {
+      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
+        notes: "Hoja duplicada: este papel ya fue procesado.",
+      });
+      return {
+        ok: false,
+        error: {
+          code: "DUPLICATE_SHEET",
+          message: "Este papel ya fue escaneado y calificado antes",
+        },
+      };
+    }
+
+    return parsedQr.data.bundle
+      ? { kind: "bundle", id: parsedQr.data.bundle }
+      : { kind: "evaluation", id: parsedQr.data.eval! };
   }
 
   /** Persiste el diagnóstico de la hoja para la matriz de revisión sin
