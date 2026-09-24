@@ -156,6 +156,7 @@ model AcademicYear {
   courses     Course[]
   periods     Period[]
   evaluations Evaluation[]
+  enrollments StudentEnrollment[]
 
   @@unique([institutionId, year])
   @@index([institutionId])
@@ -264,6 +265,7 @@ model Group {
   createdAt     DateTime    @default(now())
 
   students    Student[]
+  enrollments StudentEnrollment[]
   evaluations EvaluationGroup[]
 
   @@index([courseId])
@@ -333,6 +335,7 @@ model Student {
 
   answerSheets AnswerSheet[]
   codeHistory  StudentCodeHistory[]
+  enrollments StudentEnrollment[]
 
   @@unique([institutionId, code])
   @@index([groupId])
@@ -349,6 +352,43 @@ model StudentCodeHistory {
   changedAt DateTime @default(now())
 
   @@index([studentId])
+}
+
+/// Matrícula del estudiante en un año académico concreto. Permite conservar
+/// el histórico (un estudiante pasa por varios grupos / grados / cuadernillos
+/// a lo largo de su vida escolar). Solo una fila por estudiante tiene
+/// `isCurrent=true` (la del año académico vigente).
+///
+/// Multi-tenant via `student.institutionId` (FK transitiva, no se duplica
+/// acá — mismo patrón que `StudentCodeHistory` y `LeaderCourseAssignment`).
+/// NO se suma al array `tenant_tables` de la policy RLS; la tenancy la
+/// enforza Prisma vía `student: { institutionId }` en cada query.
+///
+/// El constraint "una fila vigente por estudiante" se delega a la capa de
+/// aplicación (transacción en `setCurrent`) porque Prisma no soporta
+/// partial unique indexes con condiciones arbitrarias sin SQL crudo.
+/// El índice parcial `WHERE "isCurrent" = true` actúa como red de
+/// seguridad (commit 1, migración `add_student_enrollment`).
+model StudentEnrollment {
+  id              String       @id @default(uuid(7)) @db.Uuid
+  studentId       String       @db.Uuid
+  student         Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  academicYearId  String       @db.Uuid
+  academicYear    AcademicYear @relation(fields: [academicYearId], references: [id])
+  groupId         String       @db.Uuid
+  group           Group        @relation(fields: [groupId], references: [id])
+  grade           String?
+  bookletTypeId   String?      @db.Uuid
+  bookletType     BookletType? @relation(fields: [bookletTypeId], references: [id], onDelete: SetNull)
+  isCurrent       Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([studentId, academicYearId])
+  @@index([studentId])
+  @@index([academicYearId])
+  @@index([groupId])
+  @@index([bookletTypeId])
 }
 
 // ========== EVALUATIONS ==========
@@ -430,6 +470,7 @@ model BookletType {
   // Back-relation agregada con la migración sep 2026 (Student.bookletTypeId).
   // El docente asigna el cuadernillo por defecto del estudiante al importar.
   students        Student[]
+  enrollments     StudentEnrollment[]
 
   @@unique([institutionId, periodId, name])
   @@index([institutionId, periodId])

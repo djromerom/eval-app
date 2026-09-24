@@ -9,3 +9,9 @@ fastapi>=0.109.0
 uvicorn>=0.27.0
 python-multipart>=0.0.6
 pillow>=10.0.0
+
+# OCR del bloque de identidad impreso. OPCIONAL: solo se usa cuando el QR no se
+# puede leer, para sugerir el codigo del estudiante (nunca lo reemplaza). Si
+# falta el binario `tesseract` del sistema, el servicio sigue devolviendo el
+# recorte y solo se pierde la sugerencia automatica.
+pytesseract>=0.3.10

@@ -5,8 +5,11 @@
 FROM python:3.11-slim
 
 # libGL/libglib: dependencias nativas de opencv-contrib-python-headless.
+# tesseract-ocr: lee el codigo impreso del bloque de identidad cuando el QR
+# esta danado. Es opcional para el servicio (sin el, solo se pierde la
+# sugerencia automatica), pero pesa poco y evita trabajo manual por hoja.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \
+  && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 tesseract-ocr \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

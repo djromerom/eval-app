@@ -168,10 +168,18 @@ export async function marcarRevisadaAction(input: { sheetId: string; batchId: st
         { bundle: { institutionId: actor.institutionId } },
       ],
     },
-    select: { id: true, status: true, score: true },
+    select: { id: true, status: true, score: true, studentId: true },
   });
   if (!sheet) {
     return { ok: false as const, error: "Hoja no encontrada." };
+  }
+  // Una hoja con QR ilegible ya llega calificada pero sin estudiante: no se
+  // puede dar por revisada una nota que no es de nadie.
+  if (!sheet.studentId) {
+    return {
+      ok: false as const,
+      error: "Asigna el estudiante antes de marcar la hoja como revisada.",
+    };
   }
   if (sheet.status !== ScanStatus.REVIEW) {
     return {
@@ -306,11 +314,35 @@ export async function asignarEstudianteHojaAction(input: {
     };
   }
 
+  // Sin QR no hay id de papel con qué detectar un papel ya calificado. Si el
+  // estudiante ya tiene otra hoja CALIFICADA de este cuadernillo, asignarle
+  // esta crearía una segunda nota, y como los reportes toman la hoja más
+  // reciente, taparía la buena. Se bloquea y se enlaza la otra hoja.
+  const otra = await prisma.answerSheet.findFirst({
+    where: {
+      id: { not: sheet.id },
+      bundleId: sheet.bundle.id,
+      studentId: student.id,
+      score: { not: null },
+    },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, scanBatchId: true },
+  });
+  if (otra) {
+    return {
+      ok: false as const,
+      code: "DUPLICATE_STUDENT" as const,
+      error: "Este estudiante ya tiene una hoja calificada de este cuadernillo.",
+      otraHoja: otra.scanBatchId ? { id: otra.id, batchId: otra.scanBatchId } : null,
+    };
+  }
+
   await prisma.answerSheet.update({
     where: { id: sheet.id },
     data: { studentId: student.id },
   });
 
   revalidatePath(`/teacher/scan/${input.batchId}/${input.sheetId}`);
+  revalidatePath(`/teacher/scan/${input.batchId}`);
   return { ok: true as const };
 }

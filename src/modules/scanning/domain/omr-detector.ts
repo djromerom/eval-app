@@ -37,6 +37,15 @@ export interface DetectedSheet {
   /** Umbral de marcado adaptativo que usó el motor para esta hoja. */
   thr: number;
   questions: DetectedQuestion[];
+  /** Recorte JPEG en base64 del bloque Nombre/Grado/Código impreso en la hoja.
+   *  Solo viene cuando el QR NO se pudo leer: en ese caso la hoja llega sin
+   *  estudiante y alguien tiene que identificarla a mano, y este recorte evita
+   *  abrir el escaneo original. Cadena vacía cuando el QR se leyó bien. */
+  idCrop?: string;
+  /** Código del estudiante leído por OCR del recorte anterior, como SUGERENCIA
+   *  a confirmar por una persona. Nunca reemplaza al QR, y es `null` si el OCR
+   *  no está disponible o no encontró un número plausible. */
+  idOcr?: string | null;
 }
 
 export interface OmrDetector {

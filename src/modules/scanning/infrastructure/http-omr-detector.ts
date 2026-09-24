@@ -35,7 +35,8 @@ export class HttpOmrDetector implements OmrDetector {
         });
 
         const body = (await res.json()) as
-          { thr: number; questions: DetectedQuestion[] } | { error: string };
+          | { thr: number; questions: DetectedQuestion[]; idCrop?: string; idOcr?: string | null }
+          | { error: string };
 
         if (!res.ok || "error" in body) {
           const msg = "error" in body ? body.error : `HTTP ${res.status}`;

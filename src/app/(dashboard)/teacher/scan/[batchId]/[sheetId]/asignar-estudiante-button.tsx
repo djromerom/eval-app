@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { asignarEstudianteHojaAction } from "./actions";
 
@@ -38,11 +39,15 @@ export function AsignarEstudianteButton({
   const [selected, setSelected] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Hoja ya calificada del mismo estudiante en este cuadernillo (bloqueo
+   *  por duplicado): se enlaza para poder compararlas. */
+  const [otraHoja, setOtraHoja] = useState<{ id: string; batchId: string } | null>(null);
 
   async function onAsignar() {
     if (!selected || saving) return;
     setSaving(true);
     setError(null);
+    setOtraHoja(null);
     const result = await asignarEstudianteHojaAction({
       sheetId,
       batchId,
@@ -53,6 +58,7 @@ export function AsignarEstudianteButton({
       router.refresh();
     } else {
       setError(result.error);
+      if ("otraHoja" in result && result.otraHoja) setOtraHoja(result.otraHoja);
     }
   }
 
@@ -60,8 +66,8 @@ export function AsignarEstudianteButton({
     return (
       <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
         <p className="font-medium text-amber-900">
-          QR no detectado y no hay estudiantes activos en el curso de este
-          cuadernillo. Asigná uno desde administración y vuelve a reprocesar.
+          QR no detectado y no hay estudiantes activos en el curso de este cuadernillo. Asigná uno
+          desde administración y vuelve a reprocesar.
         </p>
       </div>
     );
@@ -96,7 +102,22 @@ export function AsignarEstudianteButton({
           {saving ? "Asignando…" : "Asignar"}
         </button>
       </div>
-      {error && <p className="text-red-700 text-xs">{error}</p>}
+      {error && (
+        <p className="text-xs text-red-700">
+          {error}
+          {otraHoja ? (
+            <>
+              {" "}
+              <Link
+                href={`/teacher/scan/${otraHoja.batchId}/${otraHoja.id}`}
+                className="underline underline-offset-2"
+              >
+                Ver esa hoja
+              </Link>
+            </>
+          ) : null}
+        </p>
+      )}
     </div>
   );
 }
