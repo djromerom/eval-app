@@ -98,4 +98,41 @@ describe("MarkBundleReady", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
   });
+
+  describe("preguntas inhabilitadas", () => {
+    /** Fake del puerto: devuelve las efectivas que el test decida. */
+    const efectivas = (ids: string[] | null) => ({
+      async effectiveQuestionIds() {
+        return ids;
+      },
+    });
+
+    async function crear() {
+      const ev = seedEvaluationGrado6(repo);
+      const created = await createBundle.execute({
+        actor: superAdmin,
+        data: { name: "Test", evaluationIds: [ev.id] },
+      });
+      if (!created.ok) throw new Error("setup");
+      return created.value.id;
+    }
+
+    it("rechaza si todas las preguntas quedaron inhabilitadas (0 efectivas)", async () => {
+      const bundleId = await crear();
+      const uc = new MarkBundleReady(repo, efectivas([]));
+      const result = await uc.execute({ actor: superAdmin, bundleId });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe("VALIDATION");
+        expect(result.error.message).toMatch(/no tiene preguntas efectivas/);
+      }
+    });
+
+    it("marca READY si queda al menos 1 efectiva", async () => {
+      const bundleId = await crear();
+      const uc = new MarkBundleReady(repo, efectivas(["q1"]));
+      const result = await uc.execute({ actor: superAdmin, bundleId });
+      expect(result.ok).toBe(true);
+    });
+  });
 });

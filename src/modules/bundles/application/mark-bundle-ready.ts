@@ -4,6 +4,7 @@ import { NotFoundError, type Result, ValidationError, fail, ok } from "@/shared/
 import { type Bundle, type BundleRepository } from "../domain/bundle";
 import { canTransition } from "../domain/bundle-status";
 import { MIN_ITEMS_FOR_READY, isPrintableEvaluationStatus } from "../domain/bundle-rules";
+import type { DisabledBundleQuestionRepository } from "../domain/disabled-bundle-question";
 
 export interface MarkBundleReadyInput {
   actor: AuthenticatedUser;
@@ -19,12 +20,23 @@ export interface MarkBundleReadyInput {
  *   - Todas las evaluations siguen en {APPROVED, PUBLISHED} (no volvieron
  *     a DRAFT por edición).
  *   - Cada item tiene totalQuestions > 0.
+ *   - Queda al menos 1 pregunta efectiva (no inhabilitada). La regla ≥1 del
+ *     toggle no basta: quitar una formulación puede dejar solo preguntas
+ *     inhabilitadas, y las hojas saldrían calificadas 0/0.
  *
  * Una vez READY, el contenido es inmutable (no se pueden editar items,
  * nombre, bookletNumber, theme). Sí se puede regenerar el PDF.
  */
 export class MarkBundleReady implements UseCase<MarkBundleReadyInput, Bundle> {
-  constructor(private readonly bundles: BundleRepository) {}
+  constructor(
+    private readonly bundles: BundleRepository,
+    /** Opcional para no romper a los callers que no usan inhabilitaciones
+     *  (tests); el container siempre lo pasa. */
+    private readonly disabledQuestions?: Pick<
+      DisabledBundleQuestionRepository,
+      "effectiveQuestionIds"
+    >,
+  ) {}
 
   async execute({ actor, bundleId }: MarkBundleReadyInput): Promise<Result<Bundle>> {
     const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER");
@@ -66,6 +78,17 @@ export class MarkBundleReady implements UseCase<MarkBundleReadyInput, Bundle> {
         return fail(
           new ValidationError(
             `La formulación "${ev.title}" no tiene preguntas. Añade al menos una antes de marcar como READY.`,
+          ),
+        );
+      }
+    }
+
+    if (this.disabledQuestions) {
+      const efectivas = await this.disabledQuestions.effectiveQuestionIds(bundleId);
+      if (efectivas !== null && efectivas.length === 0) {
+        return fail(
+          new ValidationError(
+            "El cuadernillo no tiene preguntas efectivas: todas están inhabilitadas. Re-habilita al menos una antes de marcarlo como READY.",
           ),
         );
       }

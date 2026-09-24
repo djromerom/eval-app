@@ -262,6 +262,38 @@ describe("ToggleDisabledBundleQuestion - bloquea dejar el bundle vacio", () => {
     }
   });
 
+  it("ignora filas huérfanas de preguntas que ya no están en el cuadernillo", async () => {
+    // q-vieja quedó inhabilitada en una formulación que se quitó del
+    // cuadernillo. Con q1 y q2 ya inhabilitadas, inhabitar q3 debe fallar
+    // (0 efectivas), pero inhabitar solo q1 con q-vieja huérfana debe pasar:
+    // antes, la huérfana restaba una efectiva que no existe.
+    disabledRepo.rows.set("b-1__q-vieja", {
+      id: "dbq-huerfana",
+      bundleId: "b-1",
+      questionId: "q-vieja",
+      disabledAt: new Date(),
+      disabledByUserId: "u-x",
+      disabled: true,
+    });
+    disabledRepo.rows.set("b-1__q2", {
+      id: "dbq-old-2",
+      bundleId: "b-1",
+      questionId: "q2",
+      disabledAt: new Date(),
+      disabledByUserId: "u-x",
+      disabled: true,
+    });
+    // Preguntas actuales: q1, q2, q3. Inhabilitadas reales: q2. Inhabitar q1
+    // deja q3 efectiva → válido.
+    const r = await useCase.execute({
+      actor: superAdmin,
+      bundleId: "b-1",
+      questionId: "q1",
+      disabled: true,
+    });
+    expect(r.ok).toBe(true);
+  });
+
   it("re-habilitar siempre pasa el guard (nunca puede dejar vacio)", async () => {
     disabledRepo.rows.set("b-1__q1", {
       id: "dbq-old-1",
