@@ -15,6 +15,7 @@ import {
   makeDeleteGroup,
   makeDeletePeriod,
   makeUpdatePeriod,
+  makeUpdateSubjectShortName,
 } from "@/modules/academic/infrastructure/container";
 
 export interface FormState {
@@ -132,7 +133,27 @@ export async function createSubjectAction(_p: FormState, formData: FormData): Pr
   const actor = await requireAuthenticatedUser("ECU_MASTER");
   const result = await makeCreateSubject().execute({
     actor,
-    data: { name: str(formData, "name"), code: str(formData, "code") },
+    data: {
+      name: str(formData, "name"),
+      code: str(formData, "code"),
+      shortName: str(formData, "shortName"),
+    },
+  });
+  return finish(result);
+}
+
+/** Cambia la sigla de una asignatura (encabezados de informes). Entra el
+ *  ECU_MASTER a la página; las globales solo las acepta el use case si el
+ *  actor además es SUPER_ADMIN. */
+export async function updateSubjectShortNameAction(
+  _p: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireAuthenticatedUser("ECU_MASTER", "SUPER_ADMIN");
+  const result = await makeUpdateSubjectShortName().execute({
+    actor,
+    subjectId: str(formData, "subjectId"),
+    shortName: str(formData, "shortName"),
   });
   return finish(result);
 }

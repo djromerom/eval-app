@@ -184,6 +184,9 @@ model Subject {
   id              String       @id @default(uuid(7)) @db.Uuid
   name            String // "Matemáticas", "Física"
   code            String
+  // Sigla corta para encabezados de informes ("BIO", "LENG. C."). Opcional:
+  // si está vacía, los informes muestran el nombre completo.
+  shortName       String?
   icon            String?
   institutionId   String?      @db.Uuid // null = catálogo global
   institution     Institution? @relation(fields: [institutionId], references: [id])
