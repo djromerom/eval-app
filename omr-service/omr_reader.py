@@ -24,7 +24,7 @@ import json
 import re
 import sys
 
-VERSION = "20"         # subir al cambiar el motor: invalida cachés aguas arriba
+VERSION = "21"         # subir al cambiar el motor: invalida cachés aguas arriba
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -959,11 +959,17 @@ def build_questions(bubbles: list, letters: str) -> list:
         # de 4 abajo dan una mediana de 5.5, que no describe a ninguna fila).
         qx = np.array([q[0].x for q in raw_questions])
         completo = {}
+        origen = {}
         for gb in cluster_1d(qx, tol=gap_opt * 3.0):
             tallas = [len(raw_questions[i]) for i in gb]
             moda = max(set(tallas), key=tallas.count)
+            # Dónde arranca la columna 'A' del bloque. Las preguntas reales
+            # coinciden en esa x salvo un par de píxeles; lo que no coincide no
+            # se apoya en la rejilla.
+            x0b = float(np.median([qx[i] for i in gb]))
             for i in gb:
                 completo[i] = moda
+                origen[i] = x0b
 
         keep_q = []
         for idx, q in enumerate(raw_questions):
@@ -979,6 +985,20 @@ def build_questions(bubbles: list, letters: str) -> list:
             # falta una opción está pegada a sus vecinas, así que el criterio de
             # distancia la protege.
             if near > 1.8 * pitch and len(q) < completo.get(idx, len(q)):
+                continue
+            # Aislada en Y y descolgada de la rejilla de su bloque. El filtro
+            # de arriba solo atrapa al ruido que trae MENOS opciones que una
+            # pregunta completa, y eso dejó pasar una fila de cuatro: en una
+            # hoja real el subtítulo "Estándar Sesión 1 Grado 2 — Cuadernillo"
+            # aportó la 'S', 'sió', 'n 1' y la 'G' como cuatro burbujas con el
+            # paso horizontal correcto, dos de ellas con el radio exacto de una
+            # burbuja. Pasó por completa y corrió la numeración de los 35
+            # ítems: una lectura entera, verosímil y equivocada. Lo que la
+            # delata es que arranca 0.8 pasos a la derecha de la columna 'A'.
+            # Una pregunta legítima a la que le falte la A no entra aquí: está
+            # pegada a sus vecinas y no es aislada.
+            if (near > 1.8 * pitch
+                    and abs(q[0].x - origen.get(idx, q[0].x)) > 0.35 * gap_opt):
                 continue
             keep_q.append(q)
         raw_questions = keep_q

@@ -367,23 +367,36 @@ export class ProcessAnswerSheet {
       answers.push(record);
     }
 
+    // Verificación estructural del motor. El conteo de preguntas (validado
+    // arriba contra la clave) no basta: si el motor pierde una fila y de paso
+    // se inventa otra —una palabra del encabezado leída como burbujas— el
+    // total cuadra, la numeración queda corrida y la nota sale completa,
+    // verosímil y equivocada. El motor sabe detectarlo; hasta ahora nadie
+    // leía el aviso. Mandar la hoja a revisión cuesta un vistazo; no
+    // enterarse cuesta una nota mal puesta.
+    const avisosEstructura = detected.estructura ?? [];
+
     // Sin QR la identidad no está verificada: siempre queda en Revisión.
-    const status = sinQr || needsReview ? "REVIEW" : "GRADED";
+    const status = sinQr || needsReview || avisosEstructura.length > 0 ? "REVIEW" : "GRADED";
     const notaAmbigua = "Algunas preguntas con marca múltiple o ambigua; revisión recomendada";
     const notaSinQr = isBundle ? NOTA_SIN_QR_CUADERNILLO : NOTA_SIN_QR_FORMULACION;
+    const notaBase = sinQr
+      ? needsReview
+        ? `${notaSinQr} ${notaAmbigua}.`
+        : notaSinQr
+      : needsReview
+        ? notaAmbigua
+        : undefined;
+    const notaEstructura = avisosEstructura.length
+      ? `Lectura estructuralmente sospechosa: ${avisosEstructura.join(" ")}`
+      : undefined;
 
     await this.repository.saveAnswers(answerSheetId, answers);
     await this.repository.updateSheetStatus(answerSheetId, status, {
       score: totalCorrect,
       totalCorrect,
       totalQuestions: effectiveQuestions,
-      notes: sinQr
-        ? needsReview
-          ? `${notaSinQr} ${notaAmbigua}.`
-          : notaSinQr
-        : needsReview
-          ? notaAmbigua
-          : undefined,
+      notes: [notaBase, notaEstructura].filter(Boolean).join(" ") || undefined,
     });
     await this.repository.updateBatchProgress(scanBatchId, 0);
 
