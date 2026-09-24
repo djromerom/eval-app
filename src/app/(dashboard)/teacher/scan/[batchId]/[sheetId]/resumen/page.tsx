@@ -11,6 +11,7 @@ import {
   totalizar,
 } from "@/modules/consultas/domain/queries/calificaciones/resumen-asignaturas";
 import { listPositionByName } from "@/modules/students/domain/student";
+import { loadDisabledQuestionIds } from "@/modules/bundles/infrastructure/container";
 
 export const metadata: Metadata = { title: "Resumen por asignatura" };
 
@@ -64,6 +65,7 @@ export default async function ResumenPorAsignaturaPage({ params, searchParams }:
     select: {
       id: true,
       status: true,
+      bundleId: true,
       bundle: { select: { name: true } },
       evaluation: { select: { title: true } },
       student: {
@@ -82,10 +84,17 @@ export default async function ResumenPorAsignaturaPage({ params, searchParams }:
   });
   if (!sheet) notFound();
 
+  // Preguntas inhabilitadas del cuadernillo: no cuentan, igual que en la nota
+  // guardada de la hoja.
+  const disabledIds = sheet.bundleId
+    ? await loadDisabledQuestionIds(sheet.bundleId)
+    : new Set<string>();
+
   const answers = await prisma.studentAnswer.findMany({
     where: { answerSheetId: sheet.id },
     orderBy: { id: "asc" },
     select: {
+      questionId: true,
       selectedKey: true,
       isCorrect: true,
       isAmbiguous: true,
@@ -107,6 +116,7 @@ export default async function ResumenPorAsignaturaPage({ params, searchParams }:
       selectedKey: a.selectedKey,
       isCorrect: a.isCorrect,
       isAmbiguous: a.isAmbiguous,
+      disabled: disabledIds.has(a.questionId),
     })),
   );
   const total = totalizar(filas);

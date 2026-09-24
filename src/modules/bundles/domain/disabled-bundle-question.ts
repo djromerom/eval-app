@@ -10,13 +10,16 @@
  *     para distinguir activa/inactiva. Re-habilitar baja el flag a false
  *     en vez de borrar la fila → conservamos la auditoría de qué preguntas
  *     fueron inhabitadas en algún momento (consultable, no visible al usuario).
- *   - NO se persiste `StudentAnswer.notCounted`. El efecto sobre la hoja
- *     escaneada se computa en query-time con join a esta tabla. Esto evita
- *     tener que re-procesar hojas viejas cuando el flag cambia.
- *   - El cómputo del puntaje EFFECTIVO (= puntaje SIN contar inhabitadas)
- *     lo hacen 3 lugares: motor OMR (PR #2), reporte de calificaciones
- *     (PR #4) y posiblemente la matriz del detalle (PR #3). Todos usan
- *     `preguntasEfectivas` para mantener la regla en un único sitio.
+ *   - NO se persiste `StudentAnswer.notCounted`: la respuesta a una
+ *     inhabilitada se guarda tal cual (lo que marcó y si acertó).
+ *   - La nota de la hoja (`AnswerSheet.score/totalCorrect/totalQuestions`) se
+ *     calcula al calificar y ya excluye las inhabilitadas (ProcessAnswerSheet,
+ *     PR #2). Como el toggle se bloquea al existir un ScanBatch, toda hoja se
+ *     califica con las inhabilitaciones vigentes.
+ *   - Las vistas que recalculan desde `StudentAnswer` (resumen por asignatura,
+ *     reporte comparativo, matriz de la hoja — PR #4) cargan el set de
+ *     inhabilitadas (`loadDisabledQuestionIds`) y las excluyen o las marcan
+ *     "No cuenta".
  */
 
 export interface DisabledBundleQuestion {

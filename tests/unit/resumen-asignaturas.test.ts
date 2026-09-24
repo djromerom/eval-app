@@ -42,7 +42,9 @@ describe("resumirPorAsignatura", () => {
 
   it("una marca múltiple es incorrecta, no faltante", () => {
     // Marcó: no es "faltando". No acertó: no es correcta.
-    const [f] = resumirPorAsignatura([r({ isCorrect: false, selectedKey: null, isAmbiguous: true })]);
+    const [f] = resumirPorAsignatura([
+      r({ isCorrect: false, selectedKey: null, isAmbiguous: true }),
+    ]);
     expect(f).toMatchObject({ correctas: 0, incorrectas: 1, faltantes: 0, total: 1 });
   });
 
@@ -106,5 +108,44 @@ describe("totalizar", () => {
       r({ subjectName: "Chica", orden: 2, isCorrect: false, selectedKey: "B" }),
     ]);
     expect(totalizar(filas).puntaje).toBe(9); // 10 * 9/10, no el promedio (10 y 3) = 6.5
+  });
+});
+
+describe("resumirPorAsignatura - preguntas inhabilitadas del cuadernillo", () => {
+  it("una inhabilitada no entra en ningún conteo ni en el puntaje", () => {
+    const filas = resumirPorAsignatura([
+      r({ isCorrect: true }),
+      r({ isCorrect: false, selectedKey: "B" }),
+      r({ isCorrect: true, disabled: true }), // acertada pero no cuenta
+      r({ isCorrect: false, selectedKey: null, disabled: true }), // en blanco, no cuenta
+    ]);
+    expect(filas).toHaveLength(1);
+    expect(filas[0]).toMatchObject({ correctas: 1, incorrectas: 1, faltantes: 0, total: 2 });
+    expect(filas[0]!.puntaje).toBe(5); // 10 * 1/2
+  });
+
+  it("mantiene la invariante con inhabilitadas", () => {
+    const filas = resumirPorAsignatura([
+      r({ isCorrect: true }),
+      r({ isCorrect: false, selectedKey: null, isAmbiguous: true, disabled: true }),
+      r({ isCorrect: null, selectedKey: null }),
+    ]);
+    for (const f of filas) {
+      expect(f.correctas + f.incorrectas + f.faltantes).toBe(f.total);
+    }
+  });
+
+  it("una materia con todas sus preguntas inhabilitadas no aparece", () => {
+    const filas = resumirPorAsignatura([
+      r({ subjectName: "Biología", orden: 1, isCorrect: true }),
+      r({ subjectName: "Física", orden: 2, isCorrect: true, disabled: true }),
+    ]);
+    expect(filas.map((f) => f.subjectName)).toEqual(["Biología"]);
+    expect(totalizar(filas)).toMatchObject({ correctas: 1, total: 1 });
+  });
+
+  it("disabled: false se trata igual que ausente", () => {
+    const filas = resumirPorAsignatura([r({ disabled: false }), r()]);
+    expect(filas[0]!.total).toBe(2);
   });
 });

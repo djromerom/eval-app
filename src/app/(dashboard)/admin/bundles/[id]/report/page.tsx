@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { requireAuthenticatedUser } from "@/lib/session";
-import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
+import { loadDisabledQuestionIds, makeGetBundle } from "@/modules/bundles/infrastructure/container";
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import {
   computeCompareReport,
@@ -146,6 +146,10 @@ export default async function BundleReportPage({ params }: { params: Promise<{ i
     });
   }
 
+  // Preguntas inhabilitadas: se listan con "No cuenta" pero no entran en los
+  // promedios ni en el desglose por estudiante, igual que en la nota guardada.
+  const disabledQuestionIds = await loadDisabledQuestionIds(bundle.id);
+
   const report = computeCompareReport({
     bundleId: bundle.id,
     items,
@@ -154,6 +158,7 @@ export default async function BundleReportPage({ params }: { params: Promise<{ i
     answersByQuestion,
     answersBySheet,
     sheetLabels,
+    disabledQuestionIds,
   });
 
   return (
@@ -199,7 +204,12 @@ export default async function BundleReportPage({ params }: { params: Promise<{ i
                 {report.items.map((it) => (
                   <tr key={it.evaluationId} className="border-b last:border-0">
                     <td className="px-4 py-3 font-medium">{it.evaluationTitle}</td>
-                    <td className="text-muted-foreground px-4 py-3">{it.totalQuestions}</td>
+                    <td className="text-muted-foreground px-4 py-3">
+                      {it.totalQuestions}
+                      {it.disabledCount > 0
+                        ? ` (${it.disabledCount} no ${it.disabledCount === 1 ? "cuenta" : "cuentan"})`
+                        : ""}
+                    </td>
                     <td className="px-4 py-3">{pct(it.correctRate)}</td>
                     <td className="px-4 py-3">
                       {it.difficulty === null
@@ -230,11 +240,24 @@ export default async function BundleReportPage({ params }: { params: Promise<{ i
               </thead>
               <tbody>
                 {report.questions.map((q) => (
-                  <tr key={q.questionId} className="border-b last:border-0">
+                  <tr
+                    key={q.questionId}
+                    className={cn(
+                      "border-b last:border-0",
+                      q.disabled && "bg-muted/40 text-muted-foreground",
+                    )}
+                  >
                     <td className="text-muted-foreground px-4 py-2 font-mono text-xs">
                       {q.globalNumber}
                     </td>
-                    <td className="px-4 py-2">{q.evaluationTitle}</td>
+                    <td className="px-4 py-2">
+                      {q.evaluationTitle}
+                      {q.disabled ? (
+                        <span className="bg-muted text-muted-foreground ml-2 inline-flex rounded-full px-2 py-0.5 text-xs font-medium">
+                          No cuenta
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="px-4 py-2">{pct(q.correctRate)}</td>
                     <td className="text-muted-foreground px-4 py-2">{q.answeredCount}</td>
                   </tr>

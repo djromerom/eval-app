@@ -17,12 +17,19 @@
  * Sprint 4 añade un drill-down por hoja × item: para cada hoja del bundle,
  * correctRate por item (la evaluation de la hoja + posición). Esto es
  * posible porque StudentAnswer.bundleItemId ahora se popula al calificar.
+ *
+ * Preguntas inhabilitadas (sprint Preguntas inhabitadas, sep 2026): siguen
+ * listadas por pregunta con `disabled: true` (la tasa se muestra como dato),
+ * pero no entran en el promedio por evaluation ni en el desglose por hoja,
+ * igual que no entran en la nota guardada de la hoja.
  */
 
 export interface CompareReportItem {
   evaluationId: string;
   evaluationTitle: string;
   totalQuestions: number;
+  /** Preguntas de la evaluation inhabilitadas en el cuadernillo. */
+  disabledCount: number;
   scannedSheets: number;
   correctRate: number | null;
   difficulty: number | null;
@@ -35,6 +42,8 @@ export interface CompareReportQuestion {
   evaluationTitle: string;
   correctRate: number | null;
   answeredCount: number;
+  /** Inhabilitada en el cuadernillo: no cuenta para la nota. */
+  disabled: boolean;
 }
 
 export interface CompareReportSheetItem {
@@ -102,6 +111,8 @@ export interface CompareReportInput {
   >;
   /** Sprint 4: nombre/código legible de cada hoja. Opcional. */
   sheetLabels?: Map<string, { name: string | null; code: string | null }>;
+  /** Preguntas inhabilitadas del cuadernillo. Opcional: sin él, ninguna. */
+  disabledQuestionIds?: ReadonlySet<string>;
 }
 
 /** Compute el reporte comparativo. O(questions + totalAnswers). */
@@ -114,7 +125,9 @@ export function computeCompareReport(input: CompareReportInput): CompareReport {
     answersByQuestion,
     answersBySheet,
     sheetLabels,
+    disabledQuestionIds,
   } = input;
+  const isDisabled = (questionId: string) => disabledQuestionIds?.has(questionId) ?? false;
 
   // 1. correctRate por pregunta.
   const perQuestion: CompareReportQuestion[] = questions.map((q, idx) => {
@@ -128,13 +141,14 @@ export function computeCompareReport(input: CompareReportInput): CompareReport {
       evaluationTitle: q.evaluationTitle,
       correctRate: answered.length > 0 ? correct / answered.length : null,
       answeredCount: answered.length,
+      disabled: isDisabled(q.id),
     };
   });
 
   // 2. Stats por evaluation: agrupamos preguntas por evaluation y promediamos.
   const itemReports: CompareReportItem[] = items.map((it) => {
     const qs = perQuestion.filter((q) => q.evaluationId === it.evaluationId);
-    const withRate = qs.filter((q) => q.correctRate !== null) as Array<
+    const withRate = qs.filter((q) => !q.disabled && q.correctRate !== null) as Array<
       CompareReportQuestion & { correctRate: number }
     >;
     const correctRate = withRate.length > 0 ? mean(withRate.map((q) => q.correctRate)) : null;
@@ -143,6 +157,7 @@ export function computeCompareReport(input: CompareReportInput): CompareReport {
       evaluationId: it.evaluationId,
       evaluationTitle: it.evaluationTitle,
       totalQuestions: it.totalQuestions,
+      disabledCount: qs.filter((q) => q.disabled).length,
       scannedSheets: totalScannedSheets,
       correctRate,
       difficulty,
@@ -157,6 +172,7 @@ export function computeCompareReport(input: CompareReportInput): CompareReport {
       const buckets = new Map<string, { correct: number; answered: number; total: number }>();
       for (const ans of answers) {
         if (!ans.bundleItemId) continue; // hoja legacy sin item → skip
+        if (isDisabled(ans.questionId)) continue; // inhabilitada: no cuenta
         const b = buckets.get(ans.bundleItemId) ?? { correct: 0, answered: 0, total: 0 };
         b.total++;
         if (ans.isCorrect !== null) {
