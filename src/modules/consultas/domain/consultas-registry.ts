@@ -53,6 +53,14 @@ export const CONSULTAS: readonly ConsultaConfig[] = [
     ],
     roles: ["ECU_MASTER", "SUPER_ADMIN", "ECU_LIDER"],
   },
+  {
+    id: "informe-grupo",
+    title: "Informe detallado por grupo",
+    description:
+      "Puntaje por asignatura de cada estudiante del grupo en una prueba, consolidando todos los cuadernillos del grado.",
+    columns: ["Item", "Nombre", "Asignaturas"],
+    roles: ["ECU_MASTER", "SUPER_ADMIN", "ECU_LIDER"],
+  },
 ] as const;
 
 /** Consultas visibles para un conjunto de roles. La usa `/admin/consultas`

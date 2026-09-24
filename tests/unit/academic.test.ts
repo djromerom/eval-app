@@ -164,8 +164,15 @@ class InMemorySubjects implements SubjectRepository {
       institutionId,
       name: data.name,
       code: data.code,
+      shortName: data.shortName ?? null,
     };
     this.items.push(s);
+    return s;
+  }
+  async updateShortName(id: string, shortName: string | null) {
+    const s = this.items.find((x) => x.id === id);
+    if (!s) throw new Error("not found");
+    s.shortName = shortName;
     return s;
   }
 }

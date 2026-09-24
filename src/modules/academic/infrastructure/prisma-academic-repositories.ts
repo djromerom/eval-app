@@ -53,6 +53,7 @@ const toSubject = (r: PrismaSubject): Subject => ({
   institutionId: r.institutionId,
   name: r.name,
   code: r.code,
+  shortName: r.shortName,
 });
 
 const toGroup = (r: PrismaGroup): Group => ({
@@ -153,9 +154,17 @@ export class PrismaSubjectRepository implements SubjectRepository {
   async create(institutionId: string | null, data: CreateSubjectData): Promise<Subject> {
     return toSubject(
       await prisma.subject.create({
-        data: { institutionId, name: data.name, code: data.code },
+        data: {
+          institutionId,
+          name: data.name,
+          code: data.code,
+          shortName: data.shortName ?? null,
+        },
       }),
     );
+  }
+  async updateShortName(id: string, shortName: string | null): Promise<Subject> {
+    return toSubject(await prisma.subject.update({ where: { id }, data: { shortName } }));
   }
 }
 

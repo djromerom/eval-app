@@ -14,7 +14,7 @@ import {
   SetCurrentPeriod,
   UpdatePeriod,
 } from "../application/periods";
-import { CreateSubject, ListSubjects } from "../application/subjects";
+import { CreateSubject, ListSubjects, UpdateSubjectShortName } from "../application/subjects";
 import { PrismaTeacherRepository } from "@/modules/teachers/infrastructure/prisma-teacher-repository";
 import { PrismaStudentRepository } from "@/modules/students/infrastructure/prisma-student-repository";
 import {
@@ -44,6 +44,7 @@ export const makeListCourses = () => new ListCourses(courses);
 
 export const makeCreateSubject = () => new CreateSubject(subjects);
 export const makeListSubjects = () => new ListSubjects(subjects);
+export const makeUpdateSubjectShortName = () => new UpdateSubjectShortName(subjects);
 
 export const makeCreateGroup = () => new CreateGroup(groups, courses);
 export const makeListGroups = () => new ListGroups(groups);

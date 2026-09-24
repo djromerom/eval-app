@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { requireAuthenticatedUser } from "@/lib/session";
+import { hasRole } from "@/shared/application/authenticated-user";
+import { SHORT_NAME_MAX } from "@/modules/academic/domain/types";
 import { PageHeader } from "@/components/page-header";
 import type { AuthenticatedUser } from "@/shared/application/authenticated-user";
 import {
@@ -11,6 +13,7 @@ import {
   makeListSubjects,
 } from "@/modules/academic/infrastructure/container";
 import { EntityForm } from "./entity-form";
+import { SubjectShortNames } from "./_components/subject-short-names";
 import {
   createAcademicYearAction,
   createCourseAction,
@@ -286,7 +289,24 @@ export default async function AcademicPage() {
                   placeholder: "Matemáticas",
                 },
                 { name: "code", label: "Código", type: "text", required: true, placeholder: "MAT" },
+                {
+                  name: "shortName",
+                  label: "Sigla",
+                  type: "text",
+                  placeholder: "MAT",
+                  maxLength: SHORT_NAME_MAX,
+                },
               ]}
+            />
+            <SubjectShortNames
+              subjects={subjects.map((s) => ({
+                id: s.id,
+                name: s.name,
+                code: s.code,
+                shortName: s.shortName,
+                global: s.institutionId === null,
+              }))}
+              canEditGlobal={hasRole(actor, "SUPER_ADMIN")}
             />
           </CrudSection>
 
