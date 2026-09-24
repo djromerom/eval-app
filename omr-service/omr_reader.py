@@ -21,9 +21,10 @@ Uso:
 
 import argparse
 import json
+import re
 import sys
 
-VERSION = "19"         # subir al cambiar el motor: invalida cachés aguas arriba
+VERSION = "20"         # subir al cambiar el motor: invalida cachés aguas arriba
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -119,6 +120,51 @@ def _ink_density(gray: np.ndarray, r_ref: float) -> np.ndarray:
     _, binimg = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     win = max(3, int(r_ref * 8) | 1)
     return cv2.blur((binimg > 0).astype(np.float32), (win, win))
+
+
+def identity_box(gray: np.ndarray, qr_box):
+    """
+    Recorte del bloque Nombre / Grado / Código, que va justo debajo del QR.
+
+    Sirve cuando el QR no se puede leer: los datos del estudiante están
+    impresos en texto a un centímetro de ahí, y con el recorte a la vista una
+    persona identifica la hoja en dos segundos en vez de abrir el archivo.
+    """
+    if not qr_box:
+        return None
+    x, y, w, h = qr_box
+    H, W = gray.shape
+    x0, x1 = max(0, int(x - 0.55 * w)), min(W, int(x + 1.55 * w))
+    y0, y1 = min(H, int(y + h * 1.05)), min(H, int(y + h * 3.0))
+    if y1 - y0 < 10 or x1 - x0 < 10:
+        return None
+    return gray[y0:y1, x0:x1]
+
+
+def ocr_codigo(crop: np.ndarray):
+    """
+    Intenta leer el código del estudiante del recorte de identidad.
+
+    Sólo se usa cuando el QR falla, y **nunca reemplaza** al QR: se propone
+    como sugerencia para que una persona la confirme. Requiere pytesseract y
+    el binario tesseract; si no están, simplemente no se propone nada.
+    """
+    if crop is None or crop.size == 0:
+        return None
+    try:
+        import pytesseract
+    except Exception:
+        return None
+    up = cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+    up = cv2.threshold(up, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+    try:
+        txt = pytesseract.image_to_string(
+            up, config="--psm 6 -c tessedit_char_whitelist=0123456789")
+    except Exception:
+        return None
+    # El código es el número largo; grado y grupo son cortos.
+    nums = [t for t in re.findall(r"\d{6,12}", txt or "")]
+    return max(nums, key=len) if nums else None
 
 
 def dense_graphic_mask(gray: np.ndarray, r_ref: float,
@@ -1049,7 +1095,7 @@ def deskew(gray: np.ndarray) -> np.ndarray:
 
 def analyze_sheet(path: str, letters: str = "ABCDEFGH"):
     """
-    Analiza una hoja y devuelve (gray, questions, thr, qr, aviso, rotacion): la imagen
+    Analiza una hoja y devuelve (gray, questions, thr, qr, aviso, rotacion, qr_box): la imagen
     enderezada y orientada, las preguntas con burbujas (coordenadas, relleno,
     marcado), el umbral y el payload del QR de identificación (o None).
     Es la base tanto de process_sheet como de interfaces de revisión.
@@ -1084,6 +1130,7 @@ def analyze_sheet(path: str, letters: str = "ABCDEFGH"):
             qr, box, _ = read_qr(gray)
 
     gray = deskew(gray)
+    qr_box = box
 
     bubbles = detect_bubbles(gray)
     if not bubbles:
@@ -1094,12 +1141,12 @@ def analyze_sheet(path: str, letters: str = "ABCDEFGH"):
     measure_fill(gray, all_bubbles)
     thr, thr_warn = adaptive_mark_threshold(questions)
     apply_marks(questions, thr)
-    return gray, questions, thr, qr, thr_warn, rotation
+    return gray, questions, thr, qr, thr_warn, rotation, qr_box
 
 
 def process_sheet(path: str, letters: str = "ABCDEFGH", debug_path: str = None,
                   expected: int = 0) -> dict:
-    gray, questions, thr, qr, thr_warn, rotation = analyze_sheet(path, letters)
+    gray, questions, thr, qr, thr_warn, rotation, qr_box = analyze_sheet(path, letters)
 
     result = {
         "archivo": path,
@@ -1122,7 +1169,12 @@ def process_sheet(path: str, letters: str = "ABCDEFGH", debug_path: str = None,
     if thr_warn:
         result["advertencias"].insert(0, thr_warn)
     if not qr:
-        result["advertencias"].insert(0, "QR no legible: hoja sin identificar")
+        sug = ocr_codigo(identity_box(gray, qr_box))
+        result["codigo_sugerido"] = sug
+        result["advertencias"].insert(
+            0, "QR no legible: hoja sin identificar" +
+               (" (código impreso leído por OCR: %s — confirmar)" % sug if sug else
+                "; el código impreso está en el recorte de identidad"))
         if not qr_backends()["wechat"]:
             result["advertencias"].insert(
                 0, "falta opencv-contrib-python (decodificador WeChat): "

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/shared/infrastructure/db/prisma";
+import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { safeReturnPath } from "@/shared/domain/return-path";
 import { hasRole } from "@/shared/application/authenticated-user";
@@ -76,6 +77,21 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
               },
             },
           },
+        },
+      },
+      // El estudiante asociado (puede ser null si el QR no fue decodificado
+      // y nadie asignó manualmente todavía). Lo incluimos acá para que la
+      // cabecera y los badges reflejen al estudiante en cuanto se asigna,
+      // sin tener que reescribir `studentName`/`studentCode` en la action.
+      student: {
+        select: {
+          id: true,
+          code: true,
+          lastName1: true,
+          lastName2: true,
+          firstName1: true,
+          firstName2: true,
+          group: { select: { name: true } },
         },
       },
     },
@@ -210,16 +226,39 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
     });
   }
 
+  // Recorte del bloque Nombre/Grado/Código impreso. Solo existe cuando el motor
+  // no pudo leer el QR: en ese caso la hoja llega sin estudiante y hay que
+  // identificarla a mano. Se lee del mismo JSON de detección que ya persiste el
+  // worker (`persistCells`), así que no cuesta una llamada al servicio ni una
+  // columna nueva. Se pide únicamente si falta el estudiante: con QR legible el
+  // campo viene vacío y leer el archivo sería trabajo tirado.
+  const identidad = sheet.studentId
+    ? { crop: null as string | null, ocr: null as string | null }
+    : await leerIdentidadImpresa(batchId, sheet.id);
+
   const gridLayout = (sheet.gridLayout as unknown as GridLayoutRecord | null) ?? null;
   const detectionConfidence = sheet.detectionConfidence;
   const isProcessing = sheet.status === "PROCESSING";
 
   const answerKeys = ["A", "B", "C", "D", "E", "F", "G", "H"] as const;
 
+  // Lo que mostramos al usuario sobre la identidad de la hoja. Tiene dos
+  // fuentes y la regla es clara: la relación `student` es la verdad cuando
+  // está (sea por QR o por asignación manual); los campos guardados
+  // `studentName`/`studentCode` son respaldo legible del QR o del
+  // handwriting y solo aparecen si no hay `student` ligado. Sin esta
+  // triada, tras una asignación manual la cabecera seguía diciendo
+  // "Hoja <8 chars del UUID>".
+  const displayName = sheet.student
+    ? nombreCompleto(sheet.student)
+    : (sheet.studentName ?? sheet.studentCode ?? sheet.id.slice(0, 8));
+  const displayCode = sheet.student?.code ?? sheet.studentCode ?? null;
+  const displayGroup = sheet.student?.group.name ?? null;
+
   return (
     <>
       <PageHeader
-        title={`Hoja ${sheet.studentName ?? sheet.studentCode ?? sheet.id.slice(0, 8)}`}
+        title={`Hoja ${displayName}`}
         description={
           sheet.scanBatch?.bundle
             ? `Cuadernillo: ${sheet.scanBatch.bundle.name}`
@@ -237,14 +276,19 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
               {sheet.totalCorrect ?? 0}/{sheet.totalQuestions ?? "?"} = {sheet.score.toFixed(1)}
             </span>
           )}
-          {sheet.studentName && (
+          {displayName && displayName !== sheet.id.slice(0, 8) && (
             <span className="bg-muted text-muted-foreground rounded px-2 py-0.5 text-xs">
-              {sheet.studentName}
+              {displayName}
             </span>
           )}
-          {sheet.studentCode && (
+          {displayGroup && (
             <span className="bg-muted text-muted-foreground rounded px-2 py-0.5 text-xs">
-              Código {sheet.studentCode}
+              {displayGroup}
+            </span>
+          )}
+          {displayCode && (
+            <span className="bg-muted text-muted-foreground rounded px-2 py-0.5 text-xs">
+              Código {displayCode}
             </span>
           )}
           {detectionConfidence != null && (
@@ -284,6 +328,30 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
         {sheet.notes && (
           <div className="bg-muted/30 text-muted-foreground rounded p-3 text-xs">
             <span className="font-semibold">Notas del worker:</span> {sheet.notes}
+          </div>
+        )}
+        {identidad.crop && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+            <p className="mb-2 text-sm text-amber-900">
+              <strong>QR no legible.</strong>{" "}
+              {identidad.ocr ? (
+                <>
+                  El código impreso dice{" "}
+                  <span className="rounded bg-amber-200 px-1.5 py-0.5 font-mono font-semibold">
+                    {identidad.ocr}
+                  </span>
+                  , leído por OCR: confírmalo contra la imagen antes de asignar.
+                </>
+              ) : (
+                "Identifica la hoja con los datos impresos:"
+              )}
+            </p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`data:image/jpeg;base64,${identidad.crop}`}
+              alt="Nombre, grado y código impresos en la hoja"
+              className="w-full max-w-md rounded border bg-white"
+            />
           </div>
         )}
         {mostrarPicker && (
@@ -351,6 +419,27 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
       </section>
     </>
   );
+}
+
+/** Lee del JSON de detección persistido el recorte del bloque de identidad y el
+ *  código sugerido por OCR. Devuelve nulos ante cualquier fallo: es información
+ *  de ayuda, y una hoja vieja procesada antes de esta función simplemente no lo
+ *  trae. Misma ruta que `api/scans/cells/[batchId]/[sheetId]` — si cambia allá,
+ *  cambia acá. */
+async function leerIdentidadImpresa(
+  batchId: string,
+  sheetId: string,
+): Promise<{ crop: string | null; ocr: string | null }> {
+  try {
+    const buf = await localStorage.read(`scans/${batchId}/sheet_${sheetId}_cells.json`);
+    const data = JSON.parse(buf.toString("utf-8")) as {
+      idCrop?: string;
+      idOcr?: string | null;
+    };
+    return { crop: data.idCrop || null, ocr: data.idOcr || null };
+  } catch {
+    return { crop: null, ocr: null };
+  }
 }
 
 /** Server-side: convierte el JSON TipTap a un HTML resumido (server-safe).
