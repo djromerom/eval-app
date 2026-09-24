@@ -46,6 +46,12 @@ export interface DetectedSheet {
    *  a confirmar por una persona. Nunca reemplaza al QR, y es `null` si el OCR
    *  no está disponible o no encontró un número plausible. */
   idOcr?: string | null;
+  /** Avisos de la verificación estructural del motor (`check_structure`):
+   *  huecos entre filas, bloques con distinta cantidad de filas. Es la red
+   *  contra la falla silenciosa: cuando se pierde una fila y aparece otra
+   *  espuria, el conteo cuadra con la clave y la lectura sale completa y
+   *  verosímil pero con la numeración corrida. Vacío = sin sospechas. */
+  estructura?: string[];
 }
 
 export interface OmrDetector {
