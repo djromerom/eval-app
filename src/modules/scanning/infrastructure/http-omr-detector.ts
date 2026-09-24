@@ -11,7 +11,8 @@ import type { OmrDetector, DetectedSheet, DetectedQuestion } from "../domain/omr
 export class HttpOmrDetector implements OmrDetector {
   constructor(
     private readonly baseUrl: string,
-    private readonly timeoutMs = 30_000,
+    /** Por intento. En producción sale de `OMR_TIMEOUT_MS`. */
+    private readonly timeoutMs = 90_000,
     private readonly retries = 1,
   ) {}
 
@@ -54,17 +55,43 @@ export class HttpOmrDetector implements OmrDetector {
         return body as DetectedSheet;
       } catch (e) {
         lastError = e;
-        // Reintenta salvo en el último intento.
-        if (attempt === this.retries) break;
+        // Solo se reintenta un fallo de red (el servicio reiniciando, una
+        // conexión cortada). Un tiempo agotado no: el análisis sigue corriendo
+        // en el servicio aunque se aborte acá, y reintentar solo le apila otra
+        // hoja igual de lenta. Un error del motor (422: hoja ilegible)
+        // tampoco: daría lo mismo.
+        if (attempt === this.retries || !esFalloDeRed(e)) break;
       } finally {
         clearTimeout(timer);
       }
     }
 
     throw new Error(
-      `No se pudo analizar la hoja con omr-service (${this.baseUrl}): ${
-        lastError instanceof Error ? lastError.message : String(lastError)
-      }`,
+      `No se pudo analizar la hoja con omr-service (${this.baseUrl}): ${describirError(
+        lastError,
+        this.timeoutMs,
+      )}`,
     );
   }
+}
+
+/** `fetch` abortado por el AbortController = tiempo agotado. */
+export function esTiempoAgotado(e: unknown): boolean {
+  return e instanceof Error && e.name === "AbortError";
+}
+
+/** `fetch` de Node (undici) rechaza con `TypeError("fetch failed")` cuando no
+ *  hay conexión: servicio caído, reiniciando o conexión cortada. */
+function esFalloDeRed(e: unknown): boolean {
+  return e instanceof TypeError;
+}
+
+function describirError(e: unknown, timeoutMs: number): string {
+  if (esTiempoAgotado(e)) {
+    return `no respondió en ${Math.round(timeoutMs / 1000)} s (tiempo de espera agotado)`;
+  }
+  if (e instanceof TypeError && e.cause instanceof Error) {
+    return `${e.message} (${e.cause.message})`;
+  }
+  return e instanceof Error ? e.message : String(e);
 }

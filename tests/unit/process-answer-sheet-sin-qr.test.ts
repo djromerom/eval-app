@@ -261,6 +261,37 @@ describe("ProcessAnswerSheet - QR ilegible en lote de formulación", () => {
   });
 });
 
+describe("ProcessAnswerSheet - fallo del motor", () => {
+  it("el error devuelto (el que registra el worker) incluye la causa", async () => {
+    const { repo, guardado } = hacerRepo(pngPath, {
+      bundleId: "bundle-lote",
+      evaluationId: null,
+      studentId: null,
+    });
+    const provider = {
+      getCorrectAnswers: vi.fn(async () => clave),
+      getCorrectAnswersForBundle: vi.fn(async () => clave),
+    };
+    const detector: OmrDetector = {
+      async analyze() {
+        throw new Error("omr-service no respondió en 90 s (tiempo de espera agotado)");
+      },
+    };
+    const r = await new ProcessAnswerSheet(repo, sinQr, provider, detector).execute({
+      answerSheetId: "hoja-1",
+      scanBatchId: "lote-1",
+      institutionId: "inst-1",
+      imagePath: pngPath,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe("PROCESSING_ERROR");
+      expect(r.error.message).toContain("tiempo de espera agotado");
+    }
+    expect(guardado.notes).toContain("tiempo de espera agotado");
+  });
+});
+
 describe("ProcessAnswerSheet - QR ilegible sin objetivo del lote", () => {
   it("mantiene el error y no llama al motor", async () => {
     const { r, guardado, detector } = await procesar({ bundleId: null, evaluationId: null }, ["B"]);
