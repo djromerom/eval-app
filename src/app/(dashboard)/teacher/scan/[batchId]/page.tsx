@@ -6,6 +6,10 @@ import { prisma } from "@/shared/infrastructure/db/prisma";
 import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import { BatchReviewMatrix, type SheetRow } from "./batch-review-matrix";
 import { nombreCompleto } from "@/modules/students/domain/nombre-completo";
+import { makeListBundles } from "@/modules/bundles/infrastructure/container";
+import { MOTIVOS, type MotivoSinClasificar } from "@/modules/scanning/domain/clasificar-hojas";
+import { HojasSinClasificarCard, type HojaSinClasificarRow } from "./hojas-sin-clasificar-card";
+import { estudiantesDelCuadernillo } from "../_lib/estudiantes-del-cuadernillo";
 
 export const metadata: Metadata = { title: "Revisión de hojas" };
 
@@ -43,6 +47,8 @@ export default async function BatchReviewPage({ params }: Props) {
       OR: [
         { evaluation: { institutionId: actor.institutionId } },
         { bundle: { institutionId: actor.institutionId } },
+        // Lote sin cuadernillo: carga automática donde ninguna hoja clasificó.
+        { evaluationId: null, bundleId: null, unclassifiedScans: { some: {} } },
       ],
     },
     include: {
@@ -108,6 +114,55 @@ export default async function BatchReviewPage({ params }: Props) {
     }),
   );
 
+  // Hojas de la carga automática que no se pudieron clasificar por su QR.
+  // Solo las tiene el primer lote de cada carga (donde vive la carpeta).
+  const sinClasificar = await prisma.unclassifiedScan.findMany({
+    where: { scanBatchId: batchId, institutionId: actor.institutionId },
+    orderBy: [{ createdAt: "asc" }, { filePath: "asc" }],
+    select: {
+      id: true,
+      filePath: true,
+      originalFilename: true,
+      reason: true,
+      resolvedAt: true,
+      answerSheet: {
+        select: {
+          id: true,
+          scanBatchId: true,
+          bundle: { select: { name: true } },
+          student: {
+            select: { lastName1: true, lastName2: true, firstName1: true, firstName2: true },
+          },
+        },
+      },
+    },
+  });
+  const hojasSinClasificar: HojaSinClasificarRow[] = sinClasificar.map((h) => ({
+    id: h.id,
+    nombre: h.originalFilename ?? h.filePath.split("/").pop() ?? h.id,
+    motivo: MOTIVOS[h.reason as MotivoSinClasificar] ?? h.reason,
+    resuelta: h.resolvedAt
+      ? {
+          sheetId: h.answerSheet?.id ?? null,
+          batchId: h.answerSheet?.scanBatchId ?? null,
+          estudiante: h.answerSheet?.student ? nombreCompleto(h.answerSheet.student) : "",
+          cuadernillo: h.answerSheet?.bundle?.name ?? "",
+        }
+      : null,
+  }));
+  const hayPendientes = hojasSinClasificar.some((h) => !h.resuelta);
+  // Cuadernillos LISTOS con el mismo alcance por rol que la carga de lotes.
+  const cuadernillos = hayPendientes
+    ? await makeListBundles()
+        .execute({ actor, filters: { status: "READY" } })
+        .then((r) => (r.ok ? r.value.map((b) => ({ id: b.id, name: b.name })) : []))
+    : [];
+  const cuadernilloPorDefecto =
+    batch.bundleId && cuadernillos.some((c) => c.id === batch.bundleId) ? batch.bundleId : "";
+  const estudiantesIniciales = cuadernilloPorDefecto
+    ? await estudiantesDelCuadernillo(actor.institutionId, cuadernilloPorDefecto)
+    : [];
+
   return (
     <>
       <div className="mb-4 flex items-center gap-2 text-sm">
@@ -125,7 +180,20 @@ export default async function BatchReviewPage({ params }: Props) {
         </p>
       </header>
 
-      <BatchReviewMatrix batchId={batchId} rows={rows} />
+      {hojasSinClasificar.length > 0 && (
+        <HojasSinClasificarCard
+          batchId={batchId}
+          hojas={hojasSinClasificar}
+          cuadernillos={cuadernillos}
+          cuadernilloPorDefecto={cuadernilloPorDefecto}
+          estudiantesIniciales={estudiantesIniciales}
+        />
+      )}
+
+      {/* El lote sin cuadernillo nunca tiene hojas: solo la card de arriba. */}
+      {(batch.bundleId || batch.evaluationId) && (
+        <BatchReviewMatrix batchId={batchId} rows={rows} />
+      )}
     </>
   );
 }

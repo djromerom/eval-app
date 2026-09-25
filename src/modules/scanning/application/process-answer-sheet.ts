@@ -243,10 +243,18 @@ export class ProcessAnswerSheet {
     // dice a qué cuadernillo o formulación pertenece la hoja, se califica con
     // eso (sin estudiante: se asigna a mano) para que la matriz muestre las
     // marcas. La hoja queda en Revisión hasta que alguien la verifique.
-    const decoded = await this.qrDecoder.decode(imageBuffer);
+    //
+    // Una hoja identificada a mano (card "Hojas sin clasificar" del lote) no
+    // lee el QR: alguien ya eligió el cuadernillo y el estudiante porque el QR
+    // no servía, y si ahora se leyera podría calificarla contra otro
+    // cuadernillo o reemplazar el estudiante elegido. También al Reprocesar.
+    const aMano = sheet.identificadaAMano === true ? objetivoDelLote(sheet) : null;
+    const decoded = aMano ? null : await this.qrDecoder.decode(imageBuffer);
     let objetivo: ObjetivoHoja;
     let sinQr = false;
-    if (decoded) {
+    if (aMano) {
+      objetivo = aMano;
+    } else if (decoded) {
       const porQr = await this.identificarPorQr(answerSheetId, decoded.text);
       if ("ok" in porQr) return porQr;
       objetivo = porQr;

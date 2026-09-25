@@ -36,7 +36,15 @@ export interface HojaRechazada {
 }
 
 export type CrearLoteResultado =
-  | { ok: true; batchId: string; lotes?: LoteCreado[]; rechazadas?: HojaRechazada[] }
+  | {
+      ok: true;
+      batchId: string;
+      lotes?: LoteCreado[];
+      rechazadas?: HojaRechazada[];
+      /** Ninguna hoja clasificó: se guardaron todas en un lote sin cuadernillo.
+       *  La carga lo muestra como aviso (en rojo) en vez del resumen de lotes. */
+      aviso?: string;
+    }
   | { ok: false; error: string };
 
 export async function createScanBatchAction(formData: FormData): Promise<CrearLoteResultado> {
@@ -210,8 +218,10 @@ async function enqueueSheets(
 export interface BatchWithSheets {
   id: string;
   /** "evaluation" si el batch es de una formulación, "bundle" si es de un
-   *  cuadernillo, "unknown" si la FK quedó null por datos legacy. */
-  kind: ScanTargetKind | "unknown";
+   *  cuadernillo, "unclassified" si es el lote sin cuadernillo de una carga
+   *  automática donde ninguna hoja clasificó, "unknown" si la FK quedó null
+   *  por datos legacy. */
+  kind: ScanTargetKind | "unclassified" | "unknown";
   status: string;
   totalSheets: number;
   processedSheets: number;
@@ -219,6 +229,8 @@ export interface BatchWithSheets {
   /** Nombre del objetivo (formulación o cuadernillo). null si no se pudo
    *  resolver (huérfanos o datos legacy). */
   title: string | null;
+  /** Hojas de la carga que no se pudieron clasificar y siguen sin cuadernillo. */
+  sinClasificar: number;
   sheets: {
     id: string;
     status: string;
@@ -245,6 +257,10 @@ export async function getBatchesAction(): Promise<BatchWithSheets[]> {
       OR: [
         { evaluation: { teacherId: actor.userId, deletedAt: null } },
         { bundle: { institutionId: actor.institutionId } },
+        // Lote sin cuadernillo de una carga automática donde ninguna hoja
+        // clasificó. Se exige que tenga hojas sin clasificar para no mostrar
+        // lotes legacy que quedaron sin objetivo.
+        { evaluationId: null, bundleId: null, unclassifiedScans: { some: {} } },
       ],
     },
     orderBy: { createdAt: "desc" },
@@ -278,16 +294,23 @@ export async function getBatchesAction(): Promise<BatchWithSheets[]> {
           notes: true,
         },
       },
+      _count: { select: { unclassifiedScans: { where: { resolvedAt: null } } } },
     },
   });
 
   return rows.map((b) => {
-    const kind: ScanTargetKind | "unknown" = b.evaluationId
+    // Sin objetivo solo llega el lote de la carga automática donde ninguna
+    // hoja clasificó: las otras dos ramas del filtro exigen el objetivo.
+    const sinCuadernillo = !b.evaluationId && !b.bundleId;
+    const kind: BatchWithSheets["kind"] = b.evaluationId
       ? "evaluation"
       : b.bundleId
         ? "bundle"
-        : "unknown";
-    const title = b.evaluation?.title ?? b.bundle?.name ?? null;
+        : sinCuadernillo
+          ? "unclassified"
+          : "unknown";
+    const title =
+      b.evaluation?.title ?? b.bundle?.name ?? (sinCuadernillo ? "Hojas sin clasificar" : null);
 
     return {
       id: b.id,
@@ -297,6 +320,7 @@ export async function getBatchesAction(): Promise<BatchWithSheets[]> {
       totalSheets: b.totalSheets,
       processedSheets: b.processedSheets,
       createdAt: b.createdAt,
+      sinClasificar: b._count.unclassifiedScans,
       sheets: b.sheets.map((s) => ({
         id: s.id,
         status: s.status,
@@ -405,13 +429,24 @@ async function createAutoScanBatches(
 
   const { grupos, sinClasificar } = clasificarHojas(lecturas);
 
-  if (grupos.length === 0) {
-    return {
-      ok: false as const,
-      error:
-        "Ninguna hoja pudo clasificarse por su QR. Revisá que sean hojas de un cuadernillo de esta institución y que el cuadernillo esté LISTO.",
-    };
-  }
+  // Si ninguna clasificó, igual se guardan: van a un lote sin cuadernillo que
+  // solo muestra la card "Hojas sin clasificar". Al asignarle cuadernillo a
+  // cada una, la hoja pasa al lote de ese cuadernillo (ver elegirLoteDestino).
+  const loteSinCuadernillo =
+    grupos.length === 0
+      ? await prisma.scanBatch.create({
+          data: {
+            institutionId: actor.institutionId,
+            evaluationId: null,
+            bundleId: null,
+            uploadedBy: actor.userId,
+            status: "PENDING",
+            totalSheets: 0,
+            processedSheets: 0,
+          },
+          select: { id: true },
+        })
+      : null;
 
   const lotes: { batchId: string; cuadernillo: string; hojas: number }[] = [];
   for (const g of grupos) {
@@ -435,21 +470,53 @@ async function createAutoScanBatches(
     });
   }
 
-  // Los archivos que no clasificaron se guardan igual, bajo el primer lote,
-  // para que se puedan recuperar sin volver a pasar el papel por el escáner.
+  // Los archivos que no clasificaron se guardan igual, bajo el primer lote
+  // (o el lote sin cuadernillo), para que se puedan recuperar sin volver a
+  // pasar el papel por el escáner. Cada uno queda registrado como
+  // UnclassifiedScan: el lote los muestra en la card "Hojas sin clasificar"
+  // para elegirles cuadernillo y estudiante.
+  const primerLote = loteSinCuadernillo?.id ?? lotes[0]!.batchId;
   const rechazadas: { nombre: string; motivo: string }[] = [];
   if (sinClasificar.length > 0) {
-    const dir = `scans/${lotes[0]!.batchId}/sin-clasificar`;
+    const dir = `scans/${primerLote}/sin-clasificar`;
+    // Un solo registro de nombres para toda la carpeta: dos archivos con el
+    // mismo nombre en el mismo milisegundo se pisarían (ver enqueueSheets).
+    const usados = new Set<string>();
+    const registros: {
+      institutionId: string;
+      scanBatchId: string;
+      filePath: string;
+      originalFilename: string | null;
+      reason: MotivoSinClasificar;
+      uploadedBy: string;
+    }[] = [];
     for (const s of sinClasificar) {
-      const bytes = Buffer.from(await files[s.indice]!.arrayBuffer());
-      await localStorage.save(
-        `${dir}/${nombreDeArchivo(files[s.indice]!.name, s.indice, new Set())}`,
-        bytes,
-      );
+      const file = files[s.indice]!;
+      const bytes = Buffer.from(await file.arrayBuffer());
+      const filePath = `${dir}/${nombreDeArchivo(file.name, s.indice, usados)}`;
+      await localStorage.save(filePath, bytes);
+      registros.push({
+        institutionId: actor.institutionId,
+        scanBatchId: primerLote,
+        filePath,
+        originalFilename: file.name || null,
+        reason: s.motivo,
+        uploadedBy: actor.userId,
+      });
       rechazadas.push({ nombre: s.nombre, motivo: MOTIVOS[s.motivo] });
     }
+    await prisma.unclassifiedScan.createMany({ data: registros });
   }
 
   revalidatePath("/teacher/scan");
-  return { ok: true as const, batchId: lotes[0]!.batchId, lotes, rechazadas };
+  if (loteSinCuadernillo) {
+    return {
+      ok: true as const,
+      batchId: loteSinCuadernillo.id,
+      lotes,
+      rechazadas,
+      aviso: `Ninguna hoja pudo clasificarse por su QR. Revisá que sean hojas de un cuadernillo de esta institución y que el cuadernillo esté LISTO. Quedaron ${rechazadas.length} hoja(s) en un lote para asignarles cuadernillo y estudiante a mano.`,
+    };
+  }
+  return { ok: true as const, batchId: primerLote, lotes, rechazadas };
 }

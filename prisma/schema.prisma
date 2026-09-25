@@ -35,20 +35,21 @@ model Institution {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  users           User[]
-  academicYears   AcademicYear[]
-  courses         Course[]
-  subjects        Subject[] // catálogo propio (null en Subject = global)
-  groups          Group[]
-  periods         Period[]
-  students        Student[]
-  evaluations     Evaluation[]
-  questionBank    QuestionBank[]
-  templates       EvaluationTemplate[]
-  scanBatches     ScanBatch[]
-  bundles         EvaluationBundle[]
-  bookletTypes    BookletType[]
-  evaluationRules EvaluationRule[]
+  users             User[]
+  academicYears     AcademicYear[]
+  courses           Course[]
+  subjects          Subject[] // catálogo propio (null en Subject = global)
+  groups            Group[]
+  periods           Period[]
+  students          Student[]
+  evaluations       Evaluation[]
+  questionBank      QuestionBank[]
+  templates         EvaluationTemplate[]
+  scanBatches       ScanBatch[]
+  bundles           EvaluationBundle[]
+  bookletTypes      BookletType[]
+  evaluationRules   EvaluationRule[]
+  unclassifiedScans UnclassifiedScan[]
 }
 
 // ========== AUTH & USERS ==========
@@ -839,7 +840,10 @@ model ScanBatch {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
-  sheets AnswerSheet[]
+  sheets            AnswerSheet[]
+  /// Hojas de la carga automática que no se pudieron clasificar por su QR.
+  /// Solo el primer lote de cada carga las tiene.
+  unclassifiedScans UnclassifiedScan[]
 
   @@index([institutionId])
   @@index([evaluationId])
@@ -896,7 +900,10 @@ model AnswerSheet {
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 
-  answers StudentAnswer[]
+  answers          StudentAnswer[]
+  /// Presente si la hoja salió de una hoja sin clasificar a la que alguien le
+  /// eligió cuadernillo y estudiante a mano. El worker entonces no lee el QR.
+  unclassifiedScan UnclassifiedScan?
 
   // Invariante (validada en use cases, no en DB): exactamente uno de
   // evaluationId / bundleId no nulo.
@@ -904,6 +911,33 @@ model AnswerSheet {
   @@index([bundleId, status])
   @@index([studentId])
   @@index([scanBatchId])
+}
+
+/// Hoja de una carga automática que no se pudo atribuir a un cuadernillo por
+/// su QR (ilegible, firma inválida, cuadernillo no LISTO...). El archivo ya
+/// está en storage; la AnswerSheet se crea cuando alguien elige el cuadernillo
+/// y el estudiante a mano desde la card "Hojas sin clasificar" del lote.
+model UnclassifiedScan {
+  id               String       @id @default(uuid(7)) @db.Uuid
+  institutionId    String       @db.Uuid
+  institution      Institution  @relation(fields: [institutionId], references: [id])
+  /// Lote donde se muestra: el primero de la carga, que guarda la carpeta.
+  scanBatchId      String       @db.Uuid
+  scanBatch        ScanBatch    @relation(fields: [scanBatchId], references: [id], onDelete: Cascade)
+  /// Ruta relativa en storage: scans/<lote>/sin-clasificar/<archivo>.
+  filePath         String
+  originalFilename String?
+  /// Código de MotivoSinClasificar (src/modules/scanning/domain/clasificar-hojas.ts).
+  reason           String
+  uploadedBy       String       @db.Uuid
+  createdAt        DateTime     @default(now())
+  resolvedAt       DateTime?
+  resolvedBy       String?      @db.Uuid
+  answerSheetId    String?      @unique @db.Uuid
+  answerSheet      AnswerSheet? @relation(fields: [answerSheetId], references: [id], onDelete: SetNull)
+
+  @@index([scanBatchId])
+  @@index([institutionId])
 }
 
 enum ScanStatus {

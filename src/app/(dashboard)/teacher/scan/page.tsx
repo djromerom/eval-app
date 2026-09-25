@@ -56,7 +56,11 @@ export default async function ScanPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="bg-muted text-muted-foreground mr-2 rounded px-2 py-0.5 text-xs font-medium">
-                      {batch.kind === "bundle" ? "Cuadernillo" : "Formulación"}
+                      {batch.kind === "bundle"
+                        ? "Cuadernillo"
+                        : batch.kind === "unclassified"
+                          ? "Sin clasificar"
+                          : "Formulación"}
                     </span>
                     <span className="font-medium">{batch.title ?? "(sin nombre)"}</span>
                     <span className="text-muted-foreground ml-2 text-sm">
@@ -67,6 +71,11 @@ export default async function ScanPage() {
                     <span className="text-muted-foreground">
                       {batch.processedSheets}/{batch.totalSheets} hojas
                     </span>
+                    {batch.sinClasificar > 0 && (
+                      <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                        {batch.sinClasificar} sin clasificar
+                      </span>
+                    )}
                     <ScanStatusBadge status={batch.status} size="lg" />
                     <Link
                       href={`/teacher/scan/${batch.id}`}
