@@ -43,6 +43,11 @@ export interface AnswerSheet {
   evaluationId: string | null;
   /** Hoja de un cuadernillo (Sprint 1 del módulo cuadernillos). */
   bundleId: string | null;
+  /** Lote al que pertenece la hoja. Necesario para que el use case de
+   *  correcciones manuales valide que la hoja es del batch que el docente
+   *  está revisando. Opcional porque los mocks en memoria de los tests del
+   *  worker no siempre lo incluyen — solo lo expone el Prisma repo. */
+  scanBatchId?: string | null;
   studentId: string | null;
   studentName: string | null;
   studentCode: string | null;
@@ -137,6 +142,17 @@ export interface ScanningRepository {
   ): Promise<void>;
   saveAnswers(sheetId: string, answers: StudentAnswerRecord[]): Promise<void>;
   updateBatchProgress(batchId: string, processed: number, status?: ScanBatchStatus): Promise<void>;
+}
+
+/** Lectura de las respuestas por hoja. Separado de `ScanningRepository` para
+ *  que los mocks de tests del worker (que solo necesitan saveAnswers +
+ *  updateSheetStatus) no se vean forzados a implementar el método nuevo. */
+export interface StudentAnswersReader {
+  /** Devuelve las respuestas de una hoja en el orden de scan del motor (id
+   *  asc), que es el mismo orden posicional del grid.json (`n` 1-based).
+   *  El use case de correcciones manuales lo necesita para mapear cada
+   *  `posicion` del docente a la fila real de StudentAnswer. */
+  listStudentAnswersForSheet(sheetId: string): Promise<StudentAnswerRecord[]>;
 }
 
 export interface QrDecoder {
