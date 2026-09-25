@@ -1,8 +1,11 @@
 "use client";
 
-import { Download } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Download, Save } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
+import { guardarCorreccionesMatrizAction } from "./actions";
+import type { AnswerKey } from "@/modules/evaluations/domain/evaluation";
 
 export interface SheetRow {
   id: string;
@@ -93,6 +96,12 @@ export function BatchReviewMatrix({ batchId, rows }: { batchId: string; rows: Sh
   // Cache de recortes por hoja (carga perezosa vía /api/scans/cells).
   const [cells, setCells] = useState<Record<string, CellsDoc>>({});
   const gridRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [saveFeedback, setSaveFeedback] = useState<{
+    tone: "ok" | "err";
+    msg: string;
+  } | null>(null);
 
   const metrics = useMemo(() => {
     let blank = 0;
@@ -193,6 +202,51 @@ export function BatchReviewMatrix({ batchId, rows }: { batchId: string; rows: Sh
     URL.revokeObjectURL(url);
   }
 
+  /** Agrupa `overrides` (clave `"r,c"` 0-based) en patches por hoja y los
+   *  envía al servidor. Cada hoja recibe solo las celdas que el docente
+   *  modificó: el resto se mantiene como lo detectó el motor. */
+  function guardarCambios() {
+    setSaveFeedback(null);
+    const patches: {
+      sheetId: string;
+      corrections: { posicion: number; selectedKey: AnswerKey | null }[];
+    }[] = [];
+
+    const porHoja = new Map<number, { posicion: number; selectedKey: AnswerKey }[]>();
+    for (const [key, ans] of Object.entries(overrides)) {
+      const [rStr, cStr] = key.split(",");
+      const r = Number(rStr);
+      const c = Number(cStr);
+      const list = porHoja.get(r) ?? [];
+      list.push({ posicion: c + 1, selectedKey: ans as AnswerKey });
+      porHoja.set(r, list);
+    }
+    for (const [r, corrections] of porHoja.entries()) {
+      const sheet = rows[r];
+      if (!sheet) continue;
+      patches.push({ sheetId: sheet.id, corrections });
+    }
+
+    if (patches.length === 0) return;
+    startTransition(async () => {
+      const result = await guardarCorreccionesMatrizAction({ batchId, patches });
+      if (result.ok) {
+        const totalChanged = result.updatedSheets.reduce((acc, u) => acc + u.changed, 0);
+        setOverrides({});
+        setSaveFeedback({
+          tone: "ok",
+          msg:
+            totalChanged === 1
+              ? "Cambio guardado."
+              : `${totalChanged} cambios guardados.`,
+        });
+        router.refresh();
+      } else {
+        setSaveFeedback({ tone: "err", msg: result.error });
+      }
+    });
+  }
+
   const selSheet = rows[sel.r];
   const selDoc = selSheet ? cells[selSheet.id] : undefined;
   const selQ = selDoc?.questions[sel.c];
@@ -220,9 +274,34 @@ export function BatchReviewMatrix({ batchId, rows }: { batchId: string; rows: Sh
 
       {/* Barra de herramientas */}
       <div className="flex flex-wrap items-center gap-3">
+        {(() => {
+          const n = Object.keys(overrides).length;
+          const label = n === 1 ? "Guardar 1 cambio" : `Guardar ${n} cambios`;
+          return (
+            <span className="inline-flex items-center gap-2">
+              <button
+                onClick={guardarCambios}
+                disabled={pending || n === 0}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Save className="size-4" aria-hidden />
+                {pending ? "Guardando…" : label}
+              </button>
+              {saveFeedback && (
+                <span
+                  className={`text-xs ${
+                    saveFeedback.tone === "ok" ? "text-emerald-700" : "text-rose-700"
+                  }`}
+                >
+                  {saveFeedback.msg}
+                </span>
+              )}
+            </span>
+          );
+        })()}
         <button
           onClick={exportCsv}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition-colors"
+          className="bg-card border-border hover:bg-muted rounded-lg border px-4 py-2 text-sm font-semibold shadow-sm transition-colors"
         >
           Descargar CSV (con correcciones)
         </button>

@@ -16,6 +16,8 @@ import {
   type EvaluationQuestionsProvider,
 } from "../application/process-answer-sheet";
 import { ClassifyUnclassifiedScan } from "../application/classify-unclassified-scan";
+import { CorrectAnswerSheetAnswers } from "../application/correct-answer-sheet-answers";
+import { PrismaStudentAnswersReader } from "./prisma-scanning-repository";
 
 const scanningRepo = new PrismaScanningRepository();
 const evaluationRepo = new PrismaEvaluationRepository();
@@ -103,3 +105,10 @@ export const makeProcessAnswerSheet = () =>
 
 export const makeClassifyUnclassifiedScan = () =>
   new ClassifyUnclassifiedScan(new PrismaUnclassifiedScanRepository(), bullOmrJobQueue);
+
+export const makeCorrectAnswerSheetAnswers = () =>
+  new CorrectAnswerSheetAnswers(
+    scanningRepo,
+    new PrismaStudentAnswersReader(),
+    questionsProvider,
+  );

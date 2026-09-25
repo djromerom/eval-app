@@ -8,6 +8,7 @@ import type {
   ScanBatchStatus,
   ScanningRepository,
   StudentAnswerRecord,
+  StudentAnswersReader,
 } from "../domain/answer-sheet";
 
 const statusToPrisma: Record<AnswerSheetStatus | ScanBatchStatus, ScanStatus> = {
@@ -75,6 +76,7 @@ export class PrismaScanningRepository implements ScanningRepository {
       institutionId,
       evaluationId: row.evaluationId,
       bundleId: row.bundleId,
+      scanBatchId: row.scanBatchId,
       studentId: row.studentId,
       studentName: row.studentName,
       studentCode: row.studentCode,
@@ -251,5 +253,44 @@ export class PrismaScanningRepository implements ScanningRepository {
         ...(status ? { status: statusToPrisma[status] } : {}),
       },
     });
+  }
+}
+
+/** Lector de StudentAnswer para el use case de correcciones manuales.
+ *  Implementado aparte de `PrismaScanningRepository` para no inflar su
+ *  superficie ni obligar a los tests del worker a mockear un método que
+ *  no usan. */
+export class PrismaStudentAnswersReader implements StudentAnswersReader {
+  async listStudentAnswersForSheet(sheetId: string): Promise<StudentAnswerRecord[]> {
+    const rows = await prisma.studentAnswer.findMany({
+      where: { answerSheetId: sheetId },
+      orderBy: { id: "asc" },
+      select: {
+        questionId: true,
+        bundleItemId: true,
+        selectedKey: true,
+        isCorrect: true,
+        isAmbiguous: true,
+        confidence: true,
+        cells: true,
+        fillRatio: true,
+      },
+    });
+    return rows.map((r) => ({
+      questionId: r.questionId,
+      bundleItemId: r.bundleItemId,
+      // StudentAnswer.selectedKey es `String?` en Prisma; el dominio lo espera
+      // `AnswerKey | null`. Hacemos el cast explícito porque la columna ya está
+      // validada contra el dominio en el momento de escritura (worker y este
+      // mismo use case). Si llegara un valor fuera del rango A-H sería un
+      // bug de otro path — preferimos propagarlo como null antes que cortar
+      // la corrección manual entera.
+      selectedKey: (r.selectedKey ?? null) as StudentAnswerRecord["selectedKey"],
+      isCorrect: r.isCorrect,
+      isAmbiguous: r.isAmbiguous,
+      confidence: r.confidence,
+      cells: (r.cells as unknown as StudentAnswerRecord["cells"]) ?? undefined,
+      fillRatio: r.fillRatio,
+    }));
   }
 }
