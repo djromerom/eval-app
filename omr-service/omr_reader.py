@@ -24,7 +24,7 @@ import json
 import re
 import sys
 
-VERSION = "21"         # subir al cambiar el motor: invalida cachés aguas arriba
+VERSION = "22"         # subir al cambiar el motor: invalida cachés aguas arriba
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -45,6 +45,10 @@ class Bubble:
     ring: float = 0.0          # ratio de tinta en el ANILLO exterior del óvalo
     marked: bool = False
     letter: str = ""
+    # Fabricada por la recuperacion por rejilla (no detectada en la imagen).
+    # Hereda el radio mediano, asi que no dice nada sobre el tamaño real de lo
+    # que hay en esa fila y hay que dejarla fuera de cualquier medida de radio.
+    sintetica: bool = False
 
 
 @dataclass
@@ -919,7 +923,8 @@ def build_questions(bubbles: list, letters: str) -> list:
                 step = gap / k
                 y_i = (a.y + f[0].y) / 2
                 for j in range(1, k):
-                    merged[-1].append(Bubble(a.x + step * j, y_i, r_med))
+                    merged[-1].append(Bubble(a.x + step * j, y_i, r_med,
+                                             sintetica=True))
                 merged[-1].extend(f)
             else:
                 merged.append(f)
@@ -1024,10 +1029,43 @@ def build_questions(bubbles: list, letters: str) -> list:
         biggest = len(principal)
         holgado = max(3, int(biggest * 0.15))
 
+        def _radio(g):
+            rs = [b.r for i in g for b in raw_questions[i] if not b.sintetica]
+            return float(np.median(rs)) if rs else 0.0
+
+        r_pral = _radio(principal)
+
+        # Un bloque de respuestas es una rejilla IMPRESA, y eso se mide dentro
+        # del bloque mismo, sin compararlo con nadie: todas sus filas arrancan
+        # en la misma x (la columna 'A') y sus óvalos tienen el tamaño de una
+        # burbuja. Antes, un bloque con `holgado` filas o más entraba sin más
+        # preguntas. En una hoja real de 30 ítems holgado valía 4, y el bloque
+        # de identidad impreso bajo el QR aportó exactamente 4 filas de "burbujas"
+        # —los huecos de las letras redondas de "ZZTORO", "LUISCAR",
+        # "Grado - Grupo:" y "Código:"— que entraron por el empate 4 >= 4 como
+        # ítems 1..4 y corrieron la numeración de los 30 reales. Medido en los
+        # 17 bloques de las 10 hojas de prueba:
+        #
+        #                             legítimos        el espurio
+        #     radio / radio pral      0.98 - 1.06      0.59
+        #     MAD(x0) / paso          0.00 - 0.04      0.50
+        #
+        # Se exigen las dos porque fallan de forma independiente: en esa misma
+        # plantilla, "Grado" y "Código" empiezan ambos en el margen izquierdo, y
+        # un nombre que empezara por 'O' alinearía también el x0 de su fila; el
+        # tamaño de una letra, en cambio, no se parece al de un óvalo.
+        def _es_rejilla(g):
+            if r_pral > 0 and _radio(g) < 0.80 * r_pral:
+                return False
+            x0 = np.array([raw_questions[i][0].x for i in g])
+            mad = float(np.median(np.abs(x0 - np.median(x0))))
+            return mad <= 0.25 * gap_opt
+
         filtered = []
         for g in col_groups:
             if len(g) >= holgado:
-                filtered.append(g)
+                if _es_rejilla(g):
+                    filtered.append(g)
                 continue
             # Un bloque CORTO es legítimo si sus filas caen sobre la rejilla del
             # bloque principal: un bloque de 5 ítems a la derecha arranca a la
@@ -1038,7 +1076,7 @@ def build_questions(bubbles: list, letters: str) -> list:
             if len(g) < 2 or paso <= 0:
                 continue
             if all(min(abs(y - py) for py in filas_pral) <= 0.35 * paso
-                   for y in _filas(g)):
+                   for y in _filas(g)) and _es_rejilla(g):
                 filtered.append(g)
         if filtered:
             col_groups = filtered
