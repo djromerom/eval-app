@@ -1,4 +1,7 @@
+import { logger } from "@/shared/infrastructure/logger";
 import type { QrDecoder } from "../domain/answer-sheet";
+
+const log = logger.child({ component: "omr-service-qr" });
 
 /**
  * `QrDecoder` que delega en el microservicio Python (`omr-service`, `POST /qr`).
@@ -44,10 +47,24 @@ export class OmrServiceQrDecoder implements QrDecoder {
       // `text` es el contenido crudo impreso: la firma HMAC se verifica sobre
       // él (`canonicalJson` lo reordena, pero parte de este string).
       return { text: body.text };
-    } catch {
+    } catch (e) {
       // Un fallback que tumba el flujo es peor que no tener fallback: si el
       // servicio no responde, esto se comporta como "no pude leer el QR" y el
-      // use case sigue su camino normal a REVIEW.
+      // use case sigue su camino normal a REVIEW. Pero se registra: si no, un
+      // omr-service lento hace que hojas con QR bueno se traten como
+      // ilegibles sin ninguna pista en los logs.
+      const agotado = e instanceof Error && e.name === "AbortError";
+      log.warn(
+        {
+          baseUrl: this.baseUrl,
+          motivo: agotado
+            ? `no respondió en ${Math.round(this.timeoutMs / 1000)} s`
+            : e instanceof Error
+              ? e.message
+              : String(e),
+        },
+        "omr-service /qr falló; se trata como QR no leído",
+      );
       return null;
     } finally {
       clearTimeout(timer);

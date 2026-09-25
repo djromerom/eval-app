@@ -317,7 +317,10 @@ export class ProcessAnswerSheet {
       });
       return {
         ok: false,
-        error: { code: "PROCESSING_ERROR", message: "OMR detection failed" },
+        error: {
+          code: "PROCESSING_ERROR",
+          message: `OMR detection failed: ${(e as Error).message}`,
+        },
       };
     }
 

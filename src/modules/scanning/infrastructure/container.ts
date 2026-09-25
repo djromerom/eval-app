@@ -93,5 +93,5 @@ export const makeProcessAnswerSheet = () =>
     chainQrDecoders(sharpQrDecoder, new OmrServiceQrDecoder(env.OMR_SERVICE_URL)),
     questionsProvider,
     // Detección delegada al microservicio Python (omr-service) por HTTP.
-    new HttpOmrDetector(env.OMR_SERVICE_URL),
+    new HttpOmrDetector(env.OMR_SERVICE_URL, env.OMR_TIMEOUT_MS),
   );
