@@ -83,22 +83,33 @@ export interface UnclassifiedScanRepository {
   findBundle(institutionId: string, bundleId: string): Promise<CuadernilloParaClasificar | null>;
   /** Activo, sin borrar y en un grupo de alguno de esos cursos. */
   studentInCourses(institutionId: string, studentId: string, courseIds: string[]): Promise<boolean>;
-  /** Otra hoja YA calificada de este estudiante en este cuadernillo. */
-  findGradedSheetOf(
+  /**
+   * Otra hoja de este estudiante en este cuadernillo que impide darle una
+   * segunda: calificada, en cola o en proceso, o clasificada a mano (aunque
+   * todavía no tenga nota). Sin QR no hay id de papel con qué detectar el
+   * duplicado, y los reportes toman la hoja más reciente.
+   */
+  findBlockingSheetOf(
     bundleId: string,
     studentId: string,
   ): Promise<{ id: string; scanBatchId: string | null } | null>;
   /**
    * En una transacción: reclama la hoja sin clasificar (si otra persona ya la
-   * clasificó devuelve "ALREADY_RESOLVED"), elige o crea el lote destino con
-   * `elegirLoteDestino`, crea la AnswerSheet y la enlaza.
+   * clasificó devuelve "ALREADY_RESOLVED"), vuelve a mirar el duplicado con
+   * bloqueo (dos clasificaciones simultáneas del mismo estudiante no pasan
+   * las dos), elige o crea el lote destino con `elegirLoteDestino`, crea la
+   * AnswerSheet y la enlaza. Si hay duplicado no deja nada escrito.
    */
   resolverEnHoja(args: {
     hoja: HojaSinClasificar;
     bundleId: string;
     studentId: string;
     resolvedBy: string;
-  }): Promise<{ sheetId: string; batchId: string } | "ALREADY_RESOLVED">;
+  }): Promise<
+    | { sheetId: string; batchId: string }
+    | "ALREADY_RESOLVED"
+    | { duplicada: { id: string; scanBatchId: string | null } }
+  >;
   /** La cola no aceptó el job: la hoja queda en SCANNED para Reprocesar. */
   marcarNoEncolada(sheetId: string): Promise<void>;
 }

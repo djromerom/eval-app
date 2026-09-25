@@ -26,6 +26,8 @@ class InMemoryRepo implements UnclassifiedScanRepository {
   noEncoladas: string[] = [];
   /** Simula que otra persona la clasificó entre la validación y la escritura. */
   ganaOtro = false;
+  /** Simula que otra clasificación del mismo estudiante ganó la carrera. */
+  duplicadaEnTx: { id: string; scanBatchId: string | null } | null = null;
 
   async findById(institutionId: string, id: string) {
     const h = this.hojas.get(id);
@@ -39,10 +41,15 @@ class InMemoryRepo implements UnclassifiedScanRepository {
     const s = this.estudiantes.get(studentId);
     return !!s && s.institutionId === institutionId && courseIds.includes(s.courseId);
   }
-  async findGradedSheetOf(bundleId: string, studentId: string) {
-    return (
-      this.calificadas.find((c) => c.bundleId === bundleId && c.studentId === studentId) ?? null
+  /** Como el repo real: bloquean las calificadas y también las creadas por
+   *  una clasificación a mano, aunque todavía no tengan nota. */
+  async findBlockingSheetOf(bundleId: string, studentId: string) {
+    const calificada = this.calificadas.find(
+      (c) => c.bundleId === bundleId && c.studentId === studentId,
     );
+    if (calificada) return calificada;
+    const aMano = this.creadas.find((c) => c.bundleId === bundleId && c.studentId === studentId);
+    return aMano ? { id: aMano.sheetId, scanBatchId: aMano.batchId } : null;
   }
   async resolverEnHoja(args: {
     hoja: HojaSinClasificar;
@@ -51,6 +58,7 @@ class InMemoryRepo implements UnclassifiedScanRepository {
     resolvedBy: string;
   }) {
     if (this.ganaOtro) return "ALREADY_RESOLVED" as const;
+    if (this.duplicadaEnTx) return { duplicada: this.duplicadaEnTx };
     const creada = {
       sheetId: `sheet-${this.creadas.length + 1}`,
       batchId: "lote-destino",
@@ -205,6 +213,33 @@ describe("ClassifyUnclassifiedScan", () => {
       expect((r.error as EstudianteConHojaError).otraHoja).toEqual({ id: "otra", batchId: "l-9" });
     }
     expect(repo.creadas).toHaveLength(0);
+  });
+
+  it("una hoja clasificada a mano bloquea al mismo estudiante aunque aún no tenga nota", async () => {
+    repo.hojas.set("h-2", { ...repo.hojas.get("h-1")!, id: "h-2" });
+    expect((await clasificar()).ok).toBe(true);
+    const r = await clasificar({ unclassifiedScanId: "h-2" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe("DUPLICATE_STUDENT");
+      expect((r.error as EstudianteConHojaError).otraHoja).toEqual({
+        id: "sheet-1",
+        batchId: "lote-destino",
+      });
+    }
+    expect(repo.creadas).toHaveLength(1);
+    expect(queue.jobs).toHaveLength(1);
+  });
+
+  it("si otra clasificación del mismo estudiante gana la carrera, no se encola nada", async () => {
+    repo.duplicadaEnTx = { id: "rival", scanBatchId: "l-2" };
+    const r = await clasificar();
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe("DUPLICATE_STUDENT");
+      expect((r.error as EstudianteConHojaError).otraHoja).toEqual({ id: "rival", batchId: "l-2" });
+    }
+    expect(queue.jobs).toHaveLength(0);
   });
 
   it("si la cola no responde, la hoja queda creada para Reprocesar", async () => {

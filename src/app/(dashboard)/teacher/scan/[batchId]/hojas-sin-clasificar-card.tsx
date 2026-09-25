@@ -146,18 +146,26 @@ function FilaSinClasificar({
     setSaving(true);
     setError(null);
     setOtraHoja(null);
-    const result = await clasificarHojaAction({
-      batchId,
-      unclassifiedScanId: hoja.id,
-      bundleId,
-      studentId,
-    });
-    setSaving(false);
-    if (result.ok) {
+    try {
+      const result = await clasificarHojaAction({
+        batchId,
+        unclassifiedScanId: hoja.id,
+        bundleId,
+        studentId,
+      });
+      if (result.ok) {
+        router.refresh();
+      } else {
+        setError(result.error);
+        if (result.otraHoja) setOtraHoja(result.otraHoja);
+      }
+    } catch {
+      // Red caída o error del servidor: no se sabe si alcanzó a clasificarse.
+      // Repintar muestra el estado real (pendiente o ya calificada) en vez de
+      // dejar el botón trabado en "Calificando…".
       router.refresh();
-    } else {
-      setError(result.error);
-      if (result.otraHoja) setOtraHoja(result.otraHoja);
+    } finally {
+      setSaving(false);
     }
   }
 
