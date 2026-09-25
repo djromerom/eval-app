@@ -1,4 +1,4 @@
-const COLORS: Record<string, string> = {
+export const COLORS: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-700",
   SCANNED: "bg-blue-100 text-blue-700",
   PROCESSING: "bg-cyan-100 text-cyan-700",
@@ -9,7 +9,7 @@ const COLORS: Record<string, string> = {
   FAILED: "bg-red-100 text-red-700",
 };
 
-const LABELS: Record<string, string> = {
+export const LABELS: Record<string, string> = {
   PENDING: "Pendiente",
   SCANNED: "Escaneada",
   PROCESSING: "Procesando",
