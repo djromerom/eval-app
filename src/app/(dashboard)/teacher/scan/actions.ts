@@ -264,7 +264,7 @@ export async function getBatchesAction(): Promise<BatchWithSheets[]> {
       ],
     },
     orderBy: { createdAt: "desc" },
-    take: 20,
+    take: 200,
     include: {
       evaluation: { select: { title: true } },
       bundle: { select: { name: true } },
