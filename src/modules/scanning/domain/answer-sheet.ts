@@ -53,6 +53,10 @@ export interface AnswerSheet {
   score: number | null;
   totalCorrect: number | null;
   totalQuestions: number | null;
+  /** La hoja salió de una hoja sin clasificar: alguien eligió el cuadernillo y
+   *  el estudiante a mano. El worker entonces no lee el QR, que pudo haberse
+   *  leído mal o apuntar a otro cuadernillo, y no toca el estudiante. */
+  identificadaAMano?: boolean;
 }
 
 export interface ScanBatch {
@@ -114,10 +118,7 @@ export interface ScanningRepository {
 
   /** ¿Ya hay OTRA hoja procesada con este id de papel? `exceptoSheetId` es la
    *  que se está procesando: reprocesar la misma hoja no es un duplicado. */
-  findSheetIdByQrSheetUuid(
-    qrSheetUuid: string,
-    exceptoSheetId: string,
-  ): Promise<string | null>;
+  findSheetIdByQrSheetUuid(qrSheetUuid: string, exceptoSheetId: string): Promise<string | null>;
   updateSheetStatus(
     sheetId: string,
     status: AnswerSheetStatus,

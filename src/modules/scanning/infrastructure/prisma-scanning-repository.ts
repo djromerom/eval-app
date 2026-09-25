@@ -67,6 +67,7 @@ export class PrismaScanningRepository implements ScanningRepository {
         id: sheetId,
         OR: [{ evaluation: { institutionId } }, { bundle: { institutionId } }],
       },
+      include: { unclassifiedScan: { select: { id: true } } },
     });
     if (!row) return null;
     return {
@@ -84,6 +85,7 @@ export class PrismaScanningRepository implements ScanningRepository {
       score: row.score,
       totalCorrect: row.totalCorrect,
       totalQuestions: row.totalQuestions,
+      identificadaAMano: row.unclassifiedScan != null,
     };
   }
 

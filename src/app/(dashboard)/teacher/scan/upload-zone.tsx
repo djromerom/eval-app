@@ -101,7 +101,10 @@ export function UploadZone({ targets }: UploadZoneProps) {
       // se queda creyendo que subió 68 hojas cuando entraron 66.
       const lotes = result.lotes;
       const rechazadas = result.rechazadas ?? [];
-      if (lotes) {
+      if (result.aviso) {
+        // Ninguna hoja clasificó: quedaron todas en un lote sin cuadernillo.
+        setMessage({ ok: false, text: result.aviso });
+      } else if (lotes) {
         const detalle = lotes.map((l) => `${l.cuadernillo}: ${l.hojas}`).join(" · ");
         const sobrantes = rechazadas.length
           ? ` · ${rechazadas.length} sin clasificar (${rechazadas

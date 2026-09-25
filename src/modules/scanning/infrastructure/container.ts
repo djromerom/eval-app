@@ -8,9 +8,14 @@ import { sharpQrDecoder } from "./qr-decoder";
 import { OmrServiceQrDecoder, chainQrDecoders } from "./omr-service-qr-decoder";
 import { HttpOmrDetector } from "./http-omr-detector";
 import {
+  PrismaUnclassifiedScanRepository,
+  bullOmrJobQueue,
+} from "./prisma-unclassified-scan-repository";
+import {
   ProcessAnswerSheet,
   type EvaluationQuestionsProvider,
 } from "../application/process-answer-sheet";
+import { ClassifyUnclassifiedScan } from "../application/classify-unclassified-scan";
 
 const scanningRepo = new PrismaScanningRepository();
 const evaluationRepo = new PrismaEvaluationRepository();
@@ -95,3 +100,6 @@ export const makeProcessAnswerSheet = () =>
     // Detección delegada al microservicio Python (omr-service) por HTTP.
     new HttpOmrDetector(env.OMR_SERVICE_URL),
   );
+
+export const makeClassifyUnclassifiedScan = () =>
+  new ClassifyUnclassifiedScan(new PrismaUnclassifiedScanRepository(), bullOmrJobQueue);
