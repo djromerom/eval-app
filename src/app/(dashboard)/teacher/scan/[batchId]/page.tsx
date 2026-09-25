@@ -85,7 +85,13 @@ export default async function BatchReviewPage({ params }: Props) {
   });
   if (!batch) notFound();
 
-  const title = batch.evaluation?.title ?? batch.bundle?.name ?? "Lote de escaneo";
+  // Lote sin cuadernillo: carga automática donde ninguna hoja clasificó. No
+  // tiene hojas propias ni matriz, solo la card "Hojas sin clasificar".
+  const sinCuadernillo = !batch.bundleId && !batch.evaluationId;
+  const title =
+    batch.evaluation?.title ??
+    batch.bundle?.name ??
+    (sinCuadernillo ? "Hojas sin clasificar" : "Lote de escaneo");
 
   const rows: SheetRow[] = await Promise.all(
     batch.sheets.map(async (s, i) => {
@@ -129,6 +135,7 @@ export default async function BatchReviewPage({ params }: Props) {
         select: {
           id: true,
           scanBatchId: true,
+          status: true,
           bundle: { select: { name: true } },
           student: {
             select: { lastName1: true, lastName2: true, firstName1: true, firstName2: true },
@@ -147,6 +154,9 @@ export default async function BatchReviewPage({ params }: Props) {
           batchId: h.answerSheet?.scanBatchId ?? null,
           estudiante: h.answerSheet?.student ? nombreCompleto(h.answerSheet.student) : "",
           cuadernillo: h.answerSheet?.bundle?.name ?? "",
+          // SCANNED solo le queda a una hoja cuyo job no entró a la cola
+          // (Redis caído): hay que Reprocesarla desde su detalle.
+          sinEncolar: h.answerSheet?.status === "SCANNED",
         }
       : null,
   }));
@@ -175,8 +185,14 @@ export default async function BatchReviewPage({ params }: Props) {
           Revisión de hojas de respuestas
         </h1>
         <p className="text-muted-foreground mt-1.5 text-sm">
-          {title} · Navega la matriz con las flechas del teclado; el visor muestra lo que el motor
-          identificó en cada celda. Teclas A–H corrigen; Supr restaura.
+          {sinCuadernillo ? (
+            title
+          ) : (
+            <>
+              {title} · Navega la matriz con las flechas del teclado; el visor muestra lo que el
+              motor identificó en cada celda. Teclas A–H corrigen; Supr restaura.
+            </>
+          )}
         </p>
       </header>
 
@@ -191,9 +207,7 @@ export default async function BatchReviewPage({ params }: Props) {
       )}
 
       {/* El lote sin cuadernillo nunca tiene hojas: solo la card de arriba. */}
-      {(batch.bundleId || batch.evaluationId) && (
-        <BatchReviewMatrix batchId={batchId} rows={rows} />
-      )}
+      {!sinCuadernillo && <BatchReviewMatrix batchId={batchId} rows={rows} />}
     </>
   );
 }

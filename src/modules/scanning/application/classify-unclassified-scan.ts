@@ -30,9 +30,11 @@ export interface ClassifyUnclassifiedScanOutput {
  *      clasificado todavía.
  *   3. El cuadernillo es de la institución, está LISTO y tiene formulaciones.
  *   4. El estudiante está activo y en un curso del cuadernillo.
- *   5. No tiene ya otra hoja calificada de ese cuadernillo: sin QR no hay id
- *      de papel, y como los reportes toman la hoja más reciente, una segunda
- *      nota taparía la buena (misma regla que asignar estudiante en la hoja).
+ *   5. No tiene ya otra hoja de ese cuadernillo calificada, en cola o
+ *      clasificada a mano: sin QR no hay id de papel, y como los reportes
+ *      toman la hoja más reciente, una segunda nota taparía la buena. Se
+ *      vuelve a mirar dentro de la transacción, con bloqueo, para que dos
+ *      clasificaciones simultáneas del mismo estudiante no pasen las dos.
  *
  * La hoja creada lleva el estudiante desde el principio y el worker no lee su
  * QR (`AnswerSheet.identificadaAMano`), así que se califica con lo elegido.
@@ -87,15 +89,8 @@ export class ClassifyUnclassifiedScan implements UseCase<
       );
     }
 
-    const otra = await this.repo.findGradedSheetOf(bundle.id, input.studentId);
-    if (otra) {
-      return fail(
-        new EstudianteConHojaError(
-          "Este estudiante ya tiene una hoja calificada de este cuadernillo.",
-          otra.scanBatchId ? { id: otra.id, batchId: otra.scanBatchId } : null,
-        ),
-      );
-    }
+    const otra = await this.repo.findBlockingSheetOf(bundle.id, input.studentId);
+    if (otra) return fail(estudianteConHoja(otra));
 
     const creada = await this.repo.resolverEnHoja({
       hoja,
@@ -106,6 +101,9 @@ export class ClassifyUnclassifiedScan implements UseCase<
     if (creada === "ALREADY_RESOLVED") {
       return fail(new DomainError("ALREADY_RESOLVED", "Esta hoja ya se clasificó."));
     }
+    // Otra clasificación del mismo estudiante ganó la carrera entre el chequeo
+    // de arriba y la transacción.
+    if ("duplicada" in creada) return fail(estudianteConHoja(creada.duplicada));
 
     try {
       await this.queue.enqueue({
@@ -122,4 +120,11 @@ export class ClassifyUnclassifiedScan implements UseCase<
 
     return ok(creada);
   }
+}
+
+function estudianteConHoja(otra: { id: string; scanBatchId: string | null }) {
+  return new EstudianteConHojaError(
+    "Este estudiante ya tiene una hoja calificada de este cuadernillo.",
+    otra.scanBatchId ? { id: otra.id, batchId: otra.scanBatchId } : null,
+  );
 }

@@ -16,6 +16,8 @@ export interface HojaSinClasificarRow {
     batchId: string | null;
     estudiante: string;
     cuadernillo: string;
+    /** El job no entró a la cola (Redis caído): hay que Reprocesarla. */
+    sinEncolar: boolean;
   } | null;
 }
 
@@ -82,9 +84,15 @@ export function HojasSinClasificarCard({
           {resueltas.map((h) => (
             <li key={h.id} className="flex flex-wrap items-center gap-x-2">
               <span className="text-foreground font-medium">{h.nombre}</span>
-              <span>
-                Calificada: {h.resuelta!.estudiante} · {h.resuelta!.cuadernillo}
-              </span>
+              {h.resuelta!.sinEncolar ? (
+                <span className="text-red-700">
+                  La hoja se creó pero no se pudo encolar. Ábrela y usa Reprocesar.
+                </span>
+              ) : (
+                <span>
+                  Calificada: {h.resuelta!.estudiante} · {h.resuelta!.cuadernillo}
+                </span>
+              )}
               {h.resuelta!.sheetId && h.resuelta!.batchId && (
                 <Link
                   href={`/teacher/scan/${h.resuelta!.batchId}/${h.resuelta!.sheetId}`}
@@ -146,18 +154,26 @@ function FilaSinClasificar({
     setSaving(true);
     setError(null);
     setOtraHoja(null);
-    const result = await clasificarHojaAction({
-      batchId,
-      unclassifiedScanId: hoja.id,
-      bundleId,
-      studentId,
-    });
-    setSaving(false);
-    if (result.ok) {
+    try {
+      const result = await clasificarHojaAction({
+        batchId,
+        unclassifiedScanId: hoja.id,
+        bundleId,
+        studentId,
+      });
+      if (result.ok) {
+        router.refresh();
+      } else {
+        setError(result.error);
+        if (result.otraHoja) setOtraHoja(result.otraHoja);
+      }
+    } catch {
+      // Red caída o error del servidor: no se sabe si alcanzó a clasificarse.
+      // Repintar muestra el estado real (pendiente o ya calificada) en vez de
+      // dejar el botón trabado en "Calificando…".
       router.refresh();
-    } else {
-      setError(result.error);
-      if (result.otraHoja) setOtraHoja(result.otraHoja);
+    } finally {
+      setSaving(false);
     }
   }
 
