@@ -16,6 +16,8 @@ export interface HojaSinClasificarRow {
     batchId: string | null;
     estudiante: string;
     cuadernillo: string;
+    /** El job no entró a la cola (Redis caído): hay que Reprocesarla. */
+    sinEncolar: boolean;
   } | null;
 }
 
@@ -82,9 +84,15 @@ export function HojasSinClasificarCard({
           {resueltas.map((h) => (
             <li key={h.id} className="flex flex-wrap items-center gap-x-2">
               <span className="text-foreground font-medium">{h.nombre}</span>
-              <span>
-                Calificada: {h.resuelta!.estudiante} · {h.resuelta!.cuadernillo}
-              </span>
+              {h.resuelta!.sinEncolar ? (
+                <span className="text-red-700">
+                  La hoja se creó pero no se pudo encolar. Ábrela y usa Reprocesar.
+                </span>
+              ) : (
+                <span>
+                  Calificada: {h.resuelta!.estudiante} · {h.resuelta!.cuadernillo}
+                </span>
+              )}
               {h.resuelta!.sheetId && h.resuelta!.batchId && (
                 <Link
                   href={`/teacher/scan/${h.resuelta!.batchId}/${h.resuelta!.sheetId}`}
