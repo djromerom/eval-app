@@ -76,7 +76,12 @@ interface Guardado {
 
 function hacerRepo(qrContent: string, qrSignature: string, imagePath: string) {
   const guardado: Guardado = {};
-  const repo: ScanningRepository = {
+  // `as ScanningRepository` (en lugar de `: ScanningRepository`) es
+  // deliberado: este test también corre contra `c0a3786` (base vieja donde
+  // el interface no tiene los métodos de Eliminar). El cast evita el
+  // "excess property check" local — los stubs son *extras* aquí pero
+  // *requeridos* en el merge sintético de CI contra `af098e5`.
+  const repo = {
     async getScanBatch() {
       return null;
     },
@@ -121,7 +126,7 @@ function hacerRepo(qrContent: string, qrSignature: string, imagePath: string) {
       return { institutionId: null };
     },
     async recordDeletionAudit(_input: unknown) {},
-  };
+  } as ScanningRepository;
   return { repo, guardado };
 }
 
