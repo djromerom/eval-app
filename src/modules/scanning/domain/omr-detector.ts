@@ -31,6 +31,10 @@ export interface DetectedQuestion {
   fills: DetectedBubble[];
   /** Recorte JPEG en base64 con las burbujas dibujadas (para el visor). */
   crop: string;
+  /** Aviso del motor sobre ESTA pregunta: "falta la opción A", "posible
+   *  borrado o corrección…", "fila no detectada: quedó en blanco…". Cadena
+   *  vacía (o ausente) cuando no hay nada que reportar. */
+  aviso?: string;
 }
 
 export interface DetectedSheet {
@@ -50,7 +54,10 @@ export interface DetectedSheet {
    *  huecos entre filas, bloques con distinta cantidad de filas. Es la red
    *  contra la falla silenciosa: cuando se pierde una fila y aparece otra
    *  espuria, el conteo cuadra con la clave y la lectura sale completa y
-   *  verosímil pero con la numeración corrida. Vacío = sin sospechas. */
+   *  verosímil pero con la numeración corrida. Vacío = sin sospechas.
+   *  Los avisos sobre una pregunta concreta empiezan por "pregunta N: " (p.
+   *  ej. una fila que no se detectó y el motor insertó en blanco para no
+   *  correr la numeración); los de bloque, por "bloque en x~…". */
   estructura?: string[];
 }
 

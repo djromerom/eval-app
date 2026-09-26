@@ -24,7 +24,7 @@ import json
 import re
 import sys
 
-VERSION = "22"         # subir al cambiar el motor: invalida cachés aguas arriba
+VERSION = "24"         # subir al cambiar el motor: invalida cachés aguas arriba
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -56,6 +56,9 @@ class Question:
     number: int = 0
     bubbles: list = field(default_factory=list)
     warning: str = ""
+    # Fila que la rejilla dice que existe pero no se detectó: se inserta en
+    # blanco para que la numeración no se corra, y se corrige a mano.
+    sin_leer: bool = False
 
     @property
     def marked_letters(self):
@@ -819,6 +822,15 @@ def check_structure(questions: list, expected: int = 0) -> list:
     if not questions:
         return ["no se detectó ninguna pregunta"]
 
+    # Filas insertadas en blanco por `rellenar_filas_perdidas`: el hueco ya no
+    # se ve en la geometría, así que se avisa con el número de pregunta, que es
+    # lo que necesita quien corrige la hoja.
+    for q in questions:
+        if q.sin_leer:
+            avisos.append("pregunta %d: fila no detectada; quedó en blanco "
+                          "para no correr la numeración — corregir a mano"
+                          % q.number)
+
     if expected and len(questions) != expected:
         avisos.append("se esperaban %d preguntas y se leyeron %d: la numeración "
                       "no es de fiar" % (expected, len(questions)))
@@ -853,7 +865,146 @@ def check_structure(questions: list, expected: int = 0) -> list:
     return avisos
 
 
-def build_questions(bubbles: list, letters: str) -> list:
+TOL_COLUMNA = 0.25      # |x - columna| / paso, para cada burbuja detectada
+MAX_VECINA = 1.5        # fila vecina del bloque a <= MAX_VECINA pasos verticales
+
+
+def _completar_extremos(qs, x0, gap_opt, r_med, letters, gray):
+    """
+    Recuperación por rejilla de las opciones EXTREMAS de una fila.
+
+    La recuperación de `build_questions` solo interpola ENTRE dos fragmentos
+    detectados; si la que falla es la A (o la última), no hay fragmento a su
+    izquierda y la fila queda sin ella. Pasa con marcas agresivas que desbordan
+    el óvalo: Hough y el contorno estiman centro y radio corridos, la firma
+    anular se mide sobre una circunferencia que no es la impresa y el
+    candidato muere. Aquí se sintetiza la opción en la columna del bloque y
+    su relleno se mide después como el de cualquier otra.
+
+    En una hoja real el ítem 45 tenía la A rellena con un trazo que desbordaba
+    el óvalo: la fila llegó con B, C y D y salió BLANCO. Peor aún, el único
+    rastro era el aviso "falta la opción A", que eval-app no lee: si la hoja
+    hubiera cuadrado en conteo se habría calificado mal sin revisión. La A
+    sintetizada mide 0.993 y sale A.
+
+    La síntesis solo se admite si el óvalo IMPRESO está en esa posición (la
+    misma firma anular que usa `detect_bubbles`, medida en la rejilla). Sin esa
+    comprobación, ítems impresos con solo A-C dentro de un bloque de 4 opciones
+    recibían una D fantasma con relleno 0.000 (hoja _0001, ítems 14 y 15).
+    """
+    if len(qs) < 3:
+        return
+    tallas = [len(q) for q in qs]
+    moda = max(set(tallas), key=tallas.count)
+    # x de cada columna medida en el propio bloque (mediana de detectadas)
+    colx = {}
+    for q in qs:
+        for b in q:
+            if b.letter in letters and not b.sintetica:
+                colx.setdefault(letters.index(b.letter), []).append(b.x)
+    colx = {k: float(np.median(v)) for k, v in colx.items()}
+    ys = [float(np.mean([b.y for b in q])) for q in qs]
+    difs = np.diff(sorted(ys))
+    pitch = float(np.median(difs)) if len(difs) else 0.0
+    if gray is None:
+        return
+    blur = cv2.GaussianBlur(gray, (5, 5), 1.2)
+    _, otsu = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    h, w = otsu.shape
+    for qi, q in enumerate(qs):
+        if len(q) >= moda or pitch <= 0:
+            continue
+        ks = [letters.index(b.letter) if b.letter in letters else -1 for b in q]
+        if -1 in ks or len(set(ks)) != len(ks):
+            continue
+        # cada burbuja detectada cae sobre una columna del bloque
+        if any(abs(b.x - colx.get(k, x0 + k * gap_opt)) > TOL_COLUMNA * gap_opt
+               for b, k in zip(q, ks)):
+            continue
+        # embebida en la rejilla: tiene una fila vecina a ~1 paso vertical
+        near = min((abs(ys[qi] - y) for j, y in enumerate(ys) if j != qi), default=1e9)
+        if near > MAX_VECINA * pitch:
+            continue
+        # Los extremos que faltan, a los dos lados: la A y, si la fila es más
+        # corta que las completas del bloque, la última.
+        faltan = list(range(0, min(ks))) + list(range(max(ks) + 1, moda))
+        for k in faltan:
+            x = colx.get(k, x0 + k * gap_opt)
+            if not _ring_signature_ok(otsu, x, ys[qi], r_med, h, w):
+                continue
+            nb = Bubble(x, ys[qi], r_med, sintetica=True)
+            nb.letter = letters[k]
+            q.append(nb)
+        q.sort(key=lambda b: b.x)
+
+
+def rellenar_filas_perdidas(questions: list, gray: np.ndarray) -> list:
+    """
+    Inserta en blanco las filas que faltan DENTRO de un bloque.
+
+    Un bloque es una rejilla impresa de paso fijo: un salto de k pasos entre
+    dos filas contiguas son k-1 filas que no se detectaron, y la rejilla dice
+    dónde van. Sin esto, perder una sola fila corre la numeración de todo lo
+    que viene después, bloques siguientes incluidos. En una hoja real se
+    perdió la fila 7 del bloque 1 —un círculo espurio de Hough, más grande que
+    una burbuja, se tragó dos óvalos reales al deduplicar— y las 104 preguntas
+    siguientes salieron corridas una posición; la matriz del lote mostraba la
+    respuesta de la 8 en la columna 7, la de la 9 en la 8, y así hasta la 110.
+
+    La fila insertada NO se lee: queda en BLANCO, marcada `sin_leer`, y
+    `check_structure` la reporta con su número para que se corrija a mano.
+    Adivinar su respuesta sería justo el error que se quiere evitar. Sus
+    burbujas (sintéticas, en las columnas de la fila anterior) se miden solo
+    para que el recorte de revisión muestre lo que hay en el papel.
+
+    Se llama después de decidir las marcas, así que no cambia el umbral ni
+    ninguna otra respuesta. El criterio del hueco es el mismo de
+    `check_structure`. No cubre la primera ni la última fila de un bloque:
+    ahí no hay vecinas que delaten el hueco, y solo lo ve el conteo.
+    """
+    if len(questions) < 3:
+        return questions
+    r_med = float(np.median([b.r for q in questions for b in q.bubbles]))
+    xs = np.array([q.bubbles[0].x for q in questions])
+    bloque = {}
+    for gi, g in enumerate(cluster_1d(xs, tol=r_med * 6)):
+        for i in g:
+            bloque[i] = gi
+
+    def _y(q):
+        return float(np.mean([b.y for b in q.bubbles]))
+
+    # paso de cada bloque, medido en el bloque mismo (como check_structure)
+    pasos = {}
+    for gi in set(bloque.values()):
+        ys = sorted(_y(questions[i]) for i in bloque if bloque[i] == gi)
+        if len(ys) >= 3:
+            pasos[gi] = float(np.median(np.diff(ys)))
+
+    out = []
+    for i, q in enumerate(questions):
+        out.append(q)
+        if i + 1 >= len(questions) or bloque[i] != bloque[i + 1]:
+            continue
+        paso = pasos.get(bloque[i], 0.0)
+        if paso <= 0:
+            continue
+        d = _y(questions[i + 1]) - _y(q)
+        k = int(round(d / paso))
+        for j in range(1, k):
+            y = _y(q) + d * j / k
+            nuevas = [Bubble(b.x, y, r_med, letter=b.letter, sintetica=True)
+                      for b in q.bubbles]
+            measure_fill(gray, nuevas)
+            out.append(Question(bubbles=nuevas, sin_leer=True,
+                                warning="fila no detectada: quedó en blanco "
+                                        "para corregir a mano"))
+    for n, q in enumerate(out, 1):
+        q.number = n
+    return out
+
+
+def build_questions(bubbles: list, letters: str, gray: np.ndarray = None) -> list:
     if not bubbles:
         return []
     r_med = float(np.median([b.r for b in bubbles]))
@@ -1089,16 +1240,18 @@ def build_questions(bubbles: list, letters: str) -> list:
         # Origen de la rejilla de opciones del bloque: la columna 'A' es la
         # posición inicial más frecuente entre las preguntas del bloque.
         x0 = float(np.median([q[0].x for q in qs]))
+        # La letra se deduce de la COLUMNA de la rejilla, no del índice en
+        # la lista: si falla la detección de una opción extrema (la A), las
+        # demás conservan su letra correcta en vez de correrse una posición.
         for q in qs:
-            n += 1
-            qq = Question(number=n, bubbles=q)
-            # La letra se deduce de la COLUMNA de la rejilla, no del índice en
-            # la lista: si falla la detección de una opción extrema (la A), las
-            # demás conservan su letra correcta en vez de correrse una posición.
             for b in q:
                 k = int(round((b.x - x0) / gap_opt))
                 k = max(0, k)
                 b.letter = letters[k] if k < len(letters) else "?"
+        _completar_extremos(qs, x0, gap_opt, r_med, letters, gray)
+        for q in qs:
+            n += 1
+            qq = Question(number=n, bubbles=q)
             # Opciones ausentes dentro del rango leído -> se reportan
             got = [b.letter for b in q]
             if len(set(got)) != len(got):
@@ -1113,16 +1266,21 @@ def build_questions(bubbles: list, letters: str) -> list:
 # 4. Corrección de inclinación ligera (opcional, sin anclajes)
 # --------------------------------------------------------------------------
 
-def deskew(gray: np.ndarray) -> np.ndarray:
+def deskew(gray: np.ndarray, with_matrix: bool = False):
     """
     Endereza rotaciones usando las propias burbujas como referencia (sin
     anclajes): detecta las burbujas, calcula el ángulo dominante entre pares
     de vecinos horizontales (opciones contiguas de una misma pregunta) y
     rota la imagen para nivelar la rejilla.
+
+    Con `with_matrix=True` devuelve (imagen, M), con M la matriz afín 2x3
+    aplicada (None si no se giró), para llevar coordenadas medidas antes del
+    enderezado —la caja del QR— al sistema de la imagen enderezada.
     """
+    ret = (lambda g, m=None: (g, m)) if with_matrix else (lambda g, m=None: g)
     bubbles = detect_bubbles(gray)
     if len(bubbles) < 10:
-        return gray
+        return ret(gray)
     pts = np.array([(b.x, b.y) for b in bubbles])
     angles = []
     for i, (x, y) in enumerate(pts):
@@ -1137,14 +1295,88 @@ def deskew(gray: np.ndarray) -> np.ndarray:
         if dist[j] < 1e9:
             angles.append(np.degrees(np.arctan2(dy[j], dx[j])))
     if len(angles) < 10:
-        return gray
+        return ret(gray)
     angle = float(np.median(angles))
     if abs(angle) < 0.15 or abs(angle) > 15:
-        return gray
+        return ret(gray)
     h, w = gray.shape
     M = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
-    return cv2.warpAffine(gray, M, (w, h), flags=cv2.INTER_LINEAR,
-                          borderMode=cv2.BORDER_REPLICATE)
+    return ret(cv2.warpAffine(gray, M, (w, h), flags=cv2.INTER_LINEAR,
+                              borderMode=cv2.BORDER_REPLICATE), M)
+
+
+# Encabezado impreso (institución y "Estándar Sesión N Grado M — Cuadernillo K"):
+# está siempre por encima del QR y de la rejilla, y sus letras redondas (C, d, o)
+# pasan por burbujas. Se borra antes de detectar, cortando a HEADER_CUT_FRAC del
+# ancho de página por encima del borde superior REAL del QR. Medido en 11 hojas
+# a 1704 px de ancho: la tinta de la primera fila de burbujas empieza entre 0 y
+# 7 px por encima del QR y el texto termina entre 50 y 61 px por encima;
+# 0.017 * 1704 = 29 px queda al centro de esa banda (21-22 px libres a cada lado).
+HEADER_CUT_FRAC = 0.017
+
+
+def _box_after(box, M):
+    """Caja (x, y, w, h) llevada por la matriz afín M (None = sin cambio)."""
+    if box is None or M is None:
+        return box
+    x, y, w, h = box
+    q = np.array([[x, y, 1], [x + w, y, 1], [x, y + h, 1], [x + w, y + h, 1]],
+                 float) @ np.asarray(M).T
+    (x0, y0), (x1, y1) = q.min(0), q.max(0)
+    return (float(x0), float(y0), float(x1 - x0), float(y1 - y0))
+
+
+def qr_top_edge(gray: np.ndarray, qr_box):
+    """
+    Fila del borde superior real del QR, o None.
+
+    La caja del decodificador no sirve de ancla directa: cuando sale de la
+    máscara de densidad empieza hasta 25 px por DEBAJO del borde impreso, y su
+    alto varía de 155 a 233 px en el mismo QR. Desde un punto seguro dentro de
+    la caja se sube mientras las filas, en las columnas de la caja, tengan
+    tinta; la zona de silencio del QR (4 módulos en blanco) detiene la subida.
+    """
+    x, y, w, h = qr_box
+    H, W = gray.shape
+    x0, x1 = max(0, int(x)), min(W, int(x + w))
+    if x1 - x0 < 10 or h < 10:
+        return None
+    blur = cv2.GaussianBlur(gray, (5, 5), 1.2)
+    _, otsu = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    frac = (otsu[:, x0:x1] > 0).mean(1)
+    top, gap = None, 0
+    for yy in range(min(H - 1, int(y + 0.25 * h)), -1, -1):
+        if frac[yy] >= 0.10:
+            top, gap = yy, 0
+        else:
+            gap += 1
+            if gap > 3:
+                break
+    # La caja queda dentro del QR o sobre su borde: si la subida se cortó más
+    # abajo (QR desvaído con una franja sin tinta) se ancla en la caja, para
+    # que el corte no pueda bajar hacia la primera fila.
+    return None if top is None else min(top, int(y))
+
+
+def header_cut(gray: np.ndarray, qr_box):
+    """
+    Fila por encima de la cual todo es encabezado (0 = no borrar nada).
+
+    Solo con una caja de QR plausible: cuadrada y en el cuadrante superior
+    izquierdo (donde queda tras orientar la hoja). Sin QR no se borra nada y
+    rigen los filtros de detect_bubbles/build_questions de siempre.
+    """
+    if qr_box is None:
+        return 0
+    x, y, w, h = qr_box
+    H, W = gray.shape
+    if not (0.7 <= w / max(h, 1e-6) <= 1.4) or x + w / 2 > W / 2 or y + h / 2 > H / 2:
+        return 0
+    top = qr_top_edge(gray, qr_box)
+    if top is None:
+        return 0
+    cut = int(round(top - HEADER_CUT_FRAC * W))
+    return cut if 0 < cut < H * 0.25 else 0
 
 
 # --------------------------------------------------------------------------
@@ -1187,18 +1419,34 @@ def analyze_sheet(path: str, letters: str = "ABCDEFGH"):
             gray = cv2.rotate(gray, turn)
             qr, box, _ = read_qr(gray)
 
-    gray = deskew(gray)
+    gray, M_desk = deskew(gray, with_matrix=True)
     qr_box = box
 
-    bubbles = detect_bubbles(gray)
+    # El encabezado se borra solo en la copia que ve el detector: la imagen
+    # devuelta (la que muestra la revisión) y la medición de relleno siguen
+    # usando la hoja completa.
+    # Solo si el QR DECODIFICÓ. Sin decodificar, read_qr devuelve igual la
+    # primera zona densa, y con un QR dañado esa caja cae hasta 65 px por
+    # debajo del borde impreso: con la parte de arriba del QR borrada 40 px
+    # (prueba simulada), el corte se comía la fila 1 y corría 30 respuestas en
+    # 20101_S1, 88 en 20260918175101067_0029 y 78 en _0002, hojas que v22 lee
+    # bien. Un QR roto debe costar la identificación, no las respuestas: sin
+    # decodificar se vuelve al comportamiento de v22 (filtros v21/v22).
+    cut = header_cut(gray, _box_after(box, M_desk)) if qr is not None else 0
+    det = gray
+    if cut:
+        det = gray.copy()
+        det[:cut, :] = 255
+    bubbles = detect_bubbles(det)
     if not bubbles:
         raise RuntimeError("No se detectaron burbujas en la imagen.")
 
-    questions = build_questions(bubbles, letters)
+    questions = build_questions(bubbles, letters, gray)
     all_bubbles = [b for q in questions for b in q.bubbles]
     measure_fill(gray, all_bubbles)
     thr, thr_warn = adaptive_mark_threshold(questions)
     apply_marks(questions, thr)
+    questions = rellenar_filas_perdidas(questions, gray)
     return gray, questions, thr, qr, thr_warn, rotation, qr_box
 
 
