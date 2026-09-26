@@ -157,10 +157,26 @@ function inMemoryRepo(): RepoState {
       // repositorio (ver process-answer-sheet-duplicados.test.ts).
       return null;
     },
+    async mergeDuplicateSheet(args) {
+      // No-op para estos tests: ningún flujo aquí dispara un re-upload. Si lo
+      // hiciera, el id "sobreviviente" sería el mismo currentSheetId para no
+      // alterar otras aserciones downstream.
+      return { finalSheetId: args.currentSheetId };
+    },
     async saveAnswers(sheetId, ans) {
       answers.set(sheetId, ans);
     },
     async updateBatchProgress() {},
+    async deleteSheet(sheetId: string) {
+      return { batchId: null };
+    },
+    async findBatchAccess(_batchId: string) {
+      return null;
+    },
+    async deleteBatch(_batchId: string) {
+      return { institutionId: null };
+    },
+    async recordDeletionAudit(_input) {},
   };
 
   return {

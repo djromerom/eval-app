@@ -1,5 +1,6 @@
 import { ScanStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/shared/infrastructure/db/prisma";
+import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import type {
   AnswerSheet,
   AnswerSheetStatus,
@@ -249,6 +250,201 @@ export class PrismaScanningRepository implements ScanningRepository {
       data: {
         processedSheets: processed,
         ...(status ? { status: statusToPrisma[status] } : {}),
+      },
+    });
+  }
+
+  /** Ver documentación completa en el interface `ScanningRepository`. La fila
+   *  nueva no debería tener StudentAnswer porque todavía no se procesó — pero
+   *  el delete cascade igual los recogería. El tx es por atomicidad, no por
+   *  volumen. El orden importa: primero update con la metadata de la nueva
+   *  (escaneadaImage/filename/scanBatchId), después delete de la nueva. Si el
+   *  delete falla, queda la fila vieja con la info de la nueva — que es
+   *  exactamente lo que queremos. */
+  async mergeDuplicateSheet(args: {
+    currentSheetId: string;
+    existingSheetId: string;
+  }): Promise<{ finalSheetId: string }> {
+    const { currentSheetId, existingSheetId } = args;
+    return prisma.$transaction(async (tx) => {
+      // Cargamos la nueva para sacar los campos que vamos a copiar a la vieja.
+      // No confiamos en input: la BD es la fuente de verdad.
+      const current = await tx.answerSheet.findUnique({
+        where: { id: currentSheetId },
+        select: { scannedImage: true, originalFilename: true, scanBatchId: true },
+      });
+      if (!current) {
+        // Caso raro: el worker arrancó pero la fila nueva ya no existe
+        // (alguien la borró en carrera). Devolvemos la existente tal cual
+        // — el pipeline del use case sabe seguir con `finalSheetId`.
+        return { finalSheetId: existingSheetId };
+      }
+      await tx.answerSheet.update({
+        where: { id: existingSheetId },
+        data: {
+          // qrSheetUuid NO se copia: ya estaba en la fila vieja y es invariante
+          // (el id del papel físico, no del escaneo). Lo conservamos.
+          scannedImage: current.scannedImage,
+          originalFilename: current.originalFilename,
+          scanBatchId: current.scanBatchId,
+        },
+      });
+      // Las hojas en PROCESSING no deberían entrar acá (filtro del use case),
+      // pero si pasara, igual queremos borrar: el ciclo de vida de la hoja
+      // actual (con su nueva imagen) reemplaza al anterior.
+      await tx.answerSheet.delete({ where: { id: currentSheetId } });
+      return { finalSheetId: existingSheetId };
+    });
+  }
+
+  /** Ver documentación completa en el interface `ScanningRepository`.
+   *  Borramos archivos físicos ANTES del tx (best-effort): si el archivo
+   *  ya no está en disco, `localStorage.delete` lo loggea y sigue — no
+   *  queremos que un archivo huérfano impida una eliminación legítima.
+   *  El tx hace:
+   *    - DELETE AnswerSheet (cascade borra StudentAnswer por `onDelete`).
+   *    - Decrementa `ScanBatch.totalSheets`.
+   *  `processedSheets` queda intacto: su valor actual no refleja la
+   *  realidad (`updateBatchProgress` lo escribe a 0 en cada fallo del
+   *  worker — bug preexistente); decrementarlo acá mezclaría dos temas.
+   *  Total lo ve el docente como "X/200" en el encabezado del lote.
+   *  Devuelve `{batchId: null}` si la hoja no existe (caller mapea a
+   *  NOT_FOUND). Si existe pero el status no es REVIEW, lanza — defensa
+   *  final: el use case ya filtra, pero si algo lo burla, esta capa no
+   *  borra una hoja calificada. */
+  async deleteSheet(sheetId: string): Promise<{ batchId: string | null }> {
+    console.log("[Prisma.deleteSheet] start", sheetId);
+    const row = await prisma.answerSheet.findUnique({
+      where: { id: sheetId },
+      select: {
+        id: true,
+        status: true,
+        scannedImage: true,
+        processedImage: true,
+        scanBatchId: true,
+      },
+    });
+    if (!row) {
+      console.log("[Prisma.deleteSheet] sheet no encontrada");
+      return { batchId: null };
+    }
+    console.log("[Prisma.deleteSheet] row", { status: row.status, scanBatchId: row.scanBatchId });
+
+    if (row.status !== ScanStatus.REVIEW) {
+      throw new Error(`deleteSheet rechazó la hoja ${sheetId}: status=${row.status} (no-REVIEW).`);
+    }
+
+    // Best-effort: ENOENT ya está manejado dentro de localStorage.delete.
+    if (row.scannedImage) await localStorage.delete(row.scannedImage);
+    if (row.processedImage) await localStorage.delete(row.processedImage);
+
+    const batchId = row.scanBatchId;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.answerSheet.delete({ where: { id: sheetId } });
+      if (batchId) {
+        await tx.scanBatch.update({
+          where: { id: batchId },
+          data: { totalSheets: { decrement: 1 } },
+        });
+      }
+    });
+    console.log("[Prisma.deleteSheet] borrada OK");
+
+    return { batchId };
+  }
+
+  /** Ver documentación completa en el interface. No autoriza: trae los
+   *  campos necesarios para que el use case haga el OR de validación
+   *  (mismo filtro que getBatchesAction:254). Si el batch no existe,
+   *  devuelve `null` — el caller mapea a NOT_FOUND. */
+  async findBatchAccess(batchId: string) {
+    return prisma.scanBatch.findUnique({
+      where: { id: batchId },
+      select: {
+        institutionId: true,
+        uploadedBy: true,
+        evaluation: { select: { teacherId: true } },
+        bundle: { select: { institutionId: true } },
+      },
+    });
+  }
+
+  /** Ver documentación completa en el interface `ScanningRepository`.
+   *
+   *  Logs TEMP DEBUG: el MEMORY rule "Mantener console.log TEMP DEBUG en
+   *  eval-app" indica dejarlos como instrumentación pasiva. Útiles para
+   *  auditar un "¿quién borró este lote?" en logs de prod. */
+  async deleteBatch(batchId: string): Promise<{ institutionId: string | null }> {
+    console.log("[Prisma.deleteBatch] start", batchId);
+    const batch = await prisma.scanBatch.findUnique({
+      where: { id: batchId },
+      select: {
+        institutionId: true,
+        sheets: { select: { scannedImage: true, processedImage: true } },
+        unclassifiedScans: { select: { filePath: true } },
+      },
+    });
+    if (!batch) {
+      console.log("[Prisma.deleteBatch] batch no encontrado");
+      return { institutionId: null };
+    }
+
+    // 1) Unlink best-effort antes del tx — coherente con deleteSheet:302-305.
+    //    Si un archivo ya no existe en disco, `localStorage.delete` loggea y
+    //    sigue; NO queremos que un huérfano impida el borrado legítimo.
+    for (const s of batch.sheets) {
+      if (s.scannedImage) await localStorage.delete(s.scannedImage);
+      if (s.processedImage) await localStorage.delete(s.processedImage);
+    }
+    for (const u of batch.unclassifiedScans) {
+      if (u.filePath) await localStorage.delete(u.filePath);
+    }
+
+    // 2) Tx con el orden deleteMany → delete. RESTRICT en
+    //    AnswerSheet.scanBatch (schema:884-885) lo exige: invertirlo tira
+    //    P2003. StudentAnswer (cascade) y UnclassifiedScan (cascade desde
+    //    ScanBatch) se van solos.
+    await prisma.$transaction(async (tx) => {
+      await tx.answerSheet.deleteMany({ where: { scanBatchId: batchId } });
+      await tx.scanBatch.delete({ where: { id: batchId } });
+    });
+
+    console.log("[Prisma.deleteBatch] borrado OK", {
+      sheets: batch.sheets.length,
+      unclassifiedScans: batch.unclassifiedScans.length,
+    });
+    return { institutionId: batch.institutionId };
+  }
+
+  /** Ver documentación completa en el interface. El modelo `AuditLog`
+   *  (`schema.prisma:979`) es compartido con otras acciones del sistema
+   *  (`EVALUATION_CREATED`, etc.); reutilizamos para mantener un log
+   *  unificado por institución. `entityShortId` es legible para humanos
+   *  y `entityId` permite drill-down posterior desde la UI de admin.
+   *
+   *  Esta impl NO maneja errores — el use case lo envuelve en try/catch
+   *  porque el log es secundario al evento de borrado. */
+  async recordDeletionAudit(input: {
+    actorUserId: string;
+    actorRoles: readonly string[];
+    action: "SHEET_DELETED" | "BATCH_DELETED";
+    entityType: "AnswerSheet" | "ScanBatch";
+    entityId: string;
+    entityShortId: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
+    await prisma.auditLog.create({
+      data: {
+        userId: input.actorUserId,
+        action: input.action,
+        entityType: input.entityType,
+        entityId: input.entityId,
+        metadata: {
+          actorRoles: input.actorRoles as unknown as Prisma.InputJsonValue,
+          entityShortId: input.entityShortId,
+          ...(input.metadata ?? {}),
+        } as Prisma.InputJsonValue,
       },
     });
   }

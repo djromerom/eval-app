@@ -18,9 +18,9 @@ const EVAL_ID = "00000000-0000-0000-0000-000000000001";
 const STUDENT_CODE = "STU001";
 const SHEET_ID = "00000000-0000-0000-0000-000000000010";
 
-function inMemoryRepo(): ScanningRepository {
+function inMemoryRepo(): { repo: ScanningRepository; getLogs: () => string[] } {
   const logs: string[] = [];
-  return {
+  const repo: ScanningRepository = {
     async getScanBatch() {
       return null;
     },
@@ -53,6 +53,11 @@ function inMemoryRepo(): ScanningRepository {
     async findSheetIdByQrSheetUuid() {
       return null;
     },
+    async mergeDuplicateSheet(args) {
+      // El script de verificación no simula duplicados; conservamos el id
+      // nuevo y dejamos que el pipeline siga con él.
+      return { finalSheetId: args.currentSheetId };
+    },
     async saveAnswers(_id, ans) {
       const ok = ans.filter((a) => a.isCorrect).length;
       for (const a of ans) {
@@ -65,10 +70,18 @@ function inMemoryRepo(): ScanningRepository {
     async updateBatchProgress() {
       logs.push("batch progress");
     },
-    getLogs() {
-      return logs;
+    async deleteSheet(sheetId: string) {
+      return { batchId: null };
     },
-  } as ScanningRepository;
+    async findBatchAccess(_batchId: string) {
+      return null;
+    },
+    async deleteBatch(_batchId: string) {
+      return { institutionId: null };
+    },
+    async recordDeletionAudit(_input) {},
+  };
+  return { repo, getLogs: () => logs };
 }
 
 async function main() {
@@ -133,7 +146,7 @@ async function main() {
   writeFileSync(imagePath, sheet);
   console.log("1. Page created (QR right, bubbles in grid)");
 
-  const repo = inMemoryRepo() as ScanningRepository & { getLogs(): string[] };
+  const { repo, getLogs } = inMemoryRepo();
   const qrDecoder: QrDecoder = {
     async decode(buffer: Buffer) {
       const decodeQR = (await import("qr/decode.js")).default;
@@ -178,7 +191,7 @@ async function main() {
   }
 
   console.log("5. Per-question log:");
-  for (const line of repo.getLogs()) {
+  for (const line of getLogs()) {
     console.log(`   ${line}`);
   }
 }

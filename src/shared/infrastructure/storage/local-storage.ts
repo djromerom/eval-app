@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, normalize } from "node:path";
 import { env } from "@/config/env";
 
@@ -10,6 +10,9 @@ import { env } from "@/config/env";
 export interface FileStorage {
   save(relativePath: string, data: Buffer): Promise<string>;
   read(relativePath: string): Promise<Buffer>;
+  /** Borrado best-effort. Si el archivo no existe (ENOENT) no falla —
+   *  sólo lo loggea. Si la ruta sale de STORAGE_DIR, lanza. */
+  delete(relativePath: string): Promise<void>;
 }
 
 function resolveSafe(relativePath: string): string {
@@ -29,5 +32,16 @@ export const localStorage: FileStorage = {
   },
   async read(relativePath) {
     return readFile(resolveSafe(relativePath));
+  },
+  async delete(relativePath) {
+    // Best-effort: si el archivo ya no estaba en disco (alguien lo borró
+    // manualmente, o nunca existió — p.ej. una hoja calificada en otro
+    // ambiente), no fallamos la operación de negocio. Logs defensivos.
+    try {
+      await unlink(resolveSafe(relativePath));
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+      console.warn(`[local-storage] delete: archivo ausente: ${relativePath}`);
+    }
   },
 };

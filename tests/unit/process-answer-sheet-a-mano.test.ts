@@ -121,10 +121,25 @@ function hacerRepo(imagePath: string, identificadaAMano: boolean) {
     async findSheetIdByQrSheetUuid() {
       return null;
     },
+    async mergeDuplicateSheet(args) {
+      // Mock no dispara re-uploads en este test: devolvemos el id actual tal
+      // cual para no alterar el flujo downstream.
+      return { finalSheetId: args.currentSheetId };
+    },
     async saveAnswers(_id, ans) {
       guardado.answers = ans;
     },
     async updateBatchProgress() {},
+    async deleteSheet(sheetId: string) {
+      return { batchId: null };
+    },
+    async findBatchAccess(_batchId: string) {
+      return null;
+    },
+    async deleteBatch(_batchId: string) {
+      return { institutionId: null };
+    },
+    async recordDeletionAudit(_input) {},
   };
   return { repo, guardado };
 }

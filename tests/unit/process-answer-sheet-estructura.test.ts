@@ -109,8 +109,21 @@ function hacerRepo(qrContent: string, qrSignature: string, imagePath: string) {
     async findSheetIdByQrSheetUuid() {
       return null;
     },
+    async mergeDuplicateSheet(args) {
+      return { finalSheetId: args.currentSheetId };
+    },
     async saveAnswers() {},
     async updateBatchProgress() {},
+    async deleteSheet(sheetId: string) {
+      return { batchId: null };
+    },
+    async findBatchAccess(_batchId: string) {
+      return null;
+    },
+    async deleteBatch(_batchId: string) {
+      return { institutionId: null };
+    },
+    async recordDeletionAudit(_input) {},
   };
   return { repo, guardado };
 }
