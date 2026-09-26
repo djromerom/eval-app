@@ -16,6 +16,8 @@ import {
   type EvaluationQuestionsProvider,
 } from "../application/process-answer-sheet";
 import { ClassifyUnclassifiedScan } from "../application/classify-unclassified-scan";
+import { DeleteSheet } from "../application/delete-sheet";
+import { DeleteBatch } from "../application/delete-batch";
 
 const scanningRepo = new PrismaScanningRepository();
 const evaluationRepo = new PrismaEvaluationRepository();
@@ -103,3 +105,7 @@ export const makeProcessAnswerSheet = () =>
 
 export const makeClassifyUnclassifiedScan = () =>
   new ClassifyUnclassifiedScan(new PrismaUnclassifiedScanRepository(), bullOmrJobQueue);
+
+export const makeDeleteSheet = () => new DeleteSheet(scanningRepo);
+
+export const makeDeleteBatch = () => new DeleteBatch(scanningRepo);

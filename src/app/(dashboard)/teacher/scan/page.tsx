@@ -7,6 +7,8 @@ import { makeListEvaluations } from "@/modules/evaluations/infrastructure/contai
 import { makeListBundles } from "@/modules/bundles/infrastructure/container";
 import { UploadZone, type ScanTarget } from "./upload-zone";
 import { getBatchesAction } from "./actions";
+import { DeleteBatchButton } from "./delete-batch-button";
+import { DeleteSheetButton } from "./delete-sheet-button";
 
 export const metadata: Metadata = { title: "Escanear hojas" };
 
@@ -77,6 +79,13 @@ export default async function ScanPage() {
                       </span>
                     )}
                     <ScanStatusBadge status={batch.status} size="lg" />
+                    <DeleteBatchButton
+                      batchId={batch.id}
+                      shortId={batch.id.slice(0, 8)}
+                      total={batch.sheets.length}
+                      calificadas={batch.sheets.filter((s) => s.status === "GRADED").length}
+                      sinClasificar={batch.sinClasificar}
+                    />
                     <Link
                       href={`/teacher/scan/${batch.id}`}
                       className="text-primary font-medium hover:underline"
@@ -97,6 +106,7 @@ export default async function ScanPage() {
                           <th className="px-3 py-2 font-medium">Estado</th>
                           <th className="px-3 py-2 font-medium">Puntaje</th>
                           <th className="px-3 py-2 font-medium">Notas</th>
+                          <th className="px-3 py-2 text-right font-medium">Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -120,6 +130,15 @@ export default async function ScanPage() {
                             </td>
                             <td className="text-muted-foreground max-w-40 truncate px-3 py-2">
                               {s.notes ?? "—"}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              {s.status === "REVIEW" ? (
+                                <DeleteSheetButton
+                                  batchId={batch.id}
+                                  sheetId={s.id}
+                                  shortId={s.id.slice(0, 8)}
+                                />
+                              ) : null}
                             </td>
                           </tr>
                         ))}

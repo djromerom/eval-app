@@ -137,6 +137,81 @@ export interface ScanningRepository {
   ): Promise<void>;
   saveAnswers(sheetId: string, answers: StudentAnswerRecord[]): Promise<void>;
   updateBatchProgress(batchId: string, processed: number, status?: ScanBatchStatus): Promise<void>;
+  /** Elimina una hoja física + su archivo + decrementa totalSheets del batch.
+   *  Precondiciones validadas por el caller (use case):
+   *    - `sheet.status === "REVIEW"` (la única permitida para borrar).
+   *    - El actor tiene acceso al batch (filtro idéntico al de
+   *      getBatchesAction:254).
+   *  Efectos en una sola transacción:
+   *    - Borra StudentAnswers por cascade (`onDelete: Cascade` en schema).
+   *    - Borra la fila AnswerSheet.
+   *    - Decrementa `ScanBatch.totalSheets`.
+   *  Borrado de archivos físicos (`scannedImage`, `processedImage`) NO se
+   *  hace acá — es responsabilidad del caller porque depende del backend
+   *  de storage. Esta impl Prisma los borra antes del tx (best-effort:
+   *  si el archivo ya no existe, log warning). Para mocks/tests la action
+   *  puede reusar `localStorage.delete` directamente.
+   *  Devuelve {batchId} para que el caller revalide la ruta del lote. */
+  deleteSheet(sheetId: string): Promise<{ batchId: string | null }>;
+  /** Devuelve info de un batch para que el use case valide el acceso del
+   *  actor. Replica el OR del filtro de `getBatchesAction` (institución +
+   *  teacherId para evaluations / bundle.institutionId para bundles /
+   *  uploadedBy para unclassified), pero NO autoriza — sólo trae los
+   *  campos necesarios para que el use case pueda chequearlos. */
+  findBatchAccess(batchId: string): Promise<{
+    institutionId: string;
+    uploadedBy: string;
+    evaluation: { teacherId: string } | null;
+    bundle: { institutionId: string } | null;
+  } | null>;
+  /** Elimina el lote entero: archivos físicos (`scannedImage`,
+   *  `processedImage` de cada hoja + `filePath` de cada unclassifiedScan) +
+   *  filas `AnswerSheet` (cascade borra `StudentAnswer`) + filas
+   *  `UnclassifiedScan` (cascade de `ScanBatch`) + la fila `ScanBatch`.
+   *
+   *  NO autoriza — eso lo hace el use case con `findBatchAccess` +
+   *  `actor.role` + filtro multi-target.
+   *
+   *  Restricción del schema (`prisma/schema.prisma:884-885`):
+   *  `AnswerSheet.scanBatch` NO tiene `onDelete`, así que Prisma lo trata
+   *  como RESTRICT. El orden `deleteMany(AnswerSheet) → delete(ScanBatch)`
+   *  es obligatorio: invertirlo tira P2003.
+   *
+   *  Orden interno recomendado:
+   *    1) Cargar batch + sheets + unclassifiedScans para recolectar paths.
+   *    2) `unlink` best-effort de cada archivo (ENOENT ya manejado por
+   *       `localStorage.delete`).
+   *    3) `$transaction` con `answerSheet.deleteMany` + `scanBatch.delete`.
+   *       `StudentAnswer` se va por cascade, `UnclassifiedScan` igual.
+   *
+   *  NO soft-delete. NO filtra por estado del batch — el use case ya
+   *  aceptó "cualquier estado". */
+  deleteBatch(batchId: string): Promise<{ institutionId: string | null }>;
+  /** Registra una eliminación en `AuditLog` (modelo compartido con otras
+   *  acciones del sistema: `EVALUATION_CREATED`, `EVALUATION_APPROVED`,
+   *  etc.). Específicamente para `SHEET_DELETED` / `BATCH_DELETED`.
+   *
+   *  Se llama DESPUÉS del borrado exitoso. Best-effort: un fallo no
+   *  rompe la operación (el borrado ya es válido; el log es secundario).
+   *  El use case lo envuelve en try/catch y loggea como `console.error`.
+   *
+   *  Reutilizamos `AuditLog` (no creamos tabla nueva) para mantener un
+   *  solo log por institución + cronología agregada por fecha. La columna
+   *  `metadata` JSON guarda los conteos del batch (totalSheets,
+   *  calificadas, sinClasificar) o el batchId + shortId de la hoja.
+   *
+   *  `actorUserId` es el `User.id` (UUID, FK de `AuditLog.userId`); el use
+   *  case lo toma de `actor.userId` que ya está poblado así en
+   *  `requireAuthenticatedUser` (mapea de `session.user.id`). */
+  recordDeletionAudit(input: {
+    actorUserId: string;
+    actorRoles: readonly string[];
+    action: "SHEET_DELETED" | "BATCH_DELETED";
+    entityType: "AnswerSheet" | "ScanBatch";
+    entityId: string;
+    entityShortId: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<void>;
 }
 
 export interface QrDecoder {

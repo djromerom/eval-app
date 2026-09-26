@@ -10,6 +10,7 @@ import { nombreCompleto } from "@/modules/students/domain/nombre-completo";
 import { env } from "@/config/env";
 import { OmrServiceQrDecoder } from "@/modules/scanning/infrastructure/omr-service-qr-decoder";
 import { verifySignature, deriveInstitutionSecret } from "@/shared/infrastructure/crypto/hmac";
+import { makeDeleteSheet, makeDeleteBatch } from "@/modules/scanning/infrastructure/container";
 import {
   clasificarHojas,
   MOTIVOS,
@@ -519,4 +520,98 @@ async function createAutoScanBatches(
     };
   }
   return { ok: true as const, batchId: primerLote, lotes, rechazadas };
+}
+
+/** Estado del formulario "Eliminar hoja". Sólo errores — el éxito se
+ *  infiere por la ausencia de `error` (la UI cierra el modal cuando
+ *  `useActionState` devuelve `{}` tras la redirección/revalidate). */
+export type SheetDeleteState = { error?: string };
+
+/** Server action: elimina una hoja del lote (sólo REVIEW).
+ *
+ *  El sheetId + batchId viajan como hidden inputs dentro del AlertDialog.
+ *  El use case hace:
+ *    - Validar rol y acceso al lote (mismo filtro que getBatchesAction:254).
+ *    - Validar que la hoja exista en la institución del actor.
+ *    - Validar que la hoja esté en REVIEW.
+ *    - Borrar fila + archivos físicos + decrementar totalSheets.
+ *
+ *  Si todo sale bien, revalidamos la lista del lote y la página padre.
+ *  El modal se cierra porque el botón renderiza el formulario dentro de
+ *  AlertDialogAction y al terminar la request el cliente ve `{}` como
+ *  estado y puede llamar `setOpen(false)` (ver delete-sheet-button.tsx). */
+export async function deleteSheetAction(
+  _prev: SheetDeleteState,
+  formData: FormData,
+): Promise<SheetDeleteState> {
+  const sheetId = String(formData.get("sheetId") ?? "");
+  const batchId = String(formData.get("batchId") ?? "");
+  // [TEMP DEBUG] 25 sep 2026: investigador bug "no elimina".
+  console.log("[deleteSheetAction] start", { sheetId, batchId });
+  if (!sheetId || !batchId) {
+    return { error: "Falta identificador de hoja o lote." };
+  }
+
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  console.log("[deleteSheetAction] actor", {
+    userId: actor.userId,
+    institutionId: actor.institutionId,
+  });
+  const result = await makeDeleteSheet().execute({ actor, sheetId, batchId });
+  console.log("[deleteSheetAction] result", {
+    ok: result.ok,
+    error: result.ok ? null : result.error.code,
+  });
+  if (!result.ok) {
+    return { error: result.error.message };
+  }
+  revalidatePath("/teacher/scan");
+  revalidatePath(`/teacher/scan/${batchId}`);
+  console.log("[deleteSheetAction] revalidated");
+  return {};
+}
+
+/** Estado del formulario "Eliminar lote". Sólo errores — el éxito se
+ *  infiere por la ausencia de `error` (la UI cierra el modal cuando
+ *  `useActionState` devuelve `{}` tras el revalidate). */
+export type BatchDeleteState = { error?: string };
+
+/** Server action: elimina un lote entero.
+ *
+ *  El batchId viaja como hidden input dentro del AlertDialog. El use case
+ *  ya hace TODO el chequeo de permisos + filtro multi-target (idéntico
+ *  al de `deleteSheetAction` y `getBatchesAction:254`).
+ *
+ *  Si sale bien, revalidamos DOS rutas:
+ *    - `/teacher/scan` para que la card desaparezca del listado.
+ *    - `/teacher/scan/${batchId}` para que cualquier tab abierta en la
+ *      página del lote refresque a 404 inmediato en vez de mostrar la
+ *      página cacheada (igual que ya hace `deleteSheetAction:562-563`). */
+export async function deleteBatchAction(
+  _prev: BatchDeleteState,
+  formData: FormData,
+): Promise<BatchDeleteState> {
+  const batchId = String(formData.get("batchId") ?? "");
+  console.log("[deleteBatchAction] start", { batchId });
+  if (!batchId) {
+    return { error: "Falta identificador de lote." };
+  }
+
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
+  console.log("[deleteBatchAction] actor", {
+    userId: actor.userId,
+    institutionId: actor.institutionId,
+  });
+  const result = await makeDeleteBatch().execute({ actor, batchId });
+  console.log("[deleteBatchAction] result", {
+    ok: result.ok,
+    error: result.ok ? null : result.error.code,
+  });
+  if (!result.ok) {
+    return { error: result.error.message };
+  }
+  revalidatePath("/teacher/scan");
+  revalidatePath(`/teacher/scan/${batchId}`);
+  console.log("[deleteBatchAction] revalidated");
+  return {};
 }
