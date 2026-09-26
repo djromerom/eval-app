@@ -18,6 +18,8 @@ import {
 import { ClassifyUnclassifiedScan } from "../application/classify-unclassified-scan";
 import { CorrectAnswerSheetAnswers } from "../application/correct-answer-sheet-answers";
 import { PrismaStudentAnswersReader } from "./prisma-scanning-repository";
+import { DeleteSheet } from "../application/delete-sheet";
+import { DeleteBatch } from "../application/delete-batch";
 
 const scanningRepo = new PrismaScanningRepository();
 const evaluationRepo = new PrismaEvaluationRepository();
@@ -112,3 +114,7 @@ export const makeCorrectAnswerSheetAnswers = () =>
     new PrismaStudentAnswersReader(),
     questionsProvider,
   );
+
+export const makeDeleteSheet = () => new DeleteSheet(scanningRepo);
+
+export const makeDeleteBatch = () => new DeleteBatch(scanningRepo);

@@ -116,6 +116,16 @@ function hacerRepo(qrContent: string, qrSignature: string, imagePath: string) {
       guardado.answers = ans;
     },
     async updateBatchProgress() {},
+    async deleteSheet(_sheetId: string) {
+      return { batchId: null };
+    },
+    async findBatchAccess(_batchId: string) {
+      return null;
+    },
+    async deleteBatch(_batchId: string) {
+      return { institutionId: null };
+    },
+    async recordDeletionAudit(_input) {},
   };
   return { repo, guardado };
 }
