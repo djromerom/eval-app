@@ -357,6 +357,7 @@ export class ProcessAnswerSheet {
     let totalCorrect = 0;
     let effectiveQuestions = 0;
     let needsReview = false;
+    const avisosPregunta: { posicion: number; aviso: string }[] = [];
     for (let idx = 0; idx < correctAnswers.length; idx++) {
       const q = correctAnswers[idx]!;
       const bundleItemId = isBundle
@@ -374,6 +375,8 @@ export class ProcessAnswerSheet {
         effectiveQuestions++;
         if (record.isCorrect === true) totalCorrect++;
         if (record.isAmbiguous) needsReview = true;
+        const aviso = detected.questions[idx]!.aviso;
+        if (aviso) avisosPregunta.push({ posicion: idx + 1, aviso });
       }
       answers.push(record);
     }
@@ -399,7 +402,20 @@ export class ProcessAnswerSheet {
         ? notaAmbigua
         : undefined;
     const notaEstructura = avisosEstructura.length
-      ? `Lectura estructuralmente sospechosa: ${avisosEstructura.join(" ")}`
+      ? `Lectura estructuralmente sospechosa: ${avisosEstructura.join("; ")}.`
+      : undefined;
+    // Qué preguntas mirar, con su número: es lo que necesita quien corrige la
+    // hoja en la matriz. Las que `estructura` ya nombra ("pregunta 7: fila no
+    // detectada…") no se repiten aquí.
+    const yaNombradas = new Set(
+      avisosEstructura
+        .map((a) => /^pregunta (\d+):/.exec(a)?.[1])
+        .filter((n): n is string => n !== undefined)
+        .map(Number),
+    );
+    const porRevisar = avisosPregunta.filter((a) => !yaNombradas.has(a.posicion));
+    const notaAvisos = porRevisar.length
+      ? `Revisar a mano: ${porRevisar.map((a) => `pregunta ${a.posicion} (${a.aviso})`).join("; ")}.`
       : undefined;
 
     await this.repository.saveAnswers(answerSheetId, answers);
@@ -407,7 +423,7 @@ export class ProcessAnswerSheet {
       score: totalCorrect,
       totalCorrect,
       totalQuestions: effectiveQuestions,
-      notes: [notaBase, notaEstructura].filter(Boolean).join(" ") || undefined,
+      notes: [notaBase, notaEstructura, notaAvisos].filter(Boolean).join(" ") || undefined,
     });
     await this.repository.updateBatchProgress(scanBatchId, 0);
 
