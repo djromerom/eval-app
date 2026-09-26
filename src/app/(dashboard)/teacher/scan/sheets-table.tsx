@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ScanStatusBadge } from "@/components/evaluations/scan-status-badge";
+import { DeleteSheetButton } from "./delete-sheet-button";
 
 /** Hoja de un lote, en el formato que devuelve `getBatchesAction`
  *  (`src/app/(dashboard)/teacher/scan/actions.ts`). Solo se listan los 5
@@ -131,6 +132,7 @@ export function SheetsTable({ batchId, sheets }: { batchId: string; sheets: Shee
               <th className="px-3 py-2 font-medium">Estado</th>
               <th className="px-3 py-2 font-medium">Puntaje</th>
               <th className="px-3 py-2 font-medium">Notas</th>
+              <th className="px-3 py-2 text-right font-medium">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -154,6 +156,15 @@ export function SheetsTable({ batchId, sheets }: { batchId: string; sheets: Shee
                 </td>
                 <td className="text-muted-foreground max-w-40 truncate px-3 py-2">
                   {s.notes ?? "—"}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {s.status === "REVIEW" ? (
+                    <DeleteSheetButton
+                      batchId={batchId}
+                      sheetId={s.id}
+                      shortId={s.id.slice(0, 8)}
+                    />
+                  ) : null}
                 </td>
               </tr>
             ))}

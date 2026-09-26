@@ -65,6 +65,16 @@ function inMemoryRepo(): ScanningRepository {
     async updateBatchProgress() {
       logs.push("batch progress");
     },
+    async deleteSheet(_sheetId: string) {
+      return { batchId: null };
+    },
+    async findBatchAccess(_batchId: string) {
+      return null;
+    },
+    async deleteBatch(_batchId: string) {
+      return { institutionId: null };
+    },
+    async recordDeletionAudit(_input) {},
     getLogs() {
       return logs;
     },

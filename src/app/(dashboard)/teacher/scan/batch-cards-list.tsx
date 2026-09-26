@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ScanStatusBadge } from "@/components/evaluations/scan-status-badge";
 import { SheetsTable, type SheetRowForFilter } from "./sheets-table";
+import { DeleteBatchButton } from "./delete-batch-button";
 
 const df = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short" });
 
@@ -57,6 +58,13 @@ export function BatchCardsList({ batches }: { batches: BatchForList[] }) {
                 </span>
               )}
               <ScanStatusBadge status={batch.status} size="lg" />
+              <DeleteBatchButton
+                batchId={batch.id}
+                shortId={batch.id.slice(0, 8)}
+                total={batch.sheets.length}
+                calificadas={batch.sheets.filter((s) => s.status === "GRADED").length}
+                sinClasificar={batch.sinClasificar}
+              />
               <Link
                 href={`/teacher/scan/${batch.id}`}
                 className="text-primary font-medium hover:underline"
