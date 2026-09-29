@@ -25,7 +25,7 @@ import type { LeaderScopeReader } from "./list-calificaciones";
 
 /** Datos crudos para consolidar un grupo en una prueba. */
 export interface DatosInformeGrupo extends ConsolidarInformeGrupoInput {
-  prueba: { id: string; name: string; academicYearId: string };
+  prueba: { id: string; name: string; academicYearId: string; year: number };
   grupo: { id: string; name: string; courseName: string; courseId: string; academicYearId: string };
 }
 

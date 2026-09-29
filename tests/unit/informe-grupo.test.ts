@@ -42,7 +42,7 @@ const OPCIONES: InformeGrupoOpciones = {
 
 function datos(over: Partial<DatosInformeGrupo> = {}): DatosInformeGrupo {
   return {
-    prueba: { id: "p-2026", name: "2026-2", academicYearId: "y26" },
+    prueba: { id: "p-2026", name: "2026-2", academicYearId: "y26", year: 2026 },
     grupo: { id: "g-1001", name: "1001", courseName: "10", courseId: "c10", academicYearId: "y26" },
     estudiantes: [],
     cuadernillos: [],
@@ -142,7 +142,9 @@ describe("GetInformeGrupo - selección", () => {
   });
 
   it("un grupo de otro año académico que la prueba da VALIDATION", async () => {
-    reader.cargar = datos({ prueba: { id: "p-2025", name: "2025-4", academicYearId: "y25" } });
+    reader.cargar = datos({
+      prueba: { id: "p-2025", name: "2025-4", academicYearId: "y25", year: 2025 },
+    });
     const r = await uc.execute({ actor: master, periodId: "p-2025", groupId: "g-1001" });
     expect(r.ok).toBe(true);
     if (r.ok) {

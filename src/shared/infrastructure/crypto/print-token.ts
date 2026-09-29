@@ -21,13 +21,18 @@ export type PrintKind =
   | "answer-sheets-bundle"
   | "answer-key-bundle"
   | "cover-bundle"
-  | "bundle-linear";
+  | "bundle-linear"
+  | "informe-grupo";
 
 export interface PrintAccess {
   /** evaluationId para booklet/answer-sheets/answer-key. */
   evaluationId?: string;
   /** bundleId para bundle/answer-sheets-bundle (Sprint 1+ / Sprint 2). */
   bundleId?: string;
+  /** informe-grupo: identifica el periodo (prueba) del informe. */
+  periodId?: string;
+  /** informe-grupo: identifica el grupo del informe. */
+  groupId?: string;
   institutionId: string;
   kind: PrintKind;
 }
@@ -70,6 +75,8 @@ export function verifyPrintToken(token: string): PrintAccess | null {
   return {
     evaluationId: payload.evaluationId,
     bundleId: payload.bundleId,
+    periodId: payload.periodId,
+    groupId: payload.groupId,
     institutionId: payload.institutionId,
     kind: payload.kind,
   };

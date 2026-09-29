@@ -7,6 +7,7 @@ import type {
   InformeGrupo,
   InformeGrupoOpciones,
 } from "@/modules/consultas/domain/queries/informe-grupo/informe-grupo";
+import { DescargarPdfButton } from "./descargar-pdf-button";
 
 const select =
   "border-input bg-background focus-visible:border-primary focus-visible:ring-primary/20 rounded-md border px-3 py-1.5 text-sm focus-visible:ring-2 focus-visible:outline-hidden";
@@ -66,27 +67,49 @@ export function InformeGrupoView({
         description={description}
         actions={
           informe ? (
-            <a
-              href={`${pathname}/export.xlsx${buildQuery(informe.prueba.id, informe.grupo.id)}`}
-              download
-              className="border-input bg-background hover:bg-accent hover:text-accent-foreground inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
-            >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 16 16"
-                className="size-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
+            <div className="flex items-center gap-2">
+              <a
+                href={`${pathname}/export.xlsx${buildQuery(informe.prueba.id, informe.grupo.id)}`}
+                download
+                className="border-input bg-background hover:bg-accent hover:text-accent-foreground inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M8 2v8m0 0 3-3m-3 3-3-3M3 13h10"
-                />
-              </svg>
-              Descargar XLSX
-            </a>
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 16 16"
+                  className="size-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M8 2v8m0 0 3-3m-3 3-3-3M3 13h10"
+                  />
+                </svg>
+                Descargar XLSX
+              </a>
+              <DescargarPdfButton
+                href={`${pathname}/export.pdf${buildQuery(informe.prueba.id, informe.grupo.id)}`}
+                className="border-input bg-background hover:bg-accent hover:text-accent-foreground inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 16 16"
+                  className="size-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M8 2v8m0 0 3-3m-3 3-3-3M3 13h10"
+                  />
+                </svg>
+                Descargar PDF
+              </DescargarPdfButton>
+            </div>
           ) : null
         }
       />

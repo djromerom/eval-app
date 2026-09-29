@@ -64,12 +64,15 @@ function resp(
     bundleItemId,
     questionId: `${prefijo}-q${i + 1}`,
     isCorrect: i < correctas,
+    // Por defecto las respuestas del helper son marcas correctas/incorrectas
+    // con letra. Las pruebas que necesitan blancos los escriben inline.
+    selectedKey: ["A", "B", "C", "D", "E"][i % 5] ?? "A",
   }));
 }
 
 function base(over: Partial<ConsolidarInformeGrupoInput> = {}): ConsolidarInformeGrupoInput {
   return {
-    prueba: { id: "p1", name: "2026-2" },
+    prueba: { id: "p1", name: "2026-2", year: 2026 },
     grupo: { id: "g1", name: "1001", courseName: "10" },
     estudiantes: [est("e1", "Álvarez")],
     cuadernillos: [cuad("b1", 1, [{ id: "i-bio", order: 1, subject: BIO }])],
@@ -83,7 +86,13 @@ function base(over: Partial<ConsolidarInformeGrupoInput> = {}): ConsolidarInform
 describe("consolidarInformeGrupo - puntaje", () => {
   it("calcula el puntaje 0-10 por asignatura (8/10 → 8.0)", () => {
     const inf = consolidarInformeGrupo(base());
-    expect(inf.filas[0]!.puntajes["s-bio"]).toEqual({ puntaje: 8, correctas: 8, total: 10 });
+    expect(inf.filas[0]!.puntajes["s-bio"]).toEqual({
+      puntaje: 8,
+      correctas: 8,
+      incorrectas: 2,
+      enBlanco: 0,
+      total: 10,
+    });
   });
 
   it("aplica el piso de 3", () => {
@@ -110,7 +119,13 @@ describe("consolidarInformeGrupo - puntaje", () => {
       }),
     );
     // Sumado: 10/20 → 5.0. Promediando puntajes con piso daría (3 + 10) / 2 = 6.5.
-    expect(inf.filas[0]!.puntajes["s-bio"]).toEqual({ puntaje: 5, correctas: 10, total: 20 });
+    expect(inf.filas[0]!.puntajes["s-bio"]).toEqual({
+      puntaje: 5,
+      correctas: 10,
+      incorrectas: 10,
+      enBlanco: 0,
+      total: 20,
+    });
     expect(inf.filas[0]!.puntajes["s-fis"]!.puntaje).toBe(5);
     expect(inf.cuadernillos.map((c) => c.id)).toEqual(["b1", "b2"]);
   });
@@ -119,8 +134,20 @@ describe("consolidarInformeGrupo - puntaje", () => {
     const inf = consolidarInformeGrupo(
       base({
         respuestas: [
-          { answerSheetId: "h1", bundleItemId: "i-bio", questionId: "q1", isCorrect: true },
-          { answerSheetId: "h1", bundleItemId: "i-bio", questionId: "q2", isCorrect: null },
+          {
+            answerSheetId: "h1",
+            bundleItemId: "i-bio",
+            questionId: "q1",
+            isCorrect: true,
+            selectedKey: "A",
+          },
+          {
+            answerSheetId: "h1",
+            bundleItemId: "i-bio",
+            questionId: "q2",
+            isCorrect: null,
+            selectedKey: null,
+          },
         ],
       }),
     );
@@ -162,7 +189,13 @@ describe("consolidarInformeGrupo - hojas", () => {
       base({
         respuestas: [
           ...resp("h1", "i-bio", 2, 2),
-          { answerSheetId: "h1", bundleItemId: null, questionId: "x", isCorrect: false },
+          {
+            answerSheetId: "h1",
+            bundleItemId: null,
+            questionId: "x",
+            isCorrect: false,
+            selectedKey: "B",
+          },
         ],
       }),
     );
@@ -242,7 +275,13 @@ describe("consolidarInformeGrupo - inhabilitadas", () => {
         ]),
       }),
     );
-    expect(inf.filas[0]!.puntajes["s-bio"]).toEqual({ puntaje: 10, correctas: 8, total: 8 });
+    expect(inf.filas[0]!.puntajes["s-bio"]).toEqual({
+      puntaje: 10,
+      correctas: 8,
+      incorrectas: 0,
+      enBlanco: 0,
+      total: 8,
+    });
   });
 
   it("usa el cuadernillo del ítem para la clave, no el de la hoja", () => {

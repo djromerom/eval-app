@@ -47,10 +47,14 @@ export interface RespuestaInforme {
   bundleItemId: string | null;
   questionId: string;
   isCorrect: boolean | null;
+  /** Necesario para distinguir blanco (`"BLANCO" | null`) de incorrecta.
+   *  Sin este campo, una marca con `isCorrect=false` se confunde con un
+   *  blanco y la columna "# incorrecta" del PDF quedaría desfasada. */
+  selectedKey: string | null;
 }
 
 export interface ConsolidarInformeGrupoInput {
-  prueba: { id: string; name: string };
+  prueba: { id: string; name: string; year: number };
   grupo: { id: string; name: string; courseName: string };
   estudiantes: readonly EstudianteGrupo[];
   cuadernillos: readonly CuadernilloInforme[];
@@ -157,7 +161,10 @@ export function consolidarInformeGrupo(input: ConsolidarInformeGrupoInput): Info
   }
 
   // Suma por (estudiante, asignatura).
-  const conteos = new Map<string, Map<string, { correctas: number; total: number }>>();
+  const conteos = new Map<
+    string,
+    Map<string, { correctas: number; incorrectas: number; enBlanco: number; total: number }>
+  >();
   for (const r of input.respuestas) {
     const hoja = hojaAporta.get(r.answerSheetId);
     if (!hoja) continue;
@@ -172,9 +179,20 @@ export function consolidarInformeGrupo(input: ConsolidarInformeGrupoInput): Info
       porSubject = new Map();
       conteos.set(hoja.studentId, porSubject);
     }
-    const c = porSubject.get(subjectId) ?? { correctas: 0, total: 0 };
+    const c = porSubject.get(subjectId) ?? {
+      correctas: 0,
+      incorrectas: 0,
+      enBlanco: 0,
+      total: 0,
+    };
     c.total++;
-    if (r.isCorrect === true) c.correctas++;
+    if (r.selectedKey === "BLANCO" || r.selectedKey === null) {
+      c.enBlanco++;
+    } else if (r.isCorrect === true) {
+      c.correctas++;
+    } else {
+      c.incorrectas++;
+    }
     porSubject.set(subjectId, c);
   }
 
@@ -191,7 +209,15 @@ export function consolidarInformeGrupo(input: ConsolidarInformeGrupoInput): Info
         const c = porSubject?.get(a.subjectId);
         const puntaje = c ? calcularPuntaje(c.correctas, c.total) : null;
         puntajes[a.subjectId] =
-          c && puntaje !== null ? { puntaje, correctas: c.correctas, total: c.total } : null;
+          c && puntaje !== null
+            ? {
+                puntaje,
+                correctas: c.correctas,
+                total: c.total,
+                incorrectas: c.incorrectas,
+                enBlanco: c.enBlanco,
+              }
+            : null;
       }
       return {
         item: listPositionByName(input.estudiantes, e.id),

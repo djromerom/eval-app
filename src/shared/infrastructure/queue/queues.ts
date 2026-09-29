@@ -40,6 +40,10 @@ export interface OmrScanJob {
 export interface PdfGenerationJob {
   evaluationId?: string;
   bundleId?: string;
+  /** informe-grupo: identifica el periodo (prueba). */
+  periodId?: string;
+  /** informe-grupo: identifica el grupo. */
+  groupId?: string;
   institutionId: string;
   kind: PrintKind;
   /** Query string extra (sin `?` inicial), p.ej. "students=id1,id2". */
@@ -51,12 +55,19 @@ export interface PdfGenerationJob {
    *  position:fixed dentro de multicolumna). Si no se envía, no se estampa
    *  nada (compatibilidad con jobs que no requieren header persistente). */
   pageHeader?: string;
+  /** Texto del footer a estampar en cada página del PDF (esquina inferior
+   *  izquierda) usando pdf-lib, junto con "Página X de Y". Misma motivación
+   *  que `pageHeader` (Chromium no exporta `counter(pages)` en headless
+   *  print). Usado por el informe por grupo (A4, multi-página). */
+  pageFooter?: string;
 }
 
 /** Resultado que el worker devuelve al completar el job. */
 export interface PdfGenerationResult {
   evaluationId?: string;
   bundleId?: string;
+  periodId?: string;
+  groupId?: string;
   institutionId: string;
   kind: PrintKind;
   path: string;

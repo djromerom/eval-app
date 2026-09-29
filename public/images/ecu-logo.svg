@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Logo ECU (Estrategia de Calidad Uninorte) — placeholder SVG.
+
+  Este archivo se incluye en el header del informe por grupo PDF (slot
+  `.logo-ecu` del template institucional `tmp/prueba_2026_2.html`).
+
+  Para reemplazar con el logo real: guarda el PNG/SVG del ECU en este
+  mismo path. Si usas PNG, cambia la extensión y actualiza la referencia
+  en `src/app/print/informe-grupo/[periodId]/[groupId]/page.tsx`.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- Círculo exterior oscuro -->
+  <circle cx="100" cy="100" r="96" fill="#2b1f15" stroke="#c9a14a" stroke-width="3"/>
+  <!-- Círculo interior (anillo dorado) -->
+  <circle cx="100" cy="100" r="84" fill="none" stroke="#c9a14a" stroke-width="1.5"/>
+
+  <!-- Texto superior curvado -->
+  <defs>
+    <path id="topArc" d="M 30 100 A 70 70 0 0 1 170 100" fill="none"/>
+    <path id="bottomArc" d="M 35 110 A 65 65 0 0 0 165 110" fill="none"/>
+  </defs>
+  <text font-family="Georgia, serif" font-size="11.5" font-weight="bold" fill="#c9a14a" letter-spacing="1.5">
+    <textPath href="#topArc" startOffset="50%" text-anchor="middle">ESTRATEGIA DE CALIDAD UNINORTE</textPath>
+  </text>
+
+  <!-- ECU grande en el centro -->
+  <text x="100" y="118" text-anchor="middle" font-family="Georgia, serif" font-size="64" font-weight="bold" fill="#c9a14a">ECU</text>
+
+  <!-- Laurel inferior (ramas estilizadas) -->
+  <g fill="#c9a14a">
+    <path d="M 60 145 Q 70 135 80 145 Q 70 155 60 145 Z"/>
+    <path d="M 75 152 Q 85 142 95 152 Q 85 162 75 152 Z"/>
+    <path d="M 90 156 Q 100 146 110 156 Q 100 166 90 156 Z"/>
+    <path d="M 105 152 Q 115 142 125 152 Q 115 162 105 152 Z"/>
+    <path d="M 120 145 Q 130 135 140 145 Q 130 155 120 145 Z"/>
+  </g>
+
+  <!-- 5 estrellas inferiores -->
+  <g fill="#c9a14a">
+    <text x="100" y="178" text-anchor="middle" font-family="serif" font-size="11" letter-spacing="3">★ ★ ★ ★ ★</text>
+  </g>
+</svg>
