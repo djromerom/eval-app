@@ -28,6 +28,10 @@ export interface PuntajeCelda {
   puntaje: number;
   correctas: number;
   total: number;
+  /** `isCorrect === false` (incluye marcas múltiples). */
+  incorrectas: number;
+  /** `selectedKey === "BLANCO" || selectedKey === null`. */
+  enBlanco: number;
 }
 
 export interface AsignaturaColumna {
@@ -49,7 +53,7 @@ export interface FilaInformeGrupo {
 }
 
 export interface InformeGrupo {
-  prueba: { id: string; name: string };
+  prueba: { id: string; name: string; year: number };
   grupo: { id: string; name: string; courseName: string };
   /** Cuadernillos del grado en la prueba, en el orden de las columnas. */
   cuadernillos: { id: string; name: string }[];

@@ -1,0 +1,256 @@
+/* Informe detallado por grupo — print CSS (A4 portrait, multi-página).
+ *
+ * Replica exacta del template institucional `tmp/prueba_2026_2.html` que el
+ * docente entregó como referencia. Una página A4 por estudiante (`.page`
+ * con `min-height: 297mm`), un `.footer` absoluto al pie de cada página
+ * con "Fecha · Institución · Página X de Y" (la X/Y se estampa vía pdf-lib
+ * porque Chromium no exporta `counter(pages)` confiablemente).
+ *
+ * El patrón decorativo del header (`.instructions-pattern.patternAzul`) es
+ * el mismo SVG azul que el template — embebido como data URI. */
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #fff;
+  color: #111;
+  font-family: Arial, Helvetica, sans-serif;
+}
+body {
+  display: flex;
+  justify-content: center;
+}
+
+/* Una .page por estudiante. `min-height: 297mm` garantiza que la página
+ * mida al menos A4 portrait; el footer absoluto se ancla a su base. */
+.page {
+  width: 210mm;
+  min-height: 297mm;
+  position: relative;
+  background: white;
+}
+/* Salto de página entre estudiantes — el último no fuerza break extra. */
+.page + .page {
+  page-break-before: always;
+}
+.page:last-child {
+  page-break-before: auto;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  height: 42mm;
+  padding: 13mm 13mm 5mm;
+  background-color: #f9f9f9;
+}
+.instructions-pattern {
+  top: 0;
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  width: 14%;
+  height: 100%;
+  opacity: 0.28;
+}
+.instructions-pattern.patternAzul {
+  background: url("data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4OS40MyAxMjguMjQiPgogIDxkZWZzPgogICAgPHN0eWxlPgogICAgICAuY2xzLTEgewogICAgICAgIGlzb2xhdGlvbjogaXNvbGF0ZTsKICAgICAgfQoKICAgICAgLmNscy0yIHsKICAgICAgICBmaWxsOiAjMzY2OWIyOwogICAgICAgIHN0cm9rZS13aWR0aDogMHB4OwogICAgICB9CgogICAgICAuY2xzLTMgewogICAgICAgIG1peC1ibGVuZC1tb2RlOiBvdmVybGF5OwogICAgICAgIG9wYWNpdHk6IC41OwogICAgICB9CiAgICA8L3N0eWxlPgogIDwvZGVmcz4KICA8ZyBjbGFzcz0iY2xzLTEiPgogICAgPGcgaWQ9IkNhcGFfMSIgZGF0YS1uYW1lPSJDYXBhIDEiPgogICAgICA8ZyBjbGFzcz0iY2xzLTMiPgogICAgICAgIDxwb2x5Z29uIGNsYXNzPSJjbHMtMiIgcG9pbnRzPSI2OC4yIDEzNy42NSAyOS41NyA5OS4wMSA3Ny44IDUwLjc4IDk1LjU1IDY4LjUzIDk1LjU1IDU3IDc3LjggMzkuMjUgMTguMDQgOTkuMDEgNTYuNjcgMTM3LjY1IDY4LjIgMTM3LjY1Ii8+CiAgICAgICAgPHBvbHlnb24gY2xhc3M9ImNscy0yIiBwb2ludHM9Ijk1LjU1IDU2Ljc2IDYwLjcxIDIxLjkxIDgyLjYyIDAgNzEuMDkgMCA0OS4xOCAyMS45MSA5NS41NSA2OC4yOSA5NS41NSA1Ni43NiIvPgogICAgICAgIDxwYXRoIGNsYXNzPSJjbHMtMiIgZD0ibTg4Ljk3LDExNS4xOWwtMTYuMTctMTYuMTcsMTYuMTctMTYuMTcsNC4wMS00LjAxLDEuMTktMS4xOS0xNS45NS0xNS45NS0zNy4zMiwzNy4zMiwzNy4zMiwzNy4zMiwxNS45NS0xNS45NS0uNDEtLjQxLTQuNzktNC43OVptLTM3LjY3LTE2LjE3bDI2LjkyLTI2LjkyLDUuNTUsNS41NS0yMS4zNywyMS4zNywyMS4zNywyMS4zNy01LjU1LDUuNTUtMjYuOTItMjYuOTJaIi8+CiAgICAgICAgPHBvbHlnb24gY2xhc3M9ImNscy0yIiBwb2ludHM9Ijk1LjU1IDUuNzkgOTUuNTUgMCA4OS44MSAwIDY3LjkgMjEuOTEgNzYuNjEgMzAuNjIgODIuMzcgMjQuODYgNzkuNDMgMjEuOTEgOTUuNTUgNS43OSIvPgogICAgICAgIDxwb2x5Z29uIGNsYXNzPSJjbHMtMiIgcG9pbnRzPSI5NS41NSAzOC4wNCA4Ny41NyAzMC4wNiA4MS44MSAzNS44MiA5NS41NSA0OS41NyA5NS41NSAzOC4wNCIvPgogICAgICAgIDxyZWN0IGNsYXNzPSJjbHMtMiIgeD0iMzMuMTQiIHk9IjQwLjIyIiB3aWR0aD0iMTIuNzgiIGhlaWdodD0iMTIuNzgiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0yMS4zOCA0MS42KSByb3RhdGUoLTQ1KSIvPgogICAgICAgIDxwYXRoIGNsYXNzPSJjbHMtMiIgZD0ibTQyLjU0LDY4LjUybC0xNC44Ni0xNC44NnMwLDAsMCwwbC02LjQzLTYuNDMsMTguNC0xOC40LDE1LjU4LDE1LjU4LTEzLjg3LDEzLjg3LDUuNzEsNS43MSwxOC4zNy0xOC40My01LjY4LTUuNjhoMHMtMjAuMTEtMjAuMTEtMjAuMTEtMjAuMTFsLTI3LjQ3LDI3LjQ3LDIwLjExLDIwLjExTDAsOTkuNjNsMjguNjEsMjguNjFjMy45Ni4wOCw3LjkxLjI1LDExLjg2LjMzbC0yOC45NC0yOC45NCwzMS4wMS0zMS4xMVoiLz4KICAgICAgPC9nPgogICAgPC9nPgogIDwvZz4KPC9zdmc+");
+  background-repeat: no-repeat;
+}
+.logos {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 27%;
+  height: 80%;
+}
+.logos img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+.logo-ecu {
+  width: 70px;
+  height: 70px;
+  object-fit: contain;
+}
+.logo-school {
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+}
+.divider {
+  height: 54px;
+  width: 2px;
+  background: #222;
+  margin-left: 3px;
+}
+.title {
+  padding-left: 20px;
+  line-height: 0.88;
+}
+.title .main {
+  font-size: 33px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.title .year {
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: 1px;
+}
+
+.pdt {
+  padding: 0mm 13mm 10mm;
+  margin-top: -24px;
+}
+.institution {
+  margin-top: 3mm;
+  height: 9mm;
+  border-radius: 4px;
+  background: #087bd0;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+}
+.meta {
+  border-top: 2px solid #3c9bda;
+  border-bottom: 2px solid #3c9bda;
+  margin-top: 2mm;
+}
+.meta-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 8mm;
+  align-items: center;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+.meta-row + .meta-row {
+  border-top: 1px solid #3c9bda;
+}
+.student {
+  margin: 7mm 1mm 5mm;
+  font-size: 16px;
+  font-weight: 700;
+}
+.report {
+  border: 1px solid #e4e4e4;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.08);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 10.5px;
+}
+th {
+  height: 28px;
+  font-weight: 500;
+  line-height: 1.05;
+  background: #fff;
+}
+th:nth-child(1) {
+  width: 28%;
+}
+th:nth-child(2) {
+  width: 13%;
+}
+th:nth-child(3),
+th:nth-child(4),
+th:nth-child(5) {
+  width: 12%;
+}
+th:nth-child(6) {
+  width: 13%;
+}
+th:nth-child(7) {
+  width: 22%;
+}
+td {
+  height: 19px;
+  text-align: center;
+  padding: 2px 3px;
+}
+tr:nth-child(even) td {
+  background: #f1f1f1;
+}
+.subject {
+  text-align: left;
+  font-weight: 700;
+  padding-left: 7px;
+}
+.bar-cell {
+  padding-left: 6px;
+  padding-right: 10px;
+}
+.bar {
+  display: block;
+  width: 100%;
+  height: 11px;
+  border: 1px solid #999;
+  background: #f8f8f8;
+}
+.fill {
+  display: block;
+  height: 100%;
+  background: #68d68a;
+  min-width: 0;
+}
+.message {
+  text-align: center;
+  margin-top: 9mm;
+  font-size: 17px;
+}
+.message strong {
+  display: block;
+  margin-top: 6mm;
+  font-size: 30px;
+  font-style: italic;
+  font-family: serif;
+}
+.footer {
+  position: absolute;
+  bottom: 8mm;
+  left: 13mm;
+  right: 13mm;
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  align-items: end;
+  font-size: 11px;
+}
+.footer div:nth-child(2) {
+  text-align: center;
+}
+.footer div:last-child {
+  text-align: right;
+}
+
+/* @page: el worker pide A4 con margen 0 (la .page tiene su propio padding
+ * 13mm a izquierda/derecha). Mantener print-color-adjust para que el
+ * background del header (#f9f9f9), el banner de institución (#087bd0) y
+ * las rayas zebra se impriman a color. */
+@page {
+  size: A4;
+  margin: 0;
+}
+@media print {
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+  }
+}

@@ -11,7 +11,7 @@ import {
 import type { InformeGrupo } from "@/modules/consultas/domain/queries/informe-grupo/informe-grupo";
 
 const INFORME: InformeGrupo = {
-  prueba: { id: "p1", name: "2026-2" },
+  prueba: { id: "p1", name: "2026-2", year: 2026 },
   grupo: { id: "g1", name: "1001", courseName: "10" },
   cuadernillos: [{ id: "b1", name: "Cuadernillo 1" }],
   asignaturas: [
@@ -24,7 +24,10 @@ const INFORME: InformeGrupo = {
       studentId: "e1",
       nombre: "Álvarez, Ana",
       codigo: "C1",
-      puntajes: { bio: { puntaje: 8.5, correctas: 17, total: 20 }, fis: null },
+      puntajes: {
+        bio: { puntaje: 8.5, correctas: 17, incorrectas: 2, enBlanco: 1, total: 20 },
+        fis: null,
+      },
     },
     {
       item: 3,
@@ -32,8 +35,8 @@ const INFORME: InformeGrupo = {
       nombre: "Castro, Luis",
       codigo: "C3",
       puntajes: {
-        bio: { puntaje: 3, correctas: 1, total: 20 },
-        fis: { puntaje: 10, correctas: 5, total: 5 },
+        bio: { puntaje: 3, correctas: 1, incorrectas: 15, enBlanco: 4, total: 20 },
+        fis: { puntaje: 10, correctas: 5, incorrectas: 0, enBlanco: 0, total: 5 },
       },
     },
   ],

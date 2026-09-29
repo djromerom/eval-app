@@ -16,7 +16,10 @@ import { type PrintKind, verifyPrintToken } from "@/shared/infrastructure/crypto
  */
 export async function resolvePrintActor(
   token: string | undefined,
-  expected: { evaluationId: string; kind: PrintKind } | { bundleId: string; kind: PrintKind },
+  expected:
+    | { evaluationId: string; kind: PrintKind }
+    | { bundleId: string; kind: PrintKind }
+    | { periodId: string; groupId: string; kind: PrintKind },
 ): Promise<AuthenticatedUser> {
   if (token) {
     const access = verifyPrintToken(token);
@@ -29,6 +32,17 @@ export async function resolvePrintActor(
         roles: ["ECU_MASTER", "ECU_LIDER", "TEACHER"],
       };
     } else if ("bundleId" in expected && access.bundleId === expected.bundleId) {
+      return {
+        userId: "pdf-worker",
+        institutionId: access.institutionId,
+        roles: ["ECU_MASTER", "ECU_LIDER", "TEACHER"],
+      };
+    } else if (
+      "periodId" in expected &&
+      "groupId" in expected &&
+      access.periodId === expected.periodId &&
+      access.groupId === expected.groupId
+    ) {
       return {
         userId: "pdf-worker",
         institutionId: access.institutionId,

@@ -92,7 +92,12 @@ export class PrismaInformeGrupoReader implements InformeGrupoReader {
       }),
       prisma.period.findFirst({
         where: { id: periodId, institutionId },
-        select: { id: true, name: true, academicYearId: true },
+        select: {
+          id: true,
+          name: true,
+          academicYearId: true,
+          academicYear: { select: { year: true } },
+        },
       }),
     ]);
     if (!grupo || !prueba) return null;
@@ -183,12 +188,23 @@ export class PrismaInformeGrupoReader implements InformeGrupoReader {
         ? Promise.resolve([])
         : prisma.studentAnswer.findMany({
             where: { answerSheetId: { in: idsQueCuentan } },
-            select: { answerSheetId: true, bundleItemId: true, questionId: true, isCorrect: true },
+            select: {
+              answerSheetId: true,
+              bundleItemId: true,
+              questionId: true,
+              isCorrect: true,
+              selectedKey: true,
+            },
           }),
     ]);
 
     return {
-      prueba,
+      prueba: {
+        id: prueba.id,
+        name: prueba.name,
+        academicYearId: prueba.academicYearId,
+        year: prueba.academicYear.year,
+      },
       grupo: {
         id: grupo.id,
         name: grupo.name,
