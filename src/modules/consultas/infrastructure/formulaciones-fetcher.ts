@@ -39,6 +39,26 @@ function ruleKey(
   return `${periodId ?? "_"}|${courseId}|${subjectId}|${bookletTypeId ?? "_"}`;
 }
 
+/**
+ * Docentes asignados a una formulación.
+ *
+ * Cuenta los que tienen una asignación para esa asignatura-grado **con ese
+ * tipo de cuadernillo** y los que la tienen "para cualquier tipo"
+ * (`bookletTypeId = null`). Así el docente del cuadernillo Especial no
+ * aparece como asignado en la formulación del Estándar.
+ */
+function assignedTeachersFor(
+  teachersByKey: Map<string, string[]>,
+  courseSubjectId: string,
+  bookletTypeId: string | null,
+): string[] {
+  const names = new Set<string>();
+  for (const key of [`${courseSubjectId}|${bookletTypeId ?? "_"}`, `${courseSubjectId}|_`]) {
+    for (const name of teachersByKey.get(key) ?? []) names.add(name);
+  }
+  return [...names];
+}
+
 export class PrismaFormulacionesReader implements FormulacionesReader {
   async listByInstitution(institutionId: string): Promise<FormulacionRow[]> {
     // (1) Evaluations + joins base.
@@ -69,23 +89,27 @@ export class PrismaFormulacionesReader implements FormulacionesReader {
 
     const courseSubjectIds = Array.from(new Set(evaluations.map((e) => e.courseSubjectId)));
 
-    // (2) Docentes asignados por courseSubjectId. Un solo `findMany` batch.
+    // (2) Docentes asignados por courseSubjectId + tipo de cuadernillo. Un
+    // solo `findMany` batch.
     const assignments = await prisma.teacherSubjectAssignment.findMany({
       where: { courseSubjectId: { in: courseSubjectIds } },
       select: {
         courseSubjectId: true,
+        // `null` = la asignación aplica a cualquier tipo de cuadernillo.
+        bookletTypeId: true,
         teacher: { select: { user: { select: { name: true } } } },
       },
     });
-    // Agrupa por courseSubjectId → string[] de nombres únicos (un docente
-    // puede estar asignado 2 veces a la misma tupla? no — hay unique
-    // (teacherId, courseSubjectId) — pero por defensa hacemos dedupe).
-    const teachersByCourseSubject = new Map<string, string[]>();
+    // Agrupa por (courseSubjectId, bookletTypeId) → string[] de nombres
+    // únicos. La clave usa "_" como sentinel de "sin tipo" (asignación que
+    // aplica a cualquier cuadernillo), igual que `ruleKey` más abajo.
+    const teachersByKey = new Map<string, string[]>();
     for (const a of assignments) {
+      const key = `${a.courseSubjectId}|${a.bookletTypeId ?? "_"}`;
       const name = a.teacher.user.name;
-      const list = teachersByCourseSubject.get(a.courseSubjectId) ?? [];
+      const list = teachersByKey.get(key) ?? [];
       if (!list.includes(name)) list.push(name);
-      teachersByCourseSubject.set(a.courseSubjectId, list);
+      teachersByKey.set(key, list);
     }
 
     // (3) Reglas de la institución. Tabla chica — un único fetch vale.
@@ -125,7 +149,7 @@ export class PrismaFormulacionesReader implements FormulacionesReader {
         bookletTypeName: e.bookletType?.name ?? null,
         status: e.status as EvaluationStatus,
         authorName: e.teacher.name,
-        assignedTeachers: teachersByCourseSubject.get(e.courseSubjectId) ?? [],
+        assignedTeachers: assignedTeachersFor(teachersByKey, e.courseSubjectId, e.bookletTypeId),
         itemsTotal: e.totalQuestions,
         itemsExpected: expected,
         itemsBadge: computeItemsBadge(e.totalQuestions, expected),
