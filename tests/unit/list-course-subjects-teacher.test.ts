@@ -64,18 +64,24 @@ class InMemoryTeachers implements TeacherRepository {
   async setInviteToken(): Promise<void> {
     /* no usado */
   }
-  async assign(teacherId: string, courseSubjectId: string): Promise<void> {
+  async assign(teacherId: string, courseSubjectId: string, bookletTypeId: string | null) {
     this.assignments.push({
       id: `a-${this.assignments.length + 1}`,
       teacherId,
       courseSubjectId,
       courseName: "",
       subjectName: "",
+      bookletTypeId,
+      bookletTypeName: null,
+      periodName: null,
     });
   }
-  async isAssigned(teacherId: string, courseSubjectId: string) {
+  async isAssigned(teacherId: string, courseSubjectId: string, bookletTypeId: string | null) {
     return this.assignments.some(
-      (a) => a.teacherId === teacherId && a.courseSubjectId === courseSubjectId,
+      (a) =>
+        a.teacherId === teacherId &&
+        a.courseSubjectId === courseSubjectId &&
+        a.bookletTypeId === bookletTypeId,
     );
   }
   async listAssignments(institutionId: string, teacherId?: string) {
@@ -148,9 +154,9 @@ describe("ListCourseSubjects — scoping por rol (fix asignaciones de docente)",
     });
     // Docente 1 asignado a cs-A (Matemáticas 11°) y cs-C (Matemáticas 10°).
     // Docente 2 asignado a cs-B (Física 11°). Quedan cs-D sin asignar.
-    void teachers.assign("t-1", "cs-A");
-    void teachers.assign("t-1", "cs-C");
-    void teachers.assign("t-2", "cs-B");
+    void teachers.assign("t-1", "cs-A", null);
+    void teachers.assign("t-1", "cs-C", null);
+    void teachers.assign("t-2", "cs-B", null);
     uc = new ListCourseSubjects(courseSubjects, teachers);
   });
 

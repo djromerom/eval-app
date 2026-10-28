@@ -135,6 +135,12 @@ export class CreateEvaluation implements UseCase<CreateEvaluationInput, Evaluati
 export interface ListEvaluationsInput {
   actor: AuthenticatedUser;
   status?: EvaluationStatus;
+  /**
+   * Filtra por prueba (Period). "Mis formulaciones" lo usa para mostrar
+   * solo las formulaciones de la PRUEBA ACTUAL (oct 2026). Si se omite,
+   * no se filtra por prueba.
+   */
+  periodId?: string;
 }
 
 /**
@@ -148,7 +154,11 @@ export class ListEvaluations implements UseCase<ListEvaluationsInput, Evaluation
     private readonly leaderAssignments: LeaderAssignmentRepository,
   ) {}
 
-  async execute({ actor, status }: ListEvaluationsInput): Promise<Result<EvaluationListItem[]>> {
+  async execute({
+    actor,
+    status,
+    periodId,
+  }: ListEvaluationsInput): Promise<Result<EvaluationListItem[]>> {
     const authorized = requireRole(actor, "TEACHER", "ECU_LIDER", "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
@@ -159,12 +169,14 @@ export class ListEvaluations implements UseCase<ListEvaluationsInput, Evaluation
         actor.institutionId,
         actor.userId,
       );
-      return ok(await this.evaluations.findByCourseIds(actor.institutionId, courseIds, status));
+      return ok(
+        await this.evaluations.findByCourseIds(actor.institutionId, courseIds, status, periodId),
+      );
     }
     if (hasRole(actor, "ECU_MASTER")) {
-      return ok(await this.evaluations.findByInstitution(actor.institutionId, status));
+      return ok(await this.evaluations.findByInstitution(actor.institutionId, status, periodId));
     }
-    return ok(await this.evaluations.findByTeacher(actor.institutionId, actor.userId));
+    return ok(await this.evaluations.findByTeacher(actor.institutionId, actor.userId, periodId));
   }
 }
 

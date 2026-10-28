@@ -8,6 +8,7 @@ import {
   makeListPeriods,
 } from "@/modules/academic/infrastructure/container";
 import { makeListBookletTypesByInstitution } from "@/modules/booklet-types/infrastructure/container";
+import { makeListTeacherAssignments } from "@/modules/teachers/infrastructure/container";
 import { CreateEvaluationForm } from "./create-evaluation-form";
 import { createEvaluationAction } from "./actions";
 import { EvaluationsTable } from "./evaluations-table";
@@ -16,8 +17,7 @@ export const metadata: Metadata = { title: "Formulaciones" };
 
 export default async function EvaluationsPage() {
   const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
-  const [listRes, csRes, periodsRes, bookletTypesRes, coursesRes] = await Promise.all([
-    makeListEvaluations().execute({ actor }),
+  const [csRes, periodsRes, bookletTypesRes, coursesRes, assignmentsRes] = await Promise.all([
     makeListCourseSubjects().execute({ actor }),
     makeListPeriods().execute({ actor }),
     // Cargamos TODO el catálogo de la institución (decenas de filas) y
@@ -27,12 +27,25 @@ export default async function EvaluationsPage() {
     // Necesitamos los cursos para mapear courseSubjectId → academicYearId
     // y así preseleccionar la Prueba actual del año académico del docente.
     makeListCourses().execute({ actor }),
+    // Asignaciones del docente: de ahí sale qué tipos de cuadernillo
+    // puede formular para cada asignatura-grado (oct 2026).
+    makeListTeacherAssignments().execute({ actor }),
   ]);
-  const evaluations = listRes.ok ? listRes.value : [];
   const courseSubjects = csRes.ok ? csRes.value : [];
   const periods = periodsRes.ok ? periodsRes.value : [];
   const bookletTypes = bookletTypesRes.ok ? bookletTypesRes.value : [];
   const courses = coursesRes.ok ? coursesRes.value : [];
+  const assignments = assignmentsRes.ok ? assignmentsRes.value : [];
+
+  // "Mis formulaciones" muestra SOLO las formulaciones de la PRUEBA ACTUAL
+  // (la que el admin marcó con `isCurrent`). Se resuelve con la misma regla
+  // que el select "Prueba" del formulario (`periods.find(p => p.isCurrent)`)
+  // para que el listado y el formulario hablen siempre de la misma prueba.
+  // Sin ninguna prueba actual marcada, no se filtra: el docente ve todas
+  // (igual que antes de este filtro).
+  const currentPeriod = periods.find((p) => p.isCurrent);
+  const listRes = await makeListEvaluations().execute({ actor, periodId: currentPeriod?.id });
+  const evaluations = listRes.ok ? listRes.value : [];
 
   // Mapa courseId → academicYearId (necesario para resolver la Prueba
   // "actual" del año académico del courseSubject que el docente eligió).
@@ -69,6 +82,20 @@ export default async function EvaluationsPage() {
     if (!existingMap[key]) {
       existingMap[key] = { id: e.id, title: e.title };
     }
+  }
+
+  // Tipos de cuadernillo permitidos por asignatura-grado, según las
+  // asignaciones del docente (oct 2026). Una asignación con tipo `null`
+  // significa "cualquier cuadernillo" → `anyType` y no se filtra nada.
+  const allowedTypesByCs: Record<string, { anyType: boolean; types: string[] }> = {};
+  for (const a of assignments) {
+    const entry = allowedTypesByCs[a.courseSubjectId] ?? { anyType: false, types: [] };
+    if (a.bookletTypeId === null) {
+      entry.anyType = true;
+    } else if (!entry.types.includes(a.bookletTypeId)) {
+      entry.types.push(a.bookletTypeId);
+    }
+    allowedTypesByCs[a.courseSubjectId] = entry;
   }
 
   return (
@@ -126,6 +153,10 @@ export default async function EvaluationsPage() {
            *  duplicados client-side y redirigir al docente a la formulación
            *  existente en lugar de fallar con un error 409 (ago 2026). */
           existingMap={existingMap}
+          /** Tipos de cuadernillo que el docente puede formular para cada
+           *  asignatura-grado, según sus asignaciones (oct 2026). `anyType`
+           *  = la asignación aplica a cualquier cuadernillo → no se filtra. */
+          allowedTypesByCs={allowedTypesByCs}
         />
       </section>
 

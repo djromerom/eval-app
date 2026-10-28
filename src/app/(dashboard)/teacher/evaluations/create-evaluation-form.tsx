@@ -25,6 +25,16 @@ interface ExistingEntry {
   title: string;
 }
 
+/**
+ * Tipos de cuadernillo que el docente puede formular para una asignatura-grado,
+ * según sus asignaciones. `anyType` = la asignación aplica a cualquier
+ * cuadernillo (no se filtra nada).
+ */
+interface AllowedTypes {
+  anyType: boolean;
+  types: string[];
+}
+
 type Action = (state: AdminFormState, formData: FormData) => Promise<AdminFormState>;
 
 /**
@@ -49,6 +59,9 @@ type Action = (state: AdminFormState, formData: FormData) => Promise<AdminFormSt
  * - Detección client-side de duplicados (mismo courseSubjectId + periodId)
  *   para redirigir al docente a la formulación existente en lugar de fallar
  *   con el error 409 "Ya existe una formulación…".
+ * - Filtro del select "Tipo de cuadernillo" según las asignaciones del
+ *   docente: solo puede formular con los tipos que tiene asignados para esa
+ *   asignatura-grado (oct 2026).
  */
 export function CreateEvaluationForm({
   action,
@@ -59,6 +72,7 @@ export function CreateEvaluationForm({
   csYearMap,
   periods,
   existingMap,
+  allowedTypesByCs,
 }: {
   action: Action;
   fields: Field[];
@@ -76,6 +90,10 @@ export function CreateEvaluationForm({
    *  sentinel de "sin periodo" / "sin tipo" para mantener 1:1 con la regla
    *  del repo. */
   existingMap: Record<string, ExistingEntry>;
+  /** courseSubjectId → tipos de cuadernillo asignados al docente para esa
+   *  asignatura-grado. `anyType` = la asignación aplica a cualquier
+   *  cuadernillo → no se filtra nada (oct 2026). */
+  allowedTypesByCs: Record<string, AllowedTypes>;
 }) {
   const [state, formAction] = useActionState<AdminFormState, FormData>(action, {});
   const formRef = useRef<HTMLFormElement>(null);
@@ -105,10 +123,20 @@ export function CreateEvaluationForm({
   const [courseSubjectId, setCourseSubjectId] = useState("");
 
   // Filtramos los BookletTypes disponibles para la Prueba seleccionada.
-  const filteredTypes = useMemo(
+  const periodTypes = useMemo(
     () => (periodId ? bookletTypes.filter((bt) => bt.periodId === periodId) : []),
     [periodId, bookletTypes],
   );
+
+  // Tipos permitidos para la asignatura-grado elegida: el admin asigna al
+  // docente a (asignatura-grado, tipo de cuadernillo), así que solo puede
+  // formular con esos tipos. Una asignación "para cualquier cuadernillo"
+  // (tipo null) deja la lista completa (oct 2026).
+  const allowedForCs = courseSubjectId ? allowedTypesByCs[courseSubjectId] : undefined;
+  const filteredTypes = useMemo(() => {
+    if (!allowedForCs || allowedForCs.anyType) return periodTypes;
+    return periodTypes.filter((bt) => allowedForCs.types.includes(bt.id));
+  }, [periodTypes, allowedForCs]);
 
   // Filtramos las Asignaturas disponibles al año académico del periodo
   // actual (ago 2026): el docente solo ve las Asignaturas del año
@@ -271,7 +299,9 @@ export function CreateEvaluationForm({
         </select>
         {periodId && filteredTypes.length === 0 && (
           <p className="text-muted-foreground text-xs">
-            Pídale al admin que configure tipos para esta prueba.
+            {periodTypes.length === 0
+              ? "Pídale al admin que configure tipos para esta prueba."
+              : "No tienes tipos de cuadernillo asignados para esta asignatura."}
           </p>
         )}
       </FieldBlock>

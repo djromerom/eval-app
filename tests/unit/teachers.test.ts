@@ -21,6 +21,10 @@ import type {
   CourseSubjectRepository,
   CourseSubjectView,
 } from "@/modules/academic/domain/types";
+import type {
+  BookletType,
+  BookletTypeRepository,
+} from "@/modules/booklet-types/domain/booklet-type";
 
 class InMemoryTeachers implements TeacherRepository {
   items: Teacher[] = [];
@@ -86,18 +90,24 @@ class InMemoryTeachers implements TeacherRepository {
     const t = this.items.find((x) => x.id === id);
     if (t) t.isActive = true;
   }
-  async assign(teacherId: string, courseSubjectId: string) {
+  async assign(teacherId: string, courseSubjectId: string, bookletTypeId: string | null) {
     this.assignments.push({
       id: `a-${this.assignments.length + 1}`,
       teacherId,
       courseSubjectId,
       courseName: "11°",
       subjectName: "Mat",
+      bookletTypeId,
+      bookletTypeName: bookletTypeId ? "Estándar" : null,
+      periodName: bookletTypeId ? "I Periodo" : null,
     });
   }
-  async isAssigned(teacherId: string, courseSubjectId: string) {
+  async isAssigned(teacherId: string, courseSubjectId: string, bookletTypeId: string | null) {
     return this.assignments.some(
-      (a) => a.teacherId === teacherId && a.courseSubjectId === courseSubjectId,
+      (a) =>
+        a.teacherId === teacherId &&
+        a.courseSubjectId === courseSubjectId &&
+        a.bookletTypeId === bookletTypeId,
     );
   }
   async listAssignments(institutionId: string, teacherId?: string) {
@@ -126,6 +136,52 @@ class InMemoryCourseSubjects implements CourseSubjectRepository {
 
 const admin: AuthenticatedUser = { userId: "a", institutionId: "i1", roles: ["ECU_MASTER"] };
 const institutionName = "Colegio Test";
+
+/** Catálogo de tipos de cuadernillo mínimo para el use case de asignación. */
+class InMemoryBookletTypes implements BookletTypeRepository {
+  items: BookletType[] = [
+    {
+      id: "bt-estandar",
+      institutionId: "i1",
+      periodId: "p1",
+      name: "Estándar",
+      description: null,
+      order: 1,
+    },
+    {
+      id: "bt-especial",
+      institutionId: "i1",
+      periodId: "p1",
+      name: "Especial",
+      description: null,
+      order: 2,
+    },
+  ];
+  async findById(_institutionId: string, id: string) {
+    return this.items.find((bt) => bt.id === id) ?? null;
+  }
+  async listByPeriod(): Promise<BookletType[]> {
+    return this.items;
+  }
+  async listByInstitution(): Promise<BookletType[]> {
+    return this.items;
+  }
+  async findByName(): Promise<BookletType[]> {
+    return [];
+  }
+  async findByNameAndPeriod(): Promise<BookletType[]> {
+    return [];
+  }
+  async create(): Promise<BookletType> {
+    throw new Error("no usado");
+  }
+  async update(): Promise<BookletType> {
+    throw new Error("no usado");
+  }
+  async delete(): Promise<void> {
+    throw new Error("no usado");
+  }
+}
 
 describe("CreateTeacher", () => {
   let repo: InMemoryTeachers;
@@ -353,19 +409,96 @@ describe("AssignTeacher", () => {
       idNumber: "1",
     });
     const cs = new InMemoryCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
-    const uc = new AssignTeacher(repo, cs);
+    const uc = new AssignTeacher(repo, cs, new InMemoryBookletTypes());
 
-    const ok1 = await uc.execute({ actor: admin, teacherId: teacher.id, courseSubjectId: "cs1" });
+    const ok1 = await uc.execute({
+      actor: admin,
+      teacherId: teacher.id,
+      courseId: "c1",
+      courseSubjectId: "cs1",
+      bookletTypeId: null,
+    });
     expect(ok1.ok).toBe(true);
 
-    const dup = await uc.execute({ actor: admin, teacherId: teacher.id, courseSubjectId: "cs1" });
+    const dup = await uc.execute({
+      actor: admin,
+      teacherId: teacher.id,
+      courseId: "c1",
+      courseSubjectId: "cs1",
+      bookletTypeId: null,
+    });
     expect(dup.ok).toBe(false);
 
     const badCs = await uc.execute({
       actor: admin,
       teacherId: teacher.id,
+      courseId: "c1",
       courseSubjectId: "nope",
+      bookletTypeId: null,
     });
     expect(badCs.ok).toBe(false);
+  });
+
+  it("rechaza si la asignatura no pertenece al grado seleccionado", async () => {
+    const repo = new InMemoryTeachers();
+    const teacher = await repo.createWithUser("i1", {
+      name: "P",
+      email: "p@c.co",
+      idType: "C.C.",
+      idNumber: "1",
+    });
+    // La asignatura es del grado "c1", pero el form manda el grado "c2".
+    const cs = new InMemoryCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
+    const uc = new AssignTeacher(repo, cs, new InMemoryBookletTypes());
+
+    const r = await uc.execute({
+      actor: admin,
+      teacherId: teacher.id,
+      courseId: "c2",
+      courseSubjectId: "cs1",
+      bookletTypeId: null,
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it("el tipo de cuadernillo entra en la clave: el mismo docente puede tener dos tipos", async () => {
+    const repo = new InMemoryTeachers();
+    const teacher = await repo.createWithUser("i1", {
+      name: "P",
+      email: "p@c.co",
+      idType: "C.C.",
+      idNumber: "1",
+    });
+    const cs = new InMemoryCourseSubjects([{ id: "cs1", courseId: "c1", subjectId: "s1" }]);
+    const uc = new AssignTeacher(repo, cs, new InMemoryBookletTypes());
+
+    const estandar = await uc.execute({
+      actor: admin,
+      teacherId: teacher.id,
+      courseId: "c1",
+      courseSubjectId: "cs1",
+      bookletTypeId: "bt-estandar",
+    });
+    expect(estandar.ok).toBe(true);
+
+    // Mismo docente + misma asignatura-grado, otro tipo → NO es duplicado.
+    const especial = await uc.execute({
+      actor: admin,
+      teacherId: teacher.id,
+      courseId: "c1",
+      courseSubjectId: "cs1",
+      bookletTypeId: "bt-especial",
+    });
+    expect(especial.ok).toBe(true);
+
+    // Repetir el mismo tipo sí es duplicado.
+    const dup = await uc.execute({
+      actor: admin,
+      teacherId: teacher.id,
+      courseId: "c1",
+      courseSubjectId: "cs1",
+      bookletTypeId: "bt-estandar",
+    });
+    expect(dup.ok).toBe(false);
   });
 });

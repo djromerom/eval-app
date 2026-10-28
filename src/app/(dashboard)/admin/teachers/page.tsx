@@ -7,30 +7,53 @@ import {
   makeListTeacherAssignments,
   makeListTeachers,
 } from "@/modules/teachers/infrastructure/container";
-import { makeListCourseSubjects } from "@/modules/academic/infrastructure/container";
+import {
+  makeListAcademicYears,
+  makeListCourseSubjects,
+  makeListCourses,
+  makeListPeriods,
+} from "@/modules/academic/infrastructure/container";
+import { makeListBookletTypesByInstitution } from "@/modules/booklet-types/infrastructure/container";
 import { assignTeacherAction, createTeacherAction } from "./actions";
 import { CompleteProfileForm } from "./complete-profile-form";
 import { ResendInviteButton } from "./resend-invite-button";
 import { TeachersPageChrome } from "./_components/teachers-page-chrome";
+import { TeacherAssignmentForm } from "./_components/teacher-assignment-form";
 
 export const metadata: Metadata = { title: "Docentes" };
 
 export default async function TeachersPage() {
   const actor = await requireAuthenticatedUser("ECU_MASTER");
-  const [teachersRes, courseSubjectsRes, assignmentsRes] = await Promise.all([
+  const [
+    teachersRes,
+    courseSubjectsRes,
+    assignmentsRes,
+    // Grados, años, periodos y tipos de cuadernillo: alimentan los selects
+    // encadenados del form de asignación (Grado → Asignatura → Tipo).
+    coursesRes,
+    yearsRes,
+    periodsRes,
+    bookletTypesRes,
+  ] = await Promise.all([
     makeListTeachers().execute({ actor }),
     makeListCourseSubjects().execute({ actor }),
     makeListTeacherAssignments().execute({ actor }),
+    makeListCourses().execute({ actor }),
+    makeListAcademicYears().execute({ actor }),
+    makeListPeriods().execute({ actor }),
+    makeListBookletTypesByInstitution().execute({ actor }),
   ]);
   const teachers = teachersRes.ok ? teachersRes.value : [];
   const courseSubjects = courseSubjectsRes.ok ? courseSubjectsRes.value : [];
   const assignments = assignmentsRes.ok ? assignmentsRes.value : [];
+  const courses = coursesRes.ok ? coursesRes.value : [];
+  const years = yearsRes.ok ? yearsRes.value : [];
+  const periods = periodsRes.ok ? periodsRes.value : [];
+  const bookletTypes = bookletTypesRes.ok ? bookletTypesRes.value : [];
 
-  const teacherOptions = teachers.map((t) => ({ value: t.id, label: t.name }));
-  const csOptions = courseSubjects.map((cs) => ({
-    value: cs.id,
-    label: `${cs.courseName} · ${cs.subjectName}`,
-  }));
+  const yearById = new Map(years.map((y) => [y.id, y.year]));
+  const periodById = new Map(periods.map((p) => [p.id, p]));
+
   const byTeacher = new Map<string, typeof assignments>();
   for (const a of assignments) {
     byTeacher.set(a.teacherId, [...(byTeacher.get(a.teacherId) ?? []), a]);
@@ -81,9 +104,30 @@ export default async function TeachersPage() {
 
         <section className="bg-card space-y-4 rounded-xl border p-6">
           <h2 className="font-semibold">Asignar a asignatura-grado</h2>
-          <EntityForm
+          <TeacherAssignmentForm
             action={assignTeacherAction}
-            submitLabel="Asignar"
+            teachers={teachers.map((t) => ({ id: t.id, name: t.name }))}
+            courses={courses.map((c) => ({
+              id: c.id,
+              name: c.name,
+              academicYearId: c.academicYearId,
+              year: yearById.get(c.academicYearId) ?? 0,
+            }))}
+            courseSubjects={courseSubjects.map((cs) => ({
+              id: cs.id,
+              courseId: cs.courseId,
+              subjectName: cs.subjectName,
+            }))}
+            bookletTypes={bookletTypes.map((bt) => {
+              const period = periodById.get(bt.periodId);
+              return {
+                id: bt.id,
+                name: bt.name,
+                periodName: period?.name ?? "",
+                academicYearId: period?.academicYearId ?? "",
+                year: period ? (yearById.get(period.academicYearId) ?? 0) : 0,
+              };
+            })}
             disabledReason={
               teachers.length === 0
                 ? "Registra primero un docente."
@@ -91,22 +135,6 @@ export default async function TeachersPage() {
                   ? "Enlaza asignaturas a grados en Estructura académica."
                   : undefined
             }
-            fields={[
-              {
-                name: "teacherId",
-                label: "Docente",
-                type: "select",
-                required: true,
-                options: teacherOptions,
-              },
-              {
-                name: "courseSubjectId",
-                label: "Asignatura-grado",
-                type: "select",
-                required: true,
-                options: csOptions,
-              },
-            ]}
           />
         </section>
 
@@ -159,7 +187,12 @@ export default async function TeachersPage() {
                       </td>
                       <td className="text-muted-foreground px-4 py-3">
                         {(byTeacher.get(t.id) ?? [])
-                          .map((a) => `${a.courseName}·${a.subjectName}`)
+                          .map(
+                            (a) =>
+                              `${a.courseName}·${a.subjectName}${
+                                a.bookletTypeName ? ` - ${a.bookletTypeName}` : ""
+                              }`,
+                          )
                           .join(", ") || "—"}
                       </td>
                       <td className="px-4 py-3">

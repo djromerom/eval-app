@@ -233,10 +233,21 @@ model TeacherSubjectAssignment {
   teacher         Teacher       @relation(fields: [teacherId], references: [id])
   courseSubjectId String        @db.Uuid
   courseSubject   CourseSubject @relation(fields: [courseSubjectId], references: [id])
+  /// Tipo de cuadernillo al que aplica la asignación (oct 2026).
+  ///
+  /// `null` = la asignación aplica a CUALQUIER tipo de cuadernillo de esa
+  /// asignatura-grado. Es el valor de las filas creadas antes de este
+  /// sprint (compat) y el que usa la UI cuando el admin no marca un tipo
+  /// concreto. Un docente puede estar asignado a la misma asignatura-grado
+  /// con varios tipos (p. ej. "Estándar" y "Especial"): por eso el unique
+  /// incluye `bookletTypeId` y NO es (teacherId, courseSubjectId).
+  bookletTypeId   String?       @db.Uuid
+  bookletType     BookletType?  @relation(fields: [bookletTypeId], references: [id], onDelete: Restrict)
 
-  @@unique([teacherId, courseSubjectId])
+  @@unique([teacherId, courseSubjectId, bookletTypeId])
   @@index([teacherId])
   @@index([courseSubjectId])
+  @@index([bookletTypeId])
 }
 
 /// Asignación de un Líder ECU a un курсо entero (todas sus asignaturas).
@@ -472,6 +483,8 @@ model BookletType {
   // El docente asigna el cuadernillo por defecto del estudiante al importar.
   students        Student[]
   enrollments     StudentEnrollment[]
+  // Asignaciones docente ↔ asignatura-grado que aplican a este tipo.
+  teacherAssignments TeacherSubjectAssignment[]
 
   @@unique([institutionId, periodId, name])
   @@index([institutionId, periodId])

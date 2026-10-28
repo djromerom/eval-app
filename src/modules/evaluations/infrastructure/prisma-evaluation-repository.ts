@@ -194,7 +194,12 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
       include: {
         sections: {
           orderBy: { order: "asc" },
-          include: { questions: { orderBy: { number: "asc" }, include: { options: { orderBy: { key: "asc" } } } } },
+          include: {
+            questions: {
+              orderBy: { number: "asc" },
+              include: { options: { orderBy: { key: "asc" } } },
+            },
+          },
         },
         // Hidrata periodName para que EvaluationDetail exponga el rótulo
         // legible del periodo sin un SELECT extra desde el page.tsx.
@@ -227,18 +232,29 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
     };
   }
 
-  async findByTeacher(institutionId: string, teacherId: string): Promise<EvaluationListItem[]> {
-    return this.listWhere({ institutionId, teacherId, deletedAt: null });
+  async findByTeacher(
+    institutionId: string,
+    teacherId: string,
+    periodId?: string,
+  ): Promise<EvaluationListItem[]> {
+    return this.listWhere({
+      institutionId,
+      teacherId,
+      deletedAt: null,
+      ...(periodId ? { periodId } : {}),
+    });
   }
 
   async findByInstitution(
     institutionId: string,
     status?: EvaluationStatus,
+    periodId?: string,
   ): Promise<EvaluationListItem[]> {
     return this.listWhere({
       institutionId,
       deletedAt: null,
       ...(status ? { status: status as DraftStatus } : {}),
+      ...(periodId ? { periodId } : {}),
     });
   }
 
@@ -246,6 +262,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
     institutionId: string,
     courseIds: string[],
     status?: EvaluationStatus,
+    periodId?: string,
   ): Promise<EvaluationListItem[]> {
     if (courseIds.length === 0) return [];
     return this.listWhere({
@@ -253,6 +270,7 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
       deletedAt: null,
       courseSubject: { courseId: { in: courseIds } },
       ...(status ? { status: status as DraftStatus } : {}),
+      ...(periodId ? { periodId } : {}),
     });
   }
 
@@ -341,7 +359,12 @@ export class PrismaEvaluationRepository implements EvaluationRepository {
           ? { columnLayoutOverride: data.columnLayoutOverride }
           : {}),
       },
-      include: { questions: { include: { options: { orderBy: { key: "asc" } } }, orderBy: { number: "asc" } } },
+      include: {
+        questions: {
+          include: { options: { orderBy: { key: "asc" } } },
+          orderBy: { number: "asc" },
+        },
+      },
     });
     return toSection(row);
   }
