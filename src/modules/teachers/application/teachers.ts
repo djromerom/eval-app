@@ -5,7 +5,12 @@ import { logger } from "@/shared/infrastructure/logger";
 import type { UseCase } from "@/shared/application/use-case";
 import { type Result, ValidationError, fail, ok } from "@/shared/domain/result";
 import { isValidEmail } from "@/modules/users/domain/user";
-import type { CourseSubjectRepository } from "@/modules/academic/domain/types";
+import type {
+  CourseSubjectRepository,
+  CourseRepository,
+  PeriodRepository,
+} from "@/modules/academic/domain/types";
+import type { BookletTypeRepository } from "@/modules/booklet-types/domain/booklet-type";
 import {
   type CreateTeacherData,
   TEACHER_ID_TYPES,
@@ -375,17 +380,40 @@ export class ListTeachers implements UseCase<ListTeachersInput, Teacher[]> {
 export interface AssignTeacherInput {
   actor: AuthenticatedUser;
   teacherId: string;
+  /** Grado (course) elegido en el form. La asignatura-grado debe pertenecer
+   *  a este grado — el form filtra la lista de asignaturas por grado, pero el
+   *  servidor vuelve a validarlo (no confíamos en el DOM). */
+  courseId: string;
   courseSubjectId: string;
+  /** Tipo de cuadernillo al que aplica la asignación. `null` = la asignación
+   *  aplica a cualquier tipo de cuadernillo de esa asignatura-grado. */
+  bookletTypeId: string | null;
 }
 
-/** Asigna un docente a una asignatura-curso de la institución (ADMIN). §3.2 */
+/**
+ * Asigna un docente a una asignatura-curso de la institución (ADMIN). §3.2
+ *
+ * Desde oct 2026 la asignación incluye el TIPO DE CUADERNILLO: el mismo
+ * docente puede estar asignado a "Estándar" y a "Especial" de la misma
+ * asignatura-grado (cada tipo lo dicta un docente distinto). Un tipo
+ * `null` significa "cualquier tipo" (filas previas al sprint).
+ */
 export class AssignTeacher implements UseCase<AssignTeacherInput, void> {
   constructor(
     private readonly teachers: TeacherRepository,
     private readonly courseSubjects: CourseSubjectRepository,
+    private readonly bookletTypes: BookletTypeRepository,
+    private readonly courses?: CourseRepository,
+    private readonly periods?: PeriodRepository,
   ) {}
 
-  async execute({ actor, teacherId, courseSubjectId }: AssignTeacherInput): Promise<Result<void>> {
+  async execute({
+    actor,
+    teacherId,
+    courseId,
+    courseSubjectId,
+    bookletTypeId,
+  }: AssignTeacherInput): Promise<Result<void>> {
     const authorized = requireRole(actor, "ECU_MASTER");
     if (!authorized.ok) return authorized;
 
@@ -397,11 +425,45 @@ export class AssignTeacher implements UseCase<AssignTeacherInput, void> {
       return fail(new ValidationError("La asignatura-grado no existe en tu institución."));
     }
 
-    if (await this.teachers.isAssigned(teacherId, courseSubjectId)) {
-      return fail(new ValidationError("El docente ya está asignado a esa asignatura-grado."));
+    // El grado y la asignatura-grado tienen que ser coherentes: el form
+    // manda el par, pero un DOM manipulado podría mandar una asignatura de
+    // otro grado.
+    if (courseSubject.courseId !== courseId) {
+      return fail(new ValidationError("La asignatura no pertenece al grado seleccionado."));
     }
 
-    await this.teachers.assign(teacherId, courseSubjectId);
+    // El tipo de cuadernillo debe existir en la institución y colgar de una
+    // Prueba del mismo año académico que el grado (si no, la asignación
+    // nunca aplicaría a ninguna formulación de ese grado).
+    if (bookletTypeId) {
+      const bookletType = await this.bookletTypes.findById(actor.institutionId, bookletTypeId);
+      if (!bookletType) {
+        return fail(new ValidationError("El tipo de cuadernillo no existe en tu institución."));
+      }
+      if (this.courses && this.periods) {
+        const course = await this.courses.findById(actor.institutionId, courseId);
+        const period = await this.periods.findById(actor.institutionId, bookletType.periodId);
+        if (course && period && period.academicYearId !== course.academicYearId) {
+          return fail(
+            new ValidationError(
+              "El tipo de cuadernillo pertenece a una prueba de otro año académico.",
+            ),
+          );
+        }
+      }
+    }
+
+    if (await this.teachers.isAssigned(teacherId, courseSubjectId, bookletTypeId)) {
+      return fail(
+        new ValidationError(
+          bookletTypeId
+            ? "El docente ya está asignado a esa asignatura-grado con ese tipo de cuadernillo."
+            : "El docente ya está asignado a esa asignatura-grado.",
+        ),
+      );
+    }
+
+    await this.teachers.assign(teacherId, courseSubjectId, bookletTypeId);
     return ok(undefined);
   }
 }
@@ -411,6 +473,14 @@ export interface ListTeacherAssignmentsInput {
   teacherId?: string;
 }
 
+/**
+ * Lista las asignaciones docente ↔ asignatura-grado.
+ *
+ * El admin (ECU_MASTER) ve todas las de la institución. Un docente sin rol
+ * administrativo ve SOLO las suyas: se resuelve su perfil por el usuario de
+ * la sesión. Antes esta use case devolvía las asignaciones de toda la
+ * institución a cualquier docente que la invocara.
+ */
 export class ListTeacherAssignments implements UseCase<
   ListTeacherAssignmentsInput,
   TeacherAssignment[]
@@ -423,6 +493,18 @@ export class ListTeacherAssignments implements UseCase<
   }: ListTeacherAssignmentsInput): Promise<Result<TeacherAssignment[]>> {
     const authorized = requireRole(actor, "ECU_MASTER", "TEACHER");
     if (!authorized.ok) return authorized;
-    return ok(await this.teachers.listAssignments(actor.institutionId, teacherId));
+
+    if (teacherId) {
+      return ok(await this.teachers.listAssignments(actor.institutionId, teacherId));
+    }
+    // El admin ve todas las asignaciones de la institución.
+    if (actor.roles.includes("ECU_MASTER")) {
+      return ok(await this.teachers.listAssignments(actor.institutionId));
+    }
+    // Un docente sin rol administrativo ve solo las suyas: se resuelve su
+    // perfil por el usuario de la sesión.
+    const teacher = await this.teachers.findByUserId(actor.institutionId, actor.userId);
+    if (!teacher) return ok([]);
+    return ok(await this.teachers.listAssignments(actor.institutionId, teacher.id));
   }
 }

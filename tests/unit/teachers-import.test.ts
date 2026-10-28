@@ -70,18 +70,24 @@ class InMemoryTeachers implements TeacherRepository {
   async setInviteToken(userId: string, tokenHash: string, _expiresAt: Date): Promise<void> {
     this.tokens.push({ userId, tokenHash });
   }
-  async assign(teacherId: string, courseSubjectId: string) {
+  async assign(teacherId: string, courseSubjectId: string, bookletTypeId: string | null) {
     this.assignments.push({
       id: `a-${this.assignments.length + 1}`,
       teacherId,
       courseSubjectId,
       courseName: "11°",
       subjectName: "Mat",
+      bookletTypeId,
+      bookletTypeName: null,
+      periodName: null,
     });
   }
-  async isAssigned(teacherId: string, courseSubjectId: string) {
+  async isAssigned(teacherId: string, courseSubjectId: string, bookletTypeId: string | null) {
     return this.assignments.some(
-      (a) => a.teacherId === teacherId && a.courseSubjectId === courseSubjectId,
+      (a) =>
+        a.teacherId === teacherId &&
+        a.courseSubjectId === courseSubjectId &&
+        a.bookletTypeId === bookletTypeId,
     );
   }
   async listAssignments(institutionId: string, teacherId?: string) {

@@ -86,10 +86,15 @@ export async function assignTeacherAction(
   formData: FormData,
 ): Promise<AdminFormState> {
   const actor = await requireAuthenticatedUser("ECU_MASTER");
+  // Tipo de cuadernillo: vacío = la asignación aplica a cualquier tipo
+  // (mismo valor de las filas creadas antes del sprint de tipos).
+  const bookletTypeId = str(formData, "bookletTypeId");
   const result = await makeAssignTeacher().execute({
     actor,
     teacherId: str(formData, "teacherId"),
+    courseId: str(formData, "courseId"),
     courseSubjectId: str(formData, "courseSubjectId"),
+    bookletTypeId: bookletTypeId || null,
   });
   if (!result.ok) return { error: result.error.message };
   revalidatePath(PATH);

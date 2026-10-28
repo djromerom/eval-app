@@ -15,3 +15,33 @@ inactiva hasta que ingrese).
 UI en `src/app/(dashboard)/admin/teachers`. Depende de que existan enlaces
 asignatura↔curso (`CourseSubject`), gestionados en `/admin/academic`.
 Pendiente: quitar asignaciones, edición de perfil, reenvío de invitación.
+
+## Asignación por tipo de cuadernillo (oct 2026)
+
+`TeacherSubjectAssignment` incluye `bookletTypeId`: la asignación docente ↔
+asignatura-grado ahora es **por tipo de cuadernillo** (el cuadernillo "Especial"
+lo dicta un docente distinto del "Estándar").
+
+- `bookletTypeId = null` → la asignación aplica a **cualquier** tipo de
+  cuadernillo de esa asignatura-grado. Es el valor de las filas anteriores al
+  sprint (compat) y el que usa la UI cuando la institución no tiene tipos
+  configurados.
+- El tipo debe colgar de una Prueba del **mismo año académico** que el grado
+  (`AssignTeacher` lo valida), si no la asignación nunca aplicaría.
+
+En Postgres `NULL != NULL`, así que el `@@unique` del schema (que incluye la
+columna nullable) no impide dos filas `(teacher, asignatura-grado, NULL)`: la
+migración `20261027120000_teacher_assignment_booklet_type` agrega un índice
+único **parcial** para ese caso (mismo patrón que
+`StudentEnrollment_studentId_isCurrent_key`). El duplicado exacto se valida
+además en aplicación (`TeacherRepository.isAssigned`).
+
+Consumidores:
+
+- Admin (`/admin/teachers`): form encadenado **Grado → Asignatura → Tipo de
+  cuadernillo** (`_components/teacher-assignment-form.tsx`).
+- Consultas ("listado de formulaciones"): `assignedTeachers` cruza la
+  asignación por `(courseSubjectId, bookletTypeId)` + las asignaciones "para
+  cualquier tipo".
+- Docente (`/teacher/evaluations`): el select "Tipo de cuadernillo" solo
+  ofrece los tipos asignados para la asignatura-grado elegida.
