@@ -228,10 +228,20 @@ export interface EvaluationRepository {
   create(institutionId: string, teacherId: string, data: CreateEvaluationData): Promise<Evaluation>;
   findById(institutionId: string, id: string): Promise<Evaluation | null>;
   getDetail(institutionId: string, id: string): Promise<EvaluationDetail | null>;
-  findByTeacher(institutionId: string, teacherId: string): Promise<EvaluationListItem[]>;
+  /**
+   * Lista las evaluaciones de un docente. `periodId` filtra por prueba
+   * (oct 2026): "Mis formulaciones" lo usa para mostrar solo lo de la
+   * prueba actual. Si se omite, no se filtra.
+   */
+  findByTeacher(
+    institutionId: string,
+    teacherId: string,
+    periodId?: string,
+  ): Promise<EvaluationListItem[]>;
   findByInstitution(
     institutionId: string,
     status?: EvaluationStatus,
+    periodId?: string,
   ): Promise<EvaluationListItem[]>;
   /**
    * Lista las evaluaciones cuyo `courseSubject.courseId` está en `courseIds`.
@@ -243,6 +253,7 @@ export interface EvaluationRepository {
     institutionId: string,
     courseIds: string[],
     status?: EvaluationStatus,
+    periodId?: string,
   ): Promise<EvaluationListItem[]>;
   addSection(
     institutionId: string,

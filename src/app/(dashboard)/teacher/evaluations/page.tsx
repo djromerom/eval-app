@@ -17,28 +17,35 @@ export const metadata: Metadata = { title: "Formulaciones" };
 
 export default async function EvaluationsPage() {
   const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
-  const [listRes, csRes, periodsRes, bookletTypesRes, coursesRes, assignmentsRes] =
-    await Promise.all([
-      makeListEvaluations().execute({ actor }),
-      makeListCourseSubjects().execute({ actor }),
-      makeListPeriods().execute({ actor }),
-      // Cargamos TODO el catálogo de la institución (decenas de filas) y
-      // el cliente lo filtra por periodId. Tabla chica — no justifica un
-      // endpoint específico.
-      makeListBookletTypesByInstitution().execute({ actor }),
-      // Necesitamos los cursos para mapear courseSubjectId → academicYearId
-      // y así preseleccionar la Prueba actual del año académico del docente.
-      makeListCourses().execute({ actor }),
-      // Asignaciones del docente: de ahí sale qué tipos de cuadernillo
-      // puede formular para cada asignatura-grado (oct 2026).
-      makeListTeacherAssignments().execute({ actor }),
-    ]);
-  const evaluations = listRes.ok ? listRes.value : [];
+  const [csRes, periodsRes, bookletTypesRes, coursesRes, assignmentsRes] = await Promise.all([
+    makeListCourseSubjects().execute({ actor }),
+    makeListPeriods().execute({ actor }),
+    // Cargamos TODO el catálogo de la institución (decenas de filas) y
+    // el cliente lo filtra por periodId. Tabla chica — no justifica un
+    // endpoint específico.
+    makeListBookletTypesByInstitution().execute({ actor }),
+    // Necesitamos los cursos para mapear courseSubjectId → academicYearId
+    // y así preseleccionar la Prueba actual del año académico del docente.
+    makeListCourses().execute({ actor }),
+    // Asignaciones del docente: de ahí sale qué tipos de cuadernillo
+    // puede formular para cada asignatura-grado (oct 2026).
+    makeListTeacherAssignments().execute({ actor }),
+  ]);
   const courseSubjects = csRes.ok ? csRes.value : [];
   const periods = periodsRes.ok ? periodsRes.value : [];
   const bookletTypes = bookletTypesRes.ok ? bookletTypesRes.value : [];
   const courses = coursesRes.ok ? coursesRes.value : [];
   const assignments = assignmentsRes.ok ? assignmentsRes.value : [];
+
+  // "Mis formulaciones" muestra SOLO las formulaciones de la PRUEBA ACTUAL
+  // (la que el admin marcó con `isCurrent`). Se resuelve con la misma regla
+  // que el select "Prueba" del formulario (`periods.find(p => p.isCurrent)`)
+  // para que el listado y el formulario hablen siempre de la misma prueba.
+  // Sin ninguna prueba actual marcada, no se filtra: el docente ve todas
+  // (igual que antes de este filtro).
+  const currentPeriod = periods.find((p) => p.isCurrent);
+  const listRes = await makeListEvaluations().execute({ actor, periodId: currentPeriod?.id });
+  const evaluations = listRes.ok ? listRes.value : [];
 
   // Mapa courseId → academicYearId (necesario para resolver la Prueba
   // "actual" del año académico del courseSubject que el docente eligió).
