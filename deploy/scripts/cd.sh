@@ -179,10 +179,16 @@ log "  omr-service → $OMR_SERVICE_IMAGE"
 # (las credenciales quedan en /root/.docker/config.json, chmod 600). cd.sh
 # no hace login en cada run — solo verifica que la auth está en su sitio
 # y emite una guía clara si falta.
+#
+# oct 2026: el check solo miraba que existiera la llave "ghcr.io" en el
+# config.json — no que las credenciales sirieran. Con un PAT vencido el
+# pull fallaba con "denied" en silencio (--ignore-pull-failures) y el error
+# real se escondía detrás de un "open Dockerfile: no such file or
+# directory" (el VPS es stateless: no hay código fuente para buildear).
 if [ -f /root/.docker/config.json ] && grep -q '"ghcr.io"' /root/.docker/config.json 2>/dev/null; then
   log "GHCR auth: detectada en /root/.docker/config.json"
 else
-  log "GHCR auth: NO detectada — si el pull falla con 'unauthorized',"
+  log "GHCR auth: NO detectada — si el pull falla con 'denied'/'unauthorized',"
   log "  corre UNA vez en el VPS:    docker login ghcr.io"
   log "  con un PAT classic de scope 'read:packages'."
 fi
@@ -199,10 +205,38 @@ PULL_TARGETS=$(docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null \
   | grep -E '^(web|worker-omr|worker-pdf|worker-question-extract|omr-service|migrate)$' \
   | xargs)
 if [ -n "$PULL_TARGETS" ]; then
-  docker compose -f "$COMPOSE_FILE" pull --ignore-pull-failures $PULL_TARGETS
+  # SIN `--ignore-pull-failures` (oct 2026): un pull fallido (auth de GHCR
+  # vencida, tag inexistente) debe abortar el deploy acá. Antes seguía y
+  # deployaba servicios con la imagen vieja.
+  if ! docker compose -f "$COMPOSE_FILE" pull $PULL_TARGETS; then
+    err "falló el pull de las imágenes desde ${GHCR_IMAGE_BASE:-ghcr.io}/${GHCR_OWNER:-?}"
+    err "  causas probables:"
+    err "    (a) el PAT de GHCR del VPS expiró o fue revocado —"
+    err "        re-logueá:  docker login ghcr.io -u djromerom   (PAT con read:packages)"
+    err "    (b) el paquete es privado y el VPS no está autenticado"
+    err "    (c) el tag git-$(echo "$EXPECTED_SHA" | cut -c1-7) no existe en GHCR"
+    exit 1
+  fi
 else
   log "  (ningún servicio para pull en este compose)"
 fi
+
+# ---------- Imágenes presentes ----------
+# Si la imagen no quedó local, `docker compose run --rm migrate` (y el
+# rollout) intentan BUILD la imagen — y el VPS es stateless (no tiene
+# código fuente), así que el error es "open Dockerfile: no such file or
+# directory", que no dice nada del problema real. Verificamos antes de
+# seguir (oct 2026).
+IMAGES_TO_CHECK="$EVAL_APP_IMAGE"
+if docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null | grep -qx "omr-service"; then
+  IMAGES_TO_CHECK="$IMAGES_TO_CHECK $OMR_SERVICE_IMAGE"
+fi
+for img in $IMAGES_TO_CHECK; do
+  if ! docker image inspect "$img" >/dev/null 2>&1; then
+    err "la imagen $img no está local — el pull no se completó"
+    exit 1
+  fi
+done
 
 # ---------- Migraciones ----------
 if [ "$SKIP_MIGRATE" = "0" ]; then
