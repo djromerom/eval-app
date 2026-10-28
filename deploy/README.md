@@ -343,17 +343,17 @@ Desde julio 2026 el deploy a producción está automatizado con GitHub Actions:
 
 Staging es un ambiente paralelo en el mismo VPS, aislado lógicamente de prod:
 
-| Capa | Prod | Staging | Cómo se aísla |
-| --- | --- | --- | --- |
-| Dominio público | `ecognia.pro` | `test.ecognia.pro` | vhost nginx separado, cert Let's Encrypt propio |
-| Host port (loopback) | 3000 | 3001 | `WEB_HOST_PORT` en `.env.*` (compose override) |
-| Docker compose project | `eval-app` | `eval-app` (con override) | `docker-compose.staging.yml` hereda prod vía `include:` |
-| Postgres | DB `eval` | DB `eval_staging` | `POSTGRES_DB` distinto; mismo container compartido |
-| Redis | db=0 | db=1 | `REDIS_URL` con `/1` |
-| BullMQ | `bull:*` | `bull:stg:*` | `BULLMQ_PREFIX=stg:` en `.env.staging` |
-| Storage local | `/var/eval/storage` | `/var/eval/storage-staging` | volumen nombrado aparte |
-| Tag imágenes GHCR | `git-<sha>` | `git-<sha>-staging` | `IMAGE_TAG_SUFFIX=-staging` |
-| QR signing secret | uno | **distinto** | QRs de staging NO válidos en prod (security boundary) |
+| Capa                   | Prod                | Staging                     | Cómo se aísla                                           |
+| ---------------------- | ------------------- | --------------------------- | ------------------------------------------------------- |
+| Dominio público        | `ecognia.pro`       | `test.ecognia.pro`          | vhost nginx separado, cert Let's Encrypt propio         |
+| Host port (loopback)   | 3000                | 3001                        | `WEB_HOST_PORT` en `.env.*` (compose override)          |
+| Docker compose project | `eval-app`          | `eval-app` (con override)   | `docker-compose.staging.yml` hereda prod vía `include:` |
+| Postgres               | DB `eval`           | DB `eval_staging`           | `POSTGRES_DB` distinto; mismo container compartido      |
+| Redis                  | db=0                | db=1                        | `REDIS_URL` con `/1`                                    |
+| BullMQ                 | `bull:*`            | `bull:stg:*`                | `BULLMQ_PREFIX=stg:` en `.env.staging`                  |
+| Storage local          | `/var/eval/storage` | `/var/eval/storage-staging` | volumen nombrado aparte                                 |
+| Tag imágenes GHCR      | `git-<sha>`         | `git-<sha>-staging`         | `IMAGE_TAG_SUFFIX=-staging`                             |
+| QR signing secret      | uno                 | **distinto**                | QRs de staging NO válidos en prod (security boundary)   |
 
 ### Layout del VPS con staging
 
@@ -463,19 +463,18 @@ ssh -i ~/.ssh/<admin-key> root@<vps> 'cd /opt/eval/eval-app-staging && dp logs -
 
 Agregar redirect URIs para `test.ecognia.pro` en Google y Microsoft
 (ambos admiten múltiples):
+
 - `https://test.ecognia.pro/api/auth/callback/google`
 - `https://test.ecognia.pro/api/auth/callback/microsoft-entra-id`
 
 ### Verificación de aislamiento
 
-| Check | Comando | Esperado |
-| --- | --- | --- |
-| Staging arriba | `curl -I https://test.ecognia.pro/login` | HTTP/2 200 |
-| Prod intacto | `curl -I https://ecognia.pro/login` | HTTP/2 200 |
-| DB separada | login + crear institución en staging | NO aparece en prod |
-| BullMQ aislado | encolar job en staging | NO aparece en `bull:omr-scan:wait` (db=0 de prod) |
-
-
+| Check          | Comando                                  | Esperado                                          |
+| -------------- | ---------------------------------------- | ------------------------------------------------- |
+| Staging arriba | `curl -I https://test.ecognia.pro/login` | HTTP/2 200                                        |
+| Prod intacto   | `curl -I https://ecognia.pro/login`      | HTTP/2 200                                        |
+| DB separada    | login + crear institución en staging     | NO aparece en prod                                |
+| BullMQ aislado | encolar job en staging                   | NO aparece en `bull:omr-scan:wait` (db=0 de prod) |
 
 ### Setup único (hecho, pero documentado para reposicionamiento)
 
@@ -694,8 +693,8 @@ esa auth. No hay nada más que hacer.
 #### Cuándo renovar el login
 
 - Cuando el PAT expire (90 días) → generar uno nuevo y repetir el paso 3.
-- Si el deploy falla con `unauthorized: GHCR` o similar → el PAT expiró o se
-  revocó. cd.sh imprime una guía clara si detecta que la auth no está.
+- Si el deploy falla con `denied` / `unauthorized` al hacer pull de GHCR → el
+  PAT expiró o se revocó. cd.sh aborta el deploy con esa guía.
 
 ## Solución de problemas
 
@@ -778,10 +777,11 @@ Causas comunes: variable de entorno faltante, runtime error de Next, o que
 `AUTH_URL` apunta a un host distinto al que nginx sirve. Tras arreglar,
 basta con re-disparar el workflow.
 
-### El deploy falla con "unauthorized" al hacer pull de GHCR
+### El deploy falla con "denied" / "unauthorized" al hacer pull de GHCR
 
-El `docker login ghcr.io` del VPS expiró o el PAT fue revocado. cd.sh emite
-una guía clara en sus logs cuando detecta que falta auth. Para arreglar:
+El `docker login ghcr.io` del VPS expiró, el PAT fue revocado o los paquetes
+se volvieron privados. cd.sh aborta el deploy con una guía clara en sus logs
+cuando el pull falla. Para arreglar:
 
 ```bash
 ssh root@<vps> 'docker login ghcr.io -u djromerom'
@@ -789,6 +789,13 @@ ssh root@<vps> 'docker login ghcr.io -u djromerom'
 ```
 
 Ver §Paquetes GHCR privados abajo.
+
+> **Síntoma clásico (oct 2026)**: el pull falla con `error from registry:
+denied` y, si `cd.sh` tiene `--ignore-pull-failures`, el deploy sigue y
+> falla después con `failed to read dockerfile: open Dockerfile: no such file
+or directory` — porque el VPS es stateless (no tiene código fuente) y
+> compose intenta _buildear_ la imagen que no se pudo bajar. Desde oct 2026
+> `cd.sh` aborta en el pull y verifica que la imagen haya quedado local.
 
 ## Riesgos conocidos
 
