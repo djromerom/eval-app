@@ -1261,11 +1261,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
             redundante (el docente ya está creando/editando) y genera la
             sensación de que hay dos modos paralelos. Al cerrar el card
             (guardando o cancelando) el botón reaparece.
-            (ago 2026) "Con Contexto" abre la card con el bloque Contexto
-            visible (título + TipTap). "Sin contexto" abre la card con
-            el bloque Contexto OCULTO: el docente solo ve el enunciado
-            y las opciones de respuesta. La pregunta que se guarde en
-            este modo va a una sección placeholder (sin título ni
+            (ago 2026) "Con Contexto Declarado" abre la card con el bloque
+            Contexto visible (título + TipTap). "Con Contexto Implícito" abre
+            la card con el bloque Contexto OCULTO: el docente solo ve el
+            enunciado y las opciones de respuesta. La pregunta que se guarde
+            en este modo va a una sección placeholder (sin título ni
             contenido), que es la "sección Sin contexto" del modelo. */}
           {!showForm ? (
             <>
@@ -1297,7 +1297,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   editingOriginalSectionIdRef.current = null;
                 }}
               >
-                <Plus className="mr-1 h-3.5 w-3.5" /> Con Contexto
+                <Plus className="mr-1 h-3.5 w-3.5" /> Con Contexto Declarado
               </Button>
               <Button
                 type="button"
@@ -1360,7 +1360,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   editingOriginalSectionIdRef.current = null;
                 }}
               >
-                <Plus className="mr-1 h-3.5 w-3.5" /> Sin contexto
+                <Plus className="mr-1 h-3.5 w-3.5" /> Con Contexto Implícito
               </Button>
             </>
           ) : null}
