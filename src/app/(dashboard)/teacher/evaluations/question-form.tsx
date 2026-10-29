@@ -3,7 +3,7 @@
 import type { RefObject } from "react";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { ImagePlus, Info, Minimize2 } from "lucide-react";
+import { ImagePlus, Info, Minimize2, Sparkles } from "lucide-react";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,9 @@ import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { isTipTapEmpty } from "@/components/editor/rich-text-empty";
 import { isComplexOption } from "@/app/(dashboard)/teacher/evaluations/[id]/unified/option-text";
 import { addQuestionAction, updateQuestionAction } from "./actions";
+import { reviewItemAction, type AiReviewResponse } from "./ai-review-actions";
+import { AiReviewModal, AiReviewOverlay } from "./ai-review-modal";
+import { notifyItemSaved, type SaveToastMode } from "./save-toast";
 import {
   MAX_OPTIONS,
   MIN_OPTIONS,
@@ -36,14 +39,62 @@ const SOLO_OPTIONS = [
 
 const DEFAULT_COUNT = MAX_OPTIONS; // 4 por defecto
 
-function SubmitButton({ editing, createLabel }: { editing: boolean; createLabel: string }) {
+function SubmitButton({
+  editing,
+  createLabel,
+  disabled,
+}: {
+  editing: boolean;
+  createLabel: string;
+  /** Deshabilita el botón (p. ej. mientras la IA revisa). */
+  disabled?: boolean;
+}) {
   const { pending } = useFormStatus();
   const label = editing ? "Guardar cambios" : createLabel;
   return (
-    <Button type="submit" size="sm" disabled={pending}>
+    <Button type="submit" size="sm" disabled={pending || disabled}>
       {pending ? "Guardando…" : label}
     </Button>
   );
+}
+
+/**
+ * Botón "Guardar con IA".
+ *
+ * Es un `type="submit"` marcado con `data-ai-review="true"`: el
+ * `onSubmit` del form detecta esa marca e intercepta el guardado para
+ * PRIMERO pedirle la revisión a la IA. Si la IA aprueba, el ítem se
+ * guarda solo; si encuentra observaciones, aparece la modal con las
+ * sugerencias y el docente decide.
+ *
+ * El botón normal de guardar NO usa IA: guarda de inmediato. (oct 2026,
+ * pedido del docente: "dejar el guardar para que no use IA porque se
+ * está demorando").
+ */
+function AiSaveButton({ disabled }: { disabled?: boolean }) {
+  return (
+    <Button
+      type="submit"
+      size="sm"
+      variant="outline"
+      data-ai-review="true"
+      disabled={disabled}
+      title="Revisar con IA antes de guardar"
+    >
+      <Sparkles className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+      Guardar con IA
+    </Button>
+  );
+}
+
+/** Valores corregidos por la IA que se inyectan en el formulario. */
+interface AiPatch {
+  /** Enunciado corregido (documento TipTap). */
+  enunciado: unknown;
+  /** Clave → valor corregido de la opción. */
+  opciones: Record<string, unknown>;
+  /** Clave corregida. */
+  clave: string;
 }
 
 /**
@@ -197,6 +248,7 @@ export function QuestionForm({
   formRef,
   clearCorrectAfterSave = false,
   autoFocusEnunciado = false,
+  getReviewContext,
 }: {
   evaluationId: string;
   /** Puede ser vacío cuando la evaluación aún no tiene secciones: el
@@ -311,8 +363,19 @@ export function QuestionForm({
    *  Se consume una vez por instancia vía `hasFocusedRef` dentro de
    *  RichTextEditor (mismo patrón que el `autoFocus` nativo). (ago 2026) */
   autoFocusEnunciado?: boolean;
+  /** Devuelve el contexto vigente (título + contenido CRUDO del editor) para
+   *  que la revisión con IA lo revise también. Solo el editor unificado lo
+   *  pasa (las demás vistas no manejan contexto). Si no se pasa, la revisión
+   *  cubre enunciado + opciones + clave. (oct 2026) */
+  getReviewContext?: () => { titulo: string; contenido: string } | null;
 }) {
   const editing = initial !== undefined;
+  // Cómo se está guardando este ítem: lo consume el toast de éxito para
+  // contarle al docente qué pasó con la IA. "normal" = guardado sin IA.
+  // Lo setean `runAiReview` (IA aprobó / falló), el botón "Guardar sin
+  // tener en cuenta las sugerencias" y `applyAiCorrection`. Se resetea a
+  // "normal" en cada guardado exitoso. (oct 2026)
+  const aiSaveModeRef = useRef<SaveToastMode>("normal");
   // Si el padre pasó un overrideAction (p.ej. el editor unificado) lo
   // invocamos en lugar del action interno (add/updateQuestionAction). Lo
   // hacemos DENTRO del useActionState para que `state` se actualice con el
@@ -320,9 +383,22 @@ export function QuestionForm({
   // en el flujo normal. La firma `(prev, fd) => Promise<state>` es la que
   // espera useActionState; el padre recibe solo el FormData y devuelve el
   // AdminFormState resultante.
+  //
+  // El toast de éxito se dispara AQUÍ (y no en un efecto sobre
+  // `state.success`) porque este punto se ejecuta exactamente una vez por
+  // guardado, incluso con la cadena de revalidates del editor unificado
+  // (mismo motivo por el que el toast se había movido al overrideAction).
   const [state, formAction] = useActionState<AdminFormState, FormData>(async (prev, fd) => {
-    if (overrideAction) return overrideAction(fd);
-    return editing ? updateQuestionAction(prev, fd) : addQuestionAction(prev, fd);
+    const result = overrideAction
+      ? await overrideAction(fd)
+      : editing
+        ? await updateQuestionAction(prev, fd)
+        : await addQuestionAction(prev, fd);
+    if (result?.success) {
+      notifyItemSaved(aiSaveModeRef.current);
+      aiSaveModeRef.current = "normal";
+    }
+    return result;
   }, {});
   const [optionCount, setOptionCount] = useState<number>(initial?.options.length ?? defaultOptions);
   // "" = ninguna opción marcada todavía. Para creación partimos sin clave
@@ -354,6 +430,101 @@ export function QuestionForm({
   // Ref que el form usa: el externo si el padre lo pasó, si no el interno.
   const liveFormRef = formRef ?? internalFormRef;
 
+  // ------------------------------------------------------------------
+  // REVISIÓN CON IA (oct 2026)
+  //
+  // Hay DOS botones de guardado:
+  //  - "Guardar" (el de siempre): guarda de inmediato, sin IA.
+  //  - "Guardar con IA": revisa el ítem primero. Si la IA aprueba, se
+  //    guarda sin mostrar nada; si encuentra observaciones, se abre la
+  //    modal con las sugerencias y el docente decide (guardar igual /
+  //    corregir / cancelar).
+  //
+  // Mientras la IA responde se muestra un overlay que bloquea la
+  // pantalla: la llamada tarda varios segundos y el docente tiene que
+  // ver que el guardado está en curso. (oct 2026, pedido del docente).
+  // ------------------------------------------------------------------
+  // Veredicto pendiente de mostrar en la modal (`null` = modal cerrada).
+  const [aiReview, setAiReview] = useState<AiReviewResponse | null>(null);
+  // Valores corregidos por la IA que se inyectan en el formulario.
+  const [aiPatch, setAiPatch] = useState<AiPatch | null>(null);
+  // `true` mientras la IA está revisando (muestra el overlay).
+  const [reviewing, setReviewing] = useState(false);
+
+  /**
+   * Re-dispara el submit del form para que se guarde.
+   *
+   * `requestSubmit()` sin argumentos NO lleva submitter, así que el
+   * `onSubmit` no ve la marca `data-ai-review` y guarda directo (sin
+   * volver a revisar). El flag `data-close-on-save` del botón que sí
+   * se pulsó se conserva (solo se recalcula cuando hay submitter).
+   */
+  function submitWithoutReview(form: HTMLFormElement) {
+    if (!form.isConnected) return;
+    form.requestSubmit();
+  }
+
+  /** Revisa el ítem con la IA y decide si se guarda o se abre la modal. */
+  async function runAiReview(fd: FormData, form: HTMLFormElement) {
+    setReviewing(true);
+    try {
+      const opciones: { key: string; valor: string }[] = [];
+      for (const key of ANSWER_KEYS_ORDER.slice(0, optionCount)) {
+        opciones.push({ key, valor: String(fd.get(`option${key}`) ?? "") });
+      }
+      const response = await reviewItemAction({
+        contexto: getReviewContext?.() ?? null,
+        enunciado: String(fd.get("text") ?? ""),
+        opciones,
+        clave: correct,
+      });
+      // `null` → no hay IA configurada (o falló la revisión): el docente
+      // guarda igual. La IA es un apoyo, no una puerta que trabe el trabajo.
+      if (!response || response.aprobado) {
+        // El toast le dirá al docente que la IA no hizo ninguna sugerencia
+        // (o que la revisión no pudo completarse). (oct 2026)
+        aiSaveModeRef.current = response ? "ia-sin-sugerencias" : "ia-no-reviso";
+        submitWithoutReview(form);
+        return;
+      }
+      setAiReview(response);
+    } catch (err) {
+      console.error("[ai-review] error revisando el ítem:", err);
+      aiSaveModeRef.current = "ia-no-reviso";
+      submitWithoutReview(form);
+    } finally {
+      setReviewing(false);
+    }
+  }
+
+  /**
+   * Aplica la corrección propuesta por la IA EN EL FORMULARIO.
+   *
+   * NO guarda: el docente tiene que revisar lo que la IA escribió (y
+   * corregirlo si quiere) antes de decidir. El ítem se persiste cuando
+   * el docente pulse "Guardar" (o "Guardar con IA"). (oct 2026, pedido
+   * del docente: "cuando le de el boton de corregir no guardar
+   * inmediatamente sino que haga la correccion en el formulario para
+   * que el profesor verifique").
+   */
+  function applyAiCorrection() {
+    const correccion = aiReview?.correccion;
+    if (!correccion) return;
+    setAiPatch({
+      enunciado: correccion.enunciado,
+      opciones: correccion.opciones,
+      clave: correccion.clave,
+    });
+    setCorrect(correccion.clave);
+    // El remount del editor (resetKey) hace que el enunciado y las
+    // opciones se monten con los valores corregidos.
+    setResetKey((k) => k + 1);
+    setAiReview(null);
+    // El próximo guardado (lo dispara el docente) avisará que se guardó
+    // con las correcciones de la IA. (oct 2026)
+    aiSaveModeRef.current = "ia-corregido";
+  }
+
   // Popover (i) junto a "Opciones de respuesta".
   const optionsInfoRef = useRef<HTMLSpanElement>(null);
   const [isOptionsInfoOpen, setIsOptionsInfoOpen] = useState(false);
@@ -383,6 +554,9 @@ export function QuestionForm({
     // Tras un guardado exitoso limpiamos cualquier error de validación que
     // quedara pegado (no debería, pero por si el state.success llega tarde).
     setClientError(null);
+    // Y la corrección de la IA (si la hubo): el form vuelve a su estado
+    // normal para que el próximo ítem arranque en blanco.
+    setAiPatch(null);
     const closeOnSave = closeOnSaveRef.current;
     // Reset del flag para el próximo submit (Enter, "Agregar enunciado", etc.)
     closeOnSaveRef.current = false;
@@ -444,9 +618,21 @@ export function QuestionForm({
           // lógica. `event.submitter` es HTML5 estándar: si el form se envió
           // presionando Enter, es el primer botón submit del form (el
           // SubmitButton principal); si fue click explícito, es ese botón.
+          //
+          // Si NO hay submitter es un submit programático (el `requestSubmit()`
+          // que hacemos tras la revisión con IA): en ese caso NO tocamos el
+          // flag, porque el botón original ("Guardar" del editor unificado,
+          // que trae data-close-on-save) sigue siendo el que manda.
           const submitter = (e.nativeEvent as SubmitEvent).submitter;
-          closeOnSaveRef.current =
-            submitter instanceof HTMLButtonElement && submitter.dataset.closeOnSave === "true";
+          // Botón "Guardar con IA": el submit viene de ese botón (lleva
+          // `data-ai-review="true"`). Los submits programáticos (los
+          // que hacemos nosotros con `requestSubmit()`) NO traen
+          // submitter → se guardan directo, sin volver a revisar.
+          const esGuardarConIa =
+            submitter instanceof HTMLButtonElement && submitter.dataset.aiReview === "true";
+          if (submitter instanceof HTMLButtonElement) {
+            closeOnSaveRef.current = submitter.dataset.closeOnSave === "true";
+          }
 
           // Bloqueamos si no hay clave/CLAVE seleccionada (ago 2026). El
           // backend exige correctAnswer no vacío; lo validamos en cliente para
@@ -492,6 +678,22 @@ export function QuestionForm({
               setClientError(contextoError);
               return;
             }
+          }
+
+          // REVISIÓN CON IA (oct 2026).
+          //
+          // Solo el botón "Guardar con IA" revisa el ítem antes de
+          // persistirlo. El botón normal de guardar va directo al
+          // servidor (es lo que pidió el docente: la revisión tarda
+          // varios segundos y bloquea el trabajo).
+          //
+          // Si la IA aprueba → el submit sigue su curso normal (no se
+          // muestra nada). Si encuentra observaciones → se abre la modal
+          // con las sugerencias y el docente decide.
+          if (esGuardarConIa) {
+            e.preventDefault();
+            void runAiReview(new FormData(e.currentTarget), e.currentTarget);
+            return;
           }
 
           // Cierre optimista del card cuando el botón trae
@@ -573,7 +775,10 @@ export function QuestionForm({
             key={resetKey}
             name="text"
             minHeightClass="min-h-16"
-            defaultValue={initial?.text}
+            // Con la corrección de la IA el enunciado se monta ya corregido
+            // (el remount por `resetKey` es lo que hace que TipTap lea el
+            // `defaultValue` nuevo).
+            defaultValue={aiPatch?.enunciado ?? initial?.text}
             // Foco automático en dos casos:
             //   1. Tras un guardado exitoso (state.success=true).
             //      `key={resetKey}` fuerza el remount del editor;
@@ -652,7 +857,9 @@ export function QuestionForm({
                 name={`option${k}`}
                 required
                 placeholder={`Opción ${k}`}
-                initial={initial?.options.find((o) => o.key === k)?.text}
+                // Igual que el enunciado: con corrección de la IA, la opción
+                // se monta ya corregida.
+                initial={aiPatch?.opciones?.[k] ?? initial?.options.find((o) => o.key === k)?.text}
               />
               {correct === k ? (
                 <span className="text-primary text-xs font-medium">✓ correcta</span>
@@ -773,7 +980,12 @@ export function QuestionForm({
         >
           {extraActionsLeft}
           <div className="flex flex-wrap items-center gap-2">
-            {!hideSubmit && <SubmitButton editing={editing} createLabel={createLabel} />}
+            {!hideSubmit && (
+              <>
+                <SubmitButton editing={editing} createLabel={createLabel} disabled={reviewing} />
+                <AiSaveButton disabled={reviewing} />
+              </>
+            )}
             {extraActions}
           </div>
         </div>
@@ -793,6 +1005,23 @@ export function QuestionForm({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {aiReview ? (
+        <AiReviewModal
+          review={aiReview}
+          applying={reviewing}
+          onSaveAnyway={() => {
+            // El docente descartó las sugerencias de la IA: el toast lo
+            // deja claro. (oct 2026)
+            aiSaveModeRef.current = "ia-ignorado";
+            const form = liveFormRef.current;
+            if (form) submitWithoutReview(form);
+          }}
+          onCorrect={applyAiCorrection}
+          onCancel={() => setAiReview(null)}
+        />
+      ) : null}
+      {/* Overlay que bloquea la pantalla mientras la IA revisa. */}
+      <AiReviewOverlay visible={reviewing} />
     </>
   );
 }
