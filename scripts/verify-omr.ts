@@ -48,7 +48,10 @@ function inMemoryRepo(): ScanningRepository {
     },
     async saveDecodedQr(_id, qrContent, _sig, _studentCode) {
       logs.push(`decoded qr (${qrContent.length} chars)`);
-      return { studentId: "stu-1" };
+      return { studentId: "stu-1", duplicada: false };
+    },
+    async findSheetIdByQrSheetUuid() {
+      return null;
     },
     async saveAnswers(_id, ans) {
       const ok = ans.filter((a) => a.isCorrect).length;
@@ -62,6 +65,16 @@ function inMemoryRepo(): ScanningRepository {
     async updateBatchProgress() {
       logs.push("batch progress");
     },
+    async deleteSheet(_sheetId: string) {
+      return { batchId: null };
+    },
+    async findBatchAccess(_batchId: string) {
+      return null;
+    },
+    async deleteBatch(_batchId: string) {
+      return { institutionId: null };
+    },
+    async recordDeletionAudit(_input) {},
     getLogs() {
       return logs;
     },

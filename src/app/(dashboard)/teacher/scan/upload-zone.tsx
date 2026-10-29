@@ -60,11 +60,13 @@ export function UploadZone({ targets }: UploadZoneProps) {
   }
 
   // Resolver kind + id a partir del value "kind:id" seleccionado.
-  function readSelection(form: HTMLFormElement): { kind: ScanTargetKind; id: string } | null {
+  function readSelection(
+    form: HTMLFormElement,
+  ): { kind: ScanTargetKind | "auto"; id: string } | null {
     const value = (form.elements.namedItem("target") as HTMLSelectElement | null)?.value ?? "";
     const [kind, id] = value.split(":");
     if (!kind || !id) return null;
-    return { kind: kind as ScanTargetKind, id };
+    return { kind: kind as ScanTargetKind | "auto", id };
   }
 
   async function onFormSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -94,7 +96,28 @@ export function UploadZone({ targets }: UploadZoneProps) {
     const formData = new FormData(form);
     const result = await createScanBatchAction(formData);
     if (result.ok) {
-      setMessage({ ok: true, text: `Lote creado. ${files.length} hoja(s) encolada(s).` });
+      // El modo automático crea varios lotes y puede dejar hojas afuera: el
+      // mensaje tiene que decir exactamente qué entró y qué no, o el usuario
+      // se queda creyendo que subió 68 hojas cuando entraron 66.
+      const lotes = result.lotes;
+      const rechazadas = result.rechazadas ?? [];
+      if (result.aviso) {
+        // Ninguna hoja clasificó: quedaron todas en un lote sin cuadernillo.
+        setMessage({ ok: false, text: result.aviso });
+      } else if (lotes) {
+        const detalle = lotes.map((l) => `${l.cuadernillo}: ${l.hojas}`).join(" · ");
+        const sobrantes = rechazadas.length
+          ? ` · ${rechazadas.length} sin clasificar (${rechazadas
+              .map((r) => `${r.nombre}: ${r.motivo}`)
+              .join("; ")})`
+          : "";
+        setMessage({
+          ok: rechazadas.length === 0,
+          text: `${lotes.length} lote(s) creado(s) — ${detalle}${sobrantes}`,
+        });
+      } else {
+        setMessage({ ok: true, text: `Lote creado. ${files.length} hoja(s) encolada(s).` });
+      }
       setFiles([]);
       form.reset();
     } else {
@@ -115,6 +138,7 @@ export function UploadZone({ targets }: UploadZoneProps) {
           <option value="" disabled>
             Seleccionar formulación o cuadernillo…
           </option>
+          <option value="auto:auto">Automático — según el QR de cada hoja</option>
           {grouped.evaluations.length > 0 && (
             <optgroup label="Formulaciones">
               {grouped.evaluations.map((t) => (

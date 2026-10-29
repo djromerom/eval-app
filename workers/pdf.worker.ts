@@ -48,6 +48,7 @@ const ROUTE_BY_KIND: Record<PrintKind, string> = {
   "answer-key-bundle": "/print/answer-key/bundle", // Sprint 3
   "cover-bundle": "/print/cover/bundle", // ago 2026: solo portada (1 página)
   "bundle-linear": "/print/bundle", // ago 2026: cuadernillo page-by-page (sin imposition)
+  "informe-grupo": "/print/informe-grupo", // sep 2026: informe detallado por grupo (consultas)
 };
 
 /**
@@ -90,8 +91,57 @@ async function stampHeaderOnAllPages(pdfBytes: Uint8Array, header: string): Prom
   return await doc.save();
 }
 
-/** Genera el PDF lineal (carta, 1 página por hoja lógica) con Puppeteer. */
-async function renderLinearPdf(url: string): Promise<Uint8Array> {
+/** Estampa un footer en cada página con `text` (esquina inferior izquierda)
+ *  y "Página X de Y" (esquina inferior derecha). Chromium no exporta
+ *  `counter(pages)` confiablemente en headless print, así que el contador
+ *  se calcula en pdf-lib con el total real de páginas del PDF. Usado por
+ *  el informe por grupo (A4, multi-página). */
+async function stampFooterOnAllPages(
+  pdfBytes: Uint8Array,
+  footerText: string,
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(pdfBytes);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const pages = doc.getPages();
+  const totalPages = pages.length;
+  const fontSize = 8.25; // ≈ 11px — matchea el `font-size:11px` del `.footer` institucional
+  // Posición: 13mm desde el borde izquierdo/derecho, 8mm desde el borde
+  // inferior — replica exactamente `.footer { bottom:8mm; left/right:13mm }`
+  // de la plantilla `tmp/prueba_2026_2.html`.
+  const xMarginPt = (1.3 / 2.54) * 72;
+  const yFromBottomPt = (0.8 / 2.54) * 72;
+  const color = rgb(0.4, 0.4, 0.4);
+  for (let i = 0; i < pages.length; i++) {
+    const page = pages[i];
+    if (!page) continue;
+    const { width } = page.getSize();
+    if (footerText) {
+      page.drawText(footerText, {
+        x: xMarginPt,
+        y: yFromBottomPt,
+        size: fontSize,
+        font,
+        color,
+      });
+    }
+    const rightText = `Página ${i + 1} de ${totalPages}`;
+    const rightWidth = font.widthOfTextAtSize(rightText, fontSize);
+    page.drawText(rightText, {
+      x: width - xMarginPt - rightWidth,
+      y: yFromBottomPt,
+      size: fontSize,
+      font,
+      color,
+    });
+  }
+  return await doc.save();
+}
+
+/** Genera el PDF lineal (carta o A4, 1 página por hoja lógica) con Puppeteer. */
+async function renderLinearPdf(
+  url: string,
+  opts: { format?: "letter" | "a4" } = {},
+): Promise<Uint8Array> {
   const browser = await puppeteer.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -106,10 +156,12 @@ async function renderLinearPdf(url: string): Promise<Uint8Array> {
       throw new Error("Acceso a /print rechazado (token inválido)");
     }
     return await page.pdf({
-      // Siempre carta portrait: el worker compone el pliego apaisado
-      // manualmente con pdf-lib (Chromium no respeta `@page { size: ... }`
-      // para apaisado ni con `@page :first` ni con named pages).
-      format: "letter",
+      // Carta por defecto. El informe por grupo pide A4 y lo pasa en opts;
+      // los demás kinds siguen siendo carta (el worker compone el pliego
+      // apaisado manualmente con pdf-lib — Chromium no respeta
+      // `@page { size: ... }` para apaisado ni con `@page :first` ni con
+      // named pages).
+      format: opts.format ?? "letter",
       printBackground: true,
       preferCSSPageSize: false,
     });
@@ -121,17 +173,23 @@ async function renderLinearPdf(url: string): Promise<Uint8Array> {
 const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
   QUEUE_NAMES.pdfGeneration,
   async (job) => {
-    const { evaluationId, bundleId, institutionId, kind, extraQuery } = job.data;
+    const { evaluationId, bundleId, periodId, groupId, institutionId, kind, extraQuery } = job.data;
     // XOR explícito: o evaluación o compendio, nunca ambos.
     // Todo kind cuya ruta cuelga de un compendio va aquí — incluida
     // `answer-key-bundle`, que quedó fuera al añadirse en Sprint 3 y hacía
     // fallar el job pidiendo un `evaluationId` que nunca se envía.
+    // `informe-grupo` se maneja aparte: usa periodId+groupId en vez de
+    // evaluationId/bundleId, y la URL es `/print/informe-grupo/<periodId>/<groupId>`
+    // (dos segmentos, no uno).
+    const isInformeGrupoKind = kind === "informe-grupo";
     const isBundleKind = BUNDLE_KINDS.has(kind);
-    const targetId = isBundleKind ? bundleId : evaluationId;
+    const targetId = isInformeGrupoKind ? periodId : isBundleKind ? bundleId : evaluationId;
     if (!targetId) {
-      throw new Error(
-        `PdfGenerationJob incompleto: falta ${isBundleKind ? "bundleId" : "evaluationId"}`,
-      );
+      const field = isInformeGrupoKind ? "periodId" : isBundleKind ? "bundleId" : "evaluationId";
+      throw new Error(`PdfGenerationJob incompleto: falta ${field}`);
+    }
+    if (isInformeGrupoKind && !groupId) {
+      throw new Error("PdfGenerationJob incompleto: falta groupId para kind=informe-grupo");
     }
 
     // El token que firma el worker debe coincidir con el `kind` que la
@@ -143,9 +201,11 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
     const isBundleLinearKind = kind === "bundle-linear";
     const tokenKind: PrintKind = isBundleLinearKind ? "bundle" : kind;
 
-    const tokenAccess: Parameters<typeof signPrintToken>[0] = isBundleKind
-      ? { bundleId: targetId, institutionId, kind: tokenKind }
-      : { evaluationId: targetId, institutionId, kind: tokenKind };
+    const tokenAccess: Parameters<typeof signPrintToken>[0] = isInformeGrupoKind
+      ? { periodId: periodId!, groupId: groupId!, institutionId, kind: tokenKind }
+      : isBundleKind
+        ? { bundleId: targetId, institutionId, kind: tokenKind }
+        : { evaluationId: targetId, institutionId, kind: tokenKind };
 
     log.info({ jobId: job.id, targetId, kind }, "Generando PDF");
 
@@ -157,7 +217,9 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
     // tiene 3000 pero Next corre en 3002).
     const baseUrl = env.PRINT_BASE_URL ?? env.AUTH_URL ?? "http://localhost:3000";
     const queryString = extraQuery ? `&${extraQuery}` : "";
-    const url = `${baseUrl}${ROUTE_BY_KIND[kind]}/${targetId}?t=${encodeURIComponent(token)}${queryString}`;
+    const url = isInformeGrupoKind
+      ? `${baseUrl}${ROUTE_BY_KIND[kind]}/${periodId}/${groupId}?t=${encodeURIComponent(token)}${queryString}`
+      : `${baseUrl}${ROUTE_BY_KIND[kind]}/${targetId}?t=${encodeURIComponent(token)}${queryString}`;
 
     // Caso `bundle` (compendio con portada apaisada + booklet en carta):
     //
@@ -180,7 +242,14 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
 
     let out: Uint8Array;
 
-    if (isBundleLinearKind) {
+    if (isInformeGrupoKind) {
+      // sep 2026 — Informe detallado por grupo: A4 portrait, una página por
+      // estudiante. Lineal sin imposition. El footer "Fecha · Institución ·
+      // Página X de Y" se estampa con pdf-lib abajo (Chromium no exporta
+      // `counter(pages)` en headless print).
+      out = await renderLinearPdf(url, { format: "a4" });
+      log.info({ jobId: job.id, bytes: out.length }, "PDF informe-grupo (A4) generado");
+    } else if (isBundleLinearKind) {
       // Cuadernillo page-by-page: 1 render lineal con `?linear=1` (la ruta
       // /print/bundle/[id] detecta la flag y renderiza la portada como
       // `.sheet.cover` 8.5×11 en vez de `.sheet.cover-sheet` 17×11).
@@ -290,12 +359,26 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
       log.info({ jobId: job.id, before, after: out.length }, "Header estampado en cada página");
     }
 
+    // Footer persistente (esquina inferior izq + "Página X de Y" der).
+    // Misma motivación que el header: Chromium no exporta `counter(pages)`
+    // en headless print y el `position:fixed` no se repite con multicolumna.
+    //
+    // Para `informe-grupo` el HTML ya renderiza el footer institucional
+    // (fecha + institución) en su `.footer` interno, así que solo estampamos
+    // el contador "Página X de Y" en la columna derecha. Para los demás
+    // kinds, el footer viene completo en `pageFooter` (izquierda + derecha).
+    if (job.data.pageFooter || isInformeGrupoKind) {
+      const before = out.length;
+      out = await stampFooterOnAllPages(out, job.data.pageFooter ?? "");
+      log.info({ jobId: job.id, before, after: out.length }, "Footer estampado en cada página");
+    }
+
     const dir = path.join(env.STORAGE_DIR, "pdf", institutionId);
     await mkdir(dir, { recursive: true });
     const filePath = path.join(dir, `${targetId}-${kind}.pdf`);
     await writeFile(filePath, out);
 
-    return { evaluationId, bundleId, institutionId, kind, path: filePath };
+    return { evaluationId, bundleId, periodId, groupId, institutionId, kind, path: filePath };
   },
   { connection: getRedisConnection(), prefix: getBullMQPrefix(), concurrency: 1 },
 );

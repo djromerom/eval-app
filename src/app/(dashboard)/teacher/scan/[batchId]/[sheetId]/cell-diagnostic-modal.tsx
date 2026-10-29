@@ -9,6 +9,12 @@ interface CellDiagnosticModalProps {
   row: MatrixRow;
   answerKeys: readonly AnswerKey[];
   processedImagePath: string | null;
+  /** Recorte del escaneo para este ítem (JPEG en base64, sin el prefijo
+   *  data:). `null` si la hoja no tiene recortes persistidos o si todavía no
+   *  llegaron. Es la evidencia visual de qué marcó el estudiante: los números
+   *  de relleno dicen cuánto, la imagen dice qué se ve en el papel. */
+  crop: string | null;
+  cropCargando: boolean;
   onClose: () => void;
 }
 
@@ -16,6 +22,8 @@ export function CellDiagnosticModal({
   row,
   answerKeys,
   processedImagePath,
+  crop,
+  cropCargando,
   onClose,
 }: CellDiagnosticModalProps) {
   useEffect(() => {
@@ -64,6 +72,27 @@ export function CellDiagnosticModal({
           />
         </div>
 
+        <div className="mb-4">
+          <h4 className="mb-2 text-sm font-semibold">Marca en el papel</h4>
+          {crop ? (
+            <div className="bg-muted/30 overflow-x-auto rounded-lg border p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`data:image/jpeg;base64,${crop}`}
+                alt={`Recorte del escaneo para la pregunta ${row.questionNumber ?? ""}`}
+                className="mx-auto max-w-full"
+                style={{ imageRendering: "pixelated" }}
+              />
+            </div>
+          ) : (
+            <p className="text-muted-foreground bg-muted/30 rounded-lg border p-3 text-xs">
+              {cropCargando
+                ? "Cargando el recorte…"
+                : "Esta hoja no tiene recortes guardados. Se generan al procesarla; usa «Reprocesar» si los necesitas."}
+            </p>
+          )}
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <h4 className="mb-2 text-sm font-semibold">Lectura del escáner</h4>
@@ -76,27 +105,31 @@ export function CellDiagnosticModal({
                 </tr>
               </thead>
               <tbody>
-                {answerKeys.map((k) => {
-                  const c = cellsByKey.get(k);
-                  const fill = c ? Math.round(c.fillRatio * 100) : 0;
-                  const state: BubbleState = c?.state ?? "EMPTY";
-                  const isSelected = row.selectedKey === k;
-                  return (
-                    <tr key={k} className={isSelected ? "bg-amber-50" : ""}>
-                      <td className="py-1 font-mono">{k}</td>
-                      <td className="py-1 text-right">
-                        <FillBar value={fill} tone={stateBarTone(state, k === row.correctKey)} />
-                      </td>
-                      <td className="py-1 text-right">
-                        <StateBadge
-                          state={state}
-                          isSelected={isSelected}
-                          isCorrectKey={k === row.correctKey}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
+                {/* Solo las opciones del ítem: listar A-H en una pregunta de
+                    4 inventa cuatro filas "vacías" que en el papel no existen. */}
+                {answerKeys
+                  .filter((k) => row.optionKeys.includes(k))
+                  .map((k) => {
+                    const c = cellsByKey.get(k);
+                    const fill = c ? Math.round(c.fillRatio * 100) : 0;
+                    const state: BubbleState = c?.state ?? "EMPTY";
+                    const isSelected = row.selectedKey === k;
+                    return (
+                      <tr key={k} className={isSelected ? "bg-amber-50" : ""}>
+                        <td className="py-1 font-mono">{k}</td>
+                        <td className="py-1 text-right">
+                          <FillBar value={fill} tone={stateBarTone(state, k === row.correctKey)} />
+                        </td>
+                        <td className="py-1 text-right">
+                          <StateBadge
+                            state={state}
+                            isSelected={isSelected}
+                            isCorrectKey={k === row.correctKey}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
@@ -118,7 +151,11 @@ export function CellDiagnosticModal({
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Resultado</dt>
                 <dd>
-                  {row.isAmbiguous ? (
+                  {row.disabled ? (
+                    <span className="bg-muted text-muted-foreground rounded px-2 py-0.5 text-xs">
+                      No cuenta
+                    </span>
+                  ) : row.isAmbiguous ? (
                     <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">
                       Múltiple marca
                     </span>

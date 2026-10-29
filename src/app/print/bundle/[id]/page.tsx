@@ -2,7 +2,6 @@ import { Fragment } from "react";
 import type { Metadata } from "next";
 import "@/styles/print.css";
 import "@/styles/print-page-number.css";
-import { readFile } from "node:fs/promises";
 import { notFound } from "next/navigation";
 import { resolvePrintActor } from "@/lib/print-access";
 import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
@@ -17,6 +16,7 @@ import { isWideQuestion } from "@/modules/printing/domain/wide-question";
 import { resolveGroupDensity } from "@/modules/printing/domain/section-density";
 import { groupSectionsForPrint } from "@/modules/printing/domain/section-grouping";
 import { localStorage } from "@/shared/infrastructure/storage/local-storage";
+import { readLogoIfNeeded } from "@/shared/infrastructure/storage/logo";
 import { computeCoverTable, formatDuration } from "@/modules/bundles/domain/cover-table";
 import { getResolvedBundleTheme } from "@/modules/theme/application/get-resolved-bundle-theme";
 import { themeToCssVars } from "@/modules/theme/domain/theme";
@@ -477,7 +477,7 @@ export default async function PrintBundlePage({
                             s.questions.map((q) => (
                               <div
                                 key={q.id}
-                                className={`question${isWideQuestion(q) ? " wide" : ""}`}
+                                className={`question${isWideQuestion(q) ? "wide" : ""}`}
                               >
                                 <p className="question-text">
                                   <span className="item-number">
@@ -556,28 +556,4 @@ export default async function PrintBundlePage({
       {theme.footerText ? <div className="print-footer">{theme.footerText}</div> : null}
     </div>
   );
-}
-
-async function readLogoIfNeeded(
-  path: string | null | undefined,
-  showLogo: boolean,
-): Promise<string | null> {
-  if (!showLogo || !path) return null;
-  const { existsSync } = await import("node:fs");
-  const candidates = [
-    path,
-    path.startsWith("/") ? path : `${process.env.STORAGE_DIR ?? "./storage"}/${path}`,
-  ];
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      try {
-        const buf = await readFile(candidate);
-        const ext = candidate.toLowerCase().endsWith(".png") ? "png" : "jpeg";
-        return `data:image/${ext};base64,${buf.toString("base64")}`;
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
 }

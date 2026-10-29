@@ -28,6 +28,11 @@ const serverEnvSchema = z
     /** URL del microservicio Python de detección OMR (omr-service, FastAPI).
      *  Solo loopback: el worker OMR lo llama; nunca se expone públicamente. */
     OMR_SERVICE_URL: z.string().url().default("http://127.0.0.1:8000"),
+    /** Tiempo máximo (ms) que el worker espera el análisis de una hoja en
+     *  omr-service. Una hoja pesada o con QR ilegible (el motor busca el QR
+     *  en toda la hoja y corre el OCR de identidad) puede pasar de 30 s en
+     *  un servidor chico. */
+    OMR_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
     /** Opciones con las que se inicializa el editor de preguntas nuevas. */
     EVAL_DEFAULT_OPTIONS: z.coerce
       .number()

@@ -21,9 +21,10 @@ Uso:
 
 import argparse
 import json
+import re
 import sys
 
-VERSION = "12"         # subir al cambiar el motor: invalida cachés aguas arriba
+VERSION = "24"         # subir al cambiar el motor: invalida cachés aguas arriba
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -41,8 +42,13 @@ class Bubble:
     y: float
     r: float
     fill: float = 0.0          # ratio de píxeles oscuros dentro del círculo
+    ring: float = 0.0          # ratio de tinta en el ANILLO exterior del óvalo
     marked: bool = False
     letter: str = ""
+    # Fabricada por la recuperacion por rejilla (no detectada en la imagen).
+    # Hereda el radio mediano, asi que no dice nada sobre el tamaño real de lo
+    # que hay en esa fila y hay que dejarla fuera de cualquier medida de radio.
+    sintetica: bool = False
 
 
 @dataclass
@@ -50,6 +56,9 @@ class Question:
     number: int = 0
     bubbles: list = field(default_factory=list)
     warning: str = ""
+    # Fila que la rejilla dice que existe pero no se detectó: se inserta en
+    # blanco para que la numeración no se corra, y se corrige a mano.
+    sin_leer: bool = False
 
     @property
     def marked_letters(self):
@@ -118,6 +127,51 @@ def _ink_density(gray: np.ndarray, r_ref: float) -> np.ndarray:
     _, binimg = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     win = max(3, int(r_ref * 8) | 1)
     return cv2.blur((binimg > 0).astype(np.float32), (win, win))
+
+
+def identity_box(gray: np.ndarray, qr_box):
+    """
+    Recorte del bloque Nombre / Grado / Código, que va justo debajo del QR.
+
+    Sirve cuando el QR no se puede leer: los datos del estudiante están
+    impresos en texto a un centímetro de ahí, y con el recorte a la vista una
+    persona identifica la hoja en dos segundos en vez de abrir el archivo.
+    """
+    if not qr_box:
+        return None
+    x, y, w, h = qr_box
+    H, W = gray.shape
+    x0, x1 = max(0, int(x - 0.55 * w)), min(W, int(x + 1.55 * w))
+    y0, y1 = min(H, int(y + h * 1.05)), min(H, int(y + h * 3.0))
+    if y1 - y0 < 10 or x1 - x0 < 10:
+        return None
+    return gray[y0:y1, x0:x1]
+
+
+def ocr_codigo(crop: np.ndarray):
+    """
+    Intenta leer el código del estudiante del recorte de identidad.
+
+    Sólo se usa cuando el QR falla, y **nunca reemplaza** al QR: se propone
+    como sugerencia para que una persona la confirme. Requiere pytesseract y
+    el binario tesseract; si no están, simplemente no se propone nada.
+    """
+    if crop is None or crop.size == 0:
+        return None
+    try:
+        import pytesseract
+    except Exception:
+        return None
+    up = cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+    up = cv2.threshold(up, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+    try:
+        txt = pytesseract.image_to_string(
+            up, config="--psm 6 -c tessedit_char_whitelist=0123456789")
+    except Exception:
+        return None
+    # El código es el número largo; grado y grupo son cortos.
+    nums = [t for t in re.findall(r"\d{6,12}", txt or "")]
+    return max(nums, key=len) if nums else None
 
 
 def dense_graphic_mask(gray: np.ndarray, r_ref: float,
@@ -462,29 +516,52 @@ def measure_fill(gray: np.ndarray, bubbles: list) -> None:
         x0, x1 = max(0, int(b.x) - r), min(w, int(b.x) + r + 1)
         sub = ink[y0:y1, x0:x1]
         if sub.size == 0:
-            b.fill = 0.0
+            b.fill = b.ring = 0.0
             continue
         yy, xx = np.ogrid[y0:y1, x0:x1]
-        disc = (yy - b.y) ** 2 + (xx - b.x) ** 2 <= r * r
+        d2 = (yy - b.y) ** 2 + (xx - b.x) ** 2
+        disc = d2 <= r * r
         total = int(disc.sum())
         b.fill = float((sub & disc).sum()) / total if total else 0.0
+        # Cobertura del ANILLO exterior (0.55 r a r). Una marca hecha a
+        # propósito cubre el óvalo entero, borde incluido; el residuo de un
+        # borrado queda concentrado en el centro y ralo en la orilla. Es lo
+        # único que distingue los dos casos cuando el relleno no alcanza.
+        anillo = (d2 > (r * 0.55) ** 2) & disc
+        na = int(anillo.sum())
+        b.ring = float((sub & anillo).sum()) / na if na else 0.0
 
 
 def adaptive_mark_threshold(questions: list):
     """
-    Umbral de marcado separando dos poblaciones bien definidas:
+    Decide qué burbujas están marcadas. Devuelve (piso, aviso).
 
-      - "vacías": todas las burbujas de cada pregunta MENOS la más oscura
-      - "marcadas": la más oscura de cada pregunta
+    Un único umbral global para toda la hoja NO alcanza: la oscuridad de una
+    marca varía mucho dentro de la misma hoja (lápiz más o menos apretado,
+    tramado del escáner, zonas más claras del papel). Medido sobre una hoja
+    real, el umbral global cayó en 0.561 y dejó en BLANCO ocho ítems cuya
+    marca era inequívoca dentro de su propia pregunta:
 
-    Es mucho más estable que un Otsu sobre todos los rellenos juntos: la
-    población de marcadas es ancha (una marca a lápiz tramada por el escáner
-    va de 0.3 a 0.9) y arrastraba el corte hacia arriba, perdiendo las marcas
-    más débiles. Aquí el corte cae en la frontera real entre ambas.
+        ítem 45:  A 0.12  B 0.21  C 0.47  D 0.13   -> C, sin ninguna duda
+        ítem 41:  A 0.56  B 0.13  C ....  D ....   -> A, sin ninguna duda
 
-    Devuelve (umbral, aviso). El aviso no es vacío cuando las dos poblaciones
-    se solapan: en ese caso NO hay un corte fiable y la hoja entera debe ir a
-    revisión manual, en vez de producir un resultado de apariencia normal.
+    Así que la decisión es **relativa a cada pregunta**, con un piso absoluto
+    que evita inventar marcas en una pregunta vacía:
+
+      piso   nivel de tinta a partir del cual algo cuenta como marca. Se deriva
+             de la hoja misma: el percentil 95 de las burbujas NO ganadoras (el
+             techo del ruido: borde impreso más la letra que va dentro del
+             óvalo) más una fracción de la distancia hasta el nivel típico de
+             las marcas.
+      0.60   una burbuja está marcada si llega al 60 % de la más oscura de su
+             pregunta. Es lo que preserva los MULTIPLE reales (dos marcas
+             parejas) sin convertir el ruido en segunda marca. Una vez que la
+             pregunta tiene una marca confirmada, este criterio manda sobre el
+             piso (acotado a 0.70·piso), porque la comparación dentro de la
+             pregunta es más fiable que un corte global.
+
+    Una pregunta cuya burbuja más oscura no llega al piso queda en BLANCO
+    entera; ahí no hay nada que decidir.
     """
     tops, rest = [], []
     for q in questions:
@@ -498,21 +575,177 @@ def adaptive_mark_threshold(questions: list):
     tops = np.array(tops, dtype=np.float64)
     rest = np.array(rest, dtype=np.float64)
 
-    hi_empty = float(np.percentile(rest, 98))     # la vacía más oscura (robusto)
-    lo_mark = float(np.percentile(tops, 2))       # la marca más débil (robusto)
+    ruido = float(np.percentile(rest, 95))
+    nivel = float(np.median(tops))
+    piso = float(np.clip(ruido + 0.30 * (nivel - ruido), 0.15, 0.60))
 
-    warn = ""
-    if lo_mark <= hi_empty:
-        # Las poblaciones se tocan: puede ser una hoja con ítems en blanco
-        # (su "más oscura" es en realidad una vacía) o una hoja ilegible.
-        gap = hi_empty - lo_mark
-        thr = (hi_empty + float(np.percentile(tops, 50))) / 2
-        if gap > 0.10:
-            warn = ("separación pobre entre marcadas y vacías "
-                    "(%.2f vs %.2f): revisar la hoja completa" % (lo_mark, hi_empty))
-    else:
-        thr = (hi_empty + lo_mark) / 2
-    return float(np.clip(thr, 0.18, 0.85)), warn
+    aviso = ""
+    if not separables(ruido, nivel):
+        if nivel < 2.0 * ruido and nivel < 0.35:
+            aviso = ("HOJA SIN MARCAR: ninguna burbuja destaca sobre el resto "
+                     "(ruido %.2f, burbuja más oscura típica %.2f). No se "
+                     "emiten respuestas." % (ruido, nivel))
+        else:
+            aviso = ("HOJA ILEGIBLE: no hay separación entre marcas y vacías "
+                     "(ruido %.2f, marca típica %.2f). No se emiten respuestas."
+                     % (ruido, nivel))
+    return piso, aviso
+
+
+REL_SEGUNDA_MARCA = 0.60   # una 2ª marca debe llegar al 60 % de la 1ª de su ítem
+RING_RESIDUO = 0.60        # por DEBAJO de esto la 2ª marca es residuo de borrado.
+RING_DUDOSA = 0.85         # entre ambos se reporta MULTIPLE pero marcado como
+                           # dudoso, para que lo mire una persona (ver apply_marks)
+
+
+def separables(ruido: float, nivel: float) -> bool:
+    """
+    ¿Hay separación suficiente entre marcas y vacías para decidir algo?
+
+    Es la comprobación que distingue una hoja legible de una en blanco. Sobre
+    doce hojas reales la distancia entre el techo del ruido y la marca típica
+    va de 0.32 a 0.73, y la razón entre ambos de 2.0 a 4.5. En una hoja sin
+    marcar valen 0.01 y 1.06. El margen es tan amplio que no hay zona gris.
+
+    Importa porque las reglas relativas (60 % de la más oscura del ítem, etc.)
+    están pensadas para preguntas que SÍ tienen una marca: aplicadas sobre puro
+    ruido producen respuestas verosímiles salidas de la nada. En una hoja en
+    blanco real, el lector llegó a reportar 15 respuestas y 9 MULTIPLE.
+    """
+    return (nivel - ruido) >= 0.12 and nivel >= 1.5 * ruido
+
+
+def apply_marks(questions: list, piso: float, rel: float = None) -> None:
+    """
+    Decide qué burbujas están marcadas, con tres criterios encadenados.
+
+    **Dentro del ítem** (`rel`): una burbuja está marcada si llega al 60 % de la
+    más oscura de su propia pregunta. Esto rescata marcas claras que un umbral
+    global de hoja dejaba en BLANCO.
+
+    **El piso**, con una excepción: una pregunta cuya burbuja más oscura no
+    llega al piso queda en BLANCO, salvo que esa burbuja destaque claramente
+    sobre las de su propio ítem (ver más abajo).
+
+    **Doble real o borrado** (`RING_DOBLE`): una SEGUNDA marca en el mismo ítem
+    sólo cuenta si cubre el BORDE del óvalo tanto como lo cubren las marcas
+    únicas de esa misma hoja. Si no, es residuo de un borrado: gana la más
+    oscura y el ítem sale con una advertencia, no como MULTIPLE.
+
+    El tercer criterio necesita explicación, porque es el que más ha costado.
+
+    **El relleno no separa los dos casos.** Probado y descartado: valor absoluto;
+    fracción del nivel de marca de la hoja; razón contra la primera marca del
+    mismo ítem; percentil bajo de las marcas únicas. En todos, los rangos se
+    cruzan:
+
+        hoja _0011 ítem 36   2ª marca 0.66   -> doble real
+        hoja _0029 ítem 38   2ª marca 0.54   -> borrado
+
+    **La cobertura del borde separa mejor, pero tampoco del todo.** Una marca
+    hecha a propósito cubre el óvalo entero, borde incluido; el residuo de un
+    borrado queda concentrado en el centro. Midiendo el anillo exterior
+    (0.55 r a r) normalizado por el de las marcas únicas de la misma hoja, sobre
+    doce casos verificados a ojo:
+
+        borrados          0.46  0.49  0.49  0.58  0.66
+        dobles de verdad                          0.66  0.71  0.92  0.97  1.02  1.04
+
+    Se tocan en 0.66: ahí hay un borrado y una doble real con el mismo número.
+    Ningún corte los separa, porque lo que se está tratando de adivinar es la
+    INTENCIÓN del estudiante, y la tinta no siempre la contiene.
+
+    **Por eso la decisión es asimétrica.** Resolver a una sola respuesta cambia
+    una nota en silencio; reportar MULTIPLE sólo cuesta que una persona mire la
+    celda y pulse una tecla. Así que sólo se descarta la segunda marca cuando es
+    residuo con holgura (`RING_RESIDUO`, por debajo del cual los cuatro casos
+    medidos son borrados y ninguna doble se acerca). Entre `RING_RESIDUO` y
+    `RING_DUDOSA` sale MULTIPLE con la advertencia de que puede ser un borrado.
+    En la zona de solapamiento, el lector no adivina: avisa.
+    """
+    if rel is None:
+        rel = REL_SEGUNDA_MARCA
+
+    maximos = [max(b.fill for b in q.bubbles) for q in questions if q.bubbles]
+    con_marca = [m for m in maximos if m >= piso]
+    nivel = float(np.median(con_marca)) if con_marca else piso
+    # Techo del ruido: percentil 95 de las burbujas NO ganadoras de cada
+    # pregunta (borde impreso + la letra que va dentro del óvalo).
+    resto = [b.fill for q in questions
+             for b in sorted(q.bubbles, key=lambda z: -z.fill)[1:]]
+    ruido = float(np.percentile(resto, 95)) if resto else 0.0
+
+    # Sin separación entre marcas y vacías no hay nada que decidir: se deja
+    # todo sin marcar en vez de inventar respuestas a partir del ruido.
+    if maximos and not separables(ruido, float(np.median(maximos))):
+        for q in questions:
+            for b in q.bubbles:
+                b.marked = False
+        return
+
+    for q in questions:
+        if not q.bubbles:
+            continue
+        fills = sorted((b.fill for b in q.bubbles), reverse=True)
+        mx = fills[0]
+        segundo = fills[1] if len(fills) > 1 else 0.0
+        # Una pregunta tiene marca si su burbuja más oscura llega al piso, o si
+        # —aun sin llegar— destaca claramente sobre las de su propio ítem: al
+        # menos vez y media la siguiente, y por encima del punto medio entre el
+        # ruido y el piso. En una hoja cuyas marcas rondan 0.77 el piso sube a
+        # 0.46, y una marca floja de 0.42 contra un 0.24 es inequívoca dentro de
+        # su ítem aunque no llegue a ese piso. El punto medio es lo que impide
+        # que la regla se dispare con ruido: un 0.17 contra un 0.11, en una hoja
+        # con ruido 0.15 y piso 0.28, no pasa.
+        destaca = mx >= (ruido + piso) / 2 and mx >= 1.5 * segundo
+        if mx < piso and not destaca:
+            for b in q.bubbles:
+                b.marked = False
+            continue
+        # Con una marca confirmada, la comparación dentro del ítem manda sobre
+        # el piso (acotada a 0.70·piso): una segunda marca floja no debe
+        # perderse por quedar un pelo por debajo.
+        corte = max(rel * mx, 0.70 * min(piso, mx))
+        for b in q.bubbles:
+            b.marked = b.fill >= corte
+        marcadas = sorted((b for b in q.bubbles if b.marked),
+                          key=lambda b: -b.fill)
+        q._marcadas = marcadas
+    # --- segunda pasada: marca doble real o residuo de borrado ---
+    # La referencia es la cobertura de anillo de las marcas ÚNICAS de esta misma
+    # hoja, así que se adapta a lo fuerte que marque cada estudiante.
+    unicas = [q._marcadas[0] for q in questions
+              if getattr(q, "_marcadas", None) and len(q._marcadas) == 1]
+    ref = float(np.median([b.ring for b in unicas])) if unicas else 0.0
+    for q in questions:
+        marcadas = getattr(q, "_marcadas", None)
+        if not marcadas or len(marcadas) < 2:
+            continue
+        residuos, dudosas = [], []
+        for b in marcadas[1:]:
+            rel = (b.ring / ref) if ref > 0 else 1.0
+            if rel < RING_RESIDUO:
+                b.marked = False
+                residuos.append((b.letter, b.fill, rel * 100))
+            elif rel < RING_DUDOSA:
+                dudosas.append((b.letter, b.fill, rel * 100))
+        avisos = []
+        if residuos:
+            avisos.append("posible borrado o corrección: %s frente a %s %.2f"
+                          % (", ".join("%s %.2f (borde %.0f%% del normal)" % r
+                                       for r in residuos),
+                             marcadas[0].letter, marcadas[0].fill))
+        if dudosas:
+            avisos.append("doble marcación con una marca floja: %s — puede ser "
+                          "un borrado, conviene mirarla"
+                          % ", ".join("%s %.2f (borde %.0f%% del normal)" % d
+                                      for d in dudosas))
+        if avisos:
+            # no pisar un aviso previo de build_questions (letras ambiguas, etc.)
+            q.warning = "; ".join(([q.warning] if q.warning else []) + avisos)
+    for q in questions:
+        if hasattr(q, "_marcadas"):
+            del q._marcadas
 
 
 # --------------------------------------------------------------------------
@@ -589,6 +822,15 @@ def check_structure(questions: list, expected: int = 0) -> list:
     if not questions:
         return ["no se detectó ninguna pregunta"]
 
+    # Filas insertadas en blanco por `rellenar_filas_perdidas`: el hueco ya no
+    # se ve en la geometría, así que se avisa con el número de pregunta, que es
+    # lo que necesita quien corrige la hoja.
+    for q in questions:
+        if q.sin_leer:
+            avisos.append("pregunta %d: fila no detectada; quedó en blanco "
+                          "para no correr la numeración — corregir a mano"
+                          % q.number)
+
     if expected and len(questions) != expected:
         avisos.append("se esperaban %d preguntas y se leyeron %d: la numeración "
                       "no es de fiar" % (expected, len(questions)))
@@ -623,7 +865,146 @@ def check_structure(questions: list, expected: int = 0) -> list:
     return avisos
 
 
-def build_questions(bubbles: list, letters: str) -> list:
+TOL_COLUMNA = 0.25      # |x - columna| / paso, para cada burbuja detectada
+MAX_VECINA = 1.5        # fila vecina del bloque a <= MAX_VECINA pasos verticales
+
+
+def _completar_extremos(qs, x0, gap_opt, r_med, letters, gray):
+    """
+    Recuperación por rejilla de las opciones EXTREMAS de una fila.
+
+    La recuperación de `build_questions` solo interpola ENTRE dos fragmentos
+    detectados; si la que falla es la A (o la última), no hay fragmento a su
+    izquierda y la fila queda sin ella. Pasa con marcas agresivas que desbordan
+    el óvalo: Hough y el contorno estiman centro y radio corridos, la firma
+    anular se mide sobre una circunferencia que no es la impresa y el
+    candidato muere. Aquí se sintetiza la opción en la columna del bloque y
+    su relleno se mide después como el de cualquier otra.
+
+    En una hoja real el ítem 45 tenía la A rellena con un trazo que desbordaba
+    el óvalo: la fila llegó con B, C y D y salió BLANCO. Peor aún, el único
+    rastro era el aviso "falta la opción A", que eval-app no lee: si la hoja
+    hubiera cuadrado en conteo se habría calificado mal sin revisión. La A
+    sintetizada mide 0.993 y sale A.
+
+    La síntesis solo se admite si el óvalo IMPRESO está en esa posición (la
+    misma firma anular que usa `detect_bubbles`, medida en la rejilla). Sin esa
+    comprobación, ítems impresos con solo A-C dentro de un bloque de 4 opciones
+    recibían una D fantasma con relleno 0.000 (hoja _0001, ítems 14 y 15).
+    """
+    if len(qs) < 3:
+        return
+    tallas = [len(q) for q in qs]
+    moda = max(set(tallas), key=tallas.count)
+    # x de cada columna medida en el propio bloque (mediana de detectadas)
+    colx = {}
+    for q in qs:
+        for b in q:
+            if b.letter in letters and not b.sintetica:
+                colx.setdefault(letters.index(b.letter), []).append(b.x)
+    colx = {k: float(np.median(v)) for k, v in colx.items()}
+    ys = [float(np.mean([b.y for b in q])) for q in qs]
+    difs = np.diff(sorted(ys))
+    pitch = float(np.median(difs)) if len(difs) else 0.0
+    if gray is None:
+        return
+    blur = cv2.GaussianBlur(gray, (5, 5), 1.2)
+    _, otsu = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    h, w = otsu.shape
+    for qi, q in enumerate(qs):
+        if len(q) >= moda or pitch <= 0:
+            continue
+        ks = [letters.index(b.letter) if b.letter in letters else -1 for b in q]
+        if -1 in ks or len(set(ks)) != len(ks):
+            continue
+        # cada burbuja detectada cae sobre una columna del bloque
+        if any(abs(b.x - colx.get(k, x0 + k * gap_opt)) > TOL_COLUMNA * gap_opt
+               for b, k in zip(q, ks)):
+            continue
+        # embebida en la rejilla: tiene una fila vecina a ~1 paso vertical
+        near = min((abs(ys[qi] - y) for j, y in enumerate(ys) if j != qi), default=1e9)
+        if near > MAX_VECINA * pitch:
+            continue
+        # Los extremos que faltan, a los dos lados: la A y, si la fila es más
+        # corta que las completas del bloque, la última.
+        faltan = list(range(0, min(ks))) + list(range(max(ks) + 1, moda))
+        for k in faltan:
+            x = colx.get(k, x0 + k * gap_opt)
+            if not _ring_signature_ok(otsu, x, ys[qi], r_med, h, w):
+                continue
+            nb = Bubble(x, ys[qi], r_med, sintetica=True)
+            nb.letter = letters[k]
+            q.append(nb)
+        q.sort(key=lambda b: b.x)
+
+
+def rellenar_filas_perdidas(questions: list, gray: np.ndarray) -> list:
+    """
+    Inserta en blanco las filas que faltan DENTRO de un bloque.
+
+    Un bloque es una rejilla impresa de paso fijo: un salto de k pasos entre
+    dos filas contiguas son k-1 filas que no se detectaron, y la rejilla dice
+    dónde van. Sin esto, perder una sola fila corre la numeración de todo lo
+    que viene después, bloques siguientes incluidos. En una hoja real se
+    perdió la fila 7 del bloque 1 —un círculo espurio de Hough, más grande que
+    una burbuja, se tragó dos óvalos reales al deduplicar— y las 104 preguntas
+    siguientes salieron corridas una posición; la matriz del lote mostraba la
+    respuesta de la 8 en la columna 7, la de la 9 en la 8, y así hasta la 110.
+
+    La fila insertada NO se lee: queda en BLANCO, marcada `sin_leer`, y
+    `check_structure` la reporta con su número para que se corrija a mano.
+    Adivinar su respuesta sería justo el error que se quiere evitar. Sus
+    burbujas (sintéticas, en las columnas de la fila anterior) se miden solo
+    para que el recorte de revisión muestre lo que hay en el papel.
+
+    Se llama después de decidir las marcas, así que no cambia el umbral ni
+    ninguna otra respuesta. El criterio del hueco es el mismo de
+    `check_structure`. No cubre la primera ni la última fila de un bloque:
+    ahí no hay vecinas que delaten el hueco, y solo lo ve el conteo.
+    """
+    if len(questions) < 3:
+        return questions
+    r_med = float(np.median([b.r for q in questions for b in q.bubbles]))
+    xs = np.array([q.bubbles[0].x for q in questions])
+    bloque = {}
+    for gi, g in enumerate(cluster_1d(xs, tol=r_med * 6)):
+        for i in g:
+            bloque[i] = gi
+
+    def _y(q):
+        return float(np.mean([b.y for b in q.bubbles]))
+
+    # paso de cada bloque, medido en el bloque mismo (como check_structure)
+    pasos = {}
+    for gi in set(bloque.values()):
+        ys = sorted(_y(questions[i]) for i in bloque if bloque[i] == gi)
+        if len(ys) >= 3:
+            pasos[gi] = float(np.median(np.diff(ys)))
+
+    out = []
+    for i, q in enumerate(questions):
+        out.append(q)
+        if i + 1 >= len(questions) or bloque[i] != bloque[i + 1]:
+            continue
+        paso = pasos.get(bloque[i], 0.0)
+        if paso <= 0:
+            continue
+        d = _y(questions[i + 1]) - _y(q)
+        k = int(round(d / paso))
+        for j in range(1, k):
+            y = _y(q) + d * j / k
+            nuevas = [Bubble(b.x, y, r_med, letter=b.letter, sintetica=True)
+                      for b in q.bubbles]
+            measure_fill(gray, nuevas)
+            out.append(Question(bubbles=nuevas, sin_leer=True,
+                                warning="fila no detectada: quedó en blanco "
+                                        "para corregir a mano"))
+    for n, q in enumerate(out, 1):
+        q.number = n
+    return out
+
+
+def build_questions(bubbles: list, letters: str, gray: np.ndarray = None) -> list:
     if not bubbles:
         return []
     r_med = float(np.median([b.r for b in bubbles]))
@@ -693,7 +1074,8 @@ def build_questions(bubbles: list, letters: str) -> list:
                 step = gap / k
                 y_i = (a.y + f[0].y) / 2
                 for j in range(1, k):
-                    merged[-1].append(Bubble(a.x + step * j, y_i, r_med))
+                    merged[-1].append(Bubble(a.x + step * j, y_i, r_med,
+                                             sintetica=True))
                 merged[-1].extend(f)
             else:
                 merged.append(f)
@@ -716,14 +1098,6 @@ def build_questions(bubbles: list, letters: str) -> list:
     # Filtro de filas aisladas: una fila real de la rejilla tiene otra fila a
     # ~1 paso vertical; texto del encabezado alineado por azar queda aislado
     # y con pocas burbujas, y se descarta.
-    #
-    # Sobre una hoja de 50 items, el subtitulo "Estandar Sesion 3 Grado 5"
-    # aportaba tres glifos redondos (la "o" de Sesion, el "3" y la "G") que
-    # sobrevivian como pregunta 1 y corrian la numeracion de las 50 restantes:
-    # una lectura completa y verosimil, con cada respuesta en el item
-    # equivocado. Pasaban porque, tras la recuperacion por rejilla, la fila
-    # llegaba a 3 miembros y el umbral de descarte exigia menos del 60% de una
-    # fila tipica (2.4 sobre 4).
     row_y = sorted({round(float(np.mean([b.y for b in q])) / (r_med * 0.8))
                     * (r_med * 0.8) for q in raw_questions})
     if len(row_y) > 2:
@@ -734,26 +1108,53 @@ def build_questions(bubbles: list, letters: str) -> list:
             yq = round(float(np.mean([b.y for b in q])) / (r_med * 0.8)) * (r_med * 0.8)
             counts[yq] = counts.get(yq, 0) + len(q)
         modal_row = float(np.median(list(counts.values())))
-        completas = [oy for oy in row_y if counts[oy] >= modal_row]
+
+        # Cuántas opciones tiene una pregunta COMPLETA en cada bloque. Hay que
+        # medirlo por bloque: cuando un bloque es más largo que otro, la moda
+        # global no sirve (en una hoja real, 18 filas de 8 burbujas arriba y 20
+        # de 4 abajo dan una mediana de 5.5, que no describe a ninguna fila).
+        qx = np.array([q[0].x for q in raw_questions])
+        completo = {}
+        origen = {}
+        for gb in cluster_1d(qx, tol=gap_opt * 3.0):
+            tallas = [len(raw_questions[i]) for i in gb]
+            moda = max(set(tallas), key=tallas.count)
+            # Dónde arranca la columna 'A' del bloque. Las preguntas reales
+            # coinciden en esa x salvo un par de píxeles; lo que no coincide no
+            # se apoya en la rejilla.
+            x0b = float(np.median([qx[i] for i in gb]))
+            for i in gb:
+                completo[i] = moda
+                origen[i] = x0b
+
         keep_q = []
-        for q in raw_questions:
+        for idx, q in enumerate(raw_questions):
             yq = round(float(np.mean([b.y for b in q])) / (r_med * 0.8)) * (r_med * 0.8)
             near = min((abs(yq - oy) for oy in row_y if oy != yq), default=0)
-            # Tres condiciones, y la tercera es la que evita danos colaterales:
-            #   1. aislada -- ninguna otra fila a menos de 1.8 pasos,
-            #   2. incompleta -- MENOS miembros que una fila tipica (tras la
-            #      recuperacion por rejilla la basura del encabezado llegaba a
-            #      3 contra 4 de una fila real, y pasaba un umbral del 60%),
-            #   3. FUERA del rango vertical de la rejilla. Sin esto se caian
-            #      filas interiores legitimas de hojas a 3 columnas, donde las
-            #      ultimas filas de un bloque tienen menos miembros porque los
-            #      otros bloques ya terminaron (medido: -4 items en dos hojas
-            #      de 110). El encabezado y el pie siempre quedan afuera.
-            # El rango se define con filas COMPLETAS (>= modal), no con el
-            # 60%: la propia fila basura de 3 miembros pasaba el 60% y se
-            # metia en la lista, definiendo ella misma el minimo del rango.
-            fuera = bool(completas) and (yq < min(completas) or yq > max(completas))
-            if fuera and near > 1.8 * pitch and counts[yq] < modal_row:
+            if near > 1.8 * pitch and counts[yq] < modal_row * 0.6:
+                continue
+            # Aislada Y con menos opciones de las que tiene una pregunta completa
+            # de su propio bloque: es ruido del encabezado o del pie. En una hoja
+            # real la "ó" de Sesión y la "G" de Grado del subtítulo formaron una
+            # pregunta de 3 opciones que se coló como ítem 1 y corrió la
+            # numeración del bloque entero. Una pregunta legítima a la que le
+            # falta una opción está pegada a sus vecinas, así que el criterio de
+            # distancia la protege.
+            if near > 1.8 * pitch and len(q) < completo.get(idx, len(q)):
+                continue
+            # Aislada en Y y descolgada de la rejilla de su bloque. El filtro
+            # de arriba solo atrapa al ruido que trae MENOS opciones que una
+            # pregunta completa, y eso dejó pasar una fila de cuatro: en una
+            # hoja real el subtítulo "Estándar Sesión 1 Grado 2 — Cuadernillo"
+            # aportó la 'S', 'sió', 'n 1' y la 'G' como cuatro burbujas con el
+            # paso horizontal correcto, dos de ellas con el radio exacto de una
+            # burbuja. Pasó por completa y corrió la numeración de los 35
+            # ítems: una lectura entera, verosímil y equivocada. Lo que la
+            # delata es que arranca 0.8 pasos a la derecha de la columna 'A'.
+            # Una pregunta legítima a la que le falte la A no entra aquí: está
+            # pegada a sus vecinas y no es aislada.
+            if (near > 1.8 * pitch
+                    and abs(q[0].x - origen.get(idx, q[0].x)) > 0.35 * gap_opt):
                 continue
             keep_q.append(q)
         raw_questions = keep_q
@@ -769,9 +1170,65 @@ def build_questions(bubbles: list, letters: str) -> list:
     # se colara, además de inventar ítems correría la numeración de todo lo que
     # viene después.
     if len(col_groups) > 1:
-        biggest = max(len(g) for g in col_groups)
-        min_q = max(3, int(biggest * 0.15))
-        filtered = [g for g in col_groups if len(g) >= min_q]
+        def _filas(g):
+            return sorted(float(np.mean([b.y for b in raw_questions[i]])) for i in g)
+
+        principal = max(col_groups, key=len)
+        filas_pral = _filas(principal)
+        pasos = [b - a for a, b in zip(filas_pral, filas_pral[1:])]
+        paso = float(np.median(pasos)) if pasos else 0.0
+        biggest = len(principal)
+        holgado = max(3, int(biggest * 0.15))
+
+        def _radio(g):
+            rs = [b.r for i in g for b in raw_questions[i] if not b.sintetica]
+            return float(np.median(rs)) if rs else 0.0
+
+        r_pral = _radio(principal)
+
+        # Un bloque de respuestas es una rejilla IMPRESA, y eso se mide dentro
+        # del bloque mismo, sin compararlo con nadie: todas sus filas arrancan
+        # en la misma x (la columna 'A') y sus óvalos tienen el tamaño de una
+        # burbuja. Antes, un bloque con `holgado` filas o más entraba sin más
+        # preguntas. En una hoja real de 30 ítems holgado valía 4, y el bloque
+        # de identidad impreso bajo el QR aportó exactamente 4 filas de "burbujas"
+        # —los huecos de las letras redondas de "ZZTORO", "LUISCAR",
+        # "Grado - Grupo:" y "Código:"— que entraron por el empate 4 >= 4 como
+        # ítems 1..4 y corrieron la numeración de los 30 reales. Medido en los
+        # 17 bloques de las 10 hojas de prueba:
+        #
+        #                             legítimos        el espurio
+        #     radio / radio pral      0.98 - 1.06      0.59
+        #     MAD(x0) / paso          0.00 - 0.04      0.50
+        #
+        # Se exigen las dos porque fallan de forma independiente: en esa misma
+        # plantilla, "Grado" y "Código" empiezan ambos en el margen izquierdo, y
+        # un nombre que empezara por 'O' alinearía también el x0 de su fila; el
+        # tamaño de una letra, en cambio, no se parece al de un óvalo.
+        def _es_rejilla(g):
+            if r_pral > 0 and _radio(g) < 0.80 * r_pral:
+                return False
+            x0 = np.array([raw_questions[i][0].x for i in g])
+            mad = float(np.median(np.abs(x0 - np.median(x0))))
+            return mad <= 0.25 * gap_opt
+
+        filtered = []
+        for g in col_groups:
+            if len(g) >= holgado:
+                if _es_rejilla(g):
+                    filtered.append(g)
+                continue
+            # Un bloque CORTO es legítimo si sus filas caen sobre la rejilla del
+            # bloque principal: un bloque de 5 ítems a la derecha arranca a la
+            # misma altura que el ítem 1. El ruido (QR, logo, casillas del
+            # encabezado) cae en cualquier otra parte. Antes bastaba con ser
+            # corto para descartarlo, y eso se comió un bloque real de 5 ítems
+            # en una hoja de 45.
+            if len(g) < 2 or paso <= 0:
+                continue
+            if all(min(abs(y - py) for py in filas_pral) <= 0.35 * paso
+                   for y in _filas(g)) and _es_rejilla(g):
+                filtered.append(g)
         if filtered:
             col_groups = filtered
 
@@ -783,16 +1240,18 @@ def build_questions(bubbles: list, letters: str) -> list:
         # Origen de la rejilla de opciones del bloque: la columna 'A' es la
         # posición inicial más frecuente entre las preguntas del bloque.
         x0 = float(np.median([q[0].x for q in qs]))
+        # La letra se deduce de la COLUMNA de la rejilla, no del índice en
+        # la lista: si falla la detección de una opción extrema (la A), las
+        # demás conservan su letra correcta en vez de correrse una posición.
         for q in qs:
-            n += 1
-            qq = Question(number=n, bubbles=q)
-            # La letra se deduce de la COLUMNA de la rejilla, no del índice en
-            # la lista: si falla la detección de una opción extrema (la A), las
-            # demás conservan su letra correcta en vez de correrse una posición.
             for b in q:
                 k = int(round((b.x - x0) / gap_opt))
                 k = max(0, k)
                 b.letter = letters[k] if k < len(letters) else "?"
+        _completar_extremos(qs, x0, gap_opt, r_med, letters, gray)
+        for q in qs:
+            n += 1
+            qq = Question(number=n, bubbles=q)
             # Opciones ausentes dentro del rango leído -> se reportan
             got = [b.letter for b in q]
             if len(set(got)) != len(got):
@@ -807,16 +1266,21 @@ def build_questions(bubbles: list, letters: str) -> list:
 # 4. Corrección de inclinación ligera (opcional, sin anclajes)
 # --------------------------------------------------------------------------
 
-def deskew(gray: np.ndarray) -> np.ndarray:
+def deskew(gray: np.ndarray, with_matrix: bool = False):
     """
     Endereza rotaciones usando las propias burbujas como referencia (sin
     anclajes): detecta las burbujas, calcula el ángulo dominante entre pares
     de vecinos horizontales (opciones contiguas de una misma pregunta) y
     rota la imagen para nivelar la rejilla.
+
+    Con `with_matrix=True` devuelve (imagen, M), con M la matriz afín 2x3
+    aplicada (None si no se giró), para llevar coordenadas medidas antes del
+    enderezado —la caja del QR— al sistema de la imagen enderezada.
     """
+    ret = (lambda g, m=None: (g, m)) if with_matrix else (lambda g, m=None: g)
     bubbles = detect_bubbles(gray)
     if len(bubbles) < 10:
-        return gray
+        return ret(gray)
     pts = np.array([(b.x, b.y) for b in bubbles])
     angles = []
     for i, (x, y) in enumerate(pts):
@@ -831,14 +1295,88 @@ def deskew(gray: np.ndarray) -> np.ndarray:
         if dist[j] < 1e9:
             angles.append(np.degrees(np.arctan2(dy[j], dx[j])))
     if len(angles) < 10:
-        return gray
+        return ret(gray)
     angle = float(np.median(angles))
     if abs(angle) < 0.15 or abs(angle) > 15:
-        return gray
+        return ret(gray)
     h, w = gray.shape
     M = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
-    return cv2.warpAffine(gray, M, (w, h), flags=cv2.INTER_LINEAR,
-                          borderMode=cv2.BORDER_REPLICATE)
+    return ret(cv2.warpAffine(gray, M, (w, h), flags=cv2.INTER_LINEAR,
+                              borderMode=cv2.BORDER_REPLICATE), M)
+
+
+# Encabezado impreso (institución y "Estándar Sesión N Grado M — Cuadernillo K"):
+# está siempre por encima del QR y de la rejilla, y sus letras redondas (C, d, o)
+# pasan por burbujas. Se borra antes de detectar, cortando a HEADER_CUT_FRAC del
+# ancho de página por encima del borde superior REAL del QR. Medido en 11 hojas
+# a 1704 px de ancho: la tinta de la primera fila de burbujas empieza entre 0 y
+# 7 px por encima del QR y el texto termina entre 50 y 61 px por encima;
+# 0.017 * 1704 = 29 px queda al centro de esa banda (21-22 px libres a cada lado).
+HEADER_CUT_FRAC = 0.017
+
+
+def _box_after(box, M):
+    """Caja (x, y, w, h) llevada por la matriz afín M (None = sin cambio)."""
+    if box is None or M is None:
+        return box
+    x, y, w, h = box
+    q = np.array([[x, y, 1], [x + w, y, 1], [x, y + h, 1], [x + w, y + h, 1]],
+                 float) @ np.asarray(M).T
+    (x0, y0), (x1, y1) = q.min(0), q.max(0)
+    return (float(x0), float(y0), float(x1 - x0), float(y1 - y0))
+
+
+def qr_top_edge(gray: np.ndarray, qr_box):
+    """
+    Fila del borde superior real del QR, o None.
+
+    La caja del decodificador no sirve de ancla directa: cuando sale de la
+    máscara de densidad empieza hasta 25 px por DEBAJO del borde impreso, y su
+    alto varía de 155 a 233 px en el mismo QR. Desde un punto seguro dentro de
+    la caja se sube mientras las filas, en las columnas de la caja, tengan
+    tinta; la zona de silencio del QR (4 módulos en blanco) detiene la subida.
+    """
+    x, y, w, h = qr_box
+    H, W = gray.shape
+    x0, x1 = max(0, int(x)), min(W, int(x + w))
+    if x1 - x0 < 10 or h < 10:
+        return None
+    blur = cv2.GaussianBlur(gray, (5, 5), 1.2)
+    _, otsu = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    frac = (otsu[:, x0:x1] > 0).mean(1)
+    top, gap = None, 0
+    for yy in range(min(H - 1, int(y + 0.25 * h)), -1, -1):
+        if frac[yy] >= 0.10:
+            top, gap = yy, 0
+        else:
+            gap += 1
+            if gap > 3:
+                break
+    # La caja queda dentro del QR o sobre su borde: si la subida se cortó más
+    # abajo (QR desvaído con una franja sin tinta) se ancla en la caja, para
+    # que el corte no pueda bajar hacia la primera fila.
+    return None if top is None else min(top, int(y))
+
+
+def header_cut(gray: np.ndarray, qr_box):
+    """
+    Fila por encima de la cual todo es encabezado (0 = no borrar nada).
+
+    Solo con una caja de QR plausible: cuadrada y en el cuadrante superior
+    izquierdo (donde queda tras orientar la hoja). Sin QR no se borra nada y
+    rigen los filtros de detect_bubbles/build_questions de siempre.
+    """
+    if qr_box is None:
+        return 0
+    x, y, w, h = qr_box
+    H, W = gray.shape
+    if not (0.7 <= w / max(h, 1e-6) <= 1.4) or x + w / 2 > W / 2 or y + h / 2 > H / 2:
+        return 0
+    top = qr_top_edge(gray, qr_box)
+    if top is None:
+        return 0
+    cut = int(round(top - HEADER_CUT_FRAC * W))
+    return cut if 0 < cut < H * 0.25 else 0
 
 
 # --------------------------------------------------------------------------
@@ -847,7 +1385,7 @@ def deskew(gray: np.ndarray) -> np.ndarray:
 
 def analyze_sheet(path: str, letters: str = "ABCDEFGH"):
     """
-    Analiza una hoja y devuelve (gray, questions, thr, qr, aviso, rotacion): la imagen
+    Analiza una hoja y devuelve (gray, questions, thr, qr, aviso, rotacion, qr_box): la imagen
     enderezada y orientada, las preguntas con burbujas (coordenadas, relleno,
     marcado), el umbral y el payload del QR de identificación (o None).
     Es la base tanto de process_sheet como de interfaces de revisión.
@@ -881,24 +1419,40 @@ def analyze_sheet(path: str, letters: str = "ABCDEFGH"):
             gray = cv2.rotate(gray, turn)
             qr, box, _ = read_qr(gray)
 
-    gray = deskew(gray)
+    gray, M_desk = deskew(gray, with_matrix=True)
+    qr_box = box
 
-    bubbles = detect_bubbles(gray)
+    # El encabezado se borra solo en la copia que ve el detector: la imagen
+    # devuelta (la que muestra la revisión) y la medición de relleno siguen
+    # usando la hoja completa.
+    # Solo si el QR DECODIFICÓ. Sin decodificar, read_qr devuelve igual la
+    # primera zona densa, y con un QR dañado esa caja cae hasta 65 px por
+    # debajo del borde impreso: con la parte de arriba del QR borrada 40 px
+    # (prueba simulada), el corte se comía la fila 1 y corría 30 respuestas en
+    # 20101_S1, 88 en 20260918175101067_0029 y 78 en _0002, hojas que v22 lee
+    # bien. Un QR roto debe costar la identificación, no las respuestas: sin
+    # decodificar se vuelve al comportamiento de v22 (filtros v21/v22).
+    cut = header_cut(gray, _box_after(box, M_desk)) if qr is not None else 0
+    det = gray
+    if cut:
+        det = gray.copy()
+        det[:cut, :] = 255
+    bubbles = detect_bubbles(det)
     if not bubbles:
         raise RuntimeError("No se detectaron burbujas en la imagen.")
 
-    questions = build_questions(bubbles, letters)
+    questions = build_questions(bubbles, letters, gray)
     all_bubbles = [b for q in questions for b in q.bubbles]
     measure_fill(gray, all_bubbles)
     thr, thr_warn = adaptive_mark_threshold(questions)
-    for b in all_bubbles:
-        b.marked = b.fill >= thr
-    return gray, questions, thr, qr, thr_warn, rotation
+    apply_marks(questions, thr)
+    questions = rellenar_filas_perdidas(questions, gray)
+    return gray, questions, thr, qr, thr_warn, rotation, qr_box
 
 
 def process_sheet(path: str, letters: str = "ABCDEFGH", debug_path: str = None,
                   expected: int = 0) -> dict:
-    gray, questions, thr, qr, thr_warn, rotation = analyze_sheet(path, letters)
+    gray, questions, thr, qr, thr_warn, rotation, qr_box = analyze_sheet(path, letters)
 
     result = {
         "archivo": path,
@@ -921,7 +1475,12 @@ def process_sheet(path: str, letters: str = "ABCDEFGH", debug_path: str = None,
     if thr_warn:
         result["advertencias"].insert(0, thr_warn)
     if not qr:
-        result["advertencias"].insert(0, "QR no legible: hoja sin identificar")
+        sug = ocr_codigo(identity_box(gray, qr_box))
+        result["codigo_sugerido"] = sug
+        result["advertencias"].insert(
+            0, "QR no legible: hoja sin identificar" +
+               (" (código impreso leído por OCR: %s — confirmar)" % sug if sug else
+                "; el código impreso está en el recorte de identidad"))
         if not qr_backends()["wechat"]:
             result["advertencias"].insert(
                 0, "falta opencv-contrib-python (decodificador WeChat): "

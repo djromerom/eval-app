@@ -144,3 +144,38 @@ export function formatStudentFullName(s: StudentNameParts): string {
     .filter(Boolean)
     .join(" ");
 }
+
+/** Entrada mínima para calcular la posición en la lista del grupo. Acepta un
+ *  subset del `Student` para no obligar a la UI a cargar campos irrelevantes
+ *  (código, enrollmentYear, etc.). */
+export interface ListEntry extends StudentNameParts {
+  id: string;
+}
+
+/** "Número de lista" estilo colegio colombiano: la posición 1-based del
+ *  estudiante dentro de su grupo, ordenado por apellido1 → apellido2 →
+ *  nombre1 → nombre2 con collation `es`. Si hay empate en las 4 partes se
+ *  desempata por `id` para que el orden sea estable (importante cuando dos
+ *  hermanos comparten nombre y apellido).
+ *
+ *  Devuelve `null` si el estudiante no está en la lista — distinto de "está
+ *  en la posición 0", que no existe. La página renderiza el número solo
+ *  cuando hay valor. */
+export function listPositionByName(
+  students: readonly ListEntry[],
+  studentId: string,
+): number | null {
+  const ordenados = [...students].sort((a, b) => {
+    const cmp =
+      a.lastName1.localeCompare(b.lastName1, "es") ||
+      a.lastName2.localeCompare(b.lastName2, "es") ||
+      a.firstName1.localeCompare(b.firstName1, "es") ||
+      a.firstName2.localeCompare(b.firstName2, "es");
+    // Desempate estable por id para que el orden NO dependa del orden de
+    // llegada de la BD. Sin esto, dos gemelos con idéntico nombre pueden
+    // intercambiar posición entre renders.
+    return cmp || a.id.localeCompare(b.id);
+  });
+  const idx = ordenados.findIndex((s) => s.id === studentId);
+  return idx === -1 ? null : idx + 1;
+}

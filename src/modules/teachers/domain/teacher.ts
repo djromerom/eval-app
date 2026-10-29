@@ -39,13 +39,26 @@ export function isProfileComplete(teacher: Pick<Teacher, "idNumber">): boolean {
   return teacher.idNumber.trim().length > 0;
 }
 
-/** Asignación docente ↔ curso+asignatura, con nombres para listados. */
+/**
+ * Asignación docente ↔ curso+asignatura, con nombres para listados.
+ *
+ * `bookletTypeId` es el tipo de cuadernillo al que aplica la asignación.
+ * `null` = aplica a cualquier tipo de esa asignatura-grado (filas creadas
+ * antes del sprint de tipos, y alta en la UI sin marcar un tipo).
+ */
 export interface TeacherAssignment {
   id: string;
   teacherId: string;
   courseSubjectId: string;
   courseName: string;
   subjectName: string;
+  bookletTypeId: string | null;
+  /** Nombre del tipo de cuadernillo; null si la asignación aplica a todos. */
+  bookletTypeName: string | null;
+  /** Prueba (Period) a la que pertenece el tipo de cuadernillo, para que la
+   *  UI pueda mostrar "Estándar (I Periodo)". Null si la asignación no tiene
+   *  tipo. */
+  periodName: string | null;
 }
 
 export interface TeacherRepository {
@@ -71,8 +84,16 @@ export interface TeacherRepository {
   updateProfile(teacherId: string, data: TeacherProfileData): Promise<Teacher>;
   /** Guarda el hash del token de invitación y su expiración en el usuario. */
   setInviteToken(userId: string, tokenHash: string, expiresAt: Date): Promise<void>;
-  assign(teacherId: string, courseSubjectId: string): Promise<void>;
-  isAssigned(teacherId: string, courseSubjectId: string): Promise<boolean>;
+  /** Asigna el docente a la asignatura-grado para el tipo de cuadernillo dado.
+   *  `bookletTypeId = null` = la asignación aplica a cualquier tipo. */
+  assign(teacherId: string, courseSubjectId: string, bookletTypeId: string | null): Promise<void>;
+  /** ¿El docente ya está asignado a esa asignatura-grado para ese tipo?
+   *  `bookletTypeId = null` busca la asignación "para cualquier tipo". */
+  isAssigned(
+    teacherId: string,
+    courseSubjectId: string,
+    bookletTypeId: string | null,
+  ): Promise<boolean>;
   listAssignments(institutionId: string, teacherId?: string): Promise<TeacherAssignment[]>;
 }
 

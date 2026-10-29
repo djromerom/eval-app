@@ -6,7 +6,6 @@ import "@/styles/print.css";
 // como franja blanca dentro del pliego. Se importa DESPUÉS de print.css
 // para ganar por orden en el cascade de @page rules.
 import "../../print-cover.css";
-import { readFile } from "node:fs/promises";
 import { notFound } from "next/navigation";
 import { resolvePrintActor } from "@/lib/print-access";
 import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
@@ -18,6 +17,7 @@ import { computeCoverTable, formatDuration } from "@/modules/bundles/domain/cove
 import { getResolvedBundleTheme } from "@/modules/theme/application/get-resolved-bundle-theme";
 import { themeToCssVars } from "@/modules/theme/domain/theme";
 import { PrintButton } from "../../../evaluation/[id]/print-button";
+import { readLogoIfNeeded } from "@/shared/infrastructure/storage/logo";
 
 export const metadata: Metadata = { title: "Vista previa de la portada" };
 
@@ -208,28 +208,4 @@ export default async function PrintCoverBundlePage({
       </section>
     </div>
   );
-}
-
-async function readLogoIfNeeded(
-  path: string | null | undefined,
-  showLogo: boolean,
-): Promise<string | null> {
-  if (!showLogo || !path) return null;
-  const { existsSync } = await import("node:fs");
-  const candidates = [
-    path,
-    path.startsWith("/") ? path : `${process.env.STORAGE_DIR ?? "./storage"}/${path}`,
-  ];
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      try {
-        const buf = await readFile(candidate);
-        const ext = candidate.toLowerCase().endsWith(".png") ? "png" : "jpeg";
-        return `data:image/${ext};base64,${buf.toString("base64")}`;
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
 }

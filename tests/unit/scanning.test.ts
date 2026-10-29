@@ -150,12 +150,27 @@ function inMemoryRepo(): RepoState {
       if (s) {
         sheets.set(sheetId, { ...s, qrContent });
       }
-      return { studentId: s?.studentId ?? null };
+      return { duplicada: false, studentId: s?.studentId ?? null };
+    },
+    async findSheetIdByQrSheetUuid() {
+      // El fake no simula duplicados: los tests que los cubren usan su propio
+      // repositorio (ver process-answer-sheet-duplicados.test.ts).
+      return null;
     },
     async saveAnswers(sheetId, ans) {
       answers.set(sheetId, ans);
     },
     async updateBatchProgress() {},
+    async deleteSheet(_sheetId: string) {
+      return { batchId: null };
+    },
+    async findBatchAccess(_batchId: string) {
+      return null;
+    },
+    async deleteBatch(_batchId: string) {
+      return { institutionId: null };
+    },
+    async recordDeletionAudit(_input) {},
   };
 
   return {
@@ -215,7 +230,10 @@ describe("ProcessAnswerSheet", () => {
     if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
   });
 
-  it("returns QR_DECODE_FAILED when no QR found in image", async () => {
+  it("returns QR_DECODE_FAILED when no QR found and the sheet has no lot target", async () => {
+    // Sin QR, una hoja cuyo lote dice el cuadernillo/formulación se califica
+    // con eso (ver process-answer-sheet-sin-qr.test.ts). Sin objetivo del
+    // lote no hay con qué calificarla.
     const { repo, seed } = inMemoryRepo();
     const qr: QrDecoder = {
       async decode() {
@@ -226,7 +244,8 @@ describe("ProcessAnswerSheet", () => {
     seed({
       id: "sheet-1",
       institutionId: "inst-1",
-      evaluationId: "eval-1",
+      evaluationId: null,
+      bundleId: null,
       studentId: "stu-1",
       studentName: "Test",
       studentCode: "STU001",

@@ -130,13 +130,27 @@ export class PrismaTeacherRepository implements TeacherRepository {
     });
   }
 
-  async assign(teacherId: string, courseSubjectId: string): Promise<void> {
-    await prisma.teacherSubjectAssignment.create({ data: { teacherId, courseSubjectId } });
+  async assign(
+    teacherId: string,
+    courseSubjectId: string,
+    bookletTypeId: string | null,
+  ): Promise<void> {
+    await prisma.teacherSubjectAssignment.create({
+      data: { teacherId, courseSubjectId, bookletTypeId },
+    });
   }
 
-  async isAssigned(teacherId: string, courseSubjectId: string): Promise<boolean> {
-    const row = await prisma.teacherSubjectAssignment.findUnique({
-      where: { teacherId_courseSubjectId: { teacherId, courseSubjectId } },
+  async isAssigned(
+    teacherId: string,
+    courseSubjectId: string,
+    bookletTypeId: string | null,
+  ): Promise<boolean> {
+    // `findFirst` y no `findUnique`: el unique de la tabla incluye
+    // `bookletTypeId`, que es NULLABLE, y en Postgres NULL != NULL — un
+    // `findUnique` con null en la clave no es confiable. Además, la
+    // asignación "para cualquier tipo" (null) convive con las específicas.
+    const row = await prisma.teacherSubjectAssignment.findFirst({
+      where: { teacherId, courseSubjectId, bookletTypeId },
     });
     return row !== null;
   }
@@ -151,7 +165,12 @@ export class PrismaTeacherRepository implements TeacherRepository {
         courseSubject: {
           include: { course: { select: { name: true } }, subject: { select: { name: true } } },
         },
+        bookletType: { include: { period: { select: { name: true } } } },
       },
+      orderBy: [
+        { courseSubject: { course: { name: "asc" } } },
+        { courseSubject: { subject: { name: "asc" } } },
+      ],
     });
     return rows.map((r) => ({
       id: r.id,
@@ -159,6 +178,9 @@ export class PrismaTeacherRepository implements TeacherRepository {
       courseSubjectId: r.courseSubjectId,
       courseName: r.courseSubject.course.name,
       subjectName: r.courseSubject.subject.name,
+      bookletTypeId: r.bookletTypeId,
+      bookletTypeName: r.bookletType?.name ?? null,
+      periodName: r.bookletType?.period.name ?? null,
     }));
   }
 }

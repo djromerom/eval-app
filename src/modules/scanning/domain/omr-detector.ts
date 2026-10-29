@@ -31,12 +31,34 @@ export interface DetectedQuestion {
   fills: DetectedBubble[];
   /** Recorte JPEG en base64 con las burbujas dibujadas (para el visor). */
   crop: string;
+  /** Aviso del motor sobre ESTA pregunta: "falta la opción A", "posible
+   *  borrado o corrección…", "fila no detectada: quedó en blanco…". Cadena
+   *  vacía (o ausente) cuando no hay nada que reportar. */
+  aviso?: string;
 }
 
 export interface DetectedSheet {
   /** Umbral de marcado adaptativo que usó el motor para esta hoja. */
   thr: number;
   questions: DetectedQuestion[];
+  /** Recorte JPEG en base64 del bloque Nombre/Grado/Código impreso en la hoja.
+   *  Solo viene cuando el QR NO se pudo leer: en ese caso la hoja llega sin
+   *  estudiante y alguien tiene que identificarla a mano, y este recorte evita
+   *  abrir el escaneo original. Cadena vacía cuando el QR se leyó bien. */
+  idCrop?: string;
+  /** Código del estudiante leído por OCR del recorte anterior, como SUGERENCIA
+   *  a confirmar por una persona. Nunca reemplaza al QR, y es `null` si el OCR
+   *  no está disponible o no encontró un número plausible. */
+  idOcr?: string | null;
+  /** Avisos de la verificación estructural del motor (`check_structure`):
+   *  huecos entre filas, bloques con distinta cantidad de filas. Es la red
+   *  contra la falla silenciosa: cuando se pierde una fila y aparece otra
+   *  espuria, el conteo cuadra con la clave y la lectura sale completa y
+   *  verosímil pero con la numeración corrida. Vacío = sin sospechas.
+   *  Los avisos sobre una pregunta concreta empiezan por "pregunta N: " (p.
+   *  ej. una fila que no se detectó y el motor insertó en blanco para no
+   *  correr la numeración); los de bloque, por "bloque en x~…". */
+  estructura?: string[];
 }
 
 export interface OmrDetector {

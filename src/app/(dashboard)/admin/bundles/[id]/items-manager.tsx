@@ -45,11 +45,17 @@ export function ItemsManager({
   items,
   candidates,
   isDraft,
+  effectiveQuestions,
 }: {
   bundleId: string;
   items: ItemRow[];
   candidates: Candidate[];
   isDraft: boolean;
+  /** Conteo de preguntas efectivas del cuadernillo (sprint Preguntas
+   *  inhabitadas, sep 2026). Si llega, el header añade el sufijo
+   *  "— N efectivas de M" para que el docente vea de un vistazo el
+   *  impacto de las inhabitaciones. */
+  effectiveQuestions?: { effective: number; total: number };
 }) {
   const [selectedId, setSelectedId] = useState<string>(candidates[0]?.id ?? "");
   const [addState, addFormAction] = useActionState(addItemAction, {} as ItemsFormState);
@@ -57,7 +63,12 @@ export function ItemsManager({
   return (
     <div className="bg-card space-y-4 rounded-xl border p-6">
       <div className="flex items-end justify-between gap-2">
-        <h2 className="font-semibold">Formulaciones incluidas ({items.length})</h2>
+        <h2 className="font-semibold">
+          Formulaciones incluidas ({items.length})
+          {effectiveQuestions
+            ? ` — ${effectiveQuestions.effective} efectivas de ${effectiveQuestions.total}`
+            : ""}
+        </h2>
       </div>
 
       {items.length === 0 ? (

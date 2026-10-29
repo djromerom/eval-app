@@ -25,6 +25,7 @@ import {
 import { ReviewModal, type QuestionLite } from "./review-modal";
 import { contextLabel, type SectionLite } from "./context-label";
 import { hasUnsavedContexto } from "./save-contexto";
+import { notifyItemSaved } from "../../save-toast";
 
 export interface SectionWithQuestions extends SectionLite {
   order: number;
@@ -154,16 +155,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
     "title" | "content" | "both" | null
   >(null);
 
-  /** Toast de éxito al crear un ítem. Centraliza el copy para que un
-   *  cambio futuro (p. ej. añadir tildes) toque un único punto. Se
-   *  dispara en: handleAddOrRenameSection (2 ramas), handleNewContextWithQuestion
-   *  y onDone del QuestionForm (cubrir "Agregar enunciado" y "Guardar" en
-   *  modo creación). NO se dispara en edición ni en publicación — esos
-   *  paths están filtrados por el `if (!editingQuestionId)` en onDone. */
-  const TOAST_SAVED = "El ítem fue guardado de manera correcta";
-  function notifyItemSaved() {
-    toast.success(TOAST_SAVED);
-  }
+  // Toast de éxito al crear un ítem: el copy vive en `save-toast.ts`
+  // (compartido con el QuestionForm). Se dispara en:
+  // handleAddOrRenameSection y handleNewContextWithQuestion (creación de
+  // contexto/sección). El guardado de una PREGUNTA lo avisa el
+  // QuestionForm, que además sabe si pasó por la revisión con IA.
 
   // El form "Nuevo contexto" delega a `handleAddOrRenameSection` (definido
   // más abajo). Lo decidimos en el cliente porque el form usa un <form>
@@ -1261,11 +1257,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
             redundante (el docente ya está creando/editando) y genera la
             sensación de que hay dos modos paralelos. Al cerrar el card
             (guardando o cancelando) el botón reaparece.
-            (ago 2026) "Con Contexto" abre la card con el bloque Contexto
-            visible (título + TipTap). "Sin contexto" abre la card con
-            el bloque Contexto OCULTO: el docente solo ve el enunciado
-            y las opciones de respuesta. La pregunta que se guarde en
-            este modo va a una sección placeholder (sin título ni
+            (ago 2026) "Con Contexto Declarado" abre la card con el bloque
+            Contexto visible (título + TipTap). "Con Contexto Implícito" abre
+            la card con el bloque Contexto OCULTO: el docente solo ve el
+            enunciado y las opciones de respuesta. La pregunta que se guarde
+            en este modo va a una sección placeholder (sin título ni
             contenido), que es la "sección Sin contexto" del modelo. */}
           {!showForm ? (
             <>
@@ -1297,7 +1293,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   editingOriginalSectionIdRef.current = null;
                 }}
               >
-                <Plus className="mr-1 h-3.5 w-3.5" /> Con Contexto
+                <Plus className="mr-1 h-3.5 w-3.5" /> Con Contexto Declarado
               </Button>
               <Button
                 type="button"
@@ -1360,7 +1356,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                   editingOriginalSectionIdRef.current = null;
                 }}
               >
-                <Plus className="mr-1 h-3.5 w-3.5" /> Sin contexto
+                <Plus className="mr-1 h-3.5 w-3.5" /> Con Contexto Implícito
               </Button>
             </>
           ) : null}
@@ -2098,6 +2094,41 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       setContextValidationError(null);
                       return null;
                     }}
+                    // Contexto que entra en la revisión con IA (oct 2026).
+                    // Es el contexto que el docente tiene a la vista:
+                    //  - En modo EDICIÓN, el ya persistido (los inputs
+                    //    están deshabilitados: no hay borrador que leer).
+                    //  - En modo CREACIÓN, el borrador, leído del DOM
+                    //    (`newSectionFormRef`) porque el DOM es la fuente
+                    //    de verdad (mismo patrón que el orquestador de
+                    //    `overrideAction`: el state puede estar stale si
+                    //    el docente tipeó y pulsó sin que React batcheara).
+                    getReviewContext={() => {
+                      if (editingQuestionId) {
+                        const section = data.sections.find((s) => s.id === targetSectionId);
+                        if (!section) return null;
+                        const contenido =
+                          typeof section.content === "string"
+                            ? section.content
+                            : section.content
+                              ? JSON.stringify(section.content)
+                              : "";
+                        return { titulo: section.title ?? "", contenido };
+                      }
+                      const sectionFormFd = newSectionFormRef.current
+                        ? new FormData(newSectionFormRef.current)
+                        : null;
+                      const titulo = sectionFormFd
+                        ? String(sectionFormFd.get("title") ?? "")
+                        : draftSectionTitle;
+                      const contenido = sectionFormFd
+                        ? String(sectionFormFd.get("content") ?? "")
+                        : draftSectionContent
+                          ? JSON.stringify(draftSectionContent)
+                          : "";
+                      if (!titulo.trim() && !contenido.trim()) return null;
+                      return { titulo, contenido };
+                    }}
                     // "Nuevo contexto" se renderiza en el bloque Contexto,
                     // en la misma fila que "Editar contexto" y a la izquierda
                     // de él, justo debajo del TipTap (ver arriba, dentro del
@@ -2291,8 +2322,8 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                             // En modo "Sin contexto" el bloque Contexto está
                             // oculto, así que NO llamamos setContextSaved(true):
                             // no hay nada que bloquear visualmente. El toast
-                            // se dispara igual para confirmar el guardado.
-                            notifyItemSaved();
+                            // lo dispara el QuestionForm (que además sabe si
+                            // el guardado pasó por la revisión con IA).
                           }
                           return result;
                         }
@@ -2355,7 +2386,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                             // como única salida. (ago 2026, pedido del
                             // docente).
                             setContextSaved(true);
-                            notifyItemSaved();
                           }
                           return result;
                         }
@@ -2444,7 +2474,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                               // Contexto y mostramos "Editar contexto" como única
                               // salida. (ago 2026)
                               setContextSaved(true);
-                              notifyItemSaved();
                             }
                             return result;
                           }
@@ -2610,11 +2639,16 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                           }
                         }
                         const result = await addQuestionAction({}, formData);
-                        // FIX (ago 2026): dispara el toast directamente desde
-                        // el overrideAction. El onDone del QuestionForm NO se
-                        // está ejecutando consistentemente (probable bug del
-                        // useEffect tras la cadena de revalidates), así que
-                        // confiamos en el resultado del server action.
+                        // FIX (ago 2026): el toast de éxito lo dispara el
+                        // QuestionForm (en su `useActionState`), NO el
+                        // onDone: el useEffect que invoca onDone NO se está
+                        // ejecutando consistentemente (probable bug tras la
+                        // cadena de revalidates). El QuestionForm dispara
+                        // el toast en el mismo punto donde recibe el
+                        // resultado del server action, así que es tan
+                        // confiable como lo era este overrideAction — y
+                        // además sabe si el guardado pasó por la revisión
+                        // con IA.
                         if (result.success) {
                           // Sincronizar targetSectionId con la verdad
                           // del servidor (ago 2026, pedido del docente:
@@ -2629,7 +2663,6 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                           // como única salida. (ago 2026, pedido del
                           // docente).
                           setContextSaved(true);
-                          notifyItemSaved();
                         }
                         return result;
                       } finally {
@@ -2663,6 +2696,22 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                           title="Guardar y cerrar el card de creación"
                         >
                           Guardar
+                        </Button>
+                        {/* "Guardar con IA": revisa el ítem antes de
+                            guardarlo (el `QuestionForm` detecta la marca
+                            `data-ai-review` en el `onSubmit`). También
+                            cierra el card, como "Guardar". (oct 2026) */}
+                        <Button
+                          type="submit"
+                          size="sm"
+                          variant="outline"
+                          data-ai-review="true"
+                          data-close-on-save="true"
+                          disabled={!data.editable || actionStatus === "saving"}
+                          title="Revisar con IA antes de guardar"
+                        >
+                          <Sparkles className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                          Guardar con IA
                         </Button>
                         <Button
                           type="button"
@@ -2715,10 +2764,11 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                       setShowEditingBanner(false);
                       setActionStatus("saved");
                       // El toast de éxito "El ítem fue guardado de manera
-                      // correcta" se dispara desde el overrideAction (no
-                      // desde aquí), porque el useEffect del QuestionForm
-                      // que invoca onDone NO corre consistentemente cuando
-                      // hay revalidates encadenadas (ver commit del fix).
+                      // correcta" lo dispara el QuestionForm al recibir el
+                      // resultado del server action (no desde aquí),
+                      // porque el useEffect del QuestionForm que invoca
+                      // onDone NO corre consistentemente cuando hay
+                      // revalidates encadenadas (ver commit del fix).
                       // Si el docente había desbloqueado el contexto
                       // antes de guardar la pregunta, también limpiamos
                       // ese flag — ya no estamos en modo edición de

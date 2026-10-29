@@ -6,12 +6,14 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
+import { makeGetBundleQuestionsForToggle } from "@/modules/bundles/infrastructure/container";
 import { makeListCourses, makeListPeriods } from "@/modules/academic/infrastructure/container";
 import { makeListEvaluations } from "@/modules/evaluations/infrastructure/container";
 import { makeListBookletTypesByInstitution } from "@/modules/booklet-types/infrastructure/container";
 import { computeCoverTable, formatDuration } from "@/modules/bundles/domain/cover-table";
 import { BundleActionPanel } from "./action-buttons";
 import { BundleEditForm } from "./edit-form";
+import { DisabledQuestionsManager } from "./disabled-questions-manager";
 import { ItemsManager } from "./items-manager";
 
 export const metadata: Metadata = { title: "Detalle del cuadernillo" };
@@ -37,13 +39,18 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
 
   // Lista de evaluations aprobadas/publicadas disponibles para añadir +
   // cursos + periodos + bookletTypes para los selects del edit form.
-  const [approved, published, coursesRes, periodsRes, bookletTypesRes] = await Promise.all([
-    makeListEvaluations().execute({ actor, status: "APPROVED" }),
-    makeListEvaluations().execute({ actor, status: "PUBLISHED" }),
-    makeListCourses().execute({ actor }),
-    makeListPeriods().execute({ actor }),
-    makeListBookletTypesByInstitution().execute({ actor }),
-  ]);
+  const [approved, published, coursesRes, periodsRes, bookletTypesRes, questionsRes] =
+    await Promise.all([
+      makeListEvaluations().execute({ actor, status: "APPROVED" }),
+      makeListEvaluations().execute({ actor, status: "PUBLISHED" }),
+      makeListCourses().execute({ actor }),
+      makeListPeriods().execute({ actor }),
+      makeListBookletTypesByInstitution().execute({ actor }),
+      // PR #3 sprint Preguntas inhabitadas: vista para el panel de toggling.
+      // Si falla con NOT_FOUND (bundle borrado en otra sesión, race) seguimos
+      // renderizando la página con questionsData=null; el panel no se monta.
+      makeGetBundleQuestionsForToggle().execute({ actor, bundleId: id }),
+    ]);
   const courses = coursesRes.ok ? coursesRes.value.map((c) => ({ id: c.id, name: c.name })) : [];
   const periods = periodsRes.ok ? periodsRes.value.map((p) => ({ id: p.id, name: p.name })) : [];
   const bookletTypes = bookletTypesRes.ok
@@ -64,6 +71,7 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
     candSeen.add(e.id);
     return true;
   });
+  const questionsData = questionsRes.ok ? questionsRes.value : null;
 
   return (
     <>
@@ -144,7 +152,21 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
               totalQuestions: e.totalQuestions,
             }))}
             isDraft={isDraft}
+            effectiveQuestions={
+              questionsData
+                ? {
+                    effective: questionsData.totalQuestions - questionsData.disabledCount,
+                    total: questionsData.totalQuestions,
+                  }
+                : undefined
+            }
           />
+
+          {/* PR #3 sprint Preguntas inhabitadas: panel de toggling por pregunta.
+              Solo si el cuadernillo tiene formulaciones (sino es inútil). */}
+          {questionsData && bundle.items.length > 0 ? (
+            <DisabledQuestionsManager bundleId={bundle.id} data={questionsData} />
+          ) : null}
         </div>
 
         {/* Columna derecha — acciones */}

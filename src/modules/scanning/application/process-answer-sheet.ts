@@ -21,7 +21,10 @@ export interface EvaluationQuestionsProvider {
   /** Hoja de un cuadernillo: une en orden todas las questions de cada item.
    *  `number` es la posición global en la hoja unificada (1-based).
    *  `bundleItemId` permite drill-down del reporte comparativo por item
-   *  (Sprint 4). */
+   *  (Sprint 4).
+   *  `disabled` (sprint Preguntas inhabitadas, sep 2026): la pregunta fue
+   *  inhabilitada en el cuadernillo y no cuenta para la nota. Sigue en la
+   *  lista porque la hoja impresa la tiene y el mapeo es posicional. */
   getCorrectAnswersForBundle(
     institutionId: string,
     bundleId: string,
@@ -32,6 +35,7 @@ export interface EvaluationQuestionsProvider {
       bundleItemId: string;
       correctAnswer: AnswerKey;
       optionsLength: number;
+      disabled?: boolean;
     }[]
   >;
 }
@@ -128,6 +132,7 @@ export type ProcessAnswerSheetError =
   | { code: "NOT_FOUND"; message: string }
   | { code: "QR_DECODE_FAILED"; message: string }
   | { code: "QR_SIGNATURE_INVALID"; message: string }
+  | { code: "DUPLICATE_SHEET"; message: string }
   | { code: "EVALUATION_NOT_FOUND"; message: string }
   | { code: "PROCESSING_ERROR"; message: string };
 
@@ -184,6 +189,24 @@ export function bubbleCenter(
   return { cx, cy };
 }
 
+/** A qué se califica la hoja: el cuadernillo o la formulación. */
+type ObjetivoHoja = { kind: "bundle"; id: string } | { kind: "evaluation"; id: string };
+
+/** Objetivo del lote, para calificar sin QR. `null` si la hoja no lo tiene. */
+function objetivoDelLote(sheet: {
+  bundleId: string | null;
+  evaluationId: string | null;
+}): ObjetivoHoja | null {
+  if (sheet.bundleId) return { kind: "bundle", id: sheet.bundleId };
+  if (sheet.evaluationId) return { kind: "evaluation", id: sheet.evaluationId };
+  return null;
+}
+
+export const NOTA_SIN_QR_CUADERNILLO =
+  "QR ilegible: se calificó con el cuadernillo del lote. Verifica el estudiante y marca la hoja como revisada.";
+export const NOTA_SIN_QR_FORMULACION =
+  "QR ilegible: se calificó con la formulación del lote. Verifica el estudiante y marca la hoja como revisada.";
+
 export class ProcessAnswerSheet {
   constructor(
     private readonly repository: ScanningRepository,
@@ -216,18 +239,214 @@ export class ProcessAnswerSheet {
       return { ok: false, error: { code: "PROCESSING_ERROR", message: "Failed to load image" } };
     }
 
-    const decoded = await this.qrDecoder.decode(imageBuffer);
-    if (!decoded) {
-      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
-        notes: "QR could not be decoded",
-      });
-      return { ok: false, error: { code: "QR_DECODE_FAILED", message: "QR could not be decoded" } };
+    // Identificación: por el QR firmado; si el QR no se puede leer y el lote ya
+    // dice a qué cuadernillo o formulación pertenece la hoja, se califica con
+    // eso (sin estudiante: se asigna a mano) para que la matriz muestre las
+    // marcas. La hoja queda en Revisión hasta que alguien la verifique.
+    //
+    // Una hoja identificada a mano (card "Hojas sin clasificar" del lote) no
+    // lee el QR: alguien ya eligió el cuadernillo y el estudiante porque el QR
+    // no servía, y si ahora se leyera podría calificarla contra otro
+    // cuadernillo o reemplazar el estudiante elegido. También al Reprocesar.
+    const aMano = sheet.identificadaAMano === true ? objetivoDelLote(sheet) : null;
+    const decoded = aMano ? null : await this.qrDecoder.decode(imageBuffer);
+    let objetivo: ObjetivoHoja;
+    let sinQr = false;
+    if (aMano) {
+      objetivo = aMano;
+    } else if (decoded) {
+      const porQr = await this.identificarPorQr(answerSheetId, decoded.text);
+      if ("ok" in porQr) return porQr;
+      objetivo = porQr;
+    } else {
+      const delLote = objetivoDelLote(sheet);
+      if (!delLote) {
+        await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
+          notes: "QR could not be decoded",
+        });
+        return {
+          ok: false,
+          error: { code: "QR_DECODE_FAILED", message: "QR could not be decoded" },
+        };
+      }
+      objetivo = delLote;
+      sinQr = true;
     }
 
+    const isBundle = objetivo.kind === "bundle";
+    const correctAnswers = isBundle
+      ? await this.questionsProvider.getCorrectAnswersForBundle(institutionId, objetivo.id)
+      : await this.questionsProvider.getCorrectAnswers(institutionId, objetivo.id);
+    if (correctAnswers.length === 0) {
+      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
+        notes: isBundle ? "Bundle has no questions" : "Evaluation has no questions",
+      });
+      return {
+        ok: false,
+        error: {
+          code: "EVALUATION_NOT_FOUND",
+          message: "Evaluation not found or has no questions",
+        },
+      };
+    }
+
+    // Cuadernillo con todas sus preguntas inhabilitadas: no hay nada que
+    // calificar y la hoja saldría GRADED 0/0 sin nota. MarkBundleReady ya lo
+    // impide, esta es la defensa por si el cuadernillo llegó así igual. Se
+    // corta antes de la detección para no gastar la llamada al motor.
+    if (isBundle && !correctAnswers.some((q) => !("disabled" in q && q.disabled === true))) {
+      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
+        notes: "El cuadernillo no tiene preguntas efectivas: todas están inhabilitadas.",
+      });
+      return {
+        ok: false,
+        error: {
+          code: "EVALUATION_NOT_FOUND",
+          message: "Bundle has no effective questions",
+        },
+      };
+    }
+
+    // ===== Detección de burbujas (omr-service, Python) =====
+    // Reemplaza la antigua pipeline de visión en TS: el servicio hace deskew,
+    // detección y agrupación en preguntas. Aquí solo mapeamos su salida al
+    // dominio y puntuamos contra la clave (QR y clave ya resueltos arriba).
+    const maxOptions = correctAnswers.reduce((m, q) => Math.max(m, q.optionsLength), 2);
+    const letters = ANSWER_KEYS_ORDER.slice(0, Math.min(maxOptions, ANSWER_KEYS_ORDER.length)).join(
+      "",
+    );
+
+    let detected: DetectedSheet;
+    try {
+      detected = await this.detector.analyze(imageBuffer, { letters });
+    } catch (e) {
+      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
+        notes: `Detección OMR falló: ${(e as Error).message}`,
+      });
+      return {
+        ok: false,
+        error: {
+          code: "PROCESSING_ERROR",
+          message: `OMR detection failed: ${(e as Error).message}`,
+        },
+      };
+    }
+
+    // Guardamos el diagnóstico por celda (con recortes) para la matriz de
+    // revisión, aun si la calificación no procede.
+    await this.persistCells(scanBatchId, answerSheetId, detected);
+
+    // Sin el mismo número de preguntas que la clave, el mapeo posicional sería
+    // inválido. Preferimos REVIEW a calificar mal.
+    if (detected.questions.length !== correctAnswers.length) {
+      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
+        notes: `El motor detectó ${detected.questions.length} preguntas; la clave tiene ${correctAnswers.length}. Revisión manual.`,
+      });
+      await this.repository.updateBatchProgress(scanBatchId, 0);
+      return {
+        ok: false,
+        error: { code: "PROCESSING_ERROR", message: "Detected question count mismatch" },
+      };
+    }
+
+    // Sprint Preguntas inhabitadas (sep 2026): la respuesta a una pregunta
+    // inhabilitada se guarda tal cual (lo que marcó y si acertó), pero no suma
+    // a la nota ni al total, y una marca múltiple en ella no manda la hoja a
+    // revisión: no puede cambiar la nota.
+    const answers: StudentAnswerRecord[] = [];
+    let totalCorrect = 0;
+    let effectiveQuestions = 0;
+    let needsReview = false;
+    const avisosPregunta: { posicion: number; aviso: string }[] = [];
+    for (let idx = 0; idx < correctAnswers.length; idx++) {
+      const q = correctAnswers[idx]!;
+      const bundleItemId = isBundle
+        ? (q as unknown as { bundleItemId: string }).bundleItemId
+        : null;
+      const record = mapDetectedQuestion(
+        detected.questions[idx]!,
+        q.id,
+        q.correctAnswer,
+        bundleItemId,
+        detected.thr,
+      );
+      const counts = !("disabled" in q && q.disabled === true);
+      if (counts) {
+        effectiveQuestions++;
+        if (record.isCorrect === true) totalCorrect++;
+        if (record.isAmbiguous) needsReview = true;
+        const aviso = detected.questions[idx]!.aviso;
+        if (aviso) avisosPregunta.push({ posicion: idx + 1, aviso });
+      }
+      answers.push(record);
+    }
+
+    // Verificación estructural del motor. El conteo de preguntas (validado
+    // arriba contra la clave) no basta: si el motor pierde una fila y de paso
+    // se inventa otra —una palabra del encabezado leída como burbujas— el
+    // total cuadra, la numeración queda corrida y la nota sale completa,
+    // verosímil y equivocada. El motor sabe detectarlo; hasta ahora nadie
+    // leía el aviso. Mandar la hoja a revisión cuesta un vistazo; no
+    // enterarse cuesta una nota mal puesta.
+    const avisosEstructura = detected.estructura ?? [];
+
+    // Sin QR la identidad no está verificada: siempre queda en Revisión.
+    const status = sinQr || needsReview || avisosEstructura.length > 0 ? "REVIEW" : "GRADED";
+    const notaAmbigua = "Algunas preguntas con marca múltiple o ambigua; revisión recomendada";
+    const notaSinQr = isBundle ? NOTA_SIN_QR_CUADERNILLO : NOTA_SIN_QR_FORMULACION;
+    const notaBase = sinQr
+      ? needsReview
+        ? `${notaSinQr} ${notaAmbigua}.`
+        : notaSinQr
+      : needsReview
+        ? notaAmbigua
+        : undefined;
+    const notaEstructura = avisosEstructura.length
+      ? `Lectura estructuralmente sospechosa: ${avisosEstructura.join("; ")}.`
+      : undefined;
+    // Qué preguntas mirar, con su número: es lo que necesita quien corrige la
+    // hoja en la matriz. Las que `estructura` ya nombra ("pregunta 7: fila no
+    // detectada…") no se repiten aquí.
+    const yaNombradas = new Set(
+      avisosEstructura
+        .map((a) => /^pregunta (\d+):/.exec(a)?.[1])
+        .filter((n): n is string => n !== undefined)
+        .map(Number),
+    );
+    const porRevisar = avisosPregunta.filter((a) => !yaNombradas.has(a.posicion));
+    const notaAvisos = porRevisar.length
+      ? `Revisar a mano: ${porRevisar.map((a) => `pregunta ${a.posicion} (${a.aviso})`).join("; ")}.`
+      : undefined;
+
+    await this.repository.saveAnswers(answerSheetId, answers);
+    await this.repository.updateSheetStatus(answerSheetId, status, {
+      score: totalCorrect,
+      totalCorrect,
+      totalQuestions: effectiveQuestions,
+      notes: [notaBase, notaEstructura, notaAvisos].filter(Boolean).join(" ") || undefined,
+    });
+    await this.repository.updateBatchProgress(scanBatchId, 0);
+
+    return {
+      ok: true,
+      answerSheetId,
+      status,
+      score: totalCorrect,
+    };
+  }
+
+  /** Valida el QR firmado (JSON, firma HMAC de la institución, schema,
+   *  anti-duplicado por papel) y asocia al estudiante por su código. Devuelve
+   *  el cuadernillo o formulación del QR, o el resultado de error ya
+   *  registrado en la hoja. */
+  private async identificarPorQr(
+    answerSheetId: string,
+    qrText: string,
+  ): Promise<ObjetivoHoja | ProcessAnswerSheetResult> {
     let qrData: Record<string, unknown>;
     let qrSignature: string;
     try {
-      const parsed = JSON.parse(decoded.text);
+      const parsed = JSON.parse(qrText);
       const { sig, ...payload } = parsed;
       qrData = payload;
       qrSignature = sig;
@@ -264,107 +483,58 @@ export class ProcessAnswerSheet {
       };
     }
 
+    // Hoja duplicada: el campo `sheet` del QR identifica el PAPEL, no al
+    // estudiante ni la prueba. Si ya hay otra hoja con ese id, este papel ya
+    // pasó por el alimentador y volver a calificarlo crearía una segunda nota
+    // para el mismo examen físico, sin ninguna señal de que ocurrió.
+    //
+    // Se corta ANTES de puntuar: calificar y después descartar gastaría una
+    // llamada al motor OMR y dejaría respuestas huérfanas en la base.
+    const qrSheetUuid = typeof parsedQr.data.sheet === "string" ? parsedQr.data.sheet : null;
+    if (qrSheetUuid) {
+      const otra = await this.repository.findSheetIdByQrSheetUuid(qrSheetUuid, answerSheetId);
+      if (otra) {
+        await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
+          notes: `Hoja duplicada: este papel ya fue procesado (hoja ${otra.slice(0, 8)}).`,
+        });
+        return {
+          ok: false,
+          error: {
+            code: "DUPLICATE_SHEET",
+            message: "Este papel ya fue escaneado y calificado antes",
+          },
+        };
+      }
+    }
+
     // Persistir el QR decodificado + asociar al estudiante por código.
     const studentCode = typeof parsedQr.data.student === "string" ? parsedQr.data.student : null;
-    await this.repository.saveDecodedQr(answerSheetId, decoded.text, qrSignature, studentCode);
-
-    const isBundle = Boolean(parsedQr.data.bundle);
-    const correctAnswers = isBundle
-      ? await this.questionsProvider.getCorrectAnswersForBundle(
-          institutionId,
-          parsedQr.data.bundle!,
-        )
-      : await this.questionsProvider.getCorrectAnswers(institutionId, parsedQr.data.eval!);
-    if (correctAnswers.length === 0) {
+    const guardado = await this.repository.saveDecodedQr(
+      answerSheetId,
+      qrText,
+      qrSignature,
+      studentCode,
+      qrSheetUuid,
+    );
+    // El chequeo de arriba deja una ventana: dos duplicados procesándose a la
+    // vez lo pasan los dos. El índice único cierra esa ventana y el repo lo
+    // reporta acá.
+    if (guardado.duplicada) {
       await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
-        notes: isBundle ? "Bundle has no questions" : "Evaluation has no questions",
+        notes: "Hoja duplicada: este papel ya fue procesado.",
       });
       return {
         ok: false,
         error: {
-          code: "EVALUATION_NOT_FOUND",
-          message: "Evaluation not found or has no questions",
+          code: "DUPLICATE_SHEET",
+          message: "Este papel ya fue escaneado y calificado antes",
         },
       };
     }
 
-    // ===== Detección de burbujas (omr-service, Python) =====
-    // Reemplaza la antigua pipeline de visión en TS: el servicio hace deskew,
-    // detección y agrupación en preguntas. Aquí solo mapeamos su salida al
-    // dominio y puntuamos contra la clave (QR y clave ya resueltos arriba).
-    const maxOptions = correctAnswers.reduce((m, q) => Math.max(m, q.optionsLength), 2);
-    const letters = ANSWER_KEYS_ORDER.slice(0, Math.min(maxOptions, ANSWER_KEYS_ORDER.length)).join(
-      "",
-    );
-
-    let detected: DetectedSheet;
-    try {
-      detected = await this.detector.analyze(imageBuffer, { letters });
-    } catch (e) {
-      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
-        notes: `Detección OMR falló: ${(e as Error).message}`,
-      });
-      return {
-        ok: false,
-        error: { code: "PROCESSING_ERROR", message: "OMR detection failed" },
-      };
-    }
-
-    // Guardamos el diagnóstico por celda (con recortes) para la matriz de
-    // revisión, aun si la calificación no procede.
-    await this.persistCells(scanBatchId, answerSheetId, detected);
-
-    // Sin el mismo número de preguntas que la clave, el mapeo posicional sería
-    // inválido. Preferimos REVIEW a calificar mal.
-    if (detected.questions.length !== correctAnswers.length) {
-      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
-        notes: `El motor detectó ${detected.questions.length} preguntas; la clave tiene ${correctAnswers.length}. Revisión manual.`,
-      });
-      await this.repository.updateBatchProgress(scanBatchId, 0);
-      return {
-        ok: false,
-        error: { code: "PROCESSING_ERROR", message: "Detected question count mismatch" },
-      };
-    }
-
-    const answers: StudentAnswerRecord[] = [];
-    let totalCorrect = 0;
-    for (let idx = 0; idx < correctAnswers.length; idx++) {
-      const q = correctAnswers[idx]!;
-      const bundleItemId = isBundle
-        ? (q as unknown as { bundleItemId: string }).bundleItemId
-        : null;
-      const record = mapDetectedQuestion(
-        detected.questions[idx]!,
-        q.id,
-        q.correctAnswer,
-        bundleItemId,
-        detected.thr,
-      );
-      if (record.isCorrect === true) totalCorrect++;
-      answers.push(record);
-    }
-
-    const status = answers.some((a) => a.isAmbiguous) ? "REVIEW" : "GRADED";
-
-    await this.repository.saveAnswers(answerSheetId, answers);
-    await this.repository.updateSheetStatus(answerSheetId, status, {
-      score: totalCorrect,
-      totalCorrect,
-      totalQuestions: correctAnswers.length,
-      notes:
-        status === "REVIEW"
-          ? "Algunas preguntas con marca múltiple o ambigua; revisión recomendada"
-          : undefined,
-    });
-    await this.repository.updateBatchProgress(scanBatchId, 0);
-
-    return {
-      ok: true,
-      answerSheetId,
-      status,
-      score: totalCorrect,
-    };
+    return parsedQr.data.bundle
+      ? { kind: "bundle", id: parsedQr.data.bundle }
+      : { kind: "evaluation", id: parsedQr.data.eval! };
   }
 
   /** Persiste el diagnóstico de la hoja para la matriz de revisión sin

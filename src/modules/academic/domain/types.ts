@@ -23,6 +23,9 @@ export interface Subject {
   institutionId: string | null; // null = catálogo global compartido
   name: string;
   code: string;
+  /** Sigla para encabezados de informes ("BIO", "LENG. C."). `null` = sin
+   *  sigla: los informes muestran el nombre completo. */
+  shortName: string | null;
 }
 
 export interface Group {
@@ -77,6 +80,8 @@ export interface CreateCourseData {
 export interface CreateSubjectData {
   name: string;
   code: string;
+  /** Sigla opcional; vacía o ausente = sin sigla. */
+  shortName?: string | null;
   /** true = catálogo global (institutionId null); solo SUPER_ADMIN debería crearlas. */
   global?: boolean;
 }
@@ -127,6 +132,7 @@ export interface SubjectRepository {
   findAllForInstitution(institutionId: string): Promise<Subject[]>;
   findById(id: string): Promise<Subject | null>;
   create(institutionId: string | null, data: CreateSubjectData): Promise<Subject>;
+  updateShortName(id: string, shortName: string | null): Promise<Subject>;
 }
 
 export interface GroupRepository {
@@ -187,6 +193,18 @@ export interface CourseSubjectRepository {
 /** Un código académico corto: 1-20 caracteres visibles, sin espacios en los bordes. */
 export function isValidCode(code: string): boolean {
   return code.trim().length >= 1 && code.trim().length <= 20;
+}
+
+/** Largo máximo de la sigla de una asignatura (mismo tope que el código). */
+export const SHORT_NAME_MAX = 20;
+
+/** Normaliza la sigla: recorta espacios y convierte vacío en `null`.
+ *  Devuelve `undefined` si excede `SHORT_NAME_MAX` (inválida). */
+export function normalizeShortName(raw: string | null | undefined): string | null | undefined {
+  const s = (raw ?? "").trim();
+  if (s.length === 0) return null;
+  if (s.length > SHORT_NAME_MAX) return undefined;
+  return s;
 }
 
 export function isValidDateRange(start: Date, end: Date): boolean {

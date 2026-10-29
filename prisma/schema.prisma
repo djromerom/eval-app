@@ -35,20 +35,21 @@ model Institution {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  users           User[]
-  academicYears   AcademicYear[]
-  courses         Course[]
-  subjects        Subject[] // catálogo propio (null en Subject = global)
-  groups          Group[]
-  periods         Period[]
-  students        Student[]
-  evaluations     Evaluation[]
-  questionBank    QuestionBank[]
-  templates       EvaluationTemplate[]
-  scanBatches     ScanBatch[]
-  bundles         EvaluationBundle[]
-  bookletTypes    BookletType[]
-  evaluationRules EvaluationRule[]
+  users             User[]
+  academicYears     AcademicYear[]
+  courses           Course[]
+  subjects          Subject[] // catálogo propio (null en Subject = global)
+  groups            Group[]
+  periods           Period[]
+  students          Student[]
+  evaluations       Evaluation[]
+  questionBank      QuestionBank[]
+  templates         EvaluationTemplate[]
+  scanBatches       ScanBatch[]
+  bundles           EvaluationBundle[]
+  bookletTypes      BookletType[]
+  evaluationRules   EvaluationRule[]
+  unclassifiedScans UnclassifiedScan[]
 }
 
 // ========== AUTH & USERS ==========
@@ -86,6 +87,7 @@ model User {
   auditLogs              AuditLog[]
   notifications          Notification[]
   leaderAssignments      LeaderCourseAssignment[]
+  disabledBundleQuestions DisabledBundleQuestion[]
 
   @@index([institutionId])
 }
@@ -155,6 +157,7 @@ model AcademicYear {
   courses     Course[]
   periods     Period[]
   evaluations Evaluation[]
+  enrollments StudentEnrollment[]
 
   @@unique([institutionId, year])
   @@index([institutionId])
@@ -183,6 +186,9 @@ model Subject {
   id              String       @id @default(uuid(7)) @db.Uuid
   name            String // "Matemáticas", "Física"
   code            String
+  // Sigla corta para encabezados de informes ("BIO", "LENG. C."). Opcional:
+  // si está vacía, los informes muestran el nombre completo.
+  shortName       String?
   icon            String?
   institutionId   String?      @db.Uuid // null = catálogo global
   institution     Institution? @relation(fields: [institutionId], references: [id])
@@ -227,10 +233,21 @@ model TeacherSubjectAssignment {
   teacher         Teacher       @relation(fields: [teacherId], references: [id])
   courseSubjectId String        @db.Uuid
   courseSubject   CourseSubject @relation(fields: [courseSubjectId], references: [id])
+  /// Tipo de cuadernillo al que aplica la asignación (oct 2026).
+  ///
+  /// `null` = la asignación aplica a CUALQUIER tipo de cuadernillo de esa
+  /// asignatura-grado. Es el valor de las filas creadas antes de este
+  /// sprint (compat) y el que usa la UI cuando el admin no marca un tipo
+  /// concreto. Un docente puede estar asignado a la misma asignatura-grado
+  /// con varios tipos (p. ej. "Estándar" y "Especial"): por eso el unique
+  /// incluye `bookletTypeId` y NO es (teacherId, courseSubjectId).
+  bookletTypeId   String?       @db.Uuid
+  bookletType     BookletType?  @relation(fields: [bookletTypeId], references: [id], onDelete: Restrict)
 
-  @@unique([teacherId, courseSubjectId])
+  @@unique([teacherId, courseSubjectId, bookletTypeId])
   @@index([teacherId])
   @@index([courseSubjectId])
+  @@index([bookletTypeId])
 }
 
 /// Asignación de un Líder ECU a un курсо entero (todas sus asignaturas).
@@ -260,6 +277,7 @@ model Group {
   createdAt     DateTime    @default(now())
 
   students    Student[]
+  enrollments StudentEnrollment[]
   evaluations EvaluationGroup[]
 
   @@index([courseId])
@@ -329,6 +347,7 @@ model Student {
 
   answerSheets AnswerSheet[]
   codeHistory  StudentCodeHistory[]
+  enrollments StudentEnrollment[]
 
   @@unique([institutionId, code])
   @@index([groupId])
@@ -345,6 +364,43 @@ model StudentCodeHistory {
   changedAt DateTime @default(now())
 
   @@index([studentId])
+}
+
+/// Matrícula del estudiante en un año académico concreto. Permite conservar
+/// el histórico (un estudiante pasa por varios grupos / grados / cuadernillos
+/// a lo largo de su vida escolar). Solo una fila por estudiante tiene
+/// `isCurrent=true` (la del año académico vigente).
+///
+/// Multi-tenant via `student.institutionId` (FK transitiva, no se duplica
+/// acá — mismo patrón que `StudentCodeHistory` y `LeaderCourseAssignment`).
+/// NO se suma al array `tenant_tables` de la policy RLS; la tenancy la
+/// enforza Prisma vía `student: { institutionId }` en cada query.
+///
+/// El constraint "una fila vigente por estudiante" se delega a la capa de
+/// aplicación (transacción en `setCurrent`) porque Prisma no soporta
+/// partial unique indexes con condiciones arbitrarias sin SQL crudo.
+/// El índice parcial `WHERE "isCurrent" = true` actúa como red de
+/// seguridad (commit 1, migración `add_student_enrollment`).
+model StudentEnrollment {
+  id              String       @id @default(uuid(7)) @db.Uuid
+  studentId       String       @db.Uuid
+  student         Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  academicYearId  String       @db.Uuid
+  academicYear    AcademicYear @relation(fields: [academicYearId], references: [id])
+  groupId         String       @db.Uuid
+  group           Group        @relation(fields: [groupId], references: [id])
+  grade           String?
+  bookletTypeId   String?      @db.Uuid
+  bookletType     BookletType? @relation(fields: [bookletTypeId], references: [id], onDelete: SetNull)
+  isCurrent       Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([studentId, academicYearId])
+  @@index([studentId])
+  @@index([academicYearId])
+  @@index([groupId])
+  @@index([bookletTypeId])
 }
 
 // ========== EVALUATIONS ==========
@@ -426,6 +482,9 @@ model BookletType {
   // Back-relation agregada con la migración sep 2026 (Student.bookletTypeId).
   // El docente asigna el cuadernillo por defecto del estudiante al importar.
   students        Student[]
+  enrollments     StudentEnrollment[]
+  // Asignaciones docente ↔ asignatura-grado que aplican a este tipo.
+  teacherAssignments TeacherSubjectAssignment[]
 
   @@unique([institutionId, periodId, name])
   @@index([institutionId, periodId])
@@ -520,6 +579,7 @@ model Question {
 
   options QuestionOption[]
   answers StudentAnswer[]
+  disabledFromBundles DisabledBundleQuestion[]
 
   @@index([sectionId, number])
 }
@@ -701,6 +761,7 @@ model EvaluationBundle {
   items       EvaluationBundleItem[]
   sheets      AnswerSheet[]
   scanBatches ScanBatch[]
+  disabledQuestions DisabledBundleQuestion[]
 
   @@unique([institutionId, bookletNumber])
   @@index([institutionId])
@@ -726,6 +787,50 @@ model EvaluationBundleItem {
   @@index([evaluationId])
 }
 
+// =====================================================
+// Sprint Preguntas inhabitadas del Cuadernillo (sep 2026)
+// =====================================================
+//
+// Marca preguntas individuales de un cuadernillo para que NO cuenten en la
+// calificación (clave mal impresa, pregunta retirada post-print, redacción
+// ambigua, etc.). Granularidad por pregunta — no por `EvaluationBundleItem`
+// entero — porque las preguntas dentro de una evaluación siguen contando.
+//
+// Decisiones de diseño confirmadas con el docente (sep 2026):
+//   - Por pregunta individual del bundle (no por evaluation completa).
+//   - Lock pre-scan: toggling se bloquea cuando ya existe un `ScanBatch`
+//     apuntando al bundle. Cero re-procesamiento de hojas viejas.
+//   - La nota de la hoja (AnswerSheet.score/totalQuestions) se calcula al
+//     calificar y ya excluye las inhabilitadas; como el toggle se bloquea al
+//     existir un lote, toda hoja se califica con las inhabilitaciones
+//     vigentes. NO se persiste `StudentAnswer.notCounted`: las vistas que
+//     recalculan desde StudentAnswer cargan este set y las excluyen.
+//   - UX: la UI bloquea al docente si intenta inhabitarlas todas (debe
+//     quedar al menos 1 pregunta efectiva).
+//
+// Re-habilitar no borra la fila: solo se flaguea `disabled = false`. Esto
+// conserva la auditoría (sabemos qué preguntas fueron inhabitadas en
+// algún momento) sin perder el historial.
+//
+model DisabledBundleQuestion {
+  id               String           @id @default(uuid(7)) @db.Uuid
+  bundleId         String           @db.Uuid
+  bundle           EvaluationBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  questionId       String           @db.Uuid
+  // Cascade: una inhabilitación sin pregunta no significa nada. Si el
+  // cuadernillo ya se escaneó, StudentAnswer (RESTRICT) sigue impidiendo
+  // borrar la pregunta, así que no se pierde nada calificado.
+  question         Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  disabledAt       DateTime         @default(now())
+  disabledByUserId String           @db.Uuid
+  disabledByUser   User             @relation(fields: [disabledByUserId], references: [id])
+  // Re-habilitar no borra la fila; baja este flag a false.
+  disabled         Boolean          @default(true)
+
+  @@unique([bundleId, questionId])
+  @@index([bundleId])
+}
+
 // ========== ANSWER SHEETS & GRADING ==========
 
 // Lote de escaneo: hasta 200 hojas por carga, procesado asíncronamente (BullMQ).
@@ -748,7 +853,10 @@ model ScanBatch {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
-  sheets AnswerSheet[]
+  sheets            AnswerSheet[]
+  /// Hojas de la carga automática que no se pudieron clasificar por su QR.
+  /// Solo el primer lote de cada carga las tiene.
+  unclassifiedScans UnclassifiedScan[]
 
   @@index([institutionId])
   @@index([evaluationId])
@@ -773,6 +881,12 @@ model AnswerSheet {
   studentCode         String? // respaldo: código escrito en la hoja
   qrContent           String // contenido completo del QR (JSON)
   qrSignature         String // HMAC-SHA256 para verificar integridad
+  /// Campo `sheet` del QR: identifica el PAPEL, no al estudiante ni la prueba.
+  /// Se genera con crypto.randomUUID() al imprimir, uno por hoja física.
+  /// Con indice unico: si el mismo papel vuelve a pasar por el alimentador, la
+  /// segunda pasada se rechaza en vez de crear una calificacion nueva.
+  /// Null en hojas sin QR resuelto y en las anteriores a este campo.
+  qrSheetUuid         String?           @unique
   scannedImage        String? // ruta de la imagen escaneada original
   /// Nombre del archivo tal como lo subio el usuario (p. ej. "20260909163256931_0051.tif").
   /// La subida renombra los archivos a sheet_NNN.ext, asi que sin esto no hay forma
@@ -799,7 +913,10 @@ model AnswerSheet {
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 
-  answers StudentAnswer[]
+  answers          StudentAnswer[]
+  /// Presente si la hoja salió de una hoja sin clasificar a la que alguien le
+  /// eligió cuadernillo y estudiante a mano. El worker entonces no lee el QR.
+  unclassifiedScan UnclassifiedScan?
 
   // Invariante (validada en use cases, no en DB): exactamente uno de
   // evaluationId / bundleId no nulo.
@@ -807,6 +924,33 @@ model AnswerSheet {
   @@index([bundleId, status])
   @@index([studentId])
   @@index([scanBatchId])
+}
+
+/// Hoja de una carga automática que no se pudo atribuir a un cuadernillo por
+/// su QR (ilegible, firma inválida, cuadernillo no LISTO...). El archivo ya
+/// está en storage; la AnswerSheet se crea cuando alguien elige el cuadernillo
+/// y el estudiante a mano desde la card "Hojas sin clasificar" del lote.
+model UnclassifiedScan {
+  id               String       @id @default(uuid(7)) @db.Uuid
+  institutionId    String       @db.Uuid
+  institution      Institution  @relation(fields: [institutionId], references: [id])
+  /// Lote donde se muestra: el primero de la carga, que guarda la carpeta.
+  scanBatchId      String       @db.Uuid
+  scanBatch        ScanBatch    @relation(fields: [scanBatchId], references: [id], onDelete: Cascade)
+  /// Ruta relativa en storage: scans/<lote>/sin-clasificar/<archivo>.
+  filePath         String
+  originalFilename String?
+  /// Código de MotivoSinClasificar (src/modules/scanning/domain/clasificar-hojas.ts).
+  reason           String
+  uploadedBy       String       @db.Uuid
+  createdAt        DateTime     @default(now())
+  resolvedAt       DateTime?
+  resolvedBy       String?      @db.Uuid
+  answerSheetId    String?      @unique @db.Uuid
+  answerSheet      AnswerSheet? @relation(fields: [answerSheetId], references: [id], onDelete: SetNull)
+
+  @@index([scanBatchId])
+  @@index([institutionId])
 }
 
 enum ScanStatus {

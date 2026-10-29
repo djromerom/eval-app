@@ -207,4 +207,68 @@ describe("computeCompareReport", () => {
     // Solo quedó bi-bio
     expect(report.perSheetBreakdown[0]!.perItem[0]!.bundleItemId).toBe("bi-bio");
   });
+
+  describe("preguntas inhabilitadas del cuadernillo", () => {
+    // q1 y q2 de Biología: q1 siempre acertada, q2 siempre fallada.
+    // Con q2 inhabilitada, la tasa de Biología sube de 50% a 100%.
+    const answers = new Map<string, Array<boolean | null>>([
+      ["q1", [true, true]],
+      ["q2", [false, false]],
+      ["q5", [true, false]],
+    ]);
+    const answersBySheet = new Map<
+      string,
+      Array<{ questionId: string; bundleItemId: string | null; isCorrect: boolean | null }>
+    >([
+      [
+        "sh-1",
+        [
+          { questionId: "q1", bundleItemId: "bi-bio", isCorrect: true },
+          { questionId: "q2", bundleItemId: "bi-bio", isCorrect: false },
+          { questionId: "q5", bundleItemId: "bi-fis", isCorrect: true },
+        ],
+      ],
+    ]);
+    const base = {
+      bundleId: "b1",
+      items,
+      questions: questions.filter((q) => ["q1", "q2", "q5"].includes(q.id)),
+      totalScannedSheets: 2,
+      answersByQuestion: answers,
+      answersBySheet,
+    };
+
+    it("sin set de inhabilitadas se comporta igual que antes", () => {
+      const report = computeCompareReport(base);
+      expect(report.items[0]!.correctRate).toBeCloseTo(0.5);
+      expect(report.items[0]!.disabledCount).toBe(0);
+      expect(report.questions.every((q) => q.disabled === false)).toBe(true);
+    });
+
+    it("marca la pregunta como disabled pero conserva su tasa", () => {
+      const report = computeCompareReport({ ...base, disabledQuestionIds: new Set(["q2"]) });
+      const q2 = report.questions.find((q) => q.questionId === "q2")!;
+      expect(q2.disabled).toBe(true);
+      expect(q2.correctRate).toBe(0);
+      expect(report.questions.find((q) => q.questionId === "q1")!.disabled).toBe(false);
+    });
+
+    it("excluye la inhabilitada del promedio de su formulación", () => {
+      const report = computeCompareReport({ ...base, disabledQuestionIds: new Set(["q2"]) });
+      const bio = report.items.find((i) => i.evaluationId === "ev-bio")!;
+      expect(bio.correctRate).toBeCloseTo(1);
+      expect(bio.difficulty).toBeCloseTo(0);
+      expect(bio.disabledCount).toBe(1);
+      // Física no se ve afectada.
+      expect(report.items.find((i) => i.evaluationId === "ev-fis")!.disabledCount).toBe(0);
+    });
+
+    it("excluye la inhabilitada del desglose por estudiante", () => {
+      const report = computeCompareReport({ ...base, disabledQuestionIds: new Set(["q2"]) });
+      const bio = report.perSheetBreakdown[0]!.perItem.find((p) => p.bundleItemId === "bi-bio")!;
+      expect(bio.correctCount).toBe(1);
+      expect(bio.questionCount).toBe(1);
+      expect(bio.correctRate).toBeCloseTo(1);
+    });
+  });
 });

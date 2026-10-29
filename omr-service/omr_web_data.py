@@ -11,7 +11,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from omr_reader import analyze_sheet, check_structure, read_qr
+from omr_reader import (analyze_sheet, check_structure, identity_box,
+                        ocr_codigo, read_qr)
 
 
 def build_sheet_data(data: bytes, suffix: str = ".jpg",
@@ -26,7 +27,7 @@ def build_sheet_data(data: bytes, suffix: str = ".jpg",
         f.write(data)
         tmp = f.name
     try:
-        gray, questions, thr, qr, thr_warn, rotation = analyze_sheet(tmp, letters)
+        gray, questions, thr, qr, thr_warn, rotation, qr_box = analyze_sheet(tmp, letters)
     finally:
         Path(tmp).unlink(missing_ok=True)
 
@@ -58,9 +59,27 @@ def build_sheet_data(data: bytes, suffix: str = ".jpg",
                        "x": int(round(b.x)), "y": int(round(b.y)),
                        "r": int(round(b.r))}
                       for b in q.bubbles],
+            # Aviso por item del motor (p. ej. "letras ambiguas", "falta la
+            # opcion A"). Aditivo: el lado TS lo ignora sin romperse.
+            "aviso": q.warning,
             "crop": base64.b64encode(buf).decode() if ok else "",
         })
     ident = qr if isinstance(qr, dict) else {}
+    # Sin QR legible la hoja llega sin estudiante y alguien tiene que
+    # identificarla a mano. En vez de obligarlo a abrir el escaneo original, se
+    # devuelve el recorte del bloque Nombre/Grado/Codigo impreso (va justo
+    # debajo del QR) y, si tesseract esta disponible, una sugerencia del codigo
+    # para confirmar. Solo se calcula cuando hace falta: con QR legible ambos
+    # campos van vacios y no se paga ni el recorte ni el OCR.
+    id_crop, id_ocr = "", None
+    if not ident.get("student"):
+        caja = identity_box(gray, qr_box)
+        if caja is not None:
+            ok, buf = cv2.imencode(".jpg", caja, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            if ok:
+                id_crop = base64.b64encode(buf).decode()
+            id_ocr = ocr_codigo(caja)
+
     return {
         "thr": round(thr, 3),
         "questions": out,
@@ -69,6 +88,11 @@ def build_sheet_data(data: bytes, suffix: str = ".jpg",
         "qr": qr,
         "aviso": thr_warn,
         "rotacion": rotation,
+        # Recorte del bloque de identidad impreso + sugerencia de codigo por
+        # OCR. Ambos vacios cuando el QR se leyo bien. La sugerencia NUNCA
+        # reemplaza al QR: es para que una persona la confirme.
+        "idCrop": id_crop,
+        "idOcr": id_ocr,
         # Verificacion estructural (huecos entre filas, bloques desparejos).
         # Es la red contra la falla silenciosa: una fila no leida corre la
         # numeracion y produce una lectura completa y verosimil pero mal

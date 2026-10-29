@@ -214,6 +214,9 @@ class InMemorySubjects {
   async create(): Promise<Subject> {
     throw new Error("noop");
   }
+  async updateShortName(): Promise<Subject> {
+    throw new Error("noop");
+  }
 }
 
 class InMemoryBookletTypes implements BookletTypeRepository {
@@ -370,6 +373,7 @@ beforeEach(() => {
     institutionId: "inst1",
     name: "Matemáticas",
     code: "MAT",
+    shortName: null,
   });
   bookletTypes.items.push({
     id: "bt1",

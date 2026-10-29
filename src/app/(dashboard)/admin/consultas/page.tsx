@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
-import { CONSULTAS } from "@/modules/consultas/domain/consultas-registry";
+import { consultasFor } from "@/modules/consultas/domain/consultas-registry";
 
 export const metadata: Metadata = { title: "Consultas" };
 
@@ -18,7 +18,10 @@ export const metadata: Metadata = { title: "Consultas" };
  * no aplica); aquí se duplica el gate como segunda barrera.
  */
 export default async function ConsultasPage() {
-  await requireAuthenticatedUser("SUPER_ADMIN", "ECU_MASTER");
+  const actor = await requireAuthenticatedUser("SUPER_ADMIN", "ECU_MASTER", "ECU_LIDER");
+  // Cada rol ve solo sus consultas: un lider ECU no tiene por que enterarse de
+  // que existe el listado de formulaciones.
+  const consultas = consultasFor(actor.roles);
 
   return (
     <>
@@ -27,7 +30,7 @@ export default async function ConsultasPage() {
         description="Listados predefinidos sobre datos institucionales. Cada consulta es de solo lectura y muestra el estado real de la base de datos."
       />
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {CONSULTAS.map((c) => (
+        {consultas.map((c) => (
           <Link
             key={c.id}
             href={`/admin/consultas/${c.id}`}

@@ -32,6 +32,9 @@ export interface Field {
   min?: number;
   /** Solo aplica cuando type === "number". Se pasa como `max` al <input>. */
   max?: number;
+  /** Solo aplica a campos de texto. Se pasa como `maxLength` al <input>, para
+   *  que el navegador aplique el mismo tope que valida el servidor. */
+  maxLength?: number;
   /** Texto de ayuda debajo del label (e.g. "Si lo dejas vacío, se calcula
    *  automáticamente con preguntas × 2.5 min"). No rompe layout: se
    *  renderiza en una línea aparte. */
@@ -109,6 +112,7 @@ export function EntityForm({
               placeholder={field.placeholder}
               min={field.type === "number" ? field.min : undefined}
               max={field.type === "number" ? field.max : undefined}
+              maxLength={field.type === "text" ? field.maxLength : undefined}
               className="w-40"
             />
           )}

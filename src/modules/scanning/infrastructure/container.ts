@@ -1,18 +1,29 @@
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import { env } from "@/config/env";
 import { PrismaEvaluationRepository } from "@/modules/evaluations/infrastructure/prisma-evaluation-repository";
+import { PrismaDisabledBundleQuestionRepository } from "@/modules/bundles/infrastructure/prisma-disabled-bundle-question-repository";
 import type { AnswerKey } from "@/modules/evaluations/domain/evaluation";
 import { PrismaScanningRepository } from "./prisma-scanning-repository";
 import { sharpQrDecoder } from "./qr-decoder";
 import { OmrServiceQrDecoder, chainQrDecoders } from "./omr-service-qr-decoder";
 import { HttpOmrDetector } from "./http-omr-detector";
 import {
+  PrismaUnclassifiedScanRepository,
+  bullOmrJobQueue,
+} from "./prisma-unclassified-scan-repository";
+import {
   ProcessAnswerSheet,
   type EvaluationQuestionsProvider,
 } from "../application/process-answer-sheet";
+import { ClassifyUnclassifiedScan } from "../application/classify-unclassified-scan";
+import { CorrectAnswerSheetAnswers } from "../application/correct-answer-sheet-answers";
+import { PrismaStudentAnswersReader } from "./prisma-scanning-repository";
+import { DeleteSheet } from "../application/delete-sheet";
+import { DeleteBatch } from "../application/delete-batch";
 
 const scanningRepo = new PrismaScanningRepository();
 const evaluationRepo = new PrismaEvaluationRepository();
+const disabledQuestionsRepo = new PrismaDisabledBundleQuestionRepository();
 
 const questionsProvider: EvaluationQuestionsProvider = {
   async getCorrectAnswers(institutionId: string, evaluationId: string) {
@@ -31,8 +42,12 @@ const questionsProvider: EvaluationQuestionsProvider = {
   /** Une, en orden de item, todas las questions de cada evaluation del bundle.
    *  `number` se reescribe a la posición global 1..N.
    *  `bundleItemId` (Sprint 4) habilita el drill-down del reporte comparativo
-   *  por (student × item) sin reconsultas. */
+   *  por (student × item) sin reconsultas.
+   *  `disabled` marca las preguntas inhabilitadas del cuadernillo, que
+   *  ProcessAnswerSheet excluye de la nota. */
   async getCorrectAnswersForBundle(institutionId: string, bundleId: string) {
+    const disabledRows = await disabledQuestionsRepo.listActiveByBundle(bundleId);
+    const disabledIds = new Set(disabledRows.map((r) => r.questionId));
     const items = await prisma.evaluationBundleItem.findMany({
       where: { bundleId, bundle: { institutionId } },
       orderBy: { order: "asc" },
@@ -58,6 +73,7 @@ const questionsProvider: EvaluationQuestionsProvider = {
       bundleItemId: string;
       correctAnswer: AnswerKey;
       optionsLength: number;
+      disabled: boolean;
     }[] = [];
     let global = 1;
     for (const item of items) {
@@ -69,6 +85,7 @@ const questionsProvider: EvaluationQuestionsProvider = {
             bundleItemId: item.id,
             correctAnswer: q.correctAnswer as AnswerKey,
             optionsLength: q.options.length,
+            disabled: disabledIds.has(q.id),
           });
         }
       }
@@ -85,5 +102,19 @@ export const makeProcessAnswerSheet = () =>
     chainQrDecoders(sharpQrDecoder, new OmrServiceQrDecoder(env.OMR_SERVICE_URL)),
     questionsProvider,
     // Detección delegada al microservicio Python (omr-service) por HTTP.
-    new HttpOmrDetector(env.OMR_SERVICE_URL),
+    new HttpOmrDetector(env.OMR_SERVICE_URL, env.OMR_TIMEOUT_MS),
   );
+
+export const makeClassifyUnclassifiedScan = () =>
+  new ClassifyUnclassifiedScan(new PrismaUnclassifiedScanRepository(), bullOmrJobQueue);
+
+export const makeCorrectAnswerSheetAnswers = () =>
+  new CorrectAnswerSheetAnswers(
+    scanningRepo,
+    new PrismaStudentAnswersReader(),
+    questionsProvider,
+  );
+
+export const makeDeleteSheet = () => new DeleteSheet(scanningRepo);
+
+export const makeDeleteBatch = () => new DeleteBatch(scanningRepo);
