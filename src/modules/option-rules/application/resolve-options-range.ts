@@ -27,8 +27,11 @@ export interface ResolveOptionsRangeForEvaluationInput {
 
 /**
  * Rango de opciones aplicable a una evaluación: el de la regla
- * (Prueba × Asignatura) o, si no hay regla, el default estricto
+ * (Prueba × Grado × Asignatura) o, si no hay regla, el default estricto
  * (exactamente 4 opciones).
+ *
+ * La evaluación conoce su `courseSubjectId` (grado × asignatura) y su
+ * `periodId` (prueba), así que el match de la regla es exacto.
  */
 export class ResolveOptionsRangeForEvaluation implements UseCase<
   ResolveOptionsRangeForEvaluationInput,
@@ -61,10 +64,11 @@ export interface ResolveOptionsRangeForSubjectInput {
 /**
  * Rango de opciones aplicable al BANCO de preguntas de una asignatura.
  *
- * El banco es institucional (no pertenece a una Prueba), así que el rango
- * es la unión de las reglas de esa asignatura en todas las pruebas: el más
- * permisivo. Al importar la pregunta a una evaluación se valida contra el
- * rango de ESA evaluación, que sí es por Prueba.
+ * El banco es institucional (no pertenece a una Prueba ni a un grado), así
+ * que el rango es la unión de las reglas de esa asignatura en todos los
+ * grados y pruebas: el más permisivo. Al importar la pregunta a una
+ * evaluación se valida contra el rango de ESA evaluación, que sí es por
+ * Prueba y grado.
  */
 export class ResolveOptionsRangeForSubject implements UseCase<
   ResolveOptionsRangeForSubjectInput,

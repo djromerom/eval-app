@@ -55,6 +55,9 @@ import {
   UpdateOptionRule,
 } from "@/modules/option-rules/application/manage-option-rules";
 import type {
+  Course,
+  CourseRepository,
+  CourseSubjectRepository,
   CreatePeriodData,
   CreateSubjectData,
   Period,
@@ -82,7 +85,8 @@ class FakeOptionRules implements OptionRuleRepository {
   items: OptionRule[] = [];
   nextId = 1;
   createError: unknown = null;
-  /** Mapa courseSubjectId → subjectId, para `findForCourseSubject`. */
+  /** Mapas courseSubjectId → grado / asignatura, para `findForCourseSubject`. */
+  courseSubjectCourse: Record<string, string> = {};
   courseSubjectSubject: Record<string, string> = {};
 
   async findById(institutionId: string, id: string) {
@@ -103,6 +107,7 @@ class FakeOptionRules implements OptionRuleRepository {
       id: `r${this.nextId++}`,
       institutionId,
       periodId: data.periodId,
+      courseId: data.courseId,
       subjectId: data.subjectId,
       minOptions: data.minOptions,
       maxOptions: data.maxOptions,
@@ -130,11 +135,15 @@ class FakeOptionRules implements OptionRuleRepository {
     periodId: string | null,
   ) {
     const subjectId = this.courseSubjectSubject[courseSubjectId];
-    if (!subjectId || !periodId) return null;
+    const courseId = this.courseSubjectCourse[courseSubjectId];
+    if (!subjectId || !courseId || !periodId) return null;
     return (
       this.items.find(
         (r) =>
-          r.institutionId === institutionId && r.periodId === periodId && r.subjectId === subjectId,
+          r.institutionId === institutionId &&
+          r.periodId === periodId &&
+          r.courseId === courseId &&
+          r.subjectId === subjectId,
       ) ?? null
     );
   }
@@ -211,6 +220,40 @@ class FakeSubjects implements SubjectRepository {
     if (!s) throw new Error("noop");
     s.shortName = shortName;
     return s;
+  }
+}
+
+/** Grados (Course) en memoria. */
+class FakeCourses implements CourseRepository {
+  items: Course[] = [];
+  async findAll() {
+    return this.items;
+  }
+  async findById(institutionId: string, id: string) {
+    return this.items.find((c) => c.institutionId === institutionId && c.id === id) ?? null;
+  }
+  async create(): Promise<never> {
+    throw new Error("noop");
+  }
+}
+
+/** Pares (grado × asignatura) habilitados. */
+class FakeCourseSubjects implements CourseSubjectRepository {
+  pairs: { courseId: string; subjectId: string }[] = [];
+  async findAll() {
+    return [];
+  }
+  async findById() {
+    return null;
+  }
+  async exists(courseId: string, subjectId: string) {
+    return this.pairs.some((p) => p.courseId === courseId && p.subjectId === subjectId);
+  }
+  async create(): Promise<never> {
+    throw new Error("noop");
+  }
+  async delete() {
+    /* noop */
   }
 }
 
@@ -397,6 +440,7 @@ describe("option-rules · dominio", () => {
         id: "r1",
         institutionId: "i1",
         periodId: "p1",
+        courseId: "c1",
         subjectId: "s1",
         minOptions: 2,
         maxOptions: 8,
@@ -461,6 +505,8 @@ describe("option-rules · casos de uso", () => {
   function setup() {
     const rules = new FakeOptionRules();
     const periods = new FakePeriods();
+    const courses = new FakeCourses();
+    const courseSubjects = new FakeCourseSubjects();
     const subjects = new FakeSubjects();
     periods.items.push({
       id: "p1",
@@ -472,6 +518,32 @@ describe("option-rules · casos de uso", () => {
       endDate: new Date(),
       isCurrent: true,
     });
+    // Dos grados del MISMO año académico que la prueba: "c1" (11°) y "c2" (8°).
+    courses.items.push({
+      id: "c1",
+      institutionId: "i1",
+      academicYearId: "ay1",
+      name: "11°",
+      code: "11",
+    });
+    courses.items.push({
+      id: "c2",
+      institutionId: "i1",
+      academicYearId: "ay1",
+      name: "8°",
+      code: "8",
+    });
+    // Y uno de OTRO año: "c3" (11° del año pasado).
+    courses.items.push({
+      id: "c3",
+      institutionId: "i1",
+      academicYearId: "ay0",
+      name: "11°",
+      code: "11",
+    });
+    // Matemáticas está habilitada en 11° y 8°, pero no en el grado del otro año.
+    courseSubjects.pairs.push({ courseId: "c1", subjectId: "s1" });
+    courseSubjects.pairs.push({ courseId: "c2", subjectId: "s1" });
     subjects.items.push({
       id: "s1",
       institutionId: "i1",
@@ -479,15 +551,24 @@ describe("option-rules · casos de uso", () => {
       code: "MAT",
       shortName: null,
     });
-    return { rules, periods, subjects };
+    // `cs1` es el par (11° × Matemáticas) que usa la evaluación del fixture.
+    rules.courseSubjectCourse["cs1"] = "c1";
+    rules.courseSubjectSubject["cs1"] = "s1";
+    return { rules, periods, courses, courseSubjects, subjects };
   }
 
   describe("CreateOptionRule", () => {
     it("crea la regla con el actor que la pidió", async () => {
-      const { rules, periods, subjects } = setup();
-      const result = await new CreateOptionRule(rules, periods, subjects).execute({
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      const result = await new CreateOptionRule(
+        rules,
+        periods,
+        courses,
+        courseSubjects,
+        subjects,
+      ).execute({
         actor: master,
-        data: { periodId: "p1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
+        data: { periodId: "p1", courseId: "c1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
       });
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -498,20 +579,32 @@ describe("option-rules · casos de uso", () => {
     });
 
     it("solo el administrador de la institución (ECU_MASTER) puede crearla", async () => {
-      const { rules, periods, subjects } = setup();
-      const result = await new CreateOptionRule(rules, periods, subjects).execute({
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      const result = await new CreateOptionRule(
+        rules,
+        periods,
+        courses,
+        courseSubjects,
+        subjects,
+      ).execute({
         actor: teacher,
-        data: { periodId: "p1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
+        data: { periodId: "p1", courseId: "c1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
       });
       expect(result.ok).toBe(false);
       expect(rules.items).toHaveLength(0);
     });
 
     it("rechaza rangos inválidos", async () => {
-      const { rules, periods, subjects } = setup();
-      const result = await new CreateOptionRule(rules, periods, subjects).execute({
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      const result = await new CreateOptionRule(
+        rules,
+        periods,
+        courses,
+        courseSubjects,
+        subjects,
+      ).execute({
         actor: master,
-        data: { periodId: "p1", subjectId: "s1", minOptions: 1, maxOptions: 9 },
+        data: { periodId: "p1", courseId: "c1", subjectId: "s1", minOptions: 1, maxOptions: 9 },
       });
       expect(result.ok).toBe(false);
       if (result.ok) return;
@@ -519,10 +612,16 @@ describe("option-rules · casos de uso", () => {
     });
 
     it("rechaza una prueba inexistente", async () => {
-      const { rules, periods, subjects } = setup();
-      const result = await new CreateOptionRule(rules, periods, subjects).execute({
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      const result = await new CreateOptionRule(
+        rules,
+        periods,
+        courses,
+        courseSubjects,
+        subjects,
+      ).execute({
         actor: master,
-        data: { periodId: "nope", subjectId: "s1", minOptions: 2, maxOptions: 8 },
+        data: { periodId: "nope", courseId: "c1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
       });
       expect(result.ok).toBe(false);
       if (result.ok) return;
@@ -530,38 +629,128 @@ describe("option-rules · casos de uso", () => {
     });
 
     it("rechaza una asignatura inexistente", async () => {
-      const { rules, periods, subjects } = setup();
-      const result = await new CreateOptionRule(rules, periods, subjects).execute({
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      const result = await new CreateOptionRule(
+        rules,
+        periods,
+        courses,
+        courseSubjects,
+        subjects,
+      ).execute({
         actor: master,
-        data: { periodId: "p1", subjectId: "nope", minOptions: 2, maxOptions: 8 },
+        data: { periodId: "p1", courseId: "c1", subjectId: "nope", minOptions: 2, maxOptions: 8 },
       });
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error.code).toBe("NOT_FOUND");
     });
 
-    it("rechaza una segunda regla para la misma (prueba, asignatura)", async () => {
-      const { rules, periods, subjects } = setup();
-      const useCase = new CreateOptionRule(rules, periods, subjects);
+    it("rechaza un grado inexistente", async () => {
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      const result = await new CreateOptionRule(
+        rules,
+        periods,
+        courses,
+        courseSubjects,
+        subjects,
+      ).execute({
+        actor: master,
+        data: { periodId: "p1", courseId: "nope", subjectId: "s1", minOptions: 2, maxOptions: 8 },
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe("NOT_FOUND");
+    });
+
+    it("rechaza un grado de otro año académico que la prueba", async () => {
+      // La excepción es para un año y un grado: "c3" es 11° del año pasado.
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      const result = await new CreateOptionRule(
+        rules,
+        periods,
+        courses,
+        courseSubjects,
+        subjects,
+      ).execute({
+        actor: master,
+        data: { periodId: "p1", courseId: "c3", subjectId: "s1", minOptions: 2, maxOptions: 8 },
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe("VALIDATION");
+      expect(result.error.message).toContain("año académico");
+    });
+
+    it("rechaza una asignatura que no está habilitada en ese grado", async () => {
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      subjects.items.push({
+        id: "s2",
+        institutionId: "i1",
+        name: "Física",
+        code: "FIS",
+        shortName: null,
+      });
+      const result = await new CreateOptionRule(
+        rules,
+        periods,
+        courses,
+        courseSubjects,
+        subjects,
+      ).execute({
+        actor: master,
+        data: { periodId: "p1", courseId: "c1", subjectId: "s2", minOptions: 2, maxOptions: 8 },
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe("VALIDATION");
+      expect(result.error.message).toContain("no está habilitada para ese grado");
+    });
+
+    it("rechaza una segunda regla para la misma (prueba, grado, asignatura)", async () => {
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      const useCase = new CreateOptionRule(rules, periods, courses, courseSubjects, subjects);
       await useCase.execute({
         actor: master,
-        data: { periodId: "p1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
+        data: { periodId: "p1", courseId: "c1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
       });
       const dup = await useCase.execute({
         actor: master,
-        data: { periodId: "p1", subjectId: "s1", minOptions: 3, maxOptions: 5 },
+        data: { periodId: "p1", courseId: "c1", subjectId: "s1", minOptions: 3, maxOptions: 5 },
       });
       expect(dup.ok).toBe(false);
       if (dup.ok) return;
       expect(dup.error.code).toBe("CONFLICT");
     });
 
-    it("traduce el P2002 de Postgres a conflicto", async () => {
-      const { rules, periods, subjects } = setup();
-      rules.createError = Object.assign(new Error("unique"), { code: "P2002" });
-      const result = await new CreateOptionRule(rules, periods, subjects).execute({
+    it("permite la misma asignatura en otro grado de la misma prueba", async () => {
+      // La tupla es (Prueba × Grado × Asignatura): Matemáticas en 11° y en 8°
+      // son dos reglas distintas, cada una con su propio rango.
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      const useCase = new CreateOptionRule(rules, periods, courses, courseSubjects, subjects);
+      await useCase.execute({
         actor: master,
-        data: { periodId: "p1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
+        data: { periodId: "p1", courseId: "c1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
+      });
+      const otroGrado = await useCase.execute({
+        actor: master,
+        data: { periodId: "p1", courseId: "c2", subjectId: "s1", minOptions: 4, maxOptions: 4 },
+      });
+      expect(otroGrado.ok).toBe(true);
+      expect(rules.items).toHaveLength(2);
+    });
+
+    it("traduce el P2002 de Postgres a conflicto", async () => {
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      rules.createError = Object.assign(new Error("unique"), { code: "P2002" });
+      const result = await new CreateOptionRule(
+        rules,
+        periods,
+        courses,
+        courseSubjects,
+        subjects,
+      ).execute({
+        actor: master,
+        data: { periodId: "p1", courseId: "c1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
       });
       expect(result.ok).toBe(false);
       if (result.ok) return;
@@ -571,10 +760,16 @@ describe("option-rules · casos de uso", () => {
 
   describe("UpdateOptionRule", () => {
     it("actualiza el rango", async () => {
-      const { rules, periods, subjects } = setup();
-      const created = await new CreateOptionRule(rules, periods, subjects).execute({
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      const created = await new CreateOptionRule(
+        rules,
+        periods,
+        courses,
+        courseSubjects,
+        subjects,
+      ).execute({
         actor: master,
-        data: { periodId: "p1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
+        data: { periodId: "p1", courseId: "c1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
       });
       if (!created.ok) throw new Error("setup falló");
       const result = await new UpdateOptionRule(rules).execute({
@@ -589,10 +784,16 @@ describe("option-rules · casos de uso", () => {
     });
 
     it("rechaza dejar el mínimo por encima del máximo ya guardado", async () => {
-      const { rules, periods, subjects } = setup();
-      const created = await new CreateOptionRule(rules, periods, subjects).execute({
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      const created = await new CreateOptionRule(
+        rules,
+        periods,
+        courses,
+        courseSubjects,
+        subjects,
+      ).execute({
         actor: master,
-        data: { periodId: "p1", subjectId: "s1", minOptions: 5, maxOptions: 8 },
+        data: { periodId: "p1", courseId: "c1", subjectId: "s1", minOptions: 5, maxOptions: 8 },
       });
       if (!created.ok) throw new Error("setup falló");
       const result = await new UpdateOptionRule(rules).execute({
@@ -618,10 +819,16 @@ describe("option-rules · casos de uso", () => {
     });
 
     it("solo el administrador de la institución puede modificarla", async () => {
-      const { rules, periods, subjects } = setup();
-      const created = await new CreateOptionRule(rules, periods, subjects).execute({
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      const created = await new CreateOptionRule(
+        rules,
+        periods,
+        courses,
+        courseSubjects,
+        subjects,
+      ).execute({
         actor: master,
-        data: { periodId: "p1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
+        data: { periodId: "p1", courseId: "c1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
       });
       if (!created.ok) throw new Error("setup falló");
       const result = await new UpdateOptionRule(rules).execute({
@@ -635,10 +842,16 @@ describe("option-rules · casos de uso", () => {
 
   describe("DeleteOptionRule", () => {
     it("borra la regla", async () => {
-      const { rules, periods, subjects } = setup();
-      const created = await new CreateOptionRule(rules, periods, subjects).execute({
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      const created = await new CreateOptionRule(
+        rules,
+        periods,
+        courses,
+        courseSubjects,
+        subjects,
+      ).execute({
         actor: master,
-        data: { periodId: "p1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
+        data: { periodId: "p1", courseId: "c1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
       });
       if (!created.ok) throw new Error("setup falló");
       const result = await new DeleteOptionRule(rules).execute({
@@ -655,6 +868,7 @@ describe("option-rules · casos de uso", () => {
         id: "r1",
         institutionId: "i2",
         periodId: "p1",
+        courseId: "c1",
         subjectId: "s1",
         minOptions: 2,
         maxOptions: 8,
@@ -670,16 +884,17 @@ describe("option-rules · casos de uso", () => {
 
   describe("ListOptionRulesByPeriod", () => {
     it("devuelve solo las reglas de la prueba y de la institución", async () => {
-      const { rules, periods, subjects } = setup();
-      const useCase = new CreateOptionRule(rules, periods, subjects);
+      const { rules, periods, courses, courseSubjects, subjects } = setup();
+      const useCase = new CreateOptionRule(rules, periods, courses, courseSubjects, subjects);
       await useCase.execute({
         actor: master,
-        data: { periodId: "p1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
+        data: { periodId: "p1", courseId: "c1", subjectId: "s1", minOptions: 2, maxOptions: 8 },
       });
       rules.items.push({
         id: "r2",
         institutionId: "i2",
         periodId: "p1",
+        courseId: "c1",
         subjectId: "s1",
         minOptions: 3,
         maxOptions: 3,

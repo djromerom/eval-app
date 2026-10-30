@@ -358,14 +358,15 @@ export async function createOptionRuleAction(
 ): Promise<ActionResult> {
   const actor = await requireAuthenticatedUser("ECU_MASTER");
 
+  const courseId = (formData.get("courseId") as string | null)?.trim() ?? "";
   const subjectId = (formData.get("subjectId") as string | null)?.trim() ?? "";
   const minRaw = parseOptionCount(formData.get("minOptions"));
   const maxRaw = parseOptionCount(formData.get("maxOptions"));
 
-  if (!subjectId || !Number.isFinite(minRaw) || !Number.isFinite(maxRaw)) {
+  if (!courseId || !subjectId || !Number.isFinite(minRaw) || !Number.isFinite(maxRaw)) {
     return mapError(
       "VALIDATION",
-      "Faltan datos obligatorios (asignatura, mínimo y máximo de opciones).",
+      "Faltan datos obligatorios (grado, asignatura, mínimo y máximo de opciones).",
     );
   }
 
@@ -373,6 +374,7 @@ export async function createOptionRuleAction(
     actor,
     data: {
       periodId,
+      courseId,
       subjectId,
       minOptions: minRaw as number,
       maxOptions: maxRaw as number,

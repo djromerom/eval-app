@@ -180,6 +180,7 @@ model Course {
   bundles           EvaluationBundle[]
   leaderAssignments LeaderCourseAssignment[]
   evaluationRules   EvaluationRule[]
+  subjectOptionRules SubjectOptionRule[]
 
   @@index([institutionId, academicYearId])
 }
@@ -544,6 +545,10 @@ model SubjectOptionRule {
   institution   Institution @relation(fields: [institutionId], references: [id])
   periodId      String      @db.Uuid
   period        Period      @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  /// Grado (Course) al que aplica la excepción. El grado debe pertenecer al
+  /// mismo año académico que la Prueba.
+  courseId      String      @db.Uuid
+  course        Course      @relation(fields: [courseId], references: [id], onDelete: Restrict)
   subjectId     String      @db.Uuid
   subject       Subject     @relation(fields: [subjectId], references: [id], onDelete: Restrict)
   /// Mínimo de opciones permitidas (2..8).
@@ -555,8 +560,9 @@ model SubjectOptionRule {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
-  @@unique([institutionId, periodId, subjectId])
+  @@unique([institutionId, periodId, courseId, subjectId])
   @@index([institutionId, periodId])
+  @@index([institutionId, courseId, subjectId])
   @@index([institutionId, subjectId])
 }
 

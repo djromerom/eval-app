@@ -1,6 +1,6 @@
 /**
  * Casos de uso para `OptionRule` (reglas de opciones de respuesta por
- * Prueba × Asignatura).
+ * Prueba × Grado × Asignatura).
  *
  * Patrón idéntico a `src/modules/evaluation-rules/application/manage-evaluation-rules.ts`:
  * - UseCase<Input, Output> con `execute({ actor, ... })`.
@@ -10,9 +10,13 @@
  *
  * Particularidades:
  * - El rango (min, max) se valida en el dominio: enteros 2..8 y min ≤ max.
- * - La unicidad de la tupla (Prueba × Asignatura) la enforce Postgres
- *   (índice unique). Aquí hacemos un pre-check para el mensaje claro y, además,
- *   capturamos P2002 por si dos requests concurrentes pasan el pre-check.
+ * - El GRADO es parte de la tupla: la excepción es para un año y un grado
+ *   concretos, así que el grado debe pertenecer al mismo año académico que
+ *   la prueba, y la asignatura debe estar habilitada en ese grado.
+ * - La unicidad de la tupla (Prueba × Grado × Asignatura) la enforce
+ *   Postgres (índice unique). Aquí hacemos un pre-check para el mensaje
+ *   claro y, además, capturamos P2002 por si dos requests concurrentes
+ *   pasan el pre-check.
  */
 
 import { type AuthenticatedUser, requireRole } from "@/shared/application/authenticated-user";
@@ -25,7 +29,12 @@ import {
   fail,
   ok,
 } from "@/shared/domain/result";
-import type { PeriodRepository, SubjectRepository } from "@/modules/academic/domain/types";
+import type {
+  CourseRepository,
+  CourseSubjectRepository,
+  PeriodRepository,
+  SubjectRepository,
+} from "@/modules/academic/domain/types";
 
 import {
   type OptionRule,
@@ -52,6 +61,7 @@ export interface CreateOptionRuleInput {
   actor: AuthenticatedUser;
   data: {
     periodId: string;
+    courseId: string;
     subjectId: string;
     minOptions: number;
     maxOptions: number;
@@ -62,6 +72,8 @@ export class CreateOptionRule implements UseCase<CreateOptionRuleInput, OptionRu
   constructor(
     private readonly rules: OptionRuleRepository,
     private readonly periods: PeriodRepository,
+    private readonly courses: CourseRepository,
+    private readonly courseSubjects: CourseSubjectRepository,
     private readonly subjects: SubjectRepository,
   ) {}
 
@@ -81,22 +93,44 @@ export class CreateOptionRule implements UseCase<CreateOptionRuleInput, OptionRu
     const period = await this.periods.findById(actor.institutionId, data.periodId);
     if (!period) return fail(new NotFoundError("Prueba", data.periodId));
 
+    const course = await this.courses.findById(actor.institutionId, data.courseId);
+    if (!course) return fail(new NotFoundError("Grado", data.courseId));
+
+    // La excepción es para un AÑO y un GRADO: el grado debe ser del mismo
+    // año académico que la prueba donde se crea la regla.
+    if (course.academicYearId !== period.academicYearId) {
+      return fail(
+        new ValidationError("El grado debe pertenecer al mismo año académico que la prueba."),
+      );
+    }
+
     const subject = await this.subjects.findById(data.subjectId);
     if (!subject) return fail(new NotFoundError("Asignatura", data.subjectId));
+
+    // La asignatura debe estar habilitada en ese grado.
+    const offered = await this.courseSubjects.exists(data.courseId, data.subjectId);
+    if (!offered) {
+      return fail(new ValidationError("La asignatura no está habilitada para ese grado."));
+    }
 
     // Pre-check de unicidad de la tupla (mensaje más claro que dejar
     // que Postgres lo rechace).
     const siblings = await this.rules.listByPeriod(actor.institutionId, data.periodId);
-    const duplicate = siblings.find((r) => r.subjectId === data.subjectId);
+    const duplicate = siblings.find(
+      (r) => r.courseId === data.courseId && r.subjectId === data.subjectId,
+    );
     if (duplicate) {
       return fail(
-        new ConflictError("Ya existe una regla de opciones para esta asignatura en la prueba."),
+        new ConflictError(
+          "Ya existe una regla de opciones para esta asignatura en este grado de la prueba.",
+        ),
       );
     }
 
     try {
       const created = await this.rules.create(actor.institutionId, {
         periodId: data.periodId,
+        courseId: data.courseId,
         subjectId: data.subjectId,
         minOptions: data.minOptions,
         maxOptions: data.maxOptions,
@@ -106,7 +140,9 @@ export class CreateOptionRule implements UseCase<CreateOptionRuleInput, OptionRu
     } catch (e) {
       if (isPrismaUniqueConstraintError(e)) {
         return fail(
-          new ConflictError("Ya existe una regla de opciones para esta asignatura en la prueba."),
+          new ConflictError(
+            "Ya existe una regla de opciones para esta asignatura en este grado de la prueba.",
+          ),
         );
       }
       throw e;

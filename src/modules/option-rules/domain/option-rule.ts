@@ -1,6 +1,6 @@
 /**
  * Reglas institucionales de OPCIONES DE RESPUESTA, condicionadas a la tupla
- * (Prueba × Asignatura).
+ * (Prueba × Grado × Asignatura).
  *
  * Sprint oct 2026 — el número de opciones por pregunta dejó de ser global
  * (`.env`: EVAL_DEFAULT_OPTIONS / EVAL_MAX_OPTIONS) y pasó a ser una regla
@@ -8,8 +8,12 @@
  *
  * - **Default estricto**: sin regla, las preguntas tienen EXACTAMENTE 4
  *   opciones.
- * - **Regla de excepción**: por (Prueba × Asignatura) el admin fija un
- *   mínimo y un máximo configurables, cada uno entre 2 y 8.
+ * - **Regla de excepción**: por (Prueba × Grado × Asignatura) el admin fija
+ *   un mínimo y un máximo configurables, cada uno entre 2 y 8.
+ *
+ * El GRADO es parte de la clave porque la excepción es para un año y un
+ * grado concretos: el grado de la regla debe pertenecer al mismo año
+ * académico que la Prueba (se valida en el use case).
  *
  * Por qué 8 es el techo: la hoja de respuestas imprime 8 columnas fijas
  * (A–H) y el OMR escanea 8 columnas por pregunta. Ver
@@ -22,10 +26,11 @@
  *
  * Edge cases intencionales:
  * - `periodId = null` en la evaluación → no hay match → aplica el default.
- * - El BANCO de preguntas no pertenece a una Prueba (es institucional por
- *   asignatura): su rango es la UNIÓN de las reglas de esa asignatura entre
- *   todas las pruebas (la más permisiva). Al importar una pregunta del banco
- *   a una evaluación se valida contra el rango de ESA evaluación.
+ * - El BANCO de preguntas no pertenece a una Prueba ni a un grado (es
+ *   institucional por asignatura): su rango es la UNIÓN de las reglas de esa
+ *   asignatura entre todos los grados y pruebas (la más permisiva). Al
+ *   importar una pregunta del banco a una evaluación se valida contra el
+ *   rango de ESA evaluación (que sí es por grado).
  */
 
 /** Mínimo absoluto: verdadero/falso y tricotomías. */
@@ -45,6 +50,8 @@ export interface OptionRule {
   id: string;
   institutionId: string;
   periodId: string;
+  /** Grado (Course) al que aplica la excepción. */
+  courseId: string;
   subjectId: string;
   minOptions: number;
   maxOptions: number;
@@ -55,6 +62,7 @@ export interface OptionRule {
 
 export interface CreateOptionRuleData {
   periodId: string;
+  courseId: string;
   subjectId: string;
   minOptions: number;
   maxOptions: number;
@@ -70,17 +78,18 @@ export interface OptionRuleRepository {
   findById(institutionId: string, id: string): Promise<OptionRule | null>;
   listByPeriod(institutionId: string, periodId: string): Promise<OptionRule[]>;
   /** Todas las de la institución (tabla chica: una por combinación
-   *  Prueba × Asignatura). */
+   *  Prueba × Grado × Asignatura). */
   listByInstitution(institutionId: string): Promise<OptionRule[]>;
-  /** Todas las reglas de una asignatura, de cualquier prueba. Se usa para
-   *  resolver el rango del BANCO (que no pertenece a una prueba). */
+  /** Todas las reglas de una asignatura, de cualquier grado y prueba. Se usa
+   *  para resolver el rango del BANCO (que no pertenece a una prueba ni a un
+   *  grado). */
   listBySubject(institutionId: string, subjectId: string): Promise<OptionRule[]>;
   create(institutionId: string, data: CreateOptionRuleData): Promise<OptionRule>;
   update(institutionId: string, id: string, data: UpdateOptionRuleData): Promise<OptionRule | null>;
   delete(institutionId: string, id: string): Promise<void>;
   /**
-   * Resuelve `courseSubjectId` → `subjectId` y devuelve la regla de
-   * (Prueba × Asignatura).
+   * Resuelve `courseSubjectId` → (grado, asignatura) y devuelve la regla de
+   * (Prueba × Grado × Asignatura).
    *
    * - `periodId = null` → no hay match → sin regla (aplica el default).
    * - El join a `CourseSubject` filtra por `institutionId`, así que un

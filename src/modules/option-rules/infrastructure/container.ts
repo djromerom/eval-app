@@ -6,6 +6,8 @@
  */
 
 import {
+  PrismaCourseRepository,
+  PrismaCourseSubjectRepository,
   PrismaPeriodRepository,
   PrismaSubjectRepository,
 } from "@/modules/academic/infrastructure/prisma-academic-repositories";
@@ -26,6 +28,8 @@ import { PrismaOptionRuleRepository } from "./prisma-option-rule-repository";
 
 const rules = new PrismaOptionRuleRepository();
 const periods = new PrismaPeriodRepository();
+const courses = new PrismaCourseRepository();
+const courseSubjects = new PrismaCourseSubjectRepository();
 const subjects = new PrismaSubjectRepository();
 
 /** Repositorio singleton — exportado para que los use cases de otros módulos
@@ -33,7 +37,8 @@ const subjects = new PrismaSubjectRepository();
  *  duplicar instancias. Implementa también `OptionRuleResolver`. */
 export const optionRules = rules;
 
-export const makeCreateOptionRule = () => new CreateOptionRule(rules, periods, subjects);
+export const makeCreateOptionRule = () =>
+  new CreateOptionRule(rules, periods, courses, courseSubjects, subjects);
 export const makeListOptionRulesByPeriod = () => new ListOptionRulesByPeriod(rules);
 export const makeListOptionRulesByInstitution = () => new ListOptionRulesByInstitution(rules);
 export const makeUpdateOptionRule = () => new UpdateOptionRule(rules);
