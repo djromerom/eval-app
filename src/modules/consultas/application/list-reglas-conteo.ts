@@ -1,6 +1,6 @@
 /**
  * Use case: lista las reglas de conteo de ítems de la institución del actor,
- * con la cuenta de formulaciones que lleva cada regla.
+ * con los ítems que ya se han formulado para cada regla.
  *
  * Scoping: solo ECU_MASTER y SUPER_ADMIN (mismo criterio que
  * `ListFormulaciones` — la consulta es de administración de institución).
@@ -19,7 +19,7 @@ import type { ReglaConteoRow } from "../domain/queries/reglas-conteo/regla-conte
  *  el use case con un in-memory (ver `tests/unit/list-reglas-conteo.test.ts`). */
 export interface ReglasConteoReader {
   /** Devuelve todas las reglas de conteo de la institución con el nombre de
-   *  su prueba, grado, asignatura y tipo, y cuántas formulaciones lleva. */
+   *  su prueba, grado, asignatura y tipo, y los ítems ya formulados. */
   listByInstitution(institutionId: string): Promise<ReglaConteoRow[]>;
 }
 

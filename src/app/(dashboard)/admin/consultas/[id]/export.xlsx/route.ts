@@ -55,7 +55,7 @@ function buildFormuladoresFilename(actor: { institutionId: string }): string {
   return `formuladores-${actor.institutionId}-${today}.xlsx`;
 }
 
-/** Nombre del archivo de la consulta "Reglas de conteo por prueba". */
+/** Nombre del archivo de la consulta "Regla de conteo". */
 function buildReglasFilename(actor: { institutionId: string }): string {
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   return `reglas-conteo-${actor.institutionId}-${today}.xlsx`;
