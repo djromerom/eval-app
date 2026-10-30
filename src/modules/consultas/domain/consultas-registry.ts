@@ -81,6 +81,22 @@ export const CONSULTAS: readonly ConsultaConfig[] = [
     columns: ["Item", "Nombre", "Asignaturas"],
     roles: ["ECU_MASTER", "SUPER_ADMIN", "ECU_LIDER"],
   },
+  {
+    id: "reglas-conteo",
+    title: "Reglas de conteo por prueba",
+    description:
+      "Una fila por regla de conteo de ítems configurada en la institución: prueba, grado, asignatura y tipo de cuadernillo, con el número exacto de ítems que exige y cuántas formulaciones lleva esa regla.",
+    columns: [
+      "Prueba",
+      "Año",
+      "Grado",
+      "Asignatura",
+      "Tipo de cuadernillo",
+      "Conteo de ítems",
+      "Formuladas",
+    ],
+    roles: ["ECU_MASTER", "SUPER_ADMIN"],
+  },
 ] as const;
 
 /** Consultas visibles para un conjunto de roles. La usa `/admin/consultas`

@@ -6,10 +6,12 @@
 import { ListFormulaciones } from "../application/list-formulaciones";
 import { ListFormuladores } from "../application/list-formuladores";
 import { ListCalificaciones } from "../application/list-calificaciones";
+import { ListReglasConteo } from "../application/list-reglas-conteo";
 import { GetInformeGrupo } from "../application/informe-grupo";
 import { PrismaFormulacionesReader } from "./formulaciones-fetcher";
 import { PrismaFormuladoresReader } from "./formuladores-fetcher";
 import { PrismaCalificacionesReader } from "./calificaciones-fetcher";
+import { PrismaReglasConteoReader } from "./reglas-conteo-fetcher";
 import { PrismaInformeGrupoReader } from "./informe-grupo-fetcher";
 import { PrismaLeaderAssignmentRepository } from "@/modules/leader-assignments/infrastructure/prisma-leader-assignment-repository";
 
@@ -17,9 +19,13 @@ import { PrismaLeaderAssignmentRepository } from "@/modules/leader-assignments/i
 const reader = new PrismaFormulacionesReader();
 const formuladoresReader = new PrismaFormuladoresReader();
 const calificacionesReader = new PrismaCalificacionesReader();
+const reglasConteoReader = new PrismaReglasConteoReader();
 const informeGrupoReader = new PrismaInformeGrupoReader();
 
 export const makeListFormulaciones = () => new ListFormulaciones(reader);
+
+/** Reglas de conteo de ítems con cuántas formulaciones lleva cada una. */
+export const makeListReglasConteo = () => new ListReglasConteo(reglasConteoReader);
 
 /** Docentes formuladores por cuadernillo: asignaciones + formulaciones sin
  *  docente asignado. */
