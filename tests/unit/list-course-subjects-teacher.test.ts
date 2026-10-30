@@ -74,15 +74,38 @@ class InMemoryTeachers implements TeacherRepository {
       bookletTypeId,
       bookletTypeName: null,
       periodName: null,
+      academicYearId: "y1",
     });
   }
-  async isAssigned(teacherId: string, courseSubjectId: string, bookletTypeId: string | null) {
+  async isAssigned(
+    teacherId: string,
+    courseSubjectId: string,
+    bookletTypeId: string | null,
+    excludeAssignmentId?: string,
+  ) {
     return this.assignments.some(
       (a) =>
         a.teacherId === teacherId &&
         a.courseSubjectId === courseSubjectId &&
-        a.bookletTypeId === bookletTypeId,
+        a.bookletTypeId === bookletTypeId &&
+        a.id !== excludeAssignmentId,
     );
+  }
+  async findAssignmentById(_institutionId: string, assignmentId: string) {
+    return this.assignments.find((a) => a.id === assignmentId) ?? null;
+  }
+  async updateAssignmentType(
+    _institutionId: string,
+    assignmentId: string,
+    bookletTypeId: string | null,
+  ) {
+    const a = this.assignments.find((x) => x.id === assignmentId);
+    if (!a) throw new Error("no encontrado");
+    a.bookletTypeId = bookletTypeId;
+  }
+  async deleteAssignment(institutionId: string, assignmentId: string) {
+    if (institutionId !== "i1") return;
+    this.assignments = this.assignments.filter((a) => a.id !== assignmentId);
   }
   async listAssignments(institutionId: string, teacherId?: string) {
     return this.assignments.filter((a) => !teacherId || a.teacherId === teacherId);

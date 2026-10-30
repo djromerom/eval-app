@@ -18,6 +18,7 @@ import type {
   CreateBookletTypeData,
   UpdateBookletTypeData,
 } from "../domain/booklet-type";
+import { normalizeBookletTypeName } from "../domain/booklet-type";
 
 type Row = {
   id: string;
@@ -64,16 +65,18 @@ export class PrismaBookletTypeRepository implements BookletTypeRepository {
   }
 
   async findByName(institutionId: string, name: string): Promise<BookletType[]> {
-    const trimmed = name.trim();
-    if (!trimmed) return [];
-    // Match case-insensitive: la BD guarda "Estándar", el Excel puede traer
-    // "ESTANDAR". Postgres LIKE con ILIKE no es portable; usamos `mode:
-    // "insensitive"` de Prisma.
+    const key = normalizeBookletTypeName(name);
+    if (!key) return [];
+    // Match NORMALIZADO: la BD guarda "Estándar", el Excel puede traer
+    // "ESTANDAR" o "Estandar". Postgres no normaliza tildes por defecto
+    // (`mode: "insensitive"` solo resuelve mayúsculas), así que se
+    // compara en memoria. La tabla es chica (decenas de filas por
+    // institución), no justifica un índice de expresión.
     const rows = await prisma.bookletType.findMany({
-      where: { institutionId, name: { equals: trimmed, mode: "insensitive" } },
+      where: { institutionId },
       orderBy: [{ periodId: "asc" }, { order: "asc" }],
     });
-    return rows.map(toBookletType);
+    return rows.filter((r) => normalizeBookletTypeName(r.name) === key).map(toBookletType);
   }
 
   async findByNameAndPeriod(
@@ -81,17 +84,13 @@ export class PrismaBookletTypeRepository implements BookletTypeRepository {
     name: string,
     periodId: string,
   ): Promise<BookletType[]> {
-    const trimmed = name.trim();
-    if (!trimmed || !periodId) return [];
+    const key = normalizeBookletTypeName(name);
+    if (!key || !periodId) return [];
     const rows = await prisma.bookletType.findMany({
-      where: {
-        institutionId,
-        periodId,
-        name: { equals: trimmed, mode: "insensitive" },
-      },
+      where: { institutionId, periodId },
       orderBy: [{ order: "asc" }],
     });
-    return rows.map(toBookletType);
+    return rows.filter((r) => normalizeBookletTypeName(r.name) === key).map(toBookletType);
   }
 
   async create(institutionId: string, data: CreateBookletTypeData): Promise<BookletType> {

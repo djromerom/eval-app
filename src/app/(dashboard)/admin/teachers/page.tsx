@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { Pencil } from "lucide-react";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { EntityForm } from "@/components/admin/entity-form";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { TEACHER_ID_TYPES, isProfileComplete } from "@/modules/teachers/domain/teacher";
 import {
   makeListTeacherAssignments,
@@ -19,6 +23,7 @@ import { CompleteProfileForm } from "./complete-profile-form";
 import { ResendInviteButton } from "./resend-invite-button";
 import { TeachersPageChrome } from "./_components/teachers-page-chrome";
 import { TeacherAssignmentForm } from "./_components/teacher-assignment-form";
+import { TeacherAssignmentsDrawer } from "./_components/teacher-assignments-drawer";
 
 export const metadata: Metadata = { title: "Docentes" };
 
@@ -58,6 +63,19 @@ export default async function TeachersPage() {
   for (const a of assignments) {
     byTeacher.set(a.teacherId, [...(byTeacher.get(a.teacherId) ?? []), a]);
   }
+
+  // Tipos de cuadernillo con su Prueba y año: los usa el form de alta y
+  // también el drawer de edición (que ofrece solo los del año del grado).
+  const tiposParaForm = bookletTypes.map((bt) => {
+    const period = periodById.get(bt.periodId);
+    return {
+      id: bt.id,
+      name: bt.name,
+      periodName: period?.name ?? "",
+      academicYearId: period?.academicYearId ?? "",
+      year: period ? (yearById.get(period.academicYearId) ?? 0) : 0,
+    };
+  });
 
   return (
     <>
@@ -118,16 +136,7 @@ export default async function TeachersPage() {
               courseId: cs.courseId,
               subjectName: cs.subjectName,
             }))}
-            bookletTypes={bookletTypes.map((bt) => {
-              const period = periodById.get(bt.periodId);
-              return {
-                id: bt.id,
-                name: bt.name,
-                periodName: period?.name ?? "",
-                academicYearId: period?.academicYearId ?? "",
-                year: period ? (yearById.get(period.academicYearId) ?? 0) : 0,
-              };
-            })}
+            bookletTypes={tiposParaForm}
             disabledReason={
               teachers.length === 0
                 ? "Registra primero un docente."
@@ -197,6 +206,13 @@ export default async function TeachersPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col items-start gap-2">
+                          <Link
+                            href={`?asignaciones=${t.id}`}
+                            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Asignaciones
+                          </Link>
                           {!complete ? <CompleteProfileForm teacherId={t.id} /> : null}
                           {!t.isActive ? <ResendInviteButton teacherId={t.id} /> : null}
                           {complete && t.isActive ? (
@@ -212,6 +228,23 @@ export default async function TeachersPage() {
           </table>
         </section>
       </div>
+
+      <TeacherAssignmentsDrawer
+        teachers={teachers.map((t) => ({ id: t.id, name: t.name }))}
+        assignments={assignments}
+        bookletTypes={tiposParaForm}
+        courses={courses.map((c) => ({
+          id: c.id,
+          name: c.name,
+          academicYearId: c.academicYearId,
+          year: yearById.get(c.academicYearId) ?? 0,
+        }))}
+        courseSubjects={courseSubjects.map((cs) => ({
+          id: cs.id,
+          courseId: cs.courseId,
+          subjectName: cs.subjectName,
+        }))}
+      />
     </>
   );
 }

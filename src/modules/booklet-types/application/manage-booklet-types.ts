@@ -33,6 +33,7 @@ import type {
   UpdateBookletTypeData,
 } from "../domain/booklet-type";
 import { isValidBookletTypeName } from "../domain/booklet-type";
+import { canonicalBookletTypeName, normalizeBookletTypeName } from "../domain/booklet-type";
 
 // ---------------------------------------------------------------------------
 // Error de Prisma
@@ -86,18 +87,31 @@ export class CreateBookletType implements UseCase<CreateBookletTypeInput, Bookle
 
     // Pre-check de unicidad dentro de la Prueba. Si choca, devolvemos
     // 409 (no 500) sin esperar a Postgres.
+    //
+    // La comparación es NORMALIZADA ("estandar" = "Estándar"): el unique de
+    // Postgres es `[institutionId, periodId, name]` case-sensitive, así que
+    // sin esta comprobación se crearían dos filas gemelas en la misma
+    // prueba y el catálogo quedaría fragmentado.
     const existing = await this.bookletTypes.listByPeriod(actor.institutionId, periodId);
-    if (existing.some((b) => b.name.trim() === data.name.trim())) {
+    const requestedKey = normalizeBookletTypeName(data.name);
+    const conflict = existing.find((b) => normalizeBookletTypeName(b.name) === requestedKey);
+    if (conflict) {
       return fail(
         new ConflictError(
-          `Ya existe un tipo de cuadernillo con el nombre "${data.name}" en esta prueba.`,
+          `Ya existe un tipo de cuadernillo con el nombre "${conflict.name}" en esta prueba.`,
         ),
       );
     }
 
+    // Grafía canónica: si el nombre ya existe en la institución escrito de
+    // otra forma ("Estandar" vs "Estándar"), se guarda la forma canónica
+    // para que el catálogo no se fragmente por la ortografía.
+    const institutionTypes = await this.bookletTypes.listByInstitution(actor.institutionId);
+    const canonicalName = canonicalBookletTypeName(data.name, institutionTypes);
+
     const createData: CreateBookletTypeData = {
       periodId,
-      name: data.name.trim(),
+      name: canonicalName,
       description: data.description?.trim() || undefined,
       order: data.order,
     };
@@ -109,7 +123,7 @@ export class CreateBookletType implements UseCase<CreateBookletTypeInput, Bookle
       if (isPrismaUniqueConstraintError(e)) {
         return fail(
           new ConflictError(
-            `Ya existe un tipo de cuadernillo con el nombre "${data.name}" en esta prueba.`,
+            `Ya existe un tipo de cuadernillo con el nombre "${canonicalName}" en esta prueba.`,
           ),
         );
       }

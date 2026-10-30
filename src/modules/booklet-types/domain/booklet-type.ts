@@ -73,3 +73,99 @@ export function isValidBookletTypeName(name: string): boolean {
   const trimmed = name.trim();
   return trimmed.length >= 1 && trimmed.length <= 50;
 }
+
+// ---------------------------------------------------------------------------
+// Vocabulario de nombres (anti-deriva ortográfica)
+// ---------------------------------------------------------------------------
+
+/**
+ * Normaliza un nombre de tipo SOLO para comparar, nunca para guardar:
+ * minúsculas, sin tildes y sin espacios redundantes.
+ *
+ * "Estándar", "ESTANDAR" y "estandar" colapsan al mismo valor, de modo que
+ * el catálogo no se fragmenta según cómo se escribió el nombre. La `ñ` se
+ * convierte a `n` a mano porque al descomponer Unicode la tilde de la ñ se
+ * perdería.
+ */
+export function normalizeBookletTypeName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/ñ/g, "n")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+/** ¿La palabra lleva tilde u otro acento? ("Estándar" sí, "Estandar" no). */
+function hasDiacritics(value: string): boolean {
+  return /[\u0300-\u036f]/.test(value.normalize("NFD"));
+}
+
+/** Un nombre del catálogo institucional, con su grafía canónica. */
+export interface BookletTypeVocabularyEntry {
+  /** Grafía canónica: la que debe usarse al crear un tipo nuevo. */
+  name: string;
+  /** Cuántos tipos de la institución comparten este nombre (por escrito). */
+  count: number;
+}
+
+/**
+ * Vocabulario institucional de nombres de tipo: agrupa por nombre
+ * normalizado y devuelve UNA entrada por concepto, con la grafía canónica.
+ *
+ * La grafía canónica se elige por este orden:
+ * 1. La escrita CORRECTAMENTE (con tilde): "Estándar" antes que
+ *    "Estandar". El criterio va primero que el uso a propósito — si no, la
+ *    grafía equivocada se perpetúa por estar repetida en más pruebas.
+ * 2. La más usada.
+ * 3. La más corta.
+ * 4. La alfabética.
+ *
+ * Determinista para que la UI y el servidor coincidan siempre.
+ */
+export function buildBookletTypeVocabulary(types: BookletType[]): BookletTypeVocabularyEntry[] {
+  const groups = new Map<string, Map<string, number>>();
+
+  for (const t of types) {
+    const spelling = t.name.trim();
+    const key = normalizeBookletTypeName(spelling);
+    if (!key) continue;
+    const spellings = groups.get(key) ?? new Map<string, number>();
+    spellings.set(spelling, (spellings.get(spelling) ?? 0) + 1);
+    groups.set(key, spellings);
+  }
+
+  const entries: BookletTypeVocabularyEntry[] = [];
+  for (const spellings of groups.values()) {
+    const ranked = [...spellings.entries()].sort((a, b) => {
+      // Negativo = `a` va primero. La grafía con tilde debe ir por delante.
+      const diacritics = Number(hasDiacritics(b[0])) - Number(hasDiacritics(a[0]));
+      if (diacritics !== 0) return diacritics;
+      if (b[1] !== a[1]) return b[1] - a[1];
+      if (a[0].length !== b[0].length) return a[0].length - b[0].length;
+      return a[0].localeCompare(b[0], "es");
+    });
+    const total = [...spellings.values()].reduce((sum, n) => sum + n, 0);
+    entries.push({ name: ranked[0]![0], count: total });
+  }
+
+  return entries.sort((a, b) => a.name.localeCompare(b.name, "es"));
+}
+
+/**
+ * Devuelve la grafía canónica de `name` dentro del catálogo de la
+ * institución. Si el nombre es nuevo (no existe normalizado), se devuelve
+ * tal cual (recortado).
+ *
+ * Es la defensa de servidor contra la deriva ortográfica: aunque alguien
+ * escriba "Estandar" a mano, se guarda "Estándar".
+ */
+export function canonicalBookletTypeName(name: string, types: BookletType[]): string {
+  const key = normalizeBookletTypeName(name);
+  if (!key) return name.trim();
+  const match = buildBookletTypeVocabulary(types).find(
+    (entry) => normalizeBookletTypeName(entry.name) === key,
+  );
+  return match?.name ?? name.trim();
+}

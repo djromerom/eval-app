@@ -35,6 +35,26 @@ export const CONSULTAS: readonly ConsultaConfig[] = [
     roles: ["ECU_MASTER", "SUPER_ADMIN"],
   },
   {
+    id: "formuladores",
+    title: "Docentes formuladores por cuadernillo",
+    description:
+      "Una fila por docente asignado a un cuadernillo (con sus datos de contacto) y, además, las formulaciones que quedaron sin docente asignado. Indica el grado, la asignatura, la prueba y el estado de cobertura del cuadernillo.",
+    columns: [
+      "Cuadernillo",
+      "Grado",
+      "Asignatura",
+      "Formulador",
+      "Tipo doc.",
+      "ID",
+      "Email",
+      "Celular",
+      "Prueba",
+      "Formulación",
+      "Estado",
+    ],
+    roles: ["ECU_MASTER", "SUPER_ADMIN"],
+  },
+  {
     id: "calificaciones",
     title: "Calificaciones por grado y grupo",
     description:

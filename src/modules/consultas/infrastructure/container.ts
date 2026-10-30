@@ -4,19 +4,26 @@
  * configurado con sus dependencias Prisma.
  */
 import { ListFormulaciones } from "../application/list-formulaciones";
+import { ListFormuladores } from "../application/list-formuladores";
 import { ListCalificaciones } from "../application/list-calificaciones";
 import { GetInformeGrupo } from "../application/informe-grupo";
 import { PrismaFormulacionesReader } from "./formulaciones-fetcher";
+import { PrismaFormuladoresReader } from "./formuladores-fetcher";
 import { PrismaCalificacionesReader } from "./calificaciones-fetcher";
 import { PrismaInformeGrupoReader } from "./informe-grupo-fetcher";
 import { PrismaLeaderAssignmentRepository } from "@/modules/leader-assignments/infrastructure/prisma-leader-assignment-repository";
 
 /** Singletons (una sola instancia por proceso, sin estado entre requests). */
 const reader = new PrismaFormulacionesReader();
+const formuladoresReader = new PrismaFormuladoresReader();
 const calificacionesReader = new PrismaCalificacionesReader();
 const informeGrupoReader = new PrismaInformeGrupoReader();
 
 export const makeListFormulaciones = () => new ListFormulaciones(reader);
+
+/** Docentes formuladores por cuadernillo: asignaciones + formulaciones sin
+ *  docente asignado. */
+export const makeListFormuladores = () => new ListFormuladores(formuladoresReader);
 
 /** El alcance por grado del ECU_LIDER sale del repo de asignaciones de
  *  líderes, que ya expone `listAssignedCourseIds`. Se reutiliza esa clase en

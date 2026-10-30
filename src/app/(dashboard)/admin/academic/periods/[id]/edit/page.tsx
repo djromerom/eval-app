@@ -12,6 +12,8 @@ import {
   makeListSubjects,
 } from "@/modules/academic/infrastructure/container";
 import { makeListBookletTypesByPeriod } from "@/modules/booklet-types/infrastructure/container";
+import { makeListBookletTypesByInstitution } from "@/modules/booklet-types/infrastructure/container";
+import { buildBookletTypeVocabulary } from "@/modules/booklet-types/domain/booklet-type";
 import { makeListEvaluationRulesByPeriod } from "@/modules/evaluation-rules/infrastructure/container";
 import { BookletTypesManager } from "./booklet-types-manager";
 import { EvaluationRulesManager } from "./evaluation-rules-manager";
@@ -52,6 +54,7 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
     yearsRes,
     allPeriodsRes,
     bookletTypesRes,
+    institutionBookletTypesRes,
     rulesRes,
     coursesRes,
     subjectsRes,
@@ -60,6 +63,7 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
     makeListAcademicYears().execute({ actor }),
     makeListPeriods().execute({ actor }),
     makeListBookletTypesByPeriod().execute({ actor, periodId: id }),
+    makeListBookletTypesByInstitution().execute({ actor }),
     makeListEvaluationRulesByPeriod().execute({ actor, periodId: id }),
     makeListCourses().execute({ actor, academicYearId: period.academicYearId }),
     makeListSubjects().execute({ actor }),
@@ -84,6 +88,12 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
         name: t.name,
         description: t.description,
       }))
+    : [];
+  // Vocabulario institucional de nombres de tipo: el admin ELIGE uno de
+  // estos en lugar de escribirlo a mano, así el catálogo no se fragmenta
+  // por la ortografía ("Estandar" vs "Estándar").
+  const availableNames = institutionBookletTypesRes.ok
+    ? buildBookletTypeVocabulary(institutionBookletTypesRes.value).map((e) => e.name)
     : [];
   // Versión sin `description` para EvaluationRulesManager (solo necesita
   // id + name para el label de cada regla).
@@ -170,7 +180,11 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
             }}
             siblingNames={siblingNames}
           />
-          <BookletTypesManager periodId={period.id} initialTypes={bookletTypes} />
+          <BookletTypesManager
+            periodId={period.id}
+            initialTypes={bookletTypes}
+            availableNames={availableNames}
+          />
           <EvaluationRulesManager
             periodId={period.id}
             initialRules={rules}
