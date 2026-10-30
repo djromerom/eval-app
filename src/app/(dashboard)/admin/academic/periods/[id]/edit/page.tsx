@@ -134,10 +134,11 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
       }))
     : [];
 
-  // Reglas de opciones de respuesta por (Prueba × Asignatura).
+  // Reglas de opciones de respuesta por (Prueba × Grado × Asignatura).
   const optionRules = optionRulesRes.ok
     ? optionRulesRes.value.map((r) => ({
         id: r.id,
+        courseId: r.courseId,
         subjectId: r.subjectId,
         minOptions: r.minOptions,
         maxOptions: r.maxOptions,
@@ -235,7 +236,13 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
             bookletTypes={bookletTypesCatalog}
             sourcePeriods={sourcePeriods}
           />
-          <OptionRulesManager periodId={period.id} initialRules={optionRules} subjects={subjects} />
+          <OptionRulesManager
+            periodId={period.id}
+            initialRules={optionRules}
+            courses={courses}
+            subjects={subjects}
+            subjectsByCourse={subjectsByCourse}
+          />
         </div>
       </aside>
     </>
