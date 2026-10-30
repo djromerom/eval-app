@@ -13,6 +13,11 @@ import type {
   CreateBookletTypeData,
   UpdateBookletTypeData,
 } from "@/modules/booklet-types/domain/booklet-type";
+import {
+  buildBookletTypeVocabulary,
+  canonicalBookletTypeName,
+  normalizeBookletTypeName,
+} from "@/modules/booklet-types/domain/booklet-type";
 import type { CreatePeriodData, Period, PeriodRepository } from "@/modules/academic/domain/types";
 import type { AuthenticatedUser } from "@/shared/application/authenticated-user";
 
@@ -69,20 +74,21 @@ class InMemoryBookletTypes implements BookletTypeRepository {
   }
 
   async findByName(institutionId: string, name: string) {
-    const trimmed = name.trim().toLowerCase();
+    // Match normalizado (como el repo real): sin tildes ni mayúsculas.
+    const key = normalizeBookletTypeName(name);
     return Array.from(this.byId.values())
-      .filter((b) => b.institutionId === institutionId && b.name.trim().toLowerCase() === trimmed)
+      .filter((b) => b.institutionId === institutionId && normalizeBookletTypeName(b.name) === key)
       .map(({ createdAt: _c, ...rest }) => rest);
   }
 
   async findByNameAndPeriod(institutionId: string, name: string, periodId: string) {
-    const trimmed = name.trim().toLowerCase();
+    const key = normalizeBookletTypeName(name);
     return Array.from(this.byId.values())
       .filter(
         (b) =>
           b.institutionId === institutionId &&
           b.periodId === periodId &&
-          b.name.trim().toLowerCase() === trimmed,
+          normalizeBookletTypeName(b.name) === key,
       )
       .sort((a, b) => a.order - b.order || a.createdAt - b.createdAt)
       .map(({ createdAt: _c, ...rest }) => rest);
@@ -284,6 +290,54 @@ describe("CreateBookletType", () => {
     if (!dup.ok) expect(dup.error.code).toBe("CONFLICT");
   });
 
+  it("rechaza un nombre que solo difiere en tildes o mayúsculas", async () => {
+    // El unique de Postgres es case-sensitive, así que sin la comparación
+    // normalizada se crearían dos filas gemelas en la misma prueba.
+    await uc.execute({ actor: admin, periodId, data: { name: "Estándar" } });
+    const r = await uc.execute({ actor: admin, periodId, data: { name: "estandar" } });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe("CONFLICT");
+      // El mensaje nombra la fila que YA existe, no la que se escribió.
+      expect(r.error.message).toContain("Estándar");
+    }
+    const tipos = await bookletTypes.listByPeriod("inst1", periodId);
+    expect(tipos).toHaveLength(1);
+  });
+
+  it("rechaza el duplicado escrito sin tilde cuando la fila existente lleva tilde", async () => {
+    await uc.execute({ actor: admin, periodId, data: { name: "Estándar" } });
+    const r = await uc.execute({ actor: admin, periodId, data: { name: "Estandar" } });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("CONFLICT");
+    const tipos = await bookletTypes.listByPeriod("inst1", periodId);
+    expect(tipos).toHaveLength(1);
+  });
+
+  it("guarda la grafía canónica si el nombre ya existe en otra Prueba", async () => {
+    periods.items.push({
+      id: "p2",
+      institutionId: "inst1",
+      academicYearId: "ay1",
+      name: "II Periodo",
+      order: 2,
+      startDate: new Date(),
+      endDate: new Date(),
+      isCurrent: false,
+    });
+    await bookletTypes.create("inst1", { periodId: "p2", name: "Estándar" });
+
+    const r = await uc.execute({ actor: admin, periodId, data: { name: "Estandar" } });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.name).toBe("Estándar");
+  });
+
+  it("recorta el nombre antes de guardarlo", async () => {
+    const r = await uc.execute({ actor: admin, periodId, data: { name: "  Especial  " } });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.name).toBe("Especial");
+  });
+
   it("atrapa P2002 desde el repo y lo convierte a CONFLICT", async () => {
     // Simula carrera entre dos requests concurrentes: pre-check pasa,
     // pero el repo lanza P2002 al persistir.
@@ -461,5 +515,130 @@ describe("DeleteBookletType", () => {
     const r = await uc.execute({ actor: teacher, id: "bt-1" });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe("FORBIDDEN");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Vocabulario de nombres (anti-deriva ortográfica)
+// ---------------------------------------------------------------------------
+
+describe("normalizeBookletTypeName", () => {
+  it("quita tildes, mayúsculas y espacios sobrantes", () => {
+    expect(normalizeBookletTypeName("Estándar")).toBe("estandar");
+    expect(normalizeBookletTypeName("ESTANDAR")).toBe("estandar");
+    expect(normalizeBookletTypeName("  Estandar  ")).toBe("estandar");
+    expect(normalizeBookletTypeName("Estándar  1")).toBe("estandar 1");
+  });
+
+  it("convierte la ñ en n (al descomponer Unicode perdería la tilde)", () => {
+    expect(normalizeBookletTypeName("Español")).toBe("espanol");
+    expect(normalizeBookletTypeName("Espanol")).toBe("espanol");
+  });
+
+  it("devuelve vacío para nombres en blanco", () => {
+    expect(normalizeBookletTypeName("   ")).toBe("");
+  });
+});
+
+describe("buildBookletTypeVocabulary", () => {
+  const tipo = (name: string, id: string, periodId = "p1"): BookletType => ({
+    id,
+    institutionId: "inst1",
+    periodId,
+    name,
+    description: null,
+    order: 0,
+  });
+
+  it("agrupa las grafías equivalentes en una sola entrada", () => {
+    const vocab = buildBookletTypeVocabulary([
+      tipo("Estándar", "b1"),
+      tipo("Estandar", "b2", "p2"),
+      tipo("Especial", "b3"),
+    ]);
+    expect(vocab).toHaveLength(2);
+    expect(vocab.map((v) => v.name)).toContain("Especial");
+    const estandar = vocab.find((v) => normalizeBookletTypeName(v.name) === "estandar");
+    expect(estandar?.count).toBe(2);
+  });
+
+  it("elige la grafía con tilde cuando el uso es el mismo", () => {
+    const vocab = buildBookletTypeVocabulary([tipo("Estandar", "b1"), tipo("Estándar", "b2")]);
+    expect(vocab).toHaveLength(1);
+    expect(vocab[0]?.name).toBe("Estándar");
+  });
+
+  it("elige la grafía correcta aunque se use menos", () => {
+    // "Estandar" puede estar repetida en más pruebas que "Estándar";
+    // la ortografía correcta debe ganar para no perpetuar la errata.
+    const vocab = buildBookletTypeVocabulary([
+      tipo("Estandar", "b1"),
+      tipo("Estandar", "b2"),
+      tipo("Estándar", "b3"),
+    ]);
+    expect(vocab).toHaveLength(1);
+    expect(vocab[0]?.name).toBe("Estándar");
+    expect(vocab[0]?.count).toBe(3);
+  });
+
+  it("elige la grafía con tilde aunque la otra se use más (otro caso)", () => {
+    const vocab = buildBookletTypeVocabulary([
+      tipo("Recuperacion", "b1"),
+      tipo("Recuperacion", "b2"),
+      tipo("Recuperación", "b3"),
+    ]);
+    expect(vocab[0]?.name).toBe("Recuperación");
+    expect(vocab[0]?.count).toBe(3);
+  });
+
+  it("elige la más usada cuando ninguna tiene tilde ni acentos", () => {
+    const vocab = buildBookletTypeVocabulary([
+      tipo("Opcional", "b1"),
+      tipo("Opcional", "b2"),
+      tipo("opcional", "b3"),
+    ]);
+    expect(vocab).toHaveLength(1);
+    expect(vocab[0]?.name).toBe("Opcional");
+    expect(vocab[0]?.count).toBe(3);
+  });
+
+  it("ordena alfabéticamente", () => {
+    const vocab = buildBookletTypeVocabulary([
+      tipo("Recuperación", "b1"),
+      tipo("Estándar", "b2"),
+      tipo("Especial", "b3"),
+    ]);
+    expect(vocab.map((v) => v.name)).toEqual(["Especial", "Estándar", "Recuperación"]);
+  });
+
+  it("ignora nombres en blanco", () => {
+    expect(buildBookletTypeVocabulary([tipo("   ", "b1")])).toHaveLength(0);
+  });
+});
+
+describe("canonicalBookletTypeName", () => {
+  const tipo = (name: string, id: string): BookletType => ({
+    id,
+    institutionId: "inst1",
+    periodId: "p1",
+    name,
+    description: null,
+    order: 0,
+  });
+
+  it("devuelve la grafía del catálogo cuando el nombre ya existe", () => {
+    const types = [tipo("Estándar", "b1")];
+    expect(canonicalBookletTypeName("estandar", types)).toBe("Estándar");
+    expect(canonicalBookletTypeName("Estandar", types)).toBe("Estándar");
+    expect(canonicalBookletTypeName("  ESTÁNDAR ", types)).toBe("Estándar");
+  });
+
+  it("devuelve el nombre recortado cuando es nuevo", () => {
+    const types = [tipo("Estándar", "b1")];
+    expect(canonicalBookletTypeName("  Recuperación  ", types)).toBe("Recuperación");
+  });
+
+  it("devuelve vacío para nombres en blanco", () => {
+    expect(canonicalBookletTypeName("   ", [])).toBe("");
   });
 });
