@@ -11,7 +11,9 @@ import {
   makeCompleteTeacherProfile,
   makeCreateTeacher,
   makeImportTeachers,
+  makeRemoveTeacherAssignment,
   makeResendTeacherInvitation,
+  makeUpdateTeacherAssignment,
 } from "@/modules/teachers/infrastructure/container";
 
 const PATH = "/admin/teachers";
@@ -101,8 +103,72 @@ export async function assignTeacherAction(
   return { success: true };
 }
 
-// ============= Import masivo (XLSX/CSV) =============
+/** Resultado de editar el tipo de cuadernillo de una asignación. */
+export interface UpdateAssignmentResult {
+  ok: boolean;
+  error?: string;
+}
 
+/**
+ * Cambia el tipo de cuadernillo de una asignación docente ↔ asignatura-grado.
+ *
+ * Es una action suelta (no `useActionState`) porque la consume el drawer
+ * derecho de la fila del docente: cada fila guarda su propio estado y solo
+ * necesita el ok/error de vuelta.
+ */
+export async function updateTeacherAssignmentAction(
+  assignmentId: string,
+  bookletTypeId: string | null,
+): Promise<UpdateAssignmentResult> {
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  const result = await makeUpdateTeacherAssignment().execute({
+    actor,
+    assignmentId,
+    bookletTypeId,
+  });
+  if (!result.ok) return { ok: false, error: result.error.message };
+  revalidatePath(PATH);
+  return { ok: true };
+}
+
+/**
+ * Agrega una asignación docente ↔ asignatura-grado desde el drawer de la
+ * fila del docente.
+ *
+ * Reusa `AssignTeacher` (mismas validaciones que el form de alta de la
+ * página): el drawer solo cambia el "dónde" se hace, no las reglas.
+ */
+export async function addTeacherAssignmentAction(
+  teacherId: string,
+  courseId: string,
+  courseSubjectId: string,
+  bookletTypeId: string | null,
+): Promise<UpdateAssignmentResult> {
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  const result = await makeAssignTeacher().execute({
+    actor,
+    teacherId,
+    courseId,
+    courseSubjectId,
+    bookletTypeId,
+  });
+  if (!result.ok) return { ok: false, error: result.error.message };
+  revalidatePath(PATH);
+  return { ok: true };
+}
+
+/** Elimina una asignación docente ↔ asignatura-grado desde el drawer. */
+export async function removeTeacherAssignmentAction(
+  assignmentId: string,
+): Promise<UpdateAssignmentResult> {
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  const result = await makeRemoveTeacherAssignment().execute({ actor, assignmentId });
+  if (!result.ok) return { ok: false, error: result.error.message };
+  revalidatePath(PATH);
+  return { ok: true };
+}
+
+// ============= Import masivo (XLSX/CSV) =============
 export interface TeachersImportState {
   error?: string;
   done?: boolean;

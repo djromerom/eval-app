@@ -15,6 +15,8 @@ import {
   ListTeacherAssignments,
   ListTeachers,
   ResendTeacherInvitation,
+  RemoveTeacherAssignment,
+  UpdateTeacherAssignment,
 } from "../application/teachers";
 import { PrismaTeacherRepository } from "./prisma-teacher-repository";
 
@@ -37,3 +39,8 @@ export const makeListTeachers = () => new ListTeachers(teachers);
 export const makeAssignTeacher = () =>
   new AssignTeacher(teachers, courseSubjects, bookletTypes, courses, periods);
 export const makeListTeacherAssignments = () => new ListTeacherAssignments(teachers);
+/** Edición del tipo de cuadernillo de una asignación (drawer de Docentes). */
+export const makeUpdateTeacherAssignment = () =>
+  new UpdateTeacherAssignment(teachers, courseSubjects, bookletTypes, courses, periods);
+/** Eliminación de una asignación docente ↔ asignatura-grado (drawer de Docentes). */
+export const makeRemoveTeacherAssignment = () => new RemoveTeacherAssignment(teachers);

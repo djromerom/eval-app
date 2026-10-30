@@ -1,4 +1,4 @@
-import { RoleType } from "@prisma/client";
+import { Prisma, RoleType } from "@prisma/client";
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import type {
   CreateTeacherData,
@@ -34,6 +34,36 @@ function toTeacher(r: TeacherWithUser): Teacher {
 const withUser = {
   user: { select: { name: true, email: true, institutionId: true, isActive: true } },
 } as const;
+
+/** Relaciones que trae una asignación: grado (con su año académico),
+ *  asignatura y el tipo de cuadernillo con su Prueba. */
+const assignmentInclude = {
+  courseSubject: {
+    include: {
+      course: { select: { name: true, academicYearId: true } },
+      subject: { select: { name: true } },
+    },
+  },
+  bookletType: { include: { period: { select: { name: true } } } },
+} as const;
+
+type AssignmentWithRelations = Prisma.TeacherSubjectAssignmentGetPayload<{
+  include: typeof assignmentInclude;
+}>;
+
+function toTeacherAssignment(r: AssignmentWithRelations): TeacherAssignment {
+  return {
+    id: r.id,
+    teacherId: r.teacherId,
+    courseSubjectId: r.courseSubjectId,
+    courseName: r.courseSubject.course.name,
+    subjectName: r.courseSubject.subject.name,
+    bookletTypeId: r.bookletTypeId,
+    bookletTypeName: r.bookletType?.name ?? null,
+    periodName: r.bookletType?.period.name ?? null,
+    academicYearId: r.courseSubject.course.academicYearId,
+  };
+}
 
 export class PrismaTeacherRepository implements TeacherRepository {
   async findAll(institutionId: string): Promise<Teacher[]> {
@@ -144,15 +174,64 @@ export class PrismaTeacherRepository implements TeacherRepository {
     teacherId: string,
     courseSubjectId: string,
     bookletTypeId: string | null,
+    excludeAssignmentId?: string,
   ): Promise<boolean> {
     // `findFirst` y no `findUnique`: el unique de la tabla incluye
     // `bookletTypeId`, que es NULLABLE, y en Postgres NULL != NULL — un
     // `findUnique` con null en la clave no es confiable. Además, la
     // asignación "para cualquier tipo" (null) convive con las específicas.
     const row = await prisma.teacherSubjectAssignment.findFirst({
-      where: { teacherId, courseSubjectId, bookletTypeId },
+      where: {
+        teacherId,
+        courseSubjectId,
+        bookletTypeId,
+        // Al editar, la asignación en curso no cuenta como duplicado.
+        ...(excludeAssignmentId ? { id: { not: excludeAssignmentId } } : {}),
+      },
     });
     return row !== null;
+  }
+
+  async findAssignmentById(
+    institutionId: string,
+    assignmentId: string,
+  ): Promise<TeacherAssignment | null> {
+    const row = await prisma.teacherSubjectAssignment.findFirst({
+      where: { id: assignmentId, teacher: { user: { institutionId } } },
+      include: assignmentInclude,
+    });
+    return row ? toTeacherAssignment(row) : null;
+  }
+
+  async updateAssignmentType(
+    institutionId: string,
+    assignmentId: string,
+    bookletTypeId: string | null,
+  ): Promise<void> {
+    // El scoping va en el propio UPDATE (no solo en la lectura previa): si la
+    // asignación no pertenece a la institución del actor, no se toca nada.
+    const { count } = await prisma.teacherSubjectAssignment.updateMany({
+      where: { id: assignmentId, teacher: { user: { institutionId } } },
+      data: { bookletTypeId },
+    });
+    if (count === 0) {
+      throw new Error(
+        `Asignación ${assignmentId} no encontrada en la institución ${institutionId}`,
+      );
+    }
+  }
+
+  async deleteAssignment(institutionId: string, assignmentId: string): Promise<void> {
+    // Scoping en el propio DELETE: si la asignación no es de la institución
+    // del actor, no se borra nada.
+    const { count } = await prisma.teacherSubjectAssignment.deleteMany({
+      where: { id: assignmentId, teacher: { user: { institutionId } } },
+    });
+    if (count === 0) {
+      throw new Error(
+        `Asignación ${assignmentId} no encontrada en la institución ${institutionId}`,
+      );
+    }
   }
 
   async listAssignments(institutionId: string, teacherId?: string): Promise<TeacherAssignment[]> {
@@ -161,26 +240,12 @@ export class PrismaTeacherRepository implements TeacherRepository {
         teacher: { user: { institutionId } },
         ...(teacherId ? { teacherId } : {}),
       },
-      include: {
-        courseSubject: {
-          include: { course: { select: { name: true } }, subject: { select: { name: true } } },
-        },
-        bookletType: { include: { period: { select: { name: true } } } },
-      },
+      include: assignmentInclude,
       orderBy: [
         { courseSubject: { course: { name: "asc" } } },
         { courseSubject: { subject: { name: "asc" } } },
       ],
     });
-    return rows.map((r) => ({
-      id: r.id,
-      teacherId: r.teacherId,
-      courseSubjectId: r.courseSubjectId,
-      courseName: r.courseSubject.course.name,
-      subjectName: r.courseSubject.subject.name,
-      bookletTypeId: r.bookletTypeId,
-      bookletTypeName: r.bookletType?.name ?? null,
-      periodName: r.bookletType?.period.name ?? null,
-    }));
+    return rows.map(toTeacherAssignment);
   }
 }

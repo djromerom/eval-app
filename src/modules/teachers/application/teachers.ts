@@ -508,3 +508,134 @@ export class ListTeacherAssignments implements UseCase<
     return ok(await this.teachers.listAssignments(actor.institutionId, teacher.id));
   }
 }
+
+export interface RemoveTeacherAssignmentInput {
+  actor: AuthenticatedUser;
+  /** Id de la asignación a eliminar. */
+  assignmentId: string;
+}
+
+/**
+ * Elimina una asignación docente ↔ asignatura-grado.
+ *
+ * El borrado es "duro" (no hay borrado lógico en `TeacherSubjectAssignment`):
+ * quitar una asignación significa que el docente deja de dictar esa
+ * asignatura-grado, y volver a crearla después es una operación nueva y
+ * explícita.
+ *
+ * La pre-verificación con `findAssignmentById` (acotado a la institución)
+ * garantiza que solo se borran asignaciones de la institución del actor.
+ */
+export class RemoveTeacherAssignment implements UseCase<RemoveTeacherAssignmentInput, void> {
+  constructor(private readonly teachers: TeacherRepository) {}
+
+  async execute({ actor, assignmentId }: RemoveTeacherAssignmentInput): Promise<Result<void>> {
+    const authorized = requireRole(actor, "ECU_MASTER");
+    if (!authorized.ok) return authorized;
+
+    const assignment = await this.teachers.findAssignmentById(actor.institutionId, assignmentId);
+    if (!assignment) {
+      return fail(new ValidationError("La asignación no existe en tu institución."));
+    }
+
+    await this.teachers.deleteAssignment(actor.institutionId, assignment.id);
+    return ok(undefined);
+  }
+}
+
+export interface UpdateTeacherAssignmentInput {
+  actor: AuthenticatedUser;
+  /** Id de la asignación a editar. */
+  assignmentId: string;
+  /** Nuevo tipo de cuadernillo. `null` = la asignación aplica a cualquier
+   *  tipo de cuadernillo de esa asignatura-grado. */
+  bookletTypeId: string | null;
+}
+
+/**
+ * Edita el TIPO DE CUADERNILLO de una asignación docente ↔ asignatura-grado.
+ *
+ * Qué es editable y por qué: desde el sprint de tipos de cuadernillo la
+ * asignación dice "este docente dicta ESTE cuadernillo". El error típico es
+ * dejarla en "cualquier cuadernillo" o apuntando al tipo equivocado, y
+ * corregir eso no debería obligar a borrar y volver a crear la fila.
+ *
+ * Validaciones (las mismas del alta, para que editar no sea una puerta
+ * trasera a estados inválidos):
+ *   - la asignación debe existir en la institución del actor,
+ *   - el tipo debe existir en la institución,
+ *   - el tipo debe colgar de una Prueba del MISMO año académico que el grado,
+ *   - no puede quedar una asignación duplicada (docente + asignatura-grado +
+ *     tipo), excluyendo la que se está editando.
+ */
+export class UpdateTeacherAssignment implements UseCase<UpdateTeacherAssignmentInput, void> {
+  constructor(
+    private readonly teachers: TeacherRepository,
+    private readonly courseSubjects: CourseSubjectRepository,
+    private readonly bookletTypes: BookletTypeRepository,
+    private readonly courses?: CourseRepository,
+    private readonly periods?: PeriodRepository,
+  ) {}
+
+  async execute({
+    actor,
+    assignmentId,
+    bookletTypeId,
+  }: UpdateTeacherAssignmentInput): Promise<Result<void>> {
+    const authorized = requireRole(actor, "ECU_MASTER");
+    if (!authorized.ok) return authorized;
+
+    const assignment = await this.teachers.findAssignmentById(actor.institutionId, assignmentId);
+    if (!assignment) {
+      return fail(new ValidationError("La asignación no existe en tu institución."));
+    }
+
+    if (bookletTypeId) {
+      const bookletType = await this.bookletTypes.findById(actor.institutionId, bookletTypeId);
+      if (!bookletType) {
+        return fail(new ValidationError("El tipo de cuadernillo no existe en tu institución."));
+      }
+
+      // El tipo debe ser de una Prueba del mismo año académico que el grado:
+      // si no, la asignación nunca aplicaría a ninguna formulación de ese
+      // grado.
+      const courseSubject = await this.courseSubjects.findById(
+        actor.institutionId,
+        assignment.courseSubjectId,
+      );
+      if (courseSubject && this.courses && this.periods) {
+        const course = await this.courses.findById(actor.institutionId, courseSubject.courseId);
+        const period = await this.periods.findById(actor.institutionId, bookletType.periodId);
+        if (course && period && period.academicYearId !== course.academicYearId) {
+          return fail(
+            new ValidationError(
+              "El tipo de cuadernillo pertenece a una prueba de otro año académico.",
+            ),
+          );
+        }
+      }
+    }
+
+    // Duplicado: el mismo docente no puede quedar dos veces asignado a la
+    // misma asignatura-grado con el mismo tipo. Se excluye la asignación que
+    // se está editando (si no, guardaría "duplicado" contra sí misma).
+    const duplicado = await this.teachers.isAssigned(
+      assignment.teacherId,
+      assignment.courseSubjectId,
+      bookletTypeId,
+      assignment.id,
+    );
+    if (duplicado) {
+      return fail(
+        new ValidationError(
+          bookletTypeId
+            ? "El docente ya está asignado a esa asignatura-grado con ese tipo de cuadernillo."
+            : "El docente ya está asignado a esa asignatura-grado.",
+        ),
+      );
+    }
+
+    await this.teachers.updateAssignmentType(actor.institutionId, assignment.id, bookletTypeId);
+    return ok(undefined);
+  }
+}

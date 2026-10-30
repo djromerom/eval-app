@@ -59,6 +59,9 @@ export interface TeacherAssignment {
    *  UI pueda mostrar "Estándar (I Periodo)". Null si la asignación no tiene
    *  tipo. */
   periodName: string | null;
+  /** Año académico del grado (`Course.academicYearId`). La UI lo usa para
+   *  ofrecer solo los tipos de cuadernillo de ese año al editar. */
+  academicYearId: string;
 }
 
 export interface TeacherRepository {
@@ -88,12 +91,28 @@ export interface TeacherRepository {
    *  `bookletTypeId = null` = la asignación aplica a cualquier tipo. */
   assign(teacherId: string, courseSubjectId: string, bookletTypeId: string | null): Promise<void>;
   /** ¿El docente ya está asignado a esa asignatura-grado para ese tipo?
-   *  `bookletTypeId = null` busca la asignación "para cualquier tipo". */
+   *  `bookletTypeId = null` busca la asignación "para cualquier tipo".
+   *  `excludeAssignmentId` ignora esa asignación (para no chocar consigo
+   *  misma al EDITAR el tipo). */
   isAssigned(
     teacherId: string,
     courseSubjectId: string,
     bookletTypeId: string | null,
+    excludeAssignmentId?: string,
   ): Promise<boolean>;
+  /** Busca una asignación por id, acotada a la institución. */
+  findAssignmentById(
+    institutionId: string,
+    assignmentId: string,
+  ): Promise<TeacherAssignment | null>;
+  /** Cambia el tipo de cuadernillo de una asignación (`null` = cualquier tipo). */
+  updateAssignmentType(
+    institutionId: string,
+    assignmentId: string,
+    bookletTypeId: string | null,
+  ): Promise<void>;
+  /** Elimina una asignación docente ↔ asignatura-grado. */
+  deleteAssignment(institutionId: string, assignmentId: string): Promise<void>;
   listAssignments(institutionId: string, teacherId?: string): Promise<TeacherAssignment[]>;
 }
 
