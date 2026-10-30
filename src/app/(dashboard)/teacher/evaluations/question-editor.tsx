@@ -54,6 +54,7 @@ export function QuestionEditor({
   questionNumber,
   initial,
   defaultOptions,
+  minOptions,
   maxOptions,
   header,
   children,
@@ -63,6 +64,8 @@ export function QuestionEditor({
   questionNumber: number;
   initial: QuestionInitialValues;
   defaultOptions: number;
+  /** Mínimo de opciones permitido por la regla de (Prueba × Asignatura). */
+  minOptions: number;
   maxOptions: number;
   /** Datos para la cabecera de la card (número, competencia, id). */
   header: QuestionHeaderData;
@@ -93,6 +96,7 @@ export function QuestionEditor({
           sectionId={sectionId}
           initial={initial}
           defaultOptions={defaultOptions}
+          minOptions={minOptions}
           maxOptions={maxOptions}
           onDone={() => setEditing(false)}
         />

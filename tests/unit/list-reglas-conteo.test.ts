@@ -22,6 +22,11 @@ import {
   applyReglasConteoFilters,
   parseReglasConteoFilters,
 } from "@/modules/consultas/domain/queries/reglas-conteo/filters";
+import {
+  sumItemsPorTupla,
+  tupleKey,
+  type FormulacionItems,
+} from "@/modules/consultas/domain/queries/reglas-conteo/items-por-tupla";
 
 const ecuMaster: AuthenticatedUser = {
   userId: "u-master",
@@ -54,7 +59,7 @@ function fakeRow(overrides: Partial<ReglaConteoRow> = {}): ReglaConteoRow {
     subjectName: "Matemáticas",
     bookletTypeName: "Estándar",
     exactQuestions: 25,
-    formuladas: 2,
+    itemsFormulados: 18,
     ...overrides,
   };
 }
@@ -117,6 +122,55 @@ describe("ListReglasConteo", () => {
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.error.name).toBe("ForbiddenError");
+  });
+});
+
+describe("ítems formulados por tupla", () => {
+  function formulacion(overrides: Partial<FormulacionItems> = {}): FormulacionItems {
+    return {
+      periodId: "p-2026-2",
+      courseId: "c-6",
+      subjectId: "s-mat",
+      bookletTypeId: "bt-estandar",
+      totalQuestions: 20,
+      ...overrides,
+    };
+  }
+
+  it("suma los ítems de las formulaciones de la misma tupla", () => {
+    const mapa = sumItemsPorTupla([
+      formulacion({ totalQuestions: 20 }),
+      formulacion({ totalQuestions: 5 }),
+    ]);
+    expect(mapa.get(tupleKey("p-2026-2", "c-6", "s-mat", "bt-estandar"))).toBe(25);
+  });
+
+  it("separa tuplas distintas (prueba, grado, asignatura o tipo)", () => {
+    const mapa = sumItemsPorTupla([
+      formulacion({ totalQuestions: 20 }),
+      formulacion({ periodId: "p-2026-1", totalQuestions: 10 }),
+      formulacion({ courseId: "c-11", totalQuestions: 8 }),
+      formulacion({ subjectId: "s-leng", totalQuestions: 3 }),
+      formulacion({ bookletTypeId: "bt-esp", totalQuestions: 1 }),
+    ]);
+    expect(mapa.size).toBe(5);
+    expect(mapa.get(tupleKey("p-2026-2", "c-6", "s-mat", "bt-estandar"))).toBe(20);
+    expect(mapa.get(tupleKey("p-2026-1", "c-6", "s-mat", "bt-estandar"))).toBe(10);
+    expect(mapa.get(tupleKey("p-2026-2", "c-11", "s-mat", "bt-estandar"))).toBe(8);
+    expect(mapa.get(tupleKey("p-2026-2", "c-6", "s-leng", "bt-estandar"))).toBe(3);
+    expect(mapa.get(tupleKey("p-2026-2", "c-6", "s-mat", "bt-esp"))).toBe(1);
+  });
+
+  it("usa un sentinel interno para las formulaciones sin prueba o sin tipo", () => {
+    const mapa = sumItemsPorTupla([
+      formulacion({ periodId: null, bookletTypeId: null, totalQuestions: 7 }),
+    ]);
+    expect(mapa.get(tupleKey(null, "c-6", "s-mat", null))).toBe(7);
+    expect(mapa.size).toBe(1);
+  });
+
+  it("devuelve un mapa vacío si no hay formulaciones", () => {
+    expect(sumItemsPorTupla([]).size).toBe(0);
   });
 });
 

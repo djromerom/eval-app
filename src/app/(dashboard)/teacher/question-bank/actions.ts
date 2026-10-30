@@ -4,6 +4,12 @@ import { revalidatePath } from "next/cache";
 import { requireAuthenticatedUser } from "@/lib/session";
 import type { AdminFormState } from "@/components/admin/entity-form";
 import type { AnswerKey, SoloLevel } from "@/modules/evaluations/domain/evaluation";
+import {
+  ANSWER_KEYS_ORDER,
+  MAX_OPTIONS,
+  MIN_OPTIONS,
+} from "@/modules/evaluations/domain/evaluation";
+import { DEFAULT_OPTIONS_COUNT } from "@/modules/option-rules/domain/option-rule";
 import type { Difficulty } from "@/modules/question-bank/domain/bank-question";
 import {
   makeCreateBankQuestion,
@@ -25,12 +31,22 @@ export async function createBankQuestionAction(
     .map((t) => t.trim())
     .filter(Boolean);
 
+  // El número de opciones lo manda la regla de la asignatura (el form
+  // envía `optionCount`). Acotamos a [MIN_OPTIONS, MAX_OPTIONS] —los límites
+  // absolutos del dominio—; el rango de la regla (mínimo/máximo por
+  // asignatura) lo valida el use case.
+  const optionCountRaw = Number(str(formData, "optionCount"));
+  const optionCount = Number.isInteger(optionCountRaw)
+    ? Math.min(MAX_OPTIONS, Math.max(MIN_OPTIONS, optionCountRaw))
+    : DEFAULT_OPTIONS_COUNT;
+  const keys = ANSWER_KEYS_ORDER.slice(0, optionCount) as AnswerKey[];
+
   const result = await makeCreateBankQuestion().execute({
     actor,
     data: {
       subjectId: str(formData, "subjectId"),
       text: str(formData, "text"),
-      options: (["A", "B", "C", "D"] as AnswerKey[]).map((key) => ({
+      options: keys.map((key) => ({
         key,
         text: str(formData, `option${key}`),
       })),

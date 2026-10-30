@@ -15,8 +15,8 @@ import { DownloadReglasXlsxButton } from "./download-reglas-xlsx-button";
  *  prueba": PageHeader + filtro + tabla + botón XLSX.
  *
  *  Una fila por REGLA de conteo (Prueba × Grado × Asignatura × Tipo de
- *  cuadernillo), con el número exacto de ítems que exige y cuántas
- *  formulaciones llevan esa regla.
+ *  cuadernillo), con el número exacto de ítems que exige y cuántos ítems se
+ *  han formulado ya para esa regla.
  *
  *  Sin paginación: el módulo consultas asume ≤ 300 filas por institución
  *  (las reglas son aún menos: una por tupla configurada).
@@ -120,10 +120,10 @@ export function ReglasConteoTable({
                     <td className="px-3 py-2">{r.bookletTypeName}</td>
                     <td className="px-3 py-2 tabular-nums">{r.exactQuestions}</td>
                     <td className="px-3 py-2 tabular-nums">
-                      {r.formuladas === 0 ? (
-                        <span aria-label="Sin formulaciones">—</span>
+                      {r.itemsFormulados === 0 ? (
+                        <span aria-label="Sin ítems formulados">—</span>
                       ) : (
-                        r.formuladas
+                        r.itemsFormulados
                       )}
                     </td>
                   </tr>

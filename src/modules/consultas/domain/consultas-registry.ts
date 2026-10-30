@@ -83,9 +83,9 @@ export const CONSULTAS: readonly ConsultaConfig[] = [
   },
   {
     id: "reglas-conteo",
-    title: "Reglas de conteo por prueba",
+    title: "Regla de conteo",
     description:
-      "Una fila por regla de conteo de ítems configurada en la institución: prueba, grado, asignatura y tipo de cuadernillo, con el número exacto de ítems que exige y cuántas formulaciones lleva esa regla.",
+      "Una fila por regla de conteo de ítems configurada en la institución: prueba, grado, asignatura y tipo de cuadernillo, con el número de ítems obligatorios que exige la regla y cuántos ítems se han formulado ya.",
     columns: [
       "Prueba",
       "Año",

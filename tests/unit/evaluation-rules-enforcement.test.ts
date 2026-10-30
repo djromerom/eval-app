@@ -16,6 +16,7 @@ import type {
   EvaluationRuleRepository,
 } from "@/modules/evaluation-rules/domain/evaluation-rule";
 import type { AuthenticatedUser } from "@/shared/application/authenticated-user";
+import type { OptionRuleResolver } from "@/modules/option-rules/domain/option-rule";
 import { ValidationError } from "@/shared/domain/result";
 import type {
   LeaderAssignment,
@@ -25,6 +26,23 @@ import type {
 // ---------------------------------------------------------------------------
 // Actores
 // ---------------------------------------------------------------------------
+
+/**
+ * Resolver permisivo de la regla de opciones de respuesta. Estos tests son
+ * de la regla de CONTEO: la de opciones no debe interferir, así que el
+ * rango es 2..8 (el absoluto del dominio).
+ */
+const permissiveOptionRules: OptionRuleResolver = {
+  async forEvaluation() {
+    return { min: 2, max: 8 };
+  },
+  async forSubject() {
+    return { min: 2, max: 8 };
+  },
+  async forSubjects() {
+    return {};
+  },
+};
 
 const teacher: AuthenticatedUser = { userId: "t1", institutionId: "i1", roles: ["TEACHER"] };
 const coordinator: AuthenticatedUser = {
@@ -244,7 +262,7 @@ describe("Enforcement AddQuestion", () => {
 
   it("bloquea agregar cuando current = exact (regla = 50, current = 50)", async () => {
     rules.rule = baseRule;
-    const r = await new AddQuestion(repo, rules).execute({
+    const r = await new AddQuestion(repo, rules, permissiveOptionRules).execute({
       actor: teacher,
       evaluationId: "e1",
       sectionId: "sec1",
@@ -267,7 +285,7 @@ describe("Enforcement AddQuestion", () => {
   it("permite agregar cuando current < exact (regla = 50, current = 49)", async () => {
     rules.rule = baseRule;
     repo.items[0]!.totalQuestions = 49;
-    const r = await new AddQuestion(repo, rules).execute({
+    const r = await new AddQuestion(repo, rules, permissiveOptionRules).execute({
       actor: teacher,
       evaluationId: "e1",
       sectionId: "sec1",
@@ -286,7 +304,7 @@ describe("Enforcement AddQuestion", () => {
 
   it("permite agregar cuando no hay regla (modo libre)", async () => {
     rules.rule = null;
-    const r = await new AddQuestion(repo, rules).execute({
+    const r = await new AddQuestion(repo, rules, permissiveOptionRules).execute({
       actor: teacher,
       evaluationId: "e1",
       sectionId: "sec1",

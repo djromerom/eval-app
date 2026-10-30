@@ -1,5 +1,5 @@
 /**
- * Filtros de la consulta "Reglas de conteo por prueba".
+ * Filtros de la consulta "Regla de conteo".
  *
  * Se aplican client-side sobre el array ya cargado en la UI
  * (`admin/consultas/reglas-conteo`). El scoping (tenant + rol) lo hace el

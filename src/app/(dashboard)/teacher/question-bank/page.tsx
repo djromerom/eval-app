@@ -6,6 +6,7 @@ import type { Difficulty } from "@/modules/question-bank/domain/bank-question";
 import type { SoloLevel } from "@/modules/evaluations/domain/evaluation";
 import { makeSearchBankQuestions } from "@/modules/question-bank/infrastructure/container";
 import { makeListSubjects } from "@/modules/academic/infrastructure/container";
+import { makeResolveOptionsRangesForSubjects } from "@/modules/option-rules/infrastructure/container";
 import { BankQuestionForm } from "./bank-question-form";
 
 export const metadata: Metadata = { title: "Banco de preguntas" };
@@ -24,6 +25,15 @@ export default async function QuestionBankPage({
 
   const subjectsRes = await makeListSubjects().execute({ actor });
   const subjects = subjectsRes.ok ? subjectsRes.value : [];
+
+  // Rango de opciones permitido por asignatura (el banco no pertenece a una
+  // Prueba → es la unión de las reglas de esa asignatura). Sin regla, el
+  // default es estricto: exactamente 4 opciones.
+  const rangesRes = await makeResolveOptionsRangesForSubjects().execute({
+    actor,
+    subjectIds: subjects.map((s) => s.id),
+  });
+  const ranges = rangesRes.ok ? rangesRes.value : {};
 
   const resultsRes = await makeSearchBankQuestions().execute({
     actor,
@@ -46,7 +56,7 @@ export default async function QuestionBankPage({
 
       <section className="bg-card space-y-4 rounded-xl border p-6">
         <h2 className="font-semibold">Nueva pregunta de banco</h2>
-        <BankQuestionForm subjects={subjects} />
+        <BankQuestionForm subjects={subjects} ranges={ranges} />
       </section>
 
       <form className="mt-8 flex flex-wrap items-end gap-3">

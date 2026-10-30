@@ -59,6 +59,8 @@ export interface ContextEditorData {
    * navegador).
    */
   defaultOptions: number;
+  /** Mínimo de opciones permitido por la regla de (Prueba × Asignatura). */
+  minOptions: number;
   maxOptions: number;
 }
 
@@ -214,6 +216,7 @@ export function ContextEditor({ data }: { data: ContextEditorData }) {
                 evaluationId={data.evaluationId}
                 sectionId={data.section.id}
                 defaultOptions={data.defaultOptions}
+                minOptions={data.minOptions}
                 maxOptions={data.maxOptions}
               />
             </div>
@@ -256,6 +259,7 @@ export function ContextEditor({ data }: { data: ContextEditorData }) {
                     questionNumber={q.number}
                     initial={initial}
                     defaultOptions={data.defaultOptions}
+                    minOptions={data.minOptions}
                     maxOptions={data.maxOptions}
                     header={header}
                   >

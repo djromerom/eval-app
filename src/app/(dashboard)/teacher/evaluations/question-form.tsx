@@ -23,11 +23,8 @@ import { addQuestionAction, updateQuestionAction } from "./actions";
 import { reviewItemAction, type AiReviewResponse } from "./ai-review-actions";
 import { AiReviewModal, AiReviewOverlay } from "./ai-review-modal";
 import { notifyItemSaved, type SaveToastMode } from "./save-toast";
-import {
-  MAX_OPTIONS,
-  MIN_OPTIONS,
-  ANSWER_KEYS_ORDER,
-} from "@/modules/evaluations/domain/evaluation";
+import { MAX_OPTIONS, ANSWER_KEYS_ORDER } from "@/modules/evaluations/domain/evaluation";
+import { DEFAULT_OPTIONS_COUNT } from "@/modules/option-rules/domain/option-rule";
 
 const SOLO_OPTIONS = [
   { value: "", label: "Nivel SOLO (opcional)" },
@@ -219,22 +216,21 @@ export interface QuestionInitialValues {
 
 /** Editor estructurado por pregunta (§3.3 v2.0): enunciado + N opciones + correcta + metadatos.
  *
- *  El usuario puede ajustar el número de opciones entre MIN_OPTIONS y
- *  MAX_OPTIONS con los botones +/−. Al quitar la opción marcada como
- *  correcta, el cursor salta automáticamente a la primera visible.
- *  El tope MAX_OPTIONS está acotado por la hoja de respuestas
- *  institucional (plantilla ICFES) que solo tiene columnas A–D.
+ *  El usuario puede ajustar el número de opciones con los botones +/−. Al
+ *  quitar la opción marcada como correcta, el cursor salta automáticamente a
+ *  la primera visible.
  *
- *  Los valores de `defaultOptions` y `maxOptions` vienen del .env
- *  (EVAL_DEFAULT_OPTIONS y EVAL_MAX_OPTIONS) inyectados por el
- *  server component padre. Permiten a la institución bajar el
- *  rango sin tocar código. El tope absoluto sigue siendo MAX_OPTIONS=8
- *  (la librería solo conoce claves A–H).
+ *  El rango permitido (mínimo y máximo) lo fija la regla de opciones de
+ *  respuesta de la (Prueba × Asignatura) —ver `src/modules/option-rules/`— y
+ *  llega por props desde el server component padre. Sin regla, el default es
+ *  estricto: exactamente 4 opciones. El tope absoluto sigue siendo
+ *  MAX_OPTIONS=8 (la hoja de respuestas tiene columnas fijas A–H).
  */
 export function QuestionForm({
   evaluationId,
   sectionId,
   defaultOptions = DEFAULT_COUNT,
+  minOptions = DEFAULT_OPTIONS_COUNT,
   maxOptions = MAX_OPTIONS,
   initial,
   onDone,
@@ -257,6 +253,8 @@ export function QuestionForm({
    *  renderizarse al cargar una evaluación recién creada. */
   sectionId?: string;
   defaultOptions?: number;
+  /** Mínimo de opciones permitido para esta (Prueba × Asignatura). */
+  minOptions?: number;
   maxOptions?: number;
   /** Si viene, el formulario edita esa pregunta en vez de crear una nueva. */
   initial?: QuestionInitialValues;
@@ -592,7 +590,7 @@ export function QuestionForm({
     if (optionCount < maxOptions) setOptionCount((n) => n + 1);
   }
   function removeOption() {
-    if (optionCount <= MIN_OPTIONS) return;
+    if (optionCount <= minOptions) return;
     const removedKey = ANSWER_KEYS_ORDER[optionCount - 1];
     setOptionCount((n) => n - 1);
     // Si la opción eliminada era la correcta, salta a la primera visible.
@@ -888,8 +886,8 @@ export function QuestionForm({
             size="sm"
             variant="outline"
             onClick={removeOption}
-            disabled={optionCount <= MIN_OPTIONS}
-            title={optionCount <= MIN_OPTIONS ? `Mínimo ${MIN_OPTIONS} opciones` : "Quitar última"}
+            disabled={optionCount <= minOptions}
+            title={optionCount <= minOptions ? `Mínimo ${minOptions} opciones` : "Quitar última"}
           >
             − Opción
           </Button>

@@ -131,16 +131,38 @@ export function partitionParsedQuestions(questions: ParsedQuestion[]): {
   valid: ParsedQuestion[];
   problems: ParsedQuestionProblem[];
 } {
+  const { valid, problems } = partitionParsedQuestionsWithIndexes(questions);
+  return { valid, problems };
+}
+
+/**
+ * Igual que `partitionParsedQuestions`, pero además devuelve el índice
+ * ORIGINAL de cada pregunta válida.
+ *
+ * Lo necesita la regla de opciones de respuesta (sprint oct 2026): al
+ * descartar preguntas por número de opciones, el aviso que ve el docente
+ * tiene que apuntar a la posición de la pregunta en la lista que revisó, no
+ * a la posición dentro del subconjunto filtrado.
+ */
+export function partitionParsedQuestionsWithIndexes(questions: ParsedQuestion[]): {
+  valid: ParsedQuestion[];
+  validIndexes: number[];
+  problems: ParsedQuestionProblem[];
+} {
   const valid: ParsedQuestion[] = [];
+  const validIndexes: number[] = [];
   const problems: ParsedQuestionProblem[] = [];
 
   questions.forEach((q, index) => {
     const message = validateParsedQuestion(q);
     if (message) problems.push({ index, message });
-    else valid.push(q);
+    else {
+      valid.push(q);
+      validIndexes.push(index);
+    }
   });
 
-  return { valid, problems };
+  return { valid, validIndexes, problems };
 }
 
 /**

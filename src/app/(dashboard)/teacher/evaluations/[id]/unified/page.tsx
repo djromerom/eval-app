@@ -10,7 +10,8 @@ import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/containe
 import { makeListCourseSubjects } from "@/modules/academic/infrastructure/container";
 import { makeSearchBankQuestions } from "@/modules/question-bank/infrastructure/container";
 import { makeFindRuleForEvaluation } from "@/modules/evaluation-rules/infrastructure/container";
-import { env } from "@/config/env";
+import { makeResolveOptionsRangeForEvaluation } from "@/modules/option-rules/infrastructure/container";
+import { initialOptionsCount } from "@/modules/option-rules/domain/option-rule";
 import { EvaluationRuleBanner, type EvaluationRuleBannerData } from "./evaluation-rule-banner";
 import { UnifiedEditor, type UnifiedEditorData } from "./unified-editor";
 
@@ -80,6 +81,15 @@ export default async function UnifiedEditorPage({
         }
       : null;
 
+  // Rango de opciones de respuesta permitido para esta (Prueba × Asignatura).
+  // Sin regla, el default es estricto: exactamente 4 opciones.
+  const rangeRes = await makeResolveOptionsRangeForEvaluation().execute({
+    actor,
+    courseSubjectId: evaluation.courseSubjectId,
+    periodId: evaluation.periodId,
+  });
+  const optionsRange = rangeRes.ok ? rangeRes.value : { min: 4, max: 4 };
+
   const data: UnifiedEditorData = {
     evaluationId: evaluation.id,
     evaluationTitle: evaluation.title,
@@ -104,8 +114,9 @@ export default async function UnifiedEditorPage({
       id: bq.id,
       text: richTextToPlain(bq.text).slice(0, 80),
     })),
-    defaultOptions: env.EVAL_DEFAULT_OPTIONS,
-    maxOptions: env.EVAL_MAX_OPTIONS,
+    defaultOptions: initialOptionsCount(optionsRange),
+    minOptions: optionsRange.min,
+    maxOptions: optionsRange.max,
   };
 
   return (

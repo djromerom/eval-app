@@ -9,8 +9,15 @@ import type {
 import {
   type ParsedQuestion,
   type ParsedQuestionProblem,
-  partitionParsedQuestions,
+  partitionParsedQuestionsWithIndexes,
 } from "../domain/parsed-question";
+import {
+  STRICT_DEFAULT_RESOLVER,
+  type OptionRuleResolver,
+  type OptionsRange,
+  isOptionsCountAllowed,
+  optionsCountErrorMessage,
+} from "@/modules/option-rules/domain/option-rule";
 import {
   collectUniqueContexts,
   mergeContextsIntoSectionContent,
@@ -78,6 +85,7 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
   constructor(
     private readonly evaluations: EvaluationRepository,
     private readonly bank: BankQuestionRepository,
+    private readonly optionRules: OptionRuleResolver = STRICT_DEFAULT_RESOLVER,
   ) {}
 
   async execute({
@@ -92,8 +100,25 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
       return fail(new ValidationError("No hay preguntas para importar."));
     }
 
-    const { valid, problems } = partitionParsedQuestions(questions);
+    const { valid, validIndexes, problems } = partitionParsedQuestionsWithIndexes(questions);
     if (valid.length === 0) {
+      return fail(
+        new ValidationError(
+          "Ninguna de las preguntas está lista para importar. Revisa los avisos.",
+        ),
+      );
+    }
+
+    // Regla de opciones de respuesta (sprint oct 2026): las preguntas cuyo
+    // número de opciones no cabe en el rango del destino no se importan.
+    // Como la importación NUNCA aborta por una pregunta mala (da de alta las
+    // buenas y reporta las demás), aquí las separamos y las reportamos como
+    // problemas, apuntando a su posición original en la lista revisada.
+    const range = await this.resolveRange(actor, destination);
+    const { kept, problems: rangeProblems } = partitionByOptionsCount(valid, validIndexes, range);
+    const allProblems = [...problems, ...rangeProblems];
+
+    if (kept.length === 0) {
       return fail(
         new ValidationError(
           "Ninguna de las preguntas está lista para importar. Revisa los avisos.",
@@ -103,11 +128,45 @@ export class ImportQuestions implements UseCase<ImportQuestionsInput, ImportQues
 
     const result =
       destination.kind === "evaluation"
-        ? await this.intoEvaluation(actor, valid, destination)
-        : await this.intoBank(actor, valid, destination);
+        ? await this.intoEvaluation(actor, kept, destination)
+        : await this.intoBank(actor, kept, destination);
 
     if (!result.ok) return result;
-    return ok({ imported: result.value.imported, problems, infos: result.value.infos });
+    return ok({
+      imported: result.value.imported,
+      problems: allProblems,
+      infos: result.value.infos,
+    });
+  }
+
+  /**
+   * Rango de opciones del destino de la importación.
+   *
+   * - A una evaluación → el de su (Prueba × Asignatura).
+   * - Al banco → el de la asignatura (unión de sus reglas), porque el banco
+   *   no pertenece a una Prueba.
+   *
+   * Si no se puede resolver el rango (formulación inexistente, etc.) se
+   * devuelve `null` y no se filtra: el destino se valida después y devuelve
+   * su error propio.
+   */
+  private async resolveRange(
+    actor: AuthenticatedUser,
+    destination: ImportDestination,
+  ): Promise<OptionsRange | null> {
+    if (destination.kind === "bank") {
+      return this.optionRules.forSubject(actor.institutionId, destination.subjectId);
+    }
+    const evaluation = await this.evaluations.findById(
+      actor.institutionId,
+      destination.evaluationId,
+    );
+    if (!evaluation) return null;
+    return this.optionRules.forEvaluation(
+      actor.institutionId,
+      evaluation.courseSubjectId,
+      evaluation.periodId,
+    );
   }
 
   /** Añade a un contexto de una formulación propia y en BORRADOR. */
@@ -466,4 +525,37 @@ function aggregateContextImages(
     }
   }
   return agg;
+}
+
+/**
+ * Separa las preguntas válidas según el rango de opciones permitido y
+ * devuelve las que se quedan fuera como problemas.
+ *
+ * Los índices de los problemas son los ORIGINALES (los de la lista que el
+ * docente revisó), no los del subconjunto filtrado: así el aviso "Pregunta
+ * #7" apunta a la pregunta correcta.
+ */
+function partitionByOptionsCount(
+  questions: ParsedQuestion[],
+  originalIndexes: number[],
+  range: OptionsRange | null,
+): { kept: ParsedQuestion[]; keptIndexes: number[]; problems: ParsedQuestionProblem[] } {
+  const kept: ParsedQuestion[] = [];
+  const keptIndexes: number[] = [];
+  const problems: ParsedQuestionProblem[] = [];
+
+  questions.forEach((q, i) => {
+    const originalIndex = originalIndexes[i] ?? i;
+    if (range === null || isOptionsCountAllowed(q.options.length, range)) {
+      kept.push(q);
+      keptIndexes.push(originalIndex);
+      return;
+    }
+    problems.push({
+      index: originalIndex,
+      message: optionsCountErrorMessage(q.options.length, range),
+    });
+  });
+
+  return { kept, keptIndexes, problems };
 }

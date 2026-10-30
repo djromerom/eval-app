@@ -35,21 +35,22 @@ model Institution {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  users             User[]
-  academicYears     AcademicYear[]
-  courses           Course[]
-  subjects          Subject[] // catálogo propio (null en Subject = global)
-  groups            Group[]
-  periods           Period[]
-  students          Student[]
-  evaluations       Evaluation[]
-  questionBank      QuestionBank[]
-  templates         EvaluationTemplate[]
-  scanBatches       ScanBatch[]
-  bundles           EvaluationBundle[]
-  bookletTypes      BookletType[]
-  evaluationRules   EvaluationRule[]
-  unclassifiedScans UnclassifiedScan[]
+  users              User[]
+  academicYears      AcademicYear[]
+  courses            Course[]
+  subjects           Subject[] // catálogo propio (null en Subject = global)
+  groups             Group[]
+  periods            Period[]
+  students           Student[]
+  evaluations        Evaluation[]
+  questionBank       QuestionBank[]
+  templates          EvaluationTemplate[]
+  scanBatches        ScanBatch[]
+  bundles            EvaluationBundle[]
+  bookletTypes       BookletType[]
+  evaluationRules    EvaluationRule[]
+  subjectOptionRules SubjectOptionRule[]
+  unclassifiedScans  UnclassifiedScan[]
 }
 
 // ========== AUTH & USERS ==========
@@ -75,19 +76,20 @@ model User {
   createdAt              DateTime    @default(now())
   updatedAt              DateTime    @updatedAt
 
-  roles                  UserRole[]
-  accounts               Account[]
-  teacherProfile         Teacher?
-  evaluations            Evaluation[]
-  questionBank           QuestionBank[]
-  templates              EvaluationTemplate[]
-  scanBatches            ScanBatch[]
-  bundlesCreated         EvaluationBundle[]       @relation("BundleCreatedBy")
-  evaluationRulesCreated EvaluationRule[]         @relation("EvaluationRuleCreatedBy")
-  auditLogs              AuditLog[]
-  notifications          Notification[]
-  leaderAssignments      LeaderCourseAssignment[]
-  disabledBundleQuestions DisabledBundleQuestion[]
+  roles                     UserRole[]
+  accounts                  Account[]
+  teacherProfile            Teacher?
+  evaluations               Evaluation[]
+  questionBank              QuestionBank[]
+  templates                 EvaluationTemplate[]
+  scanBatches               ScanBatch[]
+  bundlesCreated            EvaluationBundle[]       @relation("BundleCreatedBy")
+  evaluationRulesCreated    EvaluationRule[]         @relation("EvaluationRuleCreatedBy")
+  subjectOptionRulesCreated SubjectOptionRule[]      @relation("SubjectOptionRuleCreatedBy")
+  auditLogs                 AuditLog[]
+  notifications             Notification[]
+  leaderAssignments         LeaderCourseAssignment[]
+  disabledBundleQuestions   DisabledBundleQuestion[]
 
   @@index([institutionId])
 }
@@ -178,6 +180,7 @@ model Course {
   bundles           EvaluationBundle[]
   leaderAssignments LeaderCourseAssignment[]
   evaluationRules   EvaluationRule[]
+  subjectOptionRules SubjectOptionRule[]
 
   @@index([institutionId, academicYearId])
 }
@@ -203,9 +206,10 @@ model Subject {
   isArea          Boolean      @default(false)
   createdAt       DateTime     @default(now())
 
-  courses         CourseSubject[]
-  questionBank    QuestionBank[]
-  evaluationRules EvaluationRule[]
+  courses            CourseSubject[]
+  questionBank       QuestionBank[]
+  evaluationRules    EvaluationRule[]
+  subjectOptionRules SubjectOptionRule[]
 
   @@index([institutionId])
   @@index([institutionId, parentSubjectId])
@@ -304,10 +308,11 @@ model Period {
   isCurrent      Boolean      @default(false)
   createdAt      DateTime     @default(now())
 
-  evaluations     Evaluation[]
-  bookletTypes    BookletType[]
-  evaluationRules EvaluationRule[]
-  bundles         EvaluationBundle[]
+  evaluations        Evaluation[]
+  bookletTypes       BookletType[]
+  evaluationRules    EvaluationRule[]
+  subjectOptionRules SubjectOptionRule[]
+  bundles            EvaluationBundle[]
 
   @@unique([institutionId, academicYearId, name])
   @@index([institutionId, academicYearId])
@@ -347,7 +352,7 @@ model Student {
 
   answerSheets AnswerSheet[]
   codeHistory  StudentCodeHistory[]
-  enrollments StudentEnrollment[]
+  enrollments  StudentEnrollment[]
 
   @@unique([institutionId, code])
   @@index([groupId])
@@ -382,19 +387,19 @@ model StudentCodeHistory {
 /// El índice parcial `WHERE "isCurrent" = true` actúa como red de
 /// seguridad (commit 1, migración `add_student_enrollment`).
 model StudentEnrollment {
-  id              String       @id @default(uuid(7)) @db.Uuid
-  studentId       String       @db.Uuid
-  student         Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  academicYearId  String       @db.Uuid
-  academicYear    AcademicYear @relation(fields: [academicYearId], references: [id])
-  groupId         String       @db.Uuid
-  group           Group        @relation(fields: [groupId], references: [id])
-  grade           String?
-  bookletTypeId   String?      @db.Uuid
-  bookletType     BookletType? @relation(fields: [bookletTypeId], references: [id], onDelete: SetNull)
-  isCurrent       Boolean      @default(false)
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id             String       @id @default(uuid(7)) @db.Uuid
+  studentId      String       @db.Uuid
+  student        Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  academicYearId String       @db.Uuid
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  groupId        String       @db.Uuid
+  group          Group        @relation(fields: [groupId], references: [id])
+  grade          String?
+  bookletTypeId  String?      @db.Uuid
+  bookletType    BookletType? @relation(fields: [bookletTypeId], references: [id], onDelete: SetNull)
+  isCurrent      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@unique([studentId, academicYearId])
   @@index([studentId])
@@ -476,13 +481,13 @@ model BookletType {
   order         Int         @default(0)
   createdAt     DateTime    @default(now())
 
-  evaluations     Evaluation[]
-  evaluationRules EvaluationRule[]
-  bundles         EvaluationBundle[]
+  evaluations        Evaluation[]
+  evaluationRules    EvaluationRule[]
+  bundles            EvaluationBundle[]
   // Back-relation agregada con la migración sep 2026 (Student.bookletTypeId).
   // El docente asigna el cuadernillo por defecto del estudiante al importar.
-  students        Student[]
-  enrollments     StudentEnrollment[]
+  students           Student[]
+  enrollments        StudentEnrollment[]
   // Asignaciones docente ↔ asignatura-grado que aplican a este tipo.
   teacherAssignments TeacherSubjectAssignment[]
 
@@ -524,6 +529,41 @@ model EvaluationRule {
   @@unique([institutionId, periodId, courseId, subjectId, bookletTypeId])
   @@index([institutionId, periodId])
   @@index([institutionId, periodId, courseId, subjectId])
+}
+
+/// Regla de OPCIONES DE RESPUESTA por (Prueba × Asignatura).
+///
+/// Define cuántas opciones puede tener una pregunta de esa asignatura dentro
+/// de esa prueba. El rango válido (2..8) lo enforza el use case; el techo
+/// absoluto de 8 viene de la hoja de respuestas (columnas fijas A–H).
+///
+/// Sin regla → default estricto: exactamente 4 opciones.
+/// Ver `src/modules/option-rules/domain/option-rule.ts`.
+model SubjectOptionRule {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  institutionId String      @db.Uuid
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  periodId      String      @db.Uuid
+  period        Period      @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  /// Grado (Course) al que aplica la excepción. El grado debe pertenecer al
+  /// mismo año académico que la Prueba.
+  courseId      String      @db.Uuid
+  course        Course      @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  subjectId     String      @db.Uuid
+  subject       Subject     @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  /// Mínimo de opciones permitidas (2..8).
+  minOptions    Int
+  /// Máximo de opciones permitidas (2..8, ≥ minOptions).
+  maxOptions    Int
+  createdById   String      @db.Uuid
+  createdBy     User        @relation("SubjectOptionRuleCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([institutionId, periodId, courseId, subjectId])
+  @@index([institutionId, periodId])
+  @@index([institutionId, courseId, subjectId])
+  @@index([institutionId, subjectId])
 }
 
 enum DraftStatus {
@@ -577,8 +617,8 @@ model Question {
   bankOriginId  String?           @db.Uuid // si se importó del banco (copia independiente)
   createdAt     DateTime          @default(now())
 
-  options QuestionOption[]
-  answers StudentAnswer[]
+  options             QuestionOption[]
+  answers             StudentAnswer[]
   disabledFromBundles DisabledBundleQuestion[]
 
   @@index([sectionId, number])
@@ -758,9 +798,9 @@ model EvaluationBundle {
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt
 
-  items       EvaluationBundleItem[]
-  sheets      AnswerSheet[]
-  scanBatches ScanBatch[]
+  items             EvaluationBundleItem[]
+  sheets            AnswerSheet[]
+  scanBatches       ScanBatch[]
   disabledQuestions DisabledBundleQuestion[]
 
   @@unique([institutionId, bookletNumber])

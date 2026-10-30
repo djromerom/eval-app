@@ -1,5 +1,5 @@
 /**
- * Formatter XLSX de la consulta "Reglas de conteo por prueba".
+ * Formatter XLSX de la consulta "Regla de conteo".
  * **Función pura** (no toca I/O, ni Next, ni BD) → testeable sin setup.
  *
  * Usa SheetJS (`xlsx`, ya en el repo) igual que el resto de consultas.
@@ -26,7 +26,7 @@ function rowToCells(r: ReglaConteoRow): (string | number)[] {
     r.subjectName,
     r.bookletTypeName,
     r.exactQuestions,
-    r.formuladas,
+    r.itemsFormulados,
   ];
 }
 
@@ -38,7 +38,7 @@ export function reglaConteoRowsToWorksheet(rows: ReglaConteoRow[]): Buffer {
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Reglas de conteo");
+  XLSX.utils.book_append_sheet(wb, ws, "Regla de conteo");
 
   // type 'buffer' devuelve Node Buffer directamente (evita pasar por base64).
   const buf = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });

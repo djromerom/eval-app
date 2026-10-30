@@ -13,6 +13,12 @@ import type {
 import type { BookletTypeRepository } from "@/modules/booklet-types/domain/booklet-type";
 import type { EvaluationRuleRepository } from "@/modules/evaluation-rules/domain/evaluation-rule";
 import type { LeaderAssignmentRepository } from "@/modules/leader-assignments/domain/leader-assignment";
+import {
+  STRICT_DEFAULT_RESOLVER,
+  type OptionRuleResolver,
+  isOptionsCountAllowed,
+  optionsCountErrorMessage,
+} from "@/modules/option-rules/domain/option-rule";
 import type { EvaluationStatus } from "../domain/evaluation-status";
 import {
   type CreateEvaluationData,
@@ -263,6 +269,28 @@ async function checkExactCount(
   return ok(undefined);
 }
 
+/**
+ * Regla de opciones de respuesta: valida que el número de opciones de la
+ * pregunta que se va a guardar quepa en el rango permitido para su
+ * (Prueba × Asignatura). Sin regla → default estricto (exactamente 4).
+ *
+ * Sprint oct 2026 — el bloqueo es duro: si el conteo no cabe, no se guarda.
+ */
+async function checkOptionsRange(
+  optionRules: OptionRuleResolver,
+  institutionId: string,
+  evaluation: Evaluation,
+  optionsCount: number,
+): Promise<Result<void>> {
+  const range = await optionRules.forEvaluation(
+    institutionId,
+    evaluation.courseSubjectId,
+    evaluation.periodId,
+  );
+  if (isOptionsCountAllowed(optionsCount, range)) return ok(undefined);
+  return fail(new ValidationError(optionsCountErrorMessage(optionsCount, range)));
+}
+
 export interface AddSectionInput {
   actor: AuthenticatedUser;
   evaluationId: string;
@@ -347,6 +375,7 @@ export class AddQuestion implements UseCase<AddQuestionInput, Question> {
   constructor(
     private readonly evaluations: EvaluationRepository,
     private readonly evaluationRules: EvaluationRuleRepository,
+    private readonly optionRules: OptionRuleResolver = STRICT_DEFAULT_RESOLVER,
   ) {}
 
   async execute({
@@ -369,6 +398,16 @@ export class AddQuestion implements UseCase<AddQuestionInput, Question> {
       1,
     );
     if (!addCheck.ok) return addCheck;
+
+    // Regla de opciones de respuesta: el conteo debe caber en el rango
+    // permitido para esta (Prueba × Asignatura).
+    const optionsCheck = await checkOptionsRange(
+      this.optionRules,
+      actor.institutionId,
+      owned.value,
+      data.options.length,
+    );
+    if (!optionsCheck.ok) return optionsCheck;
 
     const shapeError = validateQuestionShape(data);
     if (shapeError) return fail(new ValidationError(shapeError));
@@ -397,7 +436,10 @@ export interface UpdateQuestionInput {
  * El formulario de edición envía siempre ambas.
  */
 export class UpdateQuestion implements UseCase<UpdateQuestionInput, Question> {
-  constructor(private readonly evaluations: EvaluationRepository) {}
+  constructor(
+    private readonly evaluations: EvaluationRepository,
+    private readonly optionRules: OptionRuleResolver = STRICT_DEFAULT_RESOLVER,
+  ) {}
 
   async execute({
     actor,
@@ -424,6 +466,15 @@ export class UpdateQuestion implements UseCase<UpdateQuestionInput, Question> {
         correctAnswer: data.correctAnswer,
       });
       if (shapeError) return fail(new ValidationError(shapeError));
+      // Regla de opciones de respuesta: el conteo nuevo debe caber en el
+      // rango permitido para esta (Prueba × Asignatura).
+      const optionsCheck = await checkOptionsRange(
+        this.optionRules,
+        actor.institutionId,
+        owned.value,
+        data.options.length,
+      );
+      if (!optionsCheck.ok) return optionsCheck;
       // Validar contenido solo cuando el docente está tocando el enunciado
       // (envía `text`). Si NO lo envía, conservamos el enunciado original
       // (no se puede borrar por accidente) y solo validamos las opciones

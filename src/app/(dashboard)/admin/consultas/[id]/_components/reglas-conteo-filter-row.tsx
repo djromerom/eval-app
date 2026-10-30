@@ -21,7 +21,7 @@ export interface OpcionPrueba {
   year: number;
 }
 
-/** Filter row controlado de la consulta "Reglas de conteo por prueba".
+/** Filter row controlado de la consulta "Regla de conteo".
  *  El padre (`ReglasConteoTable`) maneja el state y pasa `filters` +
  *  `onChange` + las opciones (derivadas de las propias filas — sin fetch
  *  extra). */
