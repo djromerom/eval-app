@@ -40,6 +40,8 @@ export interface UnifiedEditorData {
   editable: boolean;
   bankQuestions: { id: string; text: string }[];
   defaultOptions: number;
+  /** Mínimo de opciones permitido por la regla de (Prueba × Asignatura). */
+  minOptions: number;
   maxOptions: number;
   /**
    * Oculta la card de creación/edición al montar. Se usa cuando el docente
@@ -1952,6 +1954,7 @@ export function UnifiedEditor({ data }: { data: UnifiedEditorData }) {
                     evaluationId={data.evaluationId}
                     sectionId={targetSectionId ?? ""}
                     defaultOptions={data.defaultOptions}
+                    minOptions={data.minOptions}
                     maxOptions={data.maxOptions}
                     formRef={questionFormRef}
                     initial={editingInitial()}

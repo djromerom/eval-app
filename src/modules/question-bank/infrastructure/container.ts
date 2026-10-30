@@ -1,4 +1,5 @@
 import { PrismaEvaluationRepository } from "@/modules/evaluations/infrastructure/prisma-evaluation-repository";
+import { optionRules } from "@/modules/option-rules/infrastructure/container";
 import {
   CreateBankQuestion,
   ExportQuestionToBank,
@@ -11,7 +12,8 @@ import { PrismaBankQuestionRepository } from "./prisma-bank-repository";
 const bank = new PrismaBankQuestionRepository();
 const evaluations = new PrismaEvaluationRepository();
 
-export const makeCreateBankQuestion = () => new CreateBankQuestion(bank);
+export const makeCreateBankQuestion = () => new CreateBankQuestion(bank, optionRules);
 export const makeSearchBankQuestions = () => new SearchBankQuestions(bank);
-export const makeImportBankQuestion = () => new ImportBankQuestion(bank, evaluations);
-export const makeExportQuestionToBank = () => new ExportQuestionToBank(bank, evaluations);
+export const makeImportBankQuestion = () => new ImportBankQuestion(bank, evaluations, optionRules);
+export const makeExportQuestionToBank = () =>
+  new ExportQuestionToBank(bank, evaluations, optionRules);

@@ -16,7 +16,8 @@ import { SectionForm } from "../section-form";
 import { SectionEditor } from "../section-editor";
 import { submitForReviewAction } from "../actions";
 import { exportQuestionToBankAction, importBankQuestionAction } from "../../question-bank/actions";
-import { env } from "@/config/env";
+import { makeResolveOptionsRangeForEvaluation } from "@/modules/option-rules/infrastructure/container";
+import { initialOptionsCount } from "@/modules/option-rules/domain/option-rule";
 
 const controlClass =
   "h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none";
@@ -52,6 +53,15 @@ export default async function EvaluationDetailPage({
       })
     : null;
   const bankQuestions = bankRes?.ok ? bankRes.value : [];
+
+  // Rango de opciones de respuesta permitido para esta (Prueba × Asignatura).
+  // Sin regla, el default es estricto: exactamente 4 opciones.
+  const rangeRes = await makeResolveOptionsRangeForEvaluation().execute({
+    actor,
+    courseSubjectId: evaluation.courseSubjectId,
+    periodId: evaluation.periodId,
+  });
+  const optionsRange = rangeRes.ok ? rangeRes.value : { min: 4, max: 4 };
 
   return (
     <>
@@ -157,8 +167,9 @@ export default async function EvaluationDetailPage({
                       evaluationId={evaluation.id}
                       sectionId={section.id}
                       questionNumber={q.number}
-                      defaultOptions={env.EVAL_DEFAULT_OPTIONS}
-                      maxOptions={env.EVAL_MAX_OPTIONS}
+                      defaultOptions={initialOptionsCount(optionsRange)}
+                      minOptions={optionsRange.min}
+                      maxOptions={optionsRange.max}
                       header={{
                         id: q.id,
                         number: q.number,
@@ -206,8 +217,9 @@ export default async function EvaluationDetailPage({
                   <QuestionForm
                     evaluationId={evaluation.id}
                     sectionId={section.id}
-                    defaultOptions={env.EVAL_DEFAULT_OPTIONS}
-                    maxOptions={env.EVAL_MAX_OPTIONS}
+                    defaultOptions={initialOptionsCount(optionsRange)}
+                    minOptions={optionsRange.min}
+                    maxOptions={optionsRange.max}
                   />
                 ) : null}
               </section>

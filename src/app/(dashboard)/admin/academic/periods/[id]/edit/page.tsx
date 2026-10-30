@@ -18,8 +18,10 @@ import {
   makeListEvaluationRulesByInstitution,
   makeListEvaluationRulesByPeriod,
 } from "@/modules/evaluation-rules/infrastructure/container";
+import { makeListOptionRulesByPeriod } from "@/modules/option-rules/infrastructure/container";
 import { BookletTypesManager } from "./booklet-types-manager";
 import { EvaluationRulesManager, type CloneSourcePeriod } from "./evaluation-rules-manager";
+import { OptionRulesManager } from "./option-rules-manager";
 import { PeriodEditForm } from "./period-edit-form";
 
 export const metadata: Metadata = { title: "Editar prueba" };
@@ -60,6 +62,7 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
     institutionBookletTypesRes,
     rulesRes,
     allRulesRes,
+    optionRulesRes,
     coursesRes,
     subjectsRes,
     courseSubjectsRes,
@@ -70,6 +73,7 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
     makeListBookletTypesByInstitution().execute({ actor }),
     makeListEvaluationRulesByPeriod().execute({ actor, periodId: id }),
     makeListEvaluationRulesByInstitution().execute({ actor }),
+    makeListOptionRulesByPeriod().execute({ actor, periodId: id }),
     makeListCourses().execute({ actor, academicYearId: period.academicYearId }),
     makeListSubjects().execute({ actor }),
     makeListCourseSubjects().execute({ actor }),
@@ -127,6 +131,16 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
         subjectId: r.subjectId,
         bookletTypeId: r.bookletTypeId,
         exactQuestions: r.exactQuestions,
+      }))
+    : [];
+
+  // Reglas de opciones de respuesta por (Prueba × Asignatura).
+  const optionRules = optionRulesRes.ok
+    ? optionRulesRes.value.map((r) => ({
+        id: r.id,
+        subjectId: r.subjectId,
+        minOptions: r.minOptions,
+        maxOptions: r.maxOptions,
       }))
     : [];
 
@@ -221,6 +235,7 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
             bookletTypes={bookletTypesCatalog}
             sourcePeriods={sourcePeriods}
           />
+          <OptionRulesManager periodId={period.id} initialRules={optionRules} subjects={subjects} />
         </div>
       </aside>
     </>

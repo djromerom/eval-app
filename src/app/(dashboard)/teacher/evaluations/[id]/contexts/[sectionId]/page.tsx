@@ -8,7 +8,8 @@ import { richTextToPlain } from "@/components/editor/render";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
 import { makeListCourseSubjects } from "@/modules/academic/infrastructure/container";
 import { makeSearchBankQuestions } from "@/modules/question-bank/infrastructure/container";
-import { env } from "@/config/env";
+import { makeResolveOptionsRangeForEvaluation } from "@/modules/option-rules/infrastructure/container";
+import { initialOptionsCount } from "@/modules/option-rules/domain/option-rule";
 import { ContextEditor, type ContextEditorData } from "./context-editor";
 
 export const metadata = { title: "Editor por contexto" };
@@ -54,6 +55,15 @@ export default async function ContextEditorPage({
     : null;
   const bankQuestions = bankRes?.ok ? bankRes.value : [];
 
+  // Rango de opciones de respuesta permitido para esta (Prueba × Asignatura).
+  // Sin regla, el default es estricto: exactamente 4 opciones.
+  const rangeRes = await makeResolveOptionsRangeForEvaluation().execute({
+    actor,
+    courseSubjectId: evaluation.courseSubjectId,
+    periodId: evaluation.periodId,
+  });
+  const optionsRange = rangeRes.ok ? rangeRes.value : { min: 4, max: 4 };
+
   const data: ContextEditorData = {
     evaluationId: evaluation.id,
     evaluationTitle: evaluation.title,
@@ -83,8 +93,9 @@ export default async function ContextEditorPage({
       id: bq.id,
       text: richTextToPlain(bq.text).slice(0, 80),
     })),
-    defaultOptions: env.EVAL_DEFAULT_OPTIONS,
-    maxOptions: env.EVAL_MAX_OPTIONS,
+    defaultOptions: initialOptionsCount(optionsRange),
+    minOptions: optionsRange.min,
+    maxOptions: optionsRange.max,
   };
 
   return (

@@ -1,5 +1,6 @@
 import { PrismaEvaluationRepository } from "@/modules/evaluations/infrastructure/prisma-evaluation-repository";
 import { PrismaBankQuestionRepository } from "@/modules/question-bank/infrastructure/prisma-bank-repository";
+import { optionRules } from "@/modules/option-rules/infrastructure/container";
 import { ImportQuestions } from "../application/import-questions";
 import { QuestionsFromEvaluation } from "../application/questions-from-evaluation";
 import { EnqueueQuestionImport } from "../application/enqueue-question-import";
@@ -44,5 +45,5 @@ export function makeQuestionExtractHandler() {
     runQuestionExtract(payload, { repo: makeQuestionImportJobRepo() });
 }
 
-export const makeImportQuestions = () => new ImportQuestions(evaluations, bank);
+export const makeImportQuestions = () => new ImportQuestions(evaluations, bank, optionRules);
 export const makeQuestionsFromEvaluation = () => new QuestionsFromEvaluation(evaluations);

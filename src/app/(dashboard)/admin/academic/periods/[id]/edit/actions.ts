@@ -15,6 +15,11 @@ import {
   makeCloneEvaluationRules,
 } from "@/modules/evaluation-rules/infrastructure/container";
 import {
+  makeCreateOptionRule,
+  makeDeleteOptionRule,
+  makeUpdateOptionRule,
+} from "@/modules/option-rules/infrastructure/container";
+import {
   ValidationError as DomainValidationError,
   ConflictError as DomainConflictError,
   NotFoundError as DomainNotFoundError,
@@ -319,6 +324,137 @@ export async function cloneEvaluationRulesAction(
   if (e instanceof DomainValidationError) {
     return mapError("VALIDATION", e.message);
   }
+  if (e instanceof DomainNotFoundError) {
+    return mapError("NOT_FOUND", e.message);
+  }
+  if (e instanceof DomainForbiddenError) {
+    return mapError("FORBIDDEN", e.message);
+  }
+  return mapError("UNKNOWN", e.message);
+}
+
+// ===========================================================================
+// Reglas de opciones de respuesta (oct 2026 — Sprint módulo option-rules)
+// ===========================================================================
+
+/**
+ * Server actions que envuelven los use cases `Create/Update/Delete
+ * OptionRule`. Mismo patrón que los de `EvaluationRule` de arriba:
+ * - Valida role (ECU_MASTER) en el use case.
+ * - Mapea errores de dominio → `ActionResult` para mostrar inline en el
+ *   `OptionRulesManager` (admin drawer).
+ * - `revalidatePath` para refrescar el drawer tras mutación.
+ */
+
+function parseOptionCount(raw: FormDataEntryValue | null): number | null {
+  if (raw === null) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) ? n : NaN;
+}
+
+export async function createOptionRuleAction(
+  periodId: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
+
+  const subjectId = (formData.get("subjectId") as string | null)?.trim() ?? "";
+  const minRaw = parseOptionCount(formData.get("minOptions"));
+  const maxRaw = parseOptionCount(formData.get("maxOptions"));
+
+  if (!subjectId || !Number.isFinite(minRaw) || !Number.isFinite(maxRaw)) {
+    return mapError(
+      "VALIDATION",
+      "Faltan datos obligatorios (asignatura, mínimo y máximo de opciones).",
+    );
+  }
+
+  const r = await makeCreateOptionRule().execute({
+    actor,
+    data: {
+      periodId,
+      subjectId,
+      minOptions: minRaw as number,
+      maxOptions: maxRaw as number,
+    },
+  });
+
+  if (r.ok) {
+    revalidatePath(`/admin/academic/periods/${periodId}/edit`);
+    return { ok: true, id: r.value.id };
+  }
+
+  const e = r.error;
+  if (e instanceof DomainValidationError) {
+    return mapError("VALIDATION", e.message);
+  }
+  if (e instanceof DomainConflictError) {
+    return mapError("CONFLICT", e.message);
+  }
+  if (e instanceof DomainNotFoundError) {
+    return mapError("NOT_FOUND", e.message);
+  }
+  if (e instanceof DomainForbiddenError) {
+    return mapError("FORBIDDEN", e.message);
+  }
+  return mapError("UNKNOWN", e.message);
+}
+
+export async function updateOptionRuleAction(
+  periodId: string,
+  ruleId: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
+
+  const minRaw = parseOptionCount(formData.get("minOptions"));
+  const maxRaw = parseOptionCount(formData.get("maxOptions"));
+
+  if (!Number.isFinite(minRaw) || !Number.isFinite(maxRaw)) {
+    return mapError("VALIDATION", "El mínimo y el máximo deben ser números enteros entre 2 y 8.");
+  }
+
+  const r = await makeUpdateOptionRule().execute({
+    actor,
+    id: ruleId,
+    data: {
+      minOptions: minRaw as number,
+      maxOptions: maxRaw as number,
+    },
+  });
+
+  if (r.ok) {
+    revalidatePath(`/admin/academic/periods/${periodId}/edit`);
+    return { ok: true };
+  }
+
+  const e = r.error;
+  if (e instanceof DomainValidationError) {
+    return mapError("VALIDATION", e.message);
+  }
+  if (e instanceof DomainNotFoundError) {
+    return mapError("NOT_FOUND", e.message);
+  }
+  if (e instanceof DomainForbiddenError) {
+    return mapError("FORBIDDEN", e.message);
+  }
+  return mapError("UNKNOWN", e.message);
+}
+
+export async function deleteOptionRuleAction(
+  periodId: string,
+  ruleId: string,
+): Promise<ActionResult> {
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
+
+  const r = await makeDeleteOptionRule().execute({ actor, id: ruleId });
+
+  if (r.ok) {
+    revalidatePath(`/admin/academic/periods/${periodId}/edit`);
+    return { ok: true };
+  }
+
+  const e = r.error;
   if (e instanceof DomainNotFoundError) {
     return mapError("NOT_FOUND", e.message);
   }

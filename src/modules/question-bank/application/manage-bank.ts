@@ -12,6 +12,12 @@ import {
   type BankQuestionRepository,
   type CreateBankQuestionData,
 } from "../domain/bank-question";
+import {
+  STRICT_DEFAULT_RESOLVER,
+  type OptionRuleResolver,
+  isOptionsCountAllowed,
+  optionsCountErrorMessage,
+} from "@/modules/option-rules/domain/option-rule";
 
 export interface CreateBankQuestionInput {
   actor: AuthenticatedUser;
@@ -20,7 +26,10 @@ export interface CreateBankQuestionInput {
 
 /** Crea una pregunta de banco (personal o institucional). §3.3 */
 export class CreateBankQuestion implements UseCase<CreateBankQuestionInput, BankQuestion> {
-  constructor(private readonly bank: BankQuestionRepository) {}
+  constructor(
+    private readonly bank: BankQuestionRepository,
+    private readonly optionRules: OptionRuleResolver = STRICT_DEFAULT_RESOLVER,
+  ) {}
 
   async execute({ actor, data }: CreateBankQuestionInput): Promise<Result<BankQuestion>> {
     const authorized = requireRole(actor, "TEACHER", "ECU_LIDER");
@@ -29,6 +38,13 @@ export class CreateBankQuestion implements UseCase<CreateBankQuestionInput, Bank
     if (!data.subjectId) return fail(new ValidationError("La asignatura es obligatoria."));
     const shapeError = validateQuestionShape(data);
     if (shapeError) return fail(new ValidationError(shapeError));
+
+    // Regla de opciones de respuesta: el banco no pertenece a una Prueba,
+    // así que el rango es el de la asignatura (unión de sus reglas).
+    const range = await this.optionRules.forSubject(actor.institutionId, data.subjectId);
+    if (!isOptionsCountAllowed(data.options.length, range)) {
+      return fail(new ValidationError(optionsCountErrorMessage(data.options.length, range)));
+    }
 
     return ok(await this.bank.create(actor.institutionId, actor.userId, data));
   }
@@ -64,6 +80,7 @@ export class ImportBankQuestion implements UseCase<ImportBankQuestionInput, Ques
   constructor(
     private readonly bank: BankQuestionRepository,
     private readonly evaluations: EvaluationRepository,
+    private readonly optionRules: OptionRuleResolver = STRICT_DEFAULT_RESOLVER,
   ) {}
 
   async execute({
@@ -86,6 +103,18 @@ export class ImportBankQuestion implements UseCase<ImportBankQuestionInput, Ques
 
     const source = await this.bank.findVisible(actor.institutionId, actor.userId, bankQuestionId);
     if (!source) return fail(new NotFoundError("Pregunta de banco", bankQuestionId));
+
+    // Regla de opciones de respuesta: la pregunta entra a una evaluación, así
+    // que se valida contra el rango de ESA evaluación (no contra el del banco,
+    // que es más permisivo).
+    const range = await this.optionRules.forEvaluation(
+      actor.institutionId,
+      evaluation.courseSubjectId,
+      evaluation.periodId,
+    );
+    if (!isOptionsCountAllowed(source.options.length, range)) {
+      return fail(new ValidationError(optionsCountErrorMessage(source.options.length, range)));
+    }
 
     const question = await this.evaluations.addQuestion(
       actor.institutionId,
@@ -121,6 +150,7 @@ export class ExportQuestionToBank implements UseCase<ExportQuestionToBankInput, 
   constructor(
     private readonly bank: BankQuestionRepository,
     private readonly evaluations: EvaluationRepository,
+    private readonly optionRules: OptionRuleResolver = STRICT_DEFAULT_RESOLVER,
   ) {}
 
   async execute(input: ExportQuestionToBankInput): Promise<Result<BankQuestion>> {
@@ -133,6 +163,13 @@ export class ExportQuestionToBank implements UseCase<ExportQuestionToBankInput, 
 
     const question = detail.sections.flatMap((s) => s.questions).find((q) => q.id === questionId);
     if (!question) return fail(new NotFoundError("Pregunta", questionId));
+
+    // Regla de opciones de respuesta: la pregunta entra al banco, que no
+    // pertenece a una Prueba → rango por asignatura (unión de sus reglas).
+    const range = await this.optionRules.forSubject(actor.institutionId, subjectId);
+    if (!isOptionsCountAllowed(question.options.length, range)) {
+      return fail(new ValidationError(optionsCountErrorMessage(question.options.length, range)));
+    }
 
     return ok(
       await this.bank.create(actor.institutionId, actor.userId, {
