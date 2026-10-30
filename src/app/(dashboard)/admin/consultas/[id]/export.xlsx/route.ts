@@ -27,6 +27,11 @@ import {
   applyFormuladoresFilters,
   parseFormuladoresFilters,
 } from "@/modules/consultas/domain/queries/formuladores/filters";
+import {
+  applyReglasConteoFilters,
+  parseReglasConteoFilters,
+} from "@/modules/consultas/domain/queries/reglas-conteo/filters";
+import { reglaConteoRowsToWorksheet } from "@/modules/consultas/domain/queries/reglas-conteo/xlsx";
 import { formuladorRowsToWorksheet } from "@/modules/consultas/domain/queries/formuladores/xlsx";
 import { formulacionRowsToWorksheet } from "@/modules/consultas/domain/shared/xlsx-formatter";
 import { informeGrupoToXlsx } from "@/modules/consultas/domain/queries/informe-grupo/xlsx";
@@ -34,6 +39,7 @@ import {
   makeGetInformeGrupo,
   makeListFormulaciones,
   makeListFormuladores,
+  makeListReglasConteo,
 } from "@/modules/consultas/infrastructure/container";
 
 export const dynamic = "force-dynamic"; // siempre fresco; no cachear
@@ -47,6 +53,12 @@ function buildFilename(actor: { institutionId: string }): string {
 function buildFormuladoresFilename(actor: { institutionId: string }): string {
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   return `formuladores-${actor.institutionId}-${today}.xlsx`;
+}
+
+/** Nombre del archivo de la consulta "Reglas de conteo por prueba". */
+function buildReglasFilename(actor: { institutionId: string }): string {
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  return `reglas-conteo-${actor.institutionId}-${today}.xlsx`;
 }
 
 const XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -112,6 +124,23 @@ export async function GET(
   const actor = await requireAuthenticatedUser("SUPER_ADMIN", "ECU_MASTER");
   if (!can("run-queries", actor.roles)) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  if (id === "reglas-conteo") {
+    const filters = parseReglasConteoFilters({
+      periodId: req.nextUrl.searchParams.get("prueba") ?? undefined,
+      courseName: req.nextUrl.searchParams.get("grado") ?? undefined,
+      subjectName: req.nextUrl.searchParams.get("asignatura") ?? undefined,
+    });
+
+    const res = await makeListReglasConteo().execute({ actor });
+    if (!res.ok) {
+      return NextResponse.json({ error: res.error.code }, { status: 500 });
+    }
+    const rows = applyReglasConteoFilters(res.value, filters);
+
+    const buffer = reglaConteoRowsToWorksheet(rows);
+    return xlsxResponse(buffer, buildReglasFilename(actor));
   }
 
   if (id === "formuladores") {

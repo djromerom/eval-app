@@ -6,11 +6,13 @@ import {
   makeListFormulaciones,
   makeListFormuladores,
   makeListCalificaciones,
+  makeListReglasConteo,
   makeGetInformeGrupo,
 } from "@/modules/consultas/infrastructure/container";
 import { FormulacionesTable } from "./_components/formulaciones-table";
 import { FormuladoresTable } from "./_components/formuladores-table";
 import { CalificacionesTable } from "./_components/calificaciones-table";
+import { ReglasConteoTable } from "./_components/reglas-conteo-table";
 import { InformeGrupoView } from "./_components/informe-grupo-view";
 
 export const metadata: Metadata = { title: "Consulta" };
@@ -79,6 +81,14 @@ export default async function ConsultaDetallePage({
     const rows = res.ok ? res.value : [];
     return (
       <CalificacionesTable rows={rows} title={consulta.title} description={consulta.description} />
+    );
+  }
+
+  if (id === "reglas-conteo") {
+    const res = await makeListReglasConteo().execute({ actor });
+    const rows = res.ok ? res.value : [];
+    return (
+      <ReglasConteoTable rows={rows} title={consulta.title} description={consulta.description} />
     );
   }
 
