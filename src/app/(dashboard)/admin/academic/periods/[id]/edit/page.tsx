@@ -14,9 +14,12 @@ import {
 import { makeListBookletTypesByPeriod } from "@/modules/booklet-types/infrastructure/container";
 import { makeListBookletTypesByInstitution } from "@/modules/booklet-types/infrastructure/container";
 import { buildBookletTypeVocabulary } from "@/modules/booklet-types/domain/booklet-type";
-import { makeListEvaluationRulesByPeriod } from "@/modules/evaluation-rules/infrastructure/container";
+import {
+  makeListEvaluationRulesByInstitution,
+  makeListEvaluationRulesByPeriod,
+} from "@/modules/evaluation-rules/infrastructure/container";
 import { BookletTypesManager } from "./booklet-types-manager";
-import { EvaluationRulesManager } from "./evaluation-rules-manager";
+import { EvaluationRulesManager, type CloneSourcePeriod } from "./evaluation-rules-manager";
 import { PeriodEditForm } from "./period-edit-form";
 
 export const metadata: Metadata = { title: "Editar prueba" };
@@ -56,6 +59,7 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
     bookletTypesRes,
     institutionBookletTypesRes,
     rulesRes,
+    allRulesRes,
     coursesRes,
     subjectsRes,
     courseSubjectsRes,
@@ -65,6 +69,7 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
     makeListBookletTypesByPeriod().execute({ actor, periodId: id }),
     makeListBookletTypesByInstitution().execute({ actor }),
     makeListEvaluationRulesByPeriod().execute({ actor, periodId: id }),
+    makeListEvaluationRulesByInstitution().execute({ actor }),
     makeListCourses().execute({ actor, academicYearId: period.academicYearId }),
     makeListSubjects().execute({ actor }),
     makeListCourseSubjects().execute({ actor }),
@@ -123,6 +128,28 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
         bookletTypeId: r.bookletTypeId,
         exactQuestions: r.exactQuestions,
       }))
+    : [];
+
+  // Pruebas desde las que se pueden copiar reglas de conteo (la actual se
+  // excluye). El conteo de reglas le sirve al admin para saber si vale la
+  // pena elegirla como origen.
+  const ruleCountByPeriod = new Map<string, number>();
+  if (allRulesRes.ok) {
+    for (const r of allRulesRes.value) {
+      ruleCountByPeriod.set(r.periodId, (ruleCountByPeriod.get(r.periodId) ?? 0) + 1);
+    }
+  }
+  const yearById = new Map(years.map((y) => [y.id, y.year]));
+  const sourcePeriods: CloneSourcePeriod[] = allPeriodsRes.ok
+    ? allPeriodsRes.value
+        .filter((p) => p.id !== period.id)
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          year: yearById.get(p.academicYearId) ?? 0,
+          ruleCount: ruleCountByPeriod.get(p.id) ?? 0,
+        }))
+        .sort((a, b) => b.year - a.year || a.name.localeCompare(b.name, "es"))
     : [];
 
   return (
@@ -192,6 +219,7 @@ export default async function EditPeriodPage({ params }: { params: Promise<{ id:
             subjects={subjects}
             subjectsByCourse={subjectsByCourse}
             bookletTypes={bookletTypesCatalog}
+            sourcePeriods={sourcePeriods}
           />
         </div>
       </aside>

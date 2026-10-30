@@ -12,6 +12,7 @@ import {
   makeCreateEvaluationRule,
   makeDeleteEvaluationRule,
   makeUpdateEvaluationRule,
+  makeCloneEvaluationRules,
 } from "@/modules/evaluation-rules/infrastructure/container";
 import {
   ValidationError as DomainValidationError,
@@ -256,6 +257,68 @@ export async function deleteEvaluationRuleAction(
   }
 
   const e = r.error;
+  if (e instanceof DomainNotFoundError) {
+    return mapError("NOT_FOUND", e.message);
+  }
+  if (e instanceof DomainForbiddenError) {
+    return mapError("FORBIDDEN", e.message);
+  }
+  return mapError("UNKNOWN", e.message);
+}
+
+/**
+ * Clona las reglas de conteo de otra prueba a esta. Las reglas que ya
+ * existen en el destino NO se duplican ni se reescriben: se conservan.
+ */
+export interface CloneEvaluationRulesActionResult extends ActionResult {
+  cloned?: number;
+  kept?: number;
+  skipped?: number;
+  outcomes?: {
+    status: "clonada" | "conservada" | "omitida";
+    courseId?: string;
+    subjectId?: string;
+    bookletTypeId?: string;
+    courseName: string;
+    subjectName: string;
+    bookletTypeName: string;
+    exactQuestions: number;
+    motivo?: string;
+  }[];
+}
+
+export async function cloneEvaluationRulesAction(
+  periodId: string,
+  formData: FormData,
+): Promise<CloneEvaluationRulesActionResult> {
+  const actor = await requireAuthenticatedUser("ECU_MASTER");
+  const sourcePeriodId = (formData.get("sourcePeriodId") as string | null)?.trim() ?? "";
+
+  if (!sourcePeriodId) {
+    return mapError("VALIDATION", "Elige la prueba de la que quieres copiar las reglas.");
+  }
+
+  const r = await makeCloneEvaluationRules().execute({
+    actor,
+    sourcePeriodId,
+    targetPeriodId: periodId,
+  });
+
+  if (r.ok) {
+    revalidatePath(`/admin/academic/periods/${periodId}/edit`);
+    return {
+      ok: true,
+      cloned: r.value.cloned,
+      kept: r.value.kept,
+      skipped: r.value.skipped,
+      outcomes: r.value.outcomes,
+    };
+  }
+
+  const e = r.error;
+  if (e instanceof DomainValidationError) {
+    return mapError("VALIDATION", e.message);
+  }
   if (e instanceof DomainNotFoundError) {
     return mapError("NOT_FOUND", e.message);
   }

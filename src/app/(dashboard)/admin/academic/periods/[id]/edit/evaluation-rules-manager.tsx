@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 import {
+  cloneEvaluationRulesAction,
   createEvaluationRuleAction,
   deleteEvaluationRuleAction,
   updateEvaluationRuleAction,
@@ -22,6 +23,33 @@ export interface EvaluationRuleRow {
 interface CatalogOption {
   id: string;
   name: string;
+}
+
+/** Prueba de la que se pueden copiar reglas. */
+export interface CloneSourcePeriod {
+  id: string;
+  name: string;
+  year: number;
+  /** Cuántas reglas tiene esa prueba (para saber si vale la pena). */
+  ruleCount: number;
+}
+
+/** Resultado de un clon, tal como lo devuelve el server action. */
+interface CloneResult {
+  cloned: number;
+  kept: number;
+  skipped: number;
+  outcomes: {
+    status: "clonada" | "conservada" | "omitida";
+    courseId?: string;
+    subjectId?: string;
+    bookletTypeId?: string;
+    courseName: string;
+    subjectName: string;
+    bookletTypeName: string;
+    exactQuestions: number;
+    motivo?: string;
+  }[];
 }
 
 /**
@@ -52,6 +80,7 @@ export function EvaluationRulesManager({
   subjects,
   subjectsByCourse,
   bookletTypes,
+  sourcePeriods,
 }: {
   periodId: string;
   initialRules: EvaluationRuleRow[];
@@ -60,6 +89,8 @@ export function EvaluationRulesManager({
   /** Mapa courseId → subjectIds habilitados para ese grado. */
   subjectsByCourse: Record<string, string[]>;
   bookletTypes: CatalogOption[];
+  /** Pruebas desde las que se pueden copiar reglas (la actual se excluye). */
+  sourcePeriods: CloneSourcePeriod[];
 }) {
   const [rules, setRules] = useState<EvaluationRuleRow[]>(initialRules);
   const [error, setError] = useState<{ message: string; field?: string } | null>(null);
@@ -68,6 +99,9 @@ export function EvaluationRulesManager({
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>("");
   const [selectedBookletTypeId, setSelectedBookletTypeId] = useState<string>("");
+  // Origen del clon y resultado del último clon.
+  const [cloneSourceId, setCloneSourceId] = useState<string>("");
+  const [cloneResult, setCloneResult] = useState<CloneResult | null>(null);
   // Ref al input de conteo exacto para enfocarlo tras crear la regla y
   // que el docente pueda tipear el siguiente número sin tocar el mouse.
   const exactInputRef = useRef<HTMLInputElement>(null);
@@ -131,6 +165,44 @@ export function EvaluationRulesManager({
         return;
       }
       setRules((prev) => prev.filter((rule) => rule.id !== id));
+    });
+  };
+
+  /**
+   * Copia las reglas de conteo de otra prueba a esta. Las que ya existen
+   * en esta prueba se conservan con su conteo actual: el server action
+   * devuelve el detalle de lo que clonó, conservó y omitió.
+   */
+  const handleClone = () => {
+    if (!cloneSourceId) return;
+    setError(null);
+    const formData = new FormData();
+    formData.set("sourcePeriodId", cloneSourceId);
+    startTransition(async () => {
+      const r = await cloneEvaluationRulesAction(periodId, formData);
+      if (!r.ok) {
+        setError({ message: r.error ?? "Error" });
+        return;
+      }
+      const resultado: CloneResult = {
+        cloned: r.cloned ?? 0,
+        kept: r.kept ?? 0,
+        skipped: r.skipped ?? 0,
+        outcomes: r.outcomes ?? [],
+      };
+      setCloneResult(resultado);
+      // Las reglas clonadas entran a la lista local (el server action ya
+      // revalidó la ruta).
+      const nuevas = resultado.outcomes
+        .filter((o) => o.status === "clonada" && o.courseId && o.subjectId && o.bookletTypeId)
+        .map((o, i) => ({
+          id: `tmp-clone-${Date.now()}-${i}`,
+          courseId: o.courseId!,
+          subjectId: o.subjectId!,
+          bookletTypeId: o.bookletTypeId!,
+          exactQuestions: o.exactQuestions,
+        }));
+      if (nuevas.length > 0) setRules((prev) => [...prev, ...nuevas]);
     });
   };
 
@@ -352,6 +424,68 @@ export function EvaluationRulesManager({
           {error.message}
         </p>
       )}
+
+      {sourcePeriods.length > 0 ? (
+        <section className="mt-6 space-y-3 rounded-lg border border-dashed p-4">
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold">Clonar reglas de otra prueba</h3>
+            <p className="text-muted-foreground text-xs">
+              Copia las reglas de conteo a esta prueba. Las que ya existen aquí se conservan con su
+              conteo actual.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="min-w-[14rem] flex-1 space-y-1">
+              <label
+                htmlFor="clone-source-period"
+                className="text-muted-foreground block text-xs font-medium"
+              >
+                Prueba de origen
+              </label>
+              <select
+                id="clone-source-period"
+                value={cloneSourceId}
+                onChange={(e) => setCloneSourceId(e.target.value)}
+                className="border-input bg-background w-full rounded-md border px-2 py-1.5 text-sm"
+                disabled={isPending}
+              >
+                <option value="">—</option>
+                {sourcePeriods.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.year}) · {p.ruleCount} {p.ruleCount === 1 ? "regla" : "reglas"}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleClone}
+              disabled={isPending || !cloneSourceId}
+            >
+              {isPending ? "Clonando…" : "Clonar reglas"}
+            </Button>
+          </div>
+
+          {cloneResult ? (
+            <div className="space-y-1">
+              <p className="text-xs">
+                {cloneResult.cloned + cloneResult.kept + cloneResult.skipped === 0
+                  ? "Esa prueba no tiene reglas."
+                  : `${cloneResult.cloned} clonadas · ${cloneResult.kept} conservadas · ${cloneResult.skipped} omitidas`}
+              </p>
+              {cloneResult.outcomes
+                .filter((o) => o.status !== "clonada")
+                .map((o, i) => (
+                  <p key={`${o.status}-${i}`} className="text-muted-foreground text-xs">
+                    {o.courseName} · {o.subjectName} · {o.bookletTypeName} — {o.motivo}
+                  </p>
+                ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </section>
   );
 }

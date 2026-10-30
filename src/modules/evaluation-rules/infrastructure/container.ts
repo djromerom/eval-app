@@ -21,6 +21,7 @@ import {
   ListEvaluationRulesByPeriod,
   UpdateEvaluationRule,
 } from "../application/manage-evaluation-rules";
+import { CloneEvaluationRules } from "../application/clone-evaluation-rules";
 import { PrismaEvaluationRuleRepository } from "./prisma-evaluation-rule-repository";
 
 const rules = new PrismaEvaluationRuleRepository();
@@ -44,5 +45,16 @@ export const makeListEvaluationRulesByInstitution = () =>
 export const makeUpdateEvaluationRule = () => new UpdateEvaluationRule(rules);
 export const makeDeleteEvaluationRule = () => new DeleteEvaluationRule(rules);
 export const makeFindRuleForEvaluation = () => new FindRuleForEvaluation(evaluations, rules);
+
+/** Clona las reglas de una Prueba a otra conservando las ya existentes. */
+export const makeCloneEvaluationRules = () =>
+  new CloneEvaluationRules(
+    rules,
+    periods,
+    courses,
+    subjects,
+    bookletTypes,
+    makeCreateEvaluationRule(),
+  );
 
 export type { EvaluationRuleRepository } from "../domain/evaluation-rule";
