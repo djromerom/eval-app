@@ -23,11 +23,17 @@ import {
   applyFormulacionesFilters,
   parseFormulacionesFilters,
 } from "@/modules/consultas/domain/queries/formulaciones/filters";
+import {
+  applyFormuladoresFilters,
+  parseFormuladoresFilters,
+} from "@/modules/consultas/domain/queries/formuladores/filters";
+import { formuladorRowsToWorksheet } from "@/modules/consultas/domain/queries/formuladores/xlsx";
 import { formulacionRowsToWorksheet } from "@/modules/consultas/domain/shared/xlsx-formatter";
 import { informeGrupoToXlsx } from "@/modules/consultas/domain/queries/informe-grupo/xlsx";
 import {
   makeGetInformeGrupo,
   makeListFormulaciones,
+  makeListFormuladores,
 } from "@/modules/consultas/infrastructure/container";
 
 export const dynamic = "force-dynamic"; // siempre fresco; no cachear
@@ -35,6 +41,12 @@ export const dynamic = "force-dynamic"; // siempre fresco; no cachear
 function buildFilename(actor: { institutionId: string }): string {
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   return `formulaciones-${actor.institutionId}-${today}.xlsx`;
+}
+
+/** Nombre del archivo de la consulta "Docentes formuladores". */
+function buildFormuladoresFilename(actor: { institutionId: string }): string {
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  return `formuladores-${actor.institutionId}-${today}.xlsx`;
 }
 
 const XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -100,6 +112,25 @@ export async function GET(
   const actor = await requireAuthenticatedUser("SUPER_ADMIN", "ECU_MASTER");
   if (!can("run-queries", actor.roles)) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  if (id === "formuladores") {
+    const filters = parseFormuladoresFilters({
+      search: req.nextUrl.searchParams.get("search") ?? undefined,
+      cuadernillo: req.nextUrl.searchParams.get("cuadernillo") ?? undefined,
+      grado: req.nextUrl.searchParams.get("grado") ?? undefined,
+      asignatura: req.nextUrl.searchParams.get("asignatura") ?? undefined,
+      estado: req.nextUrl.searchParams.get("estado") ?? undefined,
+    });
+
+    const res = await makeListFormuladores().execute({ actor });
+    if (!res.ok) {
+      return NextResponse.json({ error: res.error.code }, { status: 500 });
+    }
+    const rows = applyFormuladoresFilters(res.value, filters);
+
+    const buffer = formuladorRowsToWorksheet(rows);
+    return xlsxResponse(buffer, buildFormuladoresFilename(actor));
   }
 
   if (id !== "formulaciones") {

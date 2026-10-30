@@ -4,10 +4,12 @@ import { requireAuthenticatedUser } from "@/lib/session";
 import { findConsulta } from "@/modules/consultas/domain/consultas-registry";
 import {
   makeListFormulaciones,
+  makeListFormuladores,
   makeListCalificaciones,
   makeGetInformeGrupo,
 } from "@/modules/consultas/infrastructure/container";
 import { FormulacionesTable } from "./_components/formulaciones-table";
+import { FormuladoresTable } from "./_components/formuladores-table";
 import { CalificacionesTable } from "./_components/calificaciones-table";
 import { InformeGrupoView } from "./_components/informe-grupo-view";
 
@@ -61,6 +63,14 @@ export default async function ConsultaDetallePage({
         informe={res.ok ? res.value.informe : null}
         error={res.ok ? (res.value.error?.message ?? null) : res.error.message}
       />
+    );
+  }
+
+  if (id === "formuladores") {
+    const res = await makeListFormuladores().execute({ actor });
+    const rows = res.ok ? res.value : [];
+    return (
+      <FormuladoresTable rows={rows} title={consulta.title} description={consulta.description} />
     );
   }
 
