@@ -2,11 +2,13 @@
 
 import { useMemo } from "react";
 import type { EvaluationStatus } from "@/modules/evaluations/domain/evaluation-status";
+import type { PruebaOpcion } from "@/modules/consultas/domain/shared/prueba-opcion";
 
 export interface FormulacionesFilterState {
   search: string;
   subjectName: string; // "" = todas
   courseName: string; // "" = todos
+  periodId: string; // "" = todas
   academicYearYear: number | null; // null = todos
   status: EvaluationStatus | ""; // "" = todos
 }
@@ -15,9 +17,17 @@ export const EMPTY_FILTERS: FormulacionesFilterState = {
   search: "",
   subjectName: "",
   courseName: "",
+  periodId: "",
   academicYearYear: null,
   status: "",
 };
+
+/** Estado inicial de los filtros: todo abierto salvo la prueba, que arranca
+ *  en la que está en curso (`defaultPeriodId`). `null` = ninguna prueba
+ *  marcada como actual → el filtro queda en "todas las pruebas". */
+export function filtrosIniciales(defaultPeriodId: string | null): FormulacionesFilterState {
+  return { ...EMPTY_FILTERS, periodId: defaultPeriodId ?? "" };
+}
 
 /** Filter row controlado. El padre (`FormulacionesTable`) maneja el state y
  *  pasa `filters` + `onChange` + `lookups` (los valores disponibles se
@@ -27,6 +37,7 @@ export function FormulacionesFilterRow({
   onChange,
   subjectOptions,
   courseOptions,
+  periodOptions,
   yearOptions,
 }: {
   filters: FormulacionesFilterState;
@@ -34,6 +45,8 @@ export function FormulacionesFilterRow({
   /** Opciones derivadas de las filas actuales; ya dedupeadas y ordenadas. */
   subjectOptions: string[];
   courseOptions: string[];
+  /** Pruebas de la institución (vienen del servidor, no de las filas). */
+  periodOptions: PruebaOpcion[];
   yearOptions: number[];
 }) {
   const yearLabel = useMemo(() => {
@@ -73,6 +86,19 @@ export function FormulacionesFilterRow({
         {courseOptions.map((c) => (
           <option key={c} value={c}>
             {c}
+          </option>
+        ))}
+      </select>
+      <select
+        value={filters.periodId}
+        onChange={(e) => onChange({ ...filters, periodId: e.target.value })}
+        className="border-input bg-background focus-visible:border-primary focus-visible:ring-primary/20 rounded-md border px-3 py-1.5 text-sm focus-visible:ring-2 focus-visible:outline-hidden"
+        aria-label="Filtrar por prueba"
+      >
+        <option value="">Todas las pruebas</option>
+        {periodOptions.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name} ({p.year})
           </option>
         ))}
       </select>

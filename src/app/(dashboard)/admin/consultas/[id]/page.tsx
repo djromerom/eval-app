@@ -4,11 +4,14 @@ import { requireAuthenticatedUser } from "@/lib/session";
 import { findConsulta } from "@/modules/consultas/domain/consultas-registry";
 import {
   makeListFormulaciones,
+  makeListAsignacionesPendientes,
+  makeListPruebas,
   makeListFormuladores,
   makeListCalificaciones,
   makeListReglasConteo,
   makeGetInformeGrupo,
 } from "@/modules/consultas/infrastructure/container";
+import { pruebaActual } from "@/modules/consultas/domain/shared/prueba-opcion";
 import { FormulacionesTable } from "./_components/formulaciones-table";
 import { FormuladoresTable } from "./_components/formuladores-table";
 import { CalificacionesTable } from "./_components/calificaciones-table";
@@ -96,10 +99,30 @@ export default async function ConsultaDetallePage({
     notFound();
   }
 
-  const res = await makeListFormulaciones().execute({ actor });
+  const [res, pruebasRes, pendientesRes] = await Promise.all([
+    makeListFormulaciones().execute({ actor }),
+    makeListPruebas().execute({ actor }),
+    makeListAsignacionesPendientes().execute({ actor }),
+  ]);
   const rows = res.ok ? res.value : [];
+  const pruebas = pruebasRes.ok ? pruebasRes.value : [];
+  // Asignaciones de las pruebas que aún no tienen formulación: el listado las
+  // trae para que el admin vea qué falta, no solo lo que ya está escrito.
+  const pendientes = pendientesRes.ok ? pendientesRes.value : [];
+
+  // El filtro de prueba arranca en la que está en curso (la marcada como
+  // actual en el año académico actual). Si ninguna está marcada, el filtro
+  // queda en "todas las pruebas" — ver `pruebaActual`.
+  const current = pruebaActual(pruebas);
 
   return (
-    <FormulacionesTable rows={rows} title={consulta.title} description={consulta.description} />
+    <FormulacionesTable
+      rows={rows}
+      pendientes={pendientes}
+      title={consulta.title}
+      description={consulta.description}
+      pruebas={pruebas}
+      defaultPeriodId={current?.id ?? null}
+    />
   );
 }

@@ -22,6 +22,7 @@
 import * as XLSX from "xlsx";
 
 import type { FormulacionRow } from "../queries/formulaciones/formulacion-row";
+import type { AsignacionPendiente } from "../queries/formulaciones/asignacion-pendiente";
 
 const HEADERS = [
   "Asignatura",
@@ -45,6 +46,10 @@ const STATUS_LABEL: Record<FormulacionRow["itemsBadge"], string> = {
   none: "Sin regla",
 };
 
+/** Estado de una asignación pendiente: la tupla existe en la prueba pero
+ *  todavía no tiene formulación. */
+const PENDIENTE_STATUS_LABEL = "Sin formular";
+
 function rowToCells(r: FormulacionRow): (string | number)[] {
   return [
     r.subjectName,
@@ -62,11 +67,42 @@ function rowToCells(r: FormulacionRow): (string | number)[] {
   ];
 }
 
-/** Serializa las filas a un `Buffer` XLSX listo para devolver como
- *  `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`. */
-export function formulacionRowsToWorksheet(rows: FormulacionRow[]): Buffer {
+/** Fila de una asignación pendiente: el estado es "Sin formular" (todavía
+ *  no hay formulación detrás) y las celdas de la formulación que no existen
+ *  todavía van vacías; los ítems son 0 sobre los exigidos. */
+function pendienteToCells(p: AsignacionPendiente): (string | number)[] {
+  return [
+    p.subjectName,
+    p.courseName,
+    p.academicYearYear,
+    p.periodName,
+    p.bookletTypeName ?? "",
+    PENDIENTE_STATUS_LABEL,
+    0,
+    p.itemsExpected ?? "",
+    p.itemsExpected == null ? STATUS_LABEL.none : STATUS_LABEL.low,
+    "",
+    p.assignedTeachers.join(", "),
+    "",
+  ];
+}
+
+/**
+ * Serializa las filas a un `Buffer` XLSX listo para devolver como
+ * `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`.
+ *
+ * `pendientes` son las asignaciones de la prueba que aún no tienen
+ * formulación: se exports al final, con el estado "Sin formular", las celdas
+ * que no aplican vacías (Docente Autor, Última Actualización) y `0` ítems
+ * sobre los exigidos por la regla.
+ */
+export function formulacionRowsToWorksheet(
+  rows: FormulacionRow[],
+  pendientes: AsignacionPendiente[] = [],
+): Buffer {
   const aoa: (string | number)[][] = [HEADERS as unknown as (string | number)[]];
   for (const r of rows) aoa.push(rowToCells(r));
+  for (const p of pendientes) aoa.push(pendienteToCells(p));
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   const wb = XLSX.utils.book_new();

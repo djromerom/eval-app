@@ -13,20 +13,30 @@
 import { usePathname } from "next/navigation";
 import type { FormulacionesFilterState } from "./formulaciones-filter-row";
 
-function buildQuery(f: FormulacionesFilterState): string {
+function buildQuery(f: FormulacionesFilterState, periodIds: string[] | null): string {
   const params = new URLSearchParams();
   if (f.search.trim()) params.set("search", f.search.trim());
   if (f.subjectName) params.set("subject", f.subjectName);
   if (f.courseName) params.set("course", f.courseName);
+  // Las pruebas van resueltas (la tabla ya agrupó la prueba en curso con las
+  // que aún no han empezado): se mandan todas, separadas por coma.
+  if (periodIds && periodIds.length > 0) params.set("prueba", periodIds.join(","));
   if (f.academicYearYear != null) params.set("year", String(f.academicYearYear));
   if (f.status) params.set("status", f.status);
   const qs = params.toString();
   return qs ? `?${qs}` : "";
 }
 
-export function DownloadXlsxButton({ filters }: { filters: FormulacionesFilterState }) {
+export function DownloadXlsxButton({
+  filters,
+  periodIds,
+}: {
+  filters: FormulacionesFilterState;
+  /** Pruebas del filtro ya resueltas. `null` = todas. */
+  periodIds?: string[] | null;
+}) {
   const pathname = usePathname();
-  const href = `${pathname}/export.xlsx${buildQuery(filters)}`;
+  const href = `${pathname}/export.xlsx${buildQuery(filters, periodIds ?? null)}`;
   return (
     <a
       href={href}

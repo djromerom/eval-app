@@ -21,6 +21,7 @@ import { requireAuthenticatedUser } from "@/lib/session";
 import { can } from "@/shared/application/capabilities";
 import {
   applyFormulacionesFilters,
+  applyPendientesFilters,
   parseFormulacionesFilters,
 } from "@/modules/consultas/domain/queries/formulaciones/filters";
 import {
@@ -37,6 +38,7 @@ import { formulacionRowsToWorksheet } from "@/modules/consultas/domain/shared/xl
 import { informeGrupoToXlsx } from "@/modules/consultas/domain/queries/informe-grupo/xlsx";
 import {
   makeGetInformeGrupo,
+  makeListAsignacionesPendientes,
   makeListFormulaciones,
   makeListFormuladores,
   makeListReglasConteo,
@@ -170,17 +172,24 @@ export async function GET(
     search: req.nextUrl.searchParams.get("search") ?? undefined,
     subjectName: req.nextUrl.searchParams.get("subject") ?? undefined,
     courseName: req.nextUrl.searchParams.get("course") ?? undefined,
+    periodIds: req.nextUrl.searchParams.get("prueba") ?? undefined,
     academicYearYear: req.nextUrl.searchParams.get("year") ?? undefined,
     status: req.nextUrl.searchParams.get("status") ?? undefined,
   });
 
-  const res = await makeListFormulaciones().execute({ actor });
+  const [res, pendientesRes] = await Promise.all([
+    makeListFormulaciones().execute({ actor }),
+    makeListAsignacionesPendientes().execute({ actor }),
+  ]);
   if (!res.ok) {
     return NextResponse.json({ error: res.error.code }, { status: 500 });
   }
   const rows = applyFormulacionesFilters(res.value, filters);
+  // Las asignaciones pendientes de la prueba van al final del Excel: son
+  // parte del listado (el admin las ve en pantalla) pero no son formulaciones.
+  const pendientes = pendientesRes.ok ? applyPendientesFilters(pendientesRes.value, filters) : [];
 
-  const buffer = formulacionRowsToWorksheet(rows);
+  const buffer = formulacionRowsToWorksheet(rows, pendientes);
 
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,

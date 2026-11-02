@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 
 import type { FormulacionRow } from "@/modules/consultas/domain/queries/formulaciones/formulacion-row";
+import type { AsignacionPendiente } from "@/modules/consultas/domain/queries/formulaciones/asignacion-pendiente";
 import { formulacionRowsToWorksheet } from "@/modules/consultas/domain/shared/xlsx-formatter";
 
 function makeRow(overrides: Partial<FormulacionRow> = {}): FormulacionRow {
@@ -31,6 +32,22 @@ function makeRow(overrides: Partial<FormulacionRow> = {}): FormulacionRow {
     itemsExpected: 20,
     itemsBadge: "ok",
     updatedAt: new Date("2026-09-03T12:00:00Z"),
+    ...overrides,
+  };
+}
+
+function makePendiente(overrides: Partial<AsignacionPendiente> = {}): AsignacionPendiente {
+  return {
+    id: "rule-1",
+    subjectName: "Inglés",
+    courseName: "10",
+    academicYearYear: 2026,
+    periodId: "p-1",
+    periodName: "Periodo 1",
+    bookletTypeId: "bt-2",
+    bookletTypeName: "Con Ajuste",
+    itemsExpected: 25,
+    assignedTeachers: ["Ana Ruiz"],
     ...overrides,
   };
 }
@@ -135,5 +152,29 @@ describe("formulacionRowsToWorksheet", () => {
     const sheet = wb.Sheets["Formulaciones"]!;
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
     expect(rows).toHaveLength(1); // solo header
+  });
+
+  it("las asignaciones pendientes se exportan al final de las formulaciones", () => {
+    const buf = formulacionRowsToWorksheet([makeRow()], [makePendiente()]);
+    const wb = XLSX.read(buf, { type: "buffer" });
+    const sheet = wb.Sheets[wb.SheetNames[0]!]!;
+    const rows = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1 });
+    expect(rows).toHaveLength(3); // header + 1 formulating + 1 pendiente
+    expect(rows[2]?.[0]).toBe("Inglés");
+    expect(rows[2]?.[1]).toBe("10");
+  });
+
+  it("la asignación pendiente deja vacías las celdas que no aplican", () => {
+    const buf = formulacionRowsToWorksheet([], [makePendiente()]);
+    const wb = XLSX.read(buf, { type: "buffer" });
+    const sheet = wb.Sheets[wb.SheetNames[0]!]!;
+    const [, data = []] = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1 });
+    expect(data[5]).toBe("Sin formular"); // Estado: todavía no hay formulación
+    expect(data[6]).toBe(0); // Items Total
+    expect(data[7]).toBe(25); // Items Esperado (la regla de conteo)
+    expect(data[8]).toBe("Faltan"); // Items Estado
+    expect(data[9]).toBe(""); // Docente Autor
+    expect(data[10]).toBe("Ana Ruiz"); // Docentes Asignados
+    expect(data[11]).toBe(""); // Última Actualización
   });
 });
