@@ -151,10 +151,18 @@ export default async function PrintEvaluationPage({
                       Las preguntas wide (con imagen/tabla) ya tienen
                       column-span: all, así que cruzan ambas columnas
                       sin importar la densidad. */}
+                  {/* El className de cada pregunta va como string literal y no
+                      como template: prettier-plugin-tailwindcss normaliza las
+                      clases dentro de un template y se come el espacio de
+                      " wide", dejando `questionwide` (que no matchea la regla
+                      `.question.wide` de print.css). */}
                   <ul className="questions-list" data-density={density}>
                     {sectionsInGroup.flatMap((s) =>
                       s.questions.map((q) => (
-                        <div key={q.id} className={`question${isWideQuestion(q) ? "wide" : ""}`}>
+                        <div
+                          key={q.id}
+                          className={isWideQuestion(q) ? "question wide" : "question"}
+                        >
                           <p className="question-text">
                             <span className="item-number">{q.number}.</span>{" "}
                             <RichTextInline value={q.text} />
