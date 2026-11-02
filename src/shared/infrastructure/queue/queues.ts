@@ -71,6 +71,17 @@ export interface PdfGenerationResult {
   institutionId: string;
   kind: PrintKind;
   path: string;
+  /**
+   * Presupuesto de papel del cuadernillo (solo en las salidas que se imponen
+   * como cuadernillo). Informa cuántas páginas quedan en blanco por el
+   * redondeo a múltiplo de 4. Ver `shared/print/image-sizing.ts`.
+   */
+  pageBudget?: {
+    contentPages: number;
+    paddedPages: number;
+    sheets: number;
+    blankPages: number;
+  };
 }
 
 /**
