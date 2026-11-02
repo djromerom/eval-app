@@ -60,10 +60,8 @@ function fakeRow(overrides: Partial<FormuladorRow> = {}): FormuladorRow {
     grado: "10-1",
     asignatura: "Matemáticas",
     formulador: "Ana Ruiz",
-    tipoDocumento: "C.C.",
     documento: "123456",
     email: "ana@colegio.edu.co",
-    celular: "3001234567",
     formulacion: null,
     estado: "pendiente",
     ...overrides,
@@ -82,10 +80,8 @@ function fakeAsignacion(overrides: Partial<AsignacionDocente> = {}): AsignacionD
     courseSubjectId: "cs-1",
     docenteId: "u-ana",
     docenteNombre: "Ana Ruiz",
-    tipoDocumento: "C.C.",
     documento: "123456",
     email: "ana@colegio.edu.co",
-    celular: "3001234567",
     ...overrides,
   };
 }
@@ -103,9 +99,7 @@ function fakeFormulacion(overrides: Partial<FormulacionDocente> = {}): Formulaci
     autorId: "u-ana",
     autorNombre: "Ana Ruiz",
     email: "ana@colegio.edu.co",
-    tipoDocumento: "C.C.",
     documento: "123456",
-    celular: "3001234567",
     cuadernillo: "Cuadernillo 1",
     ...overrides,
   };
@@ -370,7 +364,7 @@ describe("formuladorRowsToWorksheet", () => {
     expect(buf[1]).toBe(0x4b);
   });
 
-  it("el header tiene las 8 columnas pedidas primero y las 3 de apoyo al final", () => {
+  it("el header tiene las 7 columnas de la consulta (sin datos de contacto)", () => {
     const buf = formuladorRowsToWorksheet([]);
     const wb = XLSX.read(buf, { type: "buffer" });
     const sheet = wb.Sheets[wb.SheetNames[0]!]!;
@@ -380,10 +374,6 @@ describe("formuladorRowsToWorksheet", () => {
       "Grado",
       "Asignatura",
       "Formulador",
-      "Tipo doc.",
-      "ID",
-      "Email",
-      "Celular",
       "Prueba",
       "Formulación",
       "Estado",
@@ -399,25 +389,24 @@ describe("formuladorRowsToWorksheet", () => {
     expect(data[1]).toBe("10-1");
     expect(data[2]).toBe("Matemáticas");
     expect(data[3]).toBe("Ana Ruiz");
-    expect(data[4]).toBe("C.C.");
-    expect(data[5]).toBe("123456");
-    expect(data[6]).toBe("ana@colegio.edu.co");
-    expect(data[7]).toBe("3001234567");
-    expect(data[8]).toBe("I Periodo · 2026");
-    expect(data[10]).toBe("Pendiente");
+    expect(data[4]).toBe("I Periodo · 2026");
+    expect(data[5]).toBe("");
+    expect(data[6]).toBe("Pendiente");
   });
 
-  it("los datos de contacto que faltan van como celda vacía", () => {
-    const buf = formuladorRowsToWorksheet([
-      fakeRow({ tipoDocumento: null, documento: null, email: null, celular: null }),
-    ]);
+  it("no exporta los datos de contacto del docente", () => {
+    const buf = formuladorRowsToWorksheet([fakeRow()]);
     const wb = XLSX.read(buf, { type: "buffer" });
     const sheet = wb.Sheets[wb.SheetNames[0]!]!;
-    const [, data = []] = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1 });
-    expect(data[4]).toBe("");
-    expect(data[5]).toBe("");
-    expect(data[6]).toBe("");
-    expect(data[7]).toBe("");
+    const [header, data = []] = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, {
+      header: 1,
+    });
+    expect(header).not.toContain("Tipo doc.");
+    expect(header).not.toContain("ID");
+    expect(header).not.toContain("Email");
+    expect(header).not.toContain("Celular");
+    expect(data).not.toContain("ana@colegio.edu.co");
+    expect(data).not.toContain("123456");
   });
 
   it("listado vacío → workbook solo con headers", () => {

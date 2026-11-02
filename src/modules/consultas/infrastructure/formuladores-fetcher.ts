@@ -4,8 +4,9 @@
  * Hace 2 queries (no N+1) y 1 map final:
  *
  *   1. `TeacherSubjectAssignment` de la institución, con el tipo de
- *      cuadernillo, el grado, la asignatura y la ficha del docente
- *      (`Teacher.idType/idNumber/phone` + `User.name/email`).
+ *      cuadernillo, el grado, la asignatura y el docente
+ *      (`Teacher.idNumber` + `User.name/email`; el tipo de documento y el
+ *      celular ya no se muestran y no se traen).
  *
  *   2. `Evaluation` (última versión: `parentVersionId: null`) con el autor,
  *      el tipo de cuadernillo y el cuadernillo (compendio) al que pertenece.
@@ -48,9 +49,7 @@ export class PrismaFormuladoresReader implements FormuladoresReader {
           },
           teacher: {
             select: {
-              idType: true,
               idNumber: true,
-              phone: true,
               user: { select: { id: true, name: true, email: true } },
             },
           },
@@ -78,7 +77,7 @@ export class PrismaFormuladoresReader implements FormuladoresReader {
               id: true,
               name: true,
               email: true,
-              teacherProfile: { select: { idType: true, idNumber: true, phone: true } },
+              teacherProfile: { select: { idNumber: true } },
             },
           },
           bundleItems: { select: { bundle: { select: { name: true } } } },
@@ -97,10 +96,8 @@ export class PrismaFormuladoresReader implements FormuladoresReader {
       courseSubjectId: a.courseSubject.id,
       docenteId: a.teacher.user.id,
       docenteNombre: a.teacher.user.name,
-      tipoDocumento: a.teacher.idType,
       documento: a.teacher.idNumber,
       email: a.teacher.user.email,
-      celular: a.teacher.phone,
     }));
 
     const formulaciones: FormulacionDocente[] = evaluations.map((e) => {
@@ -118,9 +115,7 @@ export class PrismaFormuladoresReader implements FormuladoresReader {
         autorId: e.teacher.id,
         autorNombre: e.teacher.name,
         email: e.teacher.email,
-        tipoDocumento: perfil?.idType ?? null,
         documento: perfil?.idNumber ?? null,
-        celular: perfil?.phone ?? null,
         // Mismo criterio que la consulta de calificaciones: el nombre del
         // cuadernillo si la formulación ya está en uno; si no, el título.
         cuadernillo: bundleName ?? e.title,

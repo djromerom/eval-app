@@ -6,14 +6,11 @@
  * el dataset es de cientos de filas, no de millones, así que el modo sync
  * alcanza y sobra.
  *
- * Decisión de columnas: las 8 que pidió el docente (Cuadernillo, Grado,
- * Asignatura, Formulador, Tipo doc., ID, Email, Celular) van primero, en ese
- * orden, y al final se agregan las 3 que hacen falta para que la tabla sea
- * interpretable (Prueba, Formulación, Estado).
- *
- * Los datos de contacto que el docente no tiene cargados se exportan como
- * celda VACÍA (no "—") para que en Excel no se confundan con un valor real
- * y los filtros del archivo no los arrastren.
+ * Decisión de columnas: las 7 que pidió el docente
+ * (Cuadernillo, Grado, Asignatura, Formulador, Prueba, Formulación, Estado).
+ * Los datos de contacto del docente (tipo de documento, ID, email y celular)
+ * ya no son columnas de la consulta: el docente los quitó porque enturbian la
+ * lectura; el buscador de la tabla sí sigue admitting correo e ID.
  */
 import * as XLSX from "xlsx";
 
@@ -24,10 +21,6 @@ const HEADERS = [
   "Grado",
   "Asignatura",
   "Formulador",
-  "Tipo doc.",
-  "ID",
-  "Email",
-  "Celular",
   "Prueba",
   "Formulación",
   "Estado",
@@ -39,10 +32,6 @@ function rowToCells(r: FormuladorRow): (string | number)[] {
     r.grado,
     r.asignatura,
     r.formulador,
-    r.tipoDocumento ?? "",
-    r.documento ?? "",
-    r.email ?? "",
-    r.celular ?? "",
     pruebaLabel(r),
     r.formulacion ?? "",
     ESTADO_LABEL[r.estado],

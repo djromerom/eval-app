@@ -36,10 +36,8 @@ export interface AsignacionDocente {
   /** `User.id` del docente (para saber si la formulación es suya). */
   docenteId: string;
   docenteNombre: string;
-  tipoDocumento: string | null;
   documento: string | null;
   email: string | null;
-  celular: string | null;
 }
 
 /** Formulación (última versión) con su autor. */
@@ -56,9 +54,7 @@ export interface FormulacionDocente {
   autorId: string;
   autorNombre: string;
   email: string | null;
-  tipoDocumento: string | null;
   documento: string | null;
-  celular: string | null;
   /** Nombre del cuadernillo (compendio) o el título de la formulación. */
   cuadernillo: string;
 }
@@ -113,10 +109,8 @@ export function construirFilasFormuladores(
       grado: a.grado,
       asignatura: a.asignatura,
       formulador: a.docenteNombre,
-      tipoDocumento: a.tipoDocumento,
       documento: a.documento,
       email: a.email,
-      celular: a.celular,
       formulacion: formulacion?.titulo ?? null,
       estado,
     });
@@ -138,10 +132,8 @@ export function construirFilasFormuladores(
       grado: f.grado,
       asignatura: f.asignatura,
       formulador: f.autorNombre,
-      tipoDocumento: f.tipoDocumento,
       documento: f.documento,
       email: f.email,
-      celular: f.celular,
       formulacion: f.titulo,
       estado: "formulado",
     });

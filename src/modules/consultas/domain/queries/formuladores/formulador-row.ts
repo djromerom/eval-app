@@ -1,8 +1,8 @@
 /**
  * DTO de la consulta "Docentes formuladores por cuadernillo".
  *
- * Una fila = la relación "docente ↔ cuadernillo ↔ grado ↔ asignatura", con
- * los datos de contacto del docente. La consulta tiene DOS orígenes:
+ * Una fila = la relación "docente ↔ cuadernillo ↔ grado ↔ asignatura". La
+ * consulta tiene DOS orígenes:
  *
  *  - `asignacion`: el docente está ASIGNADO (`TeacherSubjectAssignment`) a ese
  *    tipo de cuadernillo para ese grado-asignatura. Es la fila que responde
@@ -65,14 +65,14 @@ export interface FormuladorRow {
   asignatura: string;
   /** Nombre del docente. */
   formulador: string;
-  /** Tipo de documento ("C.C." / "C.E."). Null si el docente no tiene ficha. */
-  tipoDocumento: string | null;
-  /** Número de documento. Null si el docente no tiene ficha. */
+  /** Número de documento. Null si el docente no tiene ficha.
+   *  No es una columna de la tabla (el docente las quitó): se conserva solo
+   *  para que el buscador libre pueda filtrar por ID. */
   documento: string | null;
-  /** Correo del docente. */
+  /** Correo del docente. No es una columna de la tabla (el docente las
+   *  quitó): se conserva solo para que el buscador libre pueda filtrar por
+   *  correo (el placeholder del buscador lo ofrece). */
   email: string | null;
-  /** Celular del docente. Null si el docente no tiene ficha. */
-  celular: string | null;
   /** Título de la formulación asociada, si la hay. */
   formulacion: string | null;
   /** Estado de cobertura del cuadernillo. */
