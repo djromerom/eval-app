@@ -22,4 +22,10 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  // JSX con runtime automático (React 17+), igual que compila Next: los
+  // componentes se renderizan sin `React` en scope. Lo necesitan los tests que
+  // renderizan componentes con `react-dom/server`.
+  esbuild: {
+    jsx: "automatic",
+  },
 });

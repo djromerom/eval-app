@@ -85,8 +85,8 @@ describe("formulacionRowsToWorksheet", () => {
       "Items Total",
       "Items Esperado",
       "Items Estado",
-      "Docente Autor",
       "Docentes Asignados",
+      "Docente Formulador",
       "Última Actualización",
     ]);
   });
@@ -96,7 +96,8 @@ describe("formulacionRowsToWorksheet", () => {
     const wb = XLSX.read(buf, { type: "buffer" });
     const sheet = wb.Sheets[wb.SheetNames[0]!]!;
     const [, data = []] = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 });
-    expect(data[10]).toBe("A, B, C");
+    expect(data[9]).toBe("A, B, C");
+    expect(data[10]).toBe("María López"); // docente formulador
   });
 
   it("assignedTeachers vacío → celda vacía", () => {
@@ -104,7 +105,7 @@ describe("formulacionRowsToWorksheet", () => {
     const wb = XLSX.read(buf, { type: "buffer" });
     const sheet = wb.Sheets[wb.SheetNames[0]!]!;
     const [, data = []] = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 });
-    expect(data[10]).toBe("");
+    expect(data[9]).toBe("");
   });
 
   it("itemsExpected null → celda vacía + Estado Sin regla", () => {
@@ -173,8 +174,8 @@ describe("formulacionRowsToWorksheet", () => {
     expect(data[6]).toBe(0); // Items Total
     expect(data[7]).toBe(25); // Items Esperado (la regla de conteo)
     expect(data[8]).toBe("Faltan"); // Items Estado
-    expect(data[9]).toBe(""); // Docente Autor
-    expect(data[10]).toBe("Ana Ruiz"); // Docentes Asignados
+    expect(data[9]).toBe("Ana Ruiz"); // Docentes Asignados
+    expect(data[10]).toBe(""); // Docente Formulador (no hay formulación)
     expect(data[11]).toBe(""); // Última Actualización
   });
 });

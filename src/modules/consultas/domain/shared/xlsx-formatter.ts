@@ -34,8 +34,8 @@ const HEADERS = [
   "Items Total",
   "Items Esperado",
   "Items Estado",
-  "Docente Autor",
   "Docentes Asignados",
+  "Docente Formulador",
   "Última Actualización",
 ] as const;
 
@@ -61,8 +61,8 @@ function rowToCells(r: FormulacionRow): (string | number)[] {
     r.itemsTotal,
     r.itemsExpected ?? "", // "" en lugar de null → SheetJS genera celda vacía legible por sheet_to_json.
     STATUS_LABEL[r.itemsBadge],
-    r.authorName,
     r.assignedTeachers.join(", "),
+    r.authorName,
     r.updatedAt.toISOString(),
   ];
 }
@@ -81,8 +81,8 @@ function pendienteToCells(p: AsignacionPendiente): (string | number)[] {
     0,
     p.itemsExpected ?? "",
     p.itemsExpected == null ? STATUS_LABEL.none : STATUS_LABEL.low,
-    "",
     p.assignedTeachers.join(", "),
+    "",
     "",
   ];
 }
@@ -93,7 +93,7 @@ function pendienteToCells(p: AsignacionPendiente): (string | number)[] {
  *
  * `pendientes` son las asignaciones de la prueba que aún no tienen
  * formulación: se exports al final, con el estado "Sin formular", las celdas
- * que no aplican vacías (Docente Autor, Última Actualización) y `0` ítems
+ * que no aplican vacías (Docente Formulador, Última Actualización) y `0` ítems
  * sobre los exigidos por la regla.
  */
 export function formulacionRowsToWorksheet(
