@@ -6,6 +6,7 @@ import {
   makeListCourseSubjects,
   makeListCourses,
   makeListPeriods,
+  makeGetCurrentPeriod,
 } from "@/modules/academic/infrastructure/container";
 import { makeListBookletTypesByInstitution } from "@/modules/booklet-types/infrastructure/container";
 import { makeListTeacherAssignments } from "@/modules/teachers/infrastructure/container";
@@ -38,12 +39,14 @@ export default async function EvaluationsPage() {
   const assignments = assignmentsRes.ok ? assignmentsRes.value : [];
 
   // "Mis formulaciones" muestra SOLO las formulaciones de la PRUEBA ACTUAL
-  // (la que el admin marcó con `isCurrent`). Se resuelve con la misma regla
-  // que el select "Prueba" del formulario (`periods.find(p => p.isCurrent)`)
-  // para que el listado y el formulario hablen siempre de la misma prueba.
+  // (la que el admin marcó con `isCurrent`). La resolución es year-aware
+  // (`GetCurrentPeriod`): `isCurrent` es una marca POR AÑO ACADÉMICO, así que
+  // gana la actual del año en curso sobre la de un año ya cerrado. Es la
+  // misma prueba que ven Cuadernillos, Revisión y el módulo de escaneo.
   // Sin ninguna prueba actual marcada, no se filtra: el docente ve todas
   // (igual que antes de este filtro).
-  const currentPeriod = periods.find((p) => p.isCurrent);
+  const currentPeriodRes = await makeGetCurrentPeriod().execute({ actor });
+  const currentPeriod = currentPeriodRes.ok ? currentPeriodRes.value : null;
   const listRes = await makeListEvaluations().execute({ actor, periodId: currentPeriod?.id });
   const evaluations = listRes.ok ? listRes.value : [];
 
@@ -149,6 +152,11 @@ export default async function EvaluationsPage() {
             academicYearId: p.academicYearId,
             isCurrent: p.isCurrent,
           }))}
+          /** La prueba actual, resuelta en el servidor con la regla
+           *  year-aware (`GetCurrentPeriod`): la actual del año académico en
+           *  curso. El form la usa para preseleccionar y bloquear el select
+           *  "Prueba" (nov 2026). */
+          currentPeriodId={currentPeriod?.id ?? null}
           /** Mapa (courseSubjectId|periodId) → { id, title } para detectar
            *  duplicados client-side y redirigir al docente a la formulación
            *  existente en lugar de fallar con un error 409 (ago 2026). */
