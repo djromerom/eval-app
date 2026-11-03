@@ -3,6 +3,7 @@ import { requireAuthenticatedUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/evaluations/status-badge";
 import { makeListEvaluations } from "@/modules/evaluations/infrastructure/container";
+import { makeGetCurrentPeriod } from "@/modules/academic/infrastructure/container";
 import type { EvaluationListItem } from "@/modules/evaluations/domain/evaluation";
 import type { EvaluationStatus } from "@/modules/evaluations/domain/evaluation-status";
 import { approveAction, publishAction, revertAction } from "./actions";
@@ -104,7 +105,19 @@ export default async function ReviewPage({ searchParams }: { searchParams: Searc
     ? params.status
     : DEFAULT_STATUS;
 
-  const res = await makeListEvaluations().execute({ actor, status: currentStatus });
+  // La revisión se acota a la PRUEBA ACTUAL (la marcada con `isCurrent`),
+  // para que el líder revise lo que los docentes están formulando ahora y
+  // no las formulaciones de pruebas anteriores. Si la institución no tiene
+  // ninguna prueba actual marcada, no se filtra (mismo criterio que
+  // "Mis formulaciones").
+  const currentPeriodRes = await makeGetCurrentPeriod().execute({ actor });
+  const currentPeriod = currentPeriodRes.ok ? currentPeriodRes.value : null;
+
+  const res = await makeListEvaluations().execute({
+    actor,
+    status: currentStatus,
+    periodId: currentPeriod?.id,
+  });
   const evaluations = res.ok ? res.value : [];
 
   const sectionTitle = REVIEW_FILTER_OPTIONS.find((o) => o.value === currentStatus)?.label ?? "";
@@ -116,12 +129,15 @@ export default async function ReviewPage({ searchParams }: { searchParams: Searc
         description="Aprueba o rechaza (con comentario) las formulaciones enviadas por los docentes."
       />
 
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <label htmlFor="status-filter" className="text-sm font-medium">
           Filtrar por estado:
         </label>
         <StatusFilter current={currentStatus} />
         <span className="text-muted-foreground text-sm">({evaluations.length})</span>
+        {currentPeriod ? (
+          <span className="text-muted-foreground text-sm">Prueba actual: {currentPeriod.name}</span>
+        ) : null}
       </div>
 
       <section className="space-y-3">
