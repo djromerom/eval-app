@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import { makeListEvaluations } from "@/modules/evaluations/infrastructure/container";
 import { makeListLeaderAssignments } from "@/modules/leader-assignments/infrastructure/container";
+import { makeGetCurrentPeriod } from "@/modules/academic/infrastructure/container";
 
 export const metadata: Metadata = { title: "Panel de coordinación" };
 
@@ -18,10 +19,17 @@ export default async function CoordinatorDashboardPage() {
   // Las formulaciones pasan por el use case ListEvaluations → el scope
   // filter del Líder ECU se aplica aquí (solo cursos asignados). Los KPIs
   // de docentes/estudiantes siguen siendo institucionales (no por líder).
+  //
+  // Los conteos de pendientes/aprobadas se acotan a la PRUEBA ACTUAL, igual
+  // que la página de Revisión: el panel y la lista a la que enlaza tienen que
+  // hablar de la misma prueba (si no, el panel muestra más de lo que el líder
+  // encuentra al pulsar "Ir a revisión").
+  const currentPeriodRes = await makeGetCurrentPeriod().execute({ actor });
+  const currentPeriod = currentPeriodRes.ok ? currentPeriodRes.value : null;
   const [inReviewRes, approvedRes, assignmentsRes, teachersCount, studentsCount] =
     await Promise.all([
-      makeListEvaluations().execute({ actor, status: "IN_REVIEW" }),
-      makeListEvaluations().execute({ actor, status: "APPROVED" }),
+      makeListEvaluations().execute({ actor, status: "IN_REVIEW", periodId: currentPeriod?.id }),
+      makeListEvaluations().execute({ actor, status: "APPROVED", periodId: currentPeriod?.id }),
       makeListLeaderAssignments().execute({ actor }),
       prisma.user.count({
         where: {

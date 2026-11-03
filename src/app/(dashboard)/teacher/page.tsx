@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { StatusBadge } from "@/components/evaluations/status-badge";
 import { prisma } from "@/shared/infrastructure/db/prisma";
+import { makeGetCurrentPeriod } from "@/modules/academic/infrastructure/container";
 
 export const metadata: Metadata = { title: "Panel del docente" };
 
@@ -26,13 +27,23 @@ const df = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "s
 export default async function TeacherDashboardPage() {
   const actor = await requireAuthenticatedUser("TEACHER");
 
+  // El panel se acota a la PRUEBA ACTUAL, igual que "Mis formulaciones": el
+  // panel y la lista a la que enlaza tienen que hablar de la misma prueba.
+  const currentPeriodRes = await makeGetCurrentPeriod().execute({ actor });
+  const currentPeriod = currentPeriodRes.ok ? currentPeriodRes.value : null;
+
   const [currentUser, evaluations, unreadNotifications] = await Promise.all([
     prisma.user.findUnique({
       where: { id: actor.userId },
       select: { name: true },
     }),
     prisma.evaluation.findMany({
-      where: { institutionId: actor.institutionId, teacherId: actor.userId, deletedAt: null },
+      where: {
+        institutionId: actor.institutionId,
+        teacherId: actor.userId,
+        deletedAt: null,
+        ...(currentPeriod ? { periodId: currentPeriod.id } : {}),
+      },
       orderBy: { updatedAt: "desc" },
       take: 30,
       include: {

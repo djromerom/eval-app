@@ -245,7 +245,17 @@ export interface BatchWithSheets {
   }[];
 }
 
-export async function getBatchesAction(): Promise<BatchWithSheets[]> {
+/**
+ * Lotes de escaneo visibles para el actor.
+ *
+ * `periodId` acota el listado a una prueba (la actual, por defecto). El
+ * `ScanBatch` no tiene columna `periodId`: la prueba se hereda del
+ * objetivo (formulación o cuadernillo). Un lote SIN objetivo (carga
+ * automática donde ninguna hoja clasificó) no pertenece a ninguna prueba,
+ * así que se muestra siempre: son hojas esperando que el docente les
+ * asigne cuadernillo, y esconderlas las dejaría varadas.
+ */
+export async function getBatchesAction(periodId: string | null = null): Promise<BatchWithSheets[]> {
   const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER");
 
   // Filtro multi-target: el batch pertenece a la institución y:
@@ -256,8 +266,19 @@ export async function getBatchesAction(): Promise<BatchWithSheets[]> {
     where: {
       institutionId: actor.institutionId,
       OR: [
-        { evaluation: { teacherId: actor.userId, deletedAt: null } },
-        { bundle: { institutionId: actor.institutionId } },
+        {
+          evaluation: {
+            teacherId: actor.userId,
+            deletedAt: null,
+            ...(periodId ? { periodId } : {}),
+          },
+        },
+        {
+          bundle: {
+            institutionId: actor.institutionId,
+            ...(periodId ? { periodId } : {}),
+          },
+        },
         // Lote sin cuadernillo de una carga automática donde ninguna hoja
         // clasificó. Se exige que tenga hojas sin clasificar para no mostrar
         // lotes legacy que quedaron sin objetivo.

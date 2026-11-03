@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
+import { ALL_PERIODS } from "@/modules/academic/domain/period-filter";
 
 interface PeriodOption {
   id: string;
@@ -88,7 +89,7 @@ export function BundlesFilterRow({
         <select
           aria-label="Filtrar por Prueba"
           className={selectClass}
-          value={currentPeriodId}
+          value={currentPeriodId || ALL_PERIODS}
           disabled={pending}
           onChange={(e) => {
             const next = e.target.value;
@@ -97,6 +98,7 @@ export function BundlesFilterRow({
             // y luego cambia a un Period distinto, ese BookletType deja de aplicar.
             const stillValid =
               !currentBookletTypeId ||
+              next === ALL_PERIODS ||
               !next ||
               bookletTypes.find((bt) => bt.id === currentBookletTypeId && bt.periodId === next);
             navigate({
@@ -105,7 +107,7 @@ export function BundlesFilterRow({
             });
           }}
         >
-          <option value="">Todas</option>
+          <option value={ALL_PERIODS}>Todas</option>
           {periods.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}

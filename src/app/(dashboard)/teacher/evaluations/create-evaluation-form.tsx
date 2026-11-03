@@ -71,6 +71,7 @@ export function CreateEvaluationForm({
   bookletTypes,
   csYearMap,
   periods,
+  currentPeriodId,
   existingMap,
   allowedTypesByCs,
 }: {
@@ -83,6 +84,10 @@ export function CreateEvaluationForm({
   csYearMap: Record<string, string>;
   /** Periodos con `isCurrent` y `academicYearId`. */
   periods: PeriodRow[];
+  /** Id de la prueba actual, resuelto en el servidor con la regla
+   *  year-aware (`GetCurrentPeriod`): la actual del año académico en curso,
+   *  no la de un año ya cerrado. `null` = no hay prueba actual marcada. */
+  currentPeriodId: string | null;
   /** Mapa (`courseSubjectId|periodId|bookletTypeId`) → { id, title } de
    *  formulaciones ya existentes para el docente. Si la combinación
    *  seleccionada tiene match, se renderiza un link directo a esa formulación
@@ -98,13 +103,17 @@ export function CreateEvaluationForm({
   const [state, formAction] = useActionState<AdminFormState, FormData>(action, {});
   const formRef = useRef<HTMLFormElement>(null);
 
-  // Encontrar el periodo "actual" (uno por institución/año académico). Si
-  // la institución no tiene ninguno marcado como `isCurrent`, no hay
-  // preselección ni bloqueo y el form queda con todos los campos vacíos
-  // (caso defensivo). (ago 2026 — pedido del docente: "Prueba solo la
-  // actual por defecto y bloqueada, Asignatura solo del año marcado como
-  // actual".)
-  const currentPeriod = useMemo(() => periods.find((p) => p.isCurrent), [periods]);
+  // Encontrar el periodo "actual". Lo resuelve el servidor (`GetCurrentPeriod`)
+  // porque `isCurrent` es una marca POR AÑO ACADÉMICO: buscar el primero de
+  // la lista podría devolver la prueba de un año ya cerrado. Si la
+  // institución no tiene ninguna marcada, no hay preselección ni bloqueo y
+  // el form queda con todos los campos vacíos (caso defensivo).
+  // (ago 2026 — pedido del docente: "Prueba solo la actual por defecto y
+  // bloqueada, Asignatura solo del año marcado como actual".)
+  const currentPeriod = useMemo(
+    () => periods.find((p) => p.id === currentPeriodId) ?? null,
+    [periods, currentPeriodId],
+  );
   const currentAcademicYearId = currentPeriod?.academicYearId;
 
   // Definimos los fields arriba para poder usarlos en los useMemos de abajo

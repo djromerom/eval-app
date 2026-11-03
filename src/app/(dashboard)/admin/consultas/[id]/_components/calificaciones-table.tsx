@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { CalificacionRow } from "@/modules/consultas/domain/queries/calificaciones/calificacion-row";
+import type { PruebaOpcion } from "@/modules/consultas/domain/shared/prueba-opcion";
 import { PageHeader } from "@/components/page-header";
 import { etiquetaEstado } from "@/modules/consultas/domain/queries/calificaciones/estado";
 import { HistorialModal } from "./historial-modal";
@@ -30,37 +31,59 @@ export function CalificacionesTable({
   title,
   description,
   actions,
+  pruebas,
+  defaultPeriodId,
 }: {
   rows: CalificacionRow[];
   title: string;
   description: ReactNode;
   actions?: ReactNode;
+  /** Pruebas de la institución: opciones del filtro "Prueba". Si viene
+   *  vacío (el actor no puede listar pruebas), se derivan de las filas. */
+  pruebas?: PruebaOpcion[];
+  /** Prueba preseleccionada en el filtro (la que está en curso). `null` =
+   *  el filtro queda en "todas las pruebas". */
+  defaultPeriodId?: string | null;
 }) {
-  const [filters, setFilters] = useState<CalificacionesFilterState>(EMPTY_CALIFICACIONES_FILTERS);
+  // El filtro de prueba arranca en la prueba en curso, igual que la consulta
+  // "Listado de Formulaciones": el boletín se mira para la prueba que se
+  // está aplicando, no para el histórico completo.
+  const [filters, setFilters] = useState<CalificacionesFilterState>(() => ({
+    ...EMPTY_CALIFICACIONES_FILTERS,
+    periodId: defaultPeriodId ?? "",
+  }));
   const [historial, setHistorial] = useState<CalificacionRow | null>(null);
 
   const { gradoOptions, grupoOptions, pruebaOptions, tipoOptions } = useMemo(() => {
     const grados = new Map<string, OpcionGrado>();
     const grupos = new Map<string, OpcionGrupo>();
-    const pruebas = new Map<string, OpcionSimple>();
+    const pruebasDeFilas = new Map<string, OpcionSimple>();
     const tipos = new Map<string, OpcionSimple>();
     for (const r of rows) {
       grados.set(r.courseId, { id: r.courseId, name: r.courseName });
       grupos.set(r.groupId, { id: r.groupId, name: r.groupName, courseId: r.courseId });
       // Prueba y tipo son opcionales: solo se ofrecen si alguna fila los tiene.
-      if (r.periodId && r.periodName) pruebas.set(r.periodId, { id: r.periodId, name: r.periodName });
+      if (r.periodId && r.periodName) {
+        pruebasDeFilas.set(r.periodId, { id: r.periodId, name: r.periodName });
+      }
       if (r.bookletTypeId && r.bookletTypeName) {
         tipos.set(r.bookletTypeId, { id: r.bookletTypeId, name: r.bookletTypeName });
       }
     }
-    const porNombre = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, "es", { numeric: true });
+    // Las opciones de prueba salen del catálogo de pruebas de la institución
+    // (no de las filas): una prueba sin hojas debe aparecer igual, o el
+    // filtro arrancaría en una prueba que no está en la lista.
+    const opcionesPrueba = new Map<string, OpcionSimple>(pruebasDeFilas);
+    for (const p of pruebas ?? []) opcionesPrueba.set(p.id, { id: p.id, name: p.name });
+    const porNombre = (a: { name: string }, b: { name: string }) =>
+      a.name.localeCompare(b.name, "es", { numeric: true });
     return {
       gradoOptions: Array.from(grados.values()).sort(porNombre),
       grupoOptions: Array.from(grupos.values()).sort(porNombre),
-      pruebaOptions: Array.from(pruebas.values()).sort(porNombre),
+      pruebaOptions: Array.from(opcionesPrueba.values()).sort(porNombre),
       tipoOptions: Array.from(tipos.values()).sort(porNombre),
     };
-  }, [rows]);
+  }, [rows, pruebas]);
 
   const visible = useMemo(
     () =>

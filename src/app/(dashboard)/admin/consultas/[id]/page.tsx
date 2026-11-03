@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { findConsulta } from "@/modules/consultas/domain/consultas-registry";
+import { makeGetCurrentPeriod } from "@/modules/academic/infrastructure/container";
 import {
   makeListFormulaciones,
   makeListAsignacionesPendientes,
@@ -80,18 +81,45 @@ export default async function ConsultaDetallePage({
   }
 
   if (id === "calificaciones") {
-    const res = await makeListCalificaciones().execute({ actor });
+    const [res, pruebasRes, currentRes] = await Promise.all([
+      makeListCalificaciones().execute({ actor }),
+      // Opciones del filtro "Prueba": el catálogo de la institución, no las
+      // filas (una prueba sin hojas debe aparecer igual). El ECU_LIDER no
+      // puede listar pruebas: en ese caso el filtro se arma con las filas.
+      makeListPruebas().execute({ actor }),
+      makeGetCurrentPeriod().execute({ actor }),
+    ]);
     const rows = res.ok ? res.value : [];
+    const pruebas = pruebasRes.ok ? pruebasRes.value : [];
+    const current = currentRes.ok ? currentRes.value : null;
     return (
-      <CalificacionesTable rows={rows} title={consulta.title} description={consulta.description} />
+      <CalificacionesTable
+        rows={rows}
+        title={consulta.title}
+        description={consulta.description}
+        pruebas={pruebas}
+        defaultPeriodId={current?.id ?? null}
+      />
     );
   }
 
   if (id === "reglas-conteo") {
-    const res = await makeListReglasConteo().execute({ actor });
+    const [res, pruebasRes, currentRes] = await Promise.all([
+      makeListReglasConteo().execute({ actor }),
+      makeListPruebas().execute({ actor }),
+      makeGetCurrentPeriod().execute({ actor }),
+    ]);
     const rows = res.ok ? res.value : [];
+    const pruebas = pruebasRes.ok ? pruebasRes.value : [];
+    const current = currentRes.ok ? currentRes.value : null;
     return (
-      <ReglasConteoTable rows={rows} title={consulta.title} description={consulta.description} />
+      <ReglasConteoTable
+        rows={rows}
+        title={consulta.title}
+        description={consulta.description}
+        pruebas={pruebas.map((p) => ({ id: p.id, name: p.name, year: p.year }))}
+        defaultPeriodId={current?.id ?? null}
+      />
     );
   }
 
