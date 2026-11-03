@@ -63,7 +63,8 @@ export function can(capability: Capability, roles: Role[]): boolean {
       return hasRole(actor, "TEACHER", "ECU_LIDER");
     case "run-queries":
       // El ECU_LIDER entra al módulo pero solo ve las consultas que lo
-      // incluyen en `roles` (hoy: calificaciones, acotada a sus grados).
+      // incluyen en `roles` (hoy: calificaciones y listado de
+      // formulaciones, ambas acotadas a sus grados).
       return hasRole(actor, "ECU_MASTER", "SUPER_ADMIN", "ECU_LIDER");
   }
 }

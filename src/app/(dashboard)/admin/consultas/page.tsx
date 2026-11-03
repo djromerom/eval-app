@@ -19,8 +19,9 @@ export const metadata: Metadata = { title: "Consultas" };
  */
 export default async function ConsultasPage() {
   const actor = await requireAuthenticatedUser("SUPER_ADMIN", "ECU_MASTER", "ECU_LIDER");
-  // Cada rol ve solo sus consultas: un lider ECU no tiene por que enterarse de
-  // que existe el listado de formulaciones.
+  // Cada rol ve solo sus consultas: el lider ECU ve las que lo incluyen en
+  // `roles` (hoy: calificaciones y listado de formulaciones), y dentro de
+  // ellas solo lo que le corresponde por grado.
   const consultas = consultasFor(actor.roles);
 
   return (

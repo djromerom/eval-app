@@ -20,7 +20,7 @@ export const CONSULTAS: readonly ConsultaConfig[] = [
     id: "formulaciones",
     title: "Listado de Formulaciones",
     description:
-      "Maestro de formulaciones de la institución con asignatura, año, prueba, tipo de cuadernillo, estado, ítems (X/Y vs regla), profesor autor y docentes asignados al curso-grado.",
+      "Maestro de formulaciones de la institución con asignatura, año, prueba, tipo de cuadernillo, estado, ítems (X/Y vs regla), profesor autor y docentes asignados al curso-grado. El líder ECU ve solo los grados que tiene asignados.",
     columns: [
       "Asignatura",
       "Año",
@@ -28,11 +28,11 @@ export const CONSULTAS: readonly ConsultaConfig[] = [
       "Tipo de cuadernillo",
       "Estado",
       "Items",
-      "Autor",
       "Asignados",
+      "Formulador",
       "Actualizado",
     ],
-    roles: ["ECU_MASTER", "SUPER_ADMIN"],
+    roles: ["ECU_MASTER", "SUPER_ADMIN", "ECU_LIDER"],
   },
   {
     id: "formuladores",

@@ -6,8 +6,11 @@
  * formulaciones no aparecería y, peor, la prueba actual podría no estar
  * entre ellas), sino de la tabla de periodos de la institución.
  *
- * Scoping: mismo gate que `ListFormulaciones` (ECU_MASTER / SUPER_ADMIN) —
- * son la misma consulta, solo que la lista de filtros.
+ * Scoping: mismo gate que `ListFormulaciones` (ECU_MASTER / SUPER_ADMIN /
+ * ECU_LIDER) — son la misma consulta, solo que la lista de filtros. El líder
+ * puede ver el catálogo de pruebas de la institución: son los nombres de las
+ * pruebas, no datos de otros grados (el recorte de las filas lo hace
+ * `ListFormulaciones`).
  *
  * Devuelve `PruebaOpcion[]`: el DTO con los dos flags de "actual" (la prueba
  * dentro de su año y el año académico de la institución) para que la UI
@@ -34,7 +37,7 @@ export class ListPruebas implements UseCase<ListPruebasInput, PruebaOpcion[]> {
   constructor(private readonly reader: PruebasReader) {}
 
   async execute({ actor }: ListPruebasInput): Promise<Result<PruebaOpcion[]>> {
-    const authorized = requireRole(actor, "ECU_MASTER", "SUPER_ADMIN");
+    const authorized = requireRole(actor, "ECU_MASTER", "SUPER_ADMIN", "ECU_LIDER");
     if (!authorized.ok) return authorized;
     return ok(await this.reader.listByInstitution(actor.institutionId));
   }

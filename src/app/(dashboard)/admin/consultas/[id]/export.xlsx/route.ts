@@ -5,8 +5,10 @@
  *      (los query params son opcionales; si no vienen, se exportan TODAS las filas)
  *      GET /admin/consultas/informe-grupo/export.xlsx?prueba=…&grupo=…  (ambos obligatorios)
  * Auth: requiere sesión con capability `run-queries`. Formulaciones: ECU_MASTER /
- *       SUPER_ADMIN. Informe por grupo: también ECU_LIDER (acotado a sus grados
- *       por el use case).
+ *       SUPER_ADMIN y también ECU_LIDER (acotado a sus grados por el use case).
+ *       "Docentes formuladores" y "Regla de conteo" siguen siendo solo de
+ *       admin de institución. Informe por grupo: también ECU_LIDER (acotado a
+ *       sus grados por el use case).
  *       El gate del padre (`/[id]/page.tsx`) ya filtra por rol; aquí se duplica
  *       porque los route handlers son entry-points independientes.
  *
@@ -19,6 +21,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { requireAuthenticatedUser } from "@/lib/session";
 import { can } from "@/shared/application/capabilities";
+import { hasRole } from "@/shared/application/authenticated-user";
 import {
   applyFormulacionesFilters,
   applyPendientesFilters,
@@ -123,8 +126,17 @@ export async function GET(
   const { id } = await params;
   if (id === "informe-grupo") return exportInformeGrupo(req);
 
-  const actor = await requireAuthenticatedUser("SUPER_ADMIN", "ECU_MASTER");
+  const actor = await requireAuthenticatedUser("SUPER_ADMIN", "ECU_MASTER", "ECU_LIDER");
   if (!can("run-queries", actor.roles)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  // El ECU_LIDER entra al módulo de consultas, pero estas dos siguen siendo
+  // solo de admin de institución: las ve en el listado, pero no las exporta.
+  if (
+    (id === "reglas-conteo" || id === "formuladores") &&
+    !hasRole(actor, "ECU_MASTER", "SUPER_ADMIN")
+  ) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
