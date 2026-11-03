@@ -131,7 +131,7 @@ export class GetCurrentPeriod implements UseCase<GetCurrentPeriodInput, Period |
   ) {}
 
   async execute({ actor }: GetCurrentPeriodInput): Promise<Result<Period | null>> {
-    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER", "TEACHER");
+    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER", "TEACHER", "SUPER_ADMIN");
     if (!authorized.ok) return authorized;
 
     // 1) La actual del año académico actual.
