@@ -103,6 +103,60 @@ export class ListPeriods implements UseCase<ListPeriodsInput, Period[]> {
   }
 }
 
+export interface GetCurrentPeriodInput {
+  actor: AuthenticatedUser;
+}
+
+/**
+ * La prueba que está en curso: el `Period` con `isCurrent=true`.
+ *
+ * Regla de resolución (misma que usa el módulo de consultas en
+ * `pruebaActual`, para que ambas pantallas hablen de la misma prueba):
+ *   1. la actual del AÑO ACADÉMICO ACTUAL (`AcademicYear.isCurrent`);
+ *   2. si ese año no tiene ninguna marcada, la actual del año más
+ *      reciente que sí tenga una;
+ *   3. si ninguna prueba está marcada, `null` — el caller decide qué
+ *      hacer; en las pantallas filtradas significa "no filtrar" (no hay
+ *      una prueba vigente que acotar la lista).
+ *
+ * Nota: `isCurrent` es una marca POR AÑO ACADÉMICO (la institución puede
+ * tener varias pruebas actuales, una por año). Por eso el paso 1 no es
+ * opcional: sin él, el filtro quedaría sobre una prueba de un año ya
+ * cerrado.
+ */
+export class GetCurrentPeriod implements UseCase<GetCurrentPeriodInput, Period | null> {
+  constructor(
+    private readonly periods: PeriodRepository,
+    private readonly years: AcademicYearRepository,
+  ) {}
+
+  async execute({ actor }: GetCurrentPeriodInput): Promise<Result<Period | null>> {
+    const authorized = requireRole(actor, "ECU_MASTER", "ECU_LIDER", "TEACHER");
+    if (!authorized.ok) return authorized;
+
+    // 1) La actual del año académico actual.
+    const currentYear = await this.years.findCurrent(actor.institutionId);
+    if (currentYear) {
+      const current = await this.periods.findCurrent(actor.institutionId, currentYear.id);
+      if (current) return ok(current);
+    }
+
+    // 2) Fallback: la actual del año más reciente que tenga una marcada.
+    const [years, periods] = await Promise.all([
+      this.years.findAll(actor.institutionId),
+      this.periods.findAll(actor.institutionId),
+    ]);
+    const yearById = new Map(years.map((y) => [y.id, y]));
+    const candidates = periods
+      .filter((p) => p.isCurrent)
+      .map((p) => ({ period: p, year: yearById.get(p.academicYearId)?.year ?? 0 }))
+      .sort((a, b) => b.year - a.year || a.period.order - b.period.order);
+
+    // 3) Ninguna prueba marcada.
+    return ok(candidates[0]?.period ?? null);
+  }
+}
+
 /** Carga un periodo por id; usado por el drawer de edición (Fase 11). */
 export interface GetPeriodInput {
   actor: AuthenticatedUser;

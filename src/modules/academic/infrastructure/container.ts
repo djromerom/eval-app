@@ -9,6 +9,7 @@ import { CreateGroup, DeleteGroup, ListGroups } from "../application/groups";
 import {
   CreatePeriod,
   DeletePeriod,
+  GetCurrentPeriod,
   GetPeriod,
   ListPeriods,
   SetCurrentPeriod,
@@ -52,6 +53,7 @@ export const makeDeleteGroup = () => new DeleteGroup(groups, students);
 
 export const makeCreatePeriod = () => new CreatePeriod(periods, years);
 export const makeListPeriods = () => new ListPeriods(periods);
+export const makeGetCurrentPeriod = () => new GetCurrentPeriod(periods, years);
 export const makeGetPeriod = () => new GetPeriod(periods);
 export const makeUpdatePeriod = () => new UpdatePeriod(periods, years);
 export const makeDeletePeriod = () => new DeletePeriod(periods);
