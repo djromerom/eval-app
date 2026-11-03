@@ -116,10 +116,6 @@ export function FormuladoresTable({
                 <th className="px-3 py-2 text-left">Grado</th>
                 <th className="px-3 py-2 text-left">Asignatura</th>
                 <th className="px-3 py-2 text-left">Formulador</th>
-                <th className="px-3 py-2 text-left">Tipo doc.</th>
-                <th className="px-3 py-2 text-left">ID</th>
-                <th className="px-3 py-2 text-left">Email</th>
-                <th className="px-3 py-2 text-left">Celular</th>
                 <th className="px-3 py-2 text-left">Prueba</th>
                 <th className="px-3 py-2 text-left">Formulación</th>
                 <th className="px-3 py-2 text-left">Estado</th>
@@ -128,7 +124,7 @@ export function FormuladoresTable({
             <tbody>
               {visible.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="text-muted-foreground px-3 py-6 text-center text-sm">
+                  <td colSpan={7} className="text-muted-foreground px-3 py-6 text-center text-sm">
                     {rows.length === 0
                       ? "No hay docentes asignados ni formulaciones registradas en la institución."
                       : "Ninguna fila coincide con los filtros aplicados."}
@@ -141,10 +137,6 @@ export function FormuladoresTable({
                     <td className="px-3 py-2">{r.grado}</td>
                     <td className="px-3 py-2">{r.asignatura}</td>
                     <td className="px-3 py-2">{r.formulador}</td>
-                    <td className="px-3 py-2">{celda(r.tipoDocumento)}</td>
-                    <td className="px-3 py-2 tabular-nums">{celda(r.documento)}</td>
-                    <td className="px-3 py-2">{celda(r.email)}</td>
-                    <td className="px-3 py-2 tabular-nums">{celda(r.celular)}</td>
                     <td className="text-muted-foreground px-3 py-2 text-xs">
                       {r.prueba || r.anio ? pruebaLabel(r) : <span>{SIN_DATO}</span>}
                     </td>

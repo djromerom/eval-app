@@ -20,6 +20,10 @@ export interface FormulacionesFilters {
   subjectName?: string;
   /** Filtra por grado (Course.name exacto, p.ej. "10-1", "11-2"). */
   courseName?: string;
+  /** Filtra por prueba (Period.id). Puede traer varias: el filtro por
+   *  prueba agrupa la prueba en curso con las que aún no han empezado, y la
+   *  UI resuelve ese grupo antes de enviarlo. */
+  periodIds?: string[];
   /** Filtra por año académico. */
   academicYearYear?: number;
   /** Filtra por estado del workflow (DRAFT / IN_REVIEW / APPROVED / PUBLISHED). */
@@ -35,6 +39,13 @@ export function parseFormulacionesFilters(
   if (sp.search && sp.search.trim()) out.search = sp.search.trim();
   if (sp.subjectName && sp.subjectName.trim()) out.subjectName = sp.subjectName.trim();
   if (sp.courseName && sp.courseName.trim()) out.courseName = sp.courseName.trim();
+  if (sp.periodIds && sp.periodIds.trim()) {
+    const ids = sp.periodIds
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+    if (ids.length > 0) out.periodIds = ids;
+  }
   if (sp.academicYearYear && /^\d+$/.test(sp.academicYearYear)) {
     out.academicYearYear = Number(sp.academicYearYear);
   }
@@ -56,6 +67,7 @@ export function applyFormulacionesFilters<
     title: string;
     subjectName: string;
     courseName: string;
+    periodId: string | null;
     academicYearYear: number;
     status: import("@/modules/evaluations/domain/evaluation-status").EvaluationStatus;
     authorName: string;
@@ -64,12 +76,47 @@ export function applyFormulacionesFilters<
   return rows.filter((r) => {
     if (f.subjectName && r.subjectName !== f.subjectName) return false;
     if (f.courseName && r.courseName !== f.courseName) return false;
+    if (f.periodIds && f.periodIds.length > 0 && !f.periodIds.includes(r.periodId ?? "")) {
+      return false;
+    }
     if (f.academicYearYear && r.academicYearYear !== f.academicYearYear) return false;
     if (f.status && r.status !== f.status) return false;
     if (f.search && f.search.trim()) {
       const term = f.search.trim().toLowerCase();
       const haystack = `${r.title} ${r.subjectName} ${r.authorName}`.toLowerCase();
       if (!haystack.includes(term)) return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Aplica los mismos filtros a las **asignaciones pendientes** (las tuplas que
+ * la regla de conteo exige y que aún no tienen formulación).
+ *
+ * Reglas propias de este conjunto:
+ *   - no tienen estado de workflow, así que un filtro por estado las excluye;
+ *   - no tienen título ni autor, así que la búsqueda libre solo matchea por
+ *     asignatura (mismo criterio que las formulaciones, que tampoco buscan
+ *     por grado).
+ */
+export function applyPendientesFilters<
+  T extends {
+    subjectName: string;
+    courseName: string;
+    periodId: string;
+    academicYearYear: number;
+  },
+>(rows: T[], f: FormulacionesFilters): T[] {
+  return rows.filter((r) => {
+    if (f.subjectName && r.subjectName !== f.subjectName) return false;
+    if (f.courseName && r.courseName !== f.courseName) return false;
+    if (f.periodIds && f.periodIds.length > 0 && !f.periodIds.includes(r.periodId)) return false;
+    if (f.academicYearYear && r.academicYearYear !== f.academicYearYear) return false;
+    if (f.status) return false;
+    if (f.search && f.search.trim()) {
+      const term = f.search.trim().toLowerCase();
+      if (!r.subjectName.toLowerCase().includes(term)) return false;
     }
     return true;
   });

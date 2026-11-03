@@ -23,6 +23,7 @@
  *     creación) y dentro de cada uno el orden de sus formulaciones.
  *   - Etiqueta de columna = sigla de la asignatura; sin sigla, el nombre.
  */
+import type { PruebaOpcion } from "../../shared/prueba-opcion";
 
 export interface PuntajeCelda {
   puntaje: number;
@@ -62,16 +63,7 @@ export interface InformeGrupo {
 }
 
 /** Opciones de los filtros (ya acotadas al alcance del actor). */
-export interface OpcionPrueba {
-  id: string;
-  name: string;
-  academicYearId: string;
-  year: number;
-  /** Prueba actual dentro de su año. */
-  isCurrent: boolean;
-  /** El año de la prueba es el año académico actual. */
-  yearIsCurrent: boolean;
-}
+export type { PruebaOpcion as OpcionPrueba };
 
 export interface OpcionGrupo {
   id: string;
@@ -81,13 +73,13 @@ export interface OpcionGrupo {
 }
 
 export interface InformeGrupoOpciones {
-  pruebas: OpcionPrueba[];
+  pruebas: PruebaOpcion[];
   grupos: OpcionGrupo[];
 }
 
 /** Prueba preseleccionada cuando el usuario no eligió una: la actual del año
  *  actual; si no hay, la actual de cualquier año; si no, la primera. */
-export function pruebaPorDefecto(pruebas: readonly OpcionPrueba[]): OpcionPrueba | null {
+export function pruebaPorDefecto(pruebas: readonly PruebaOpcion[]): PruebaOpcion | null {
   return (
     pruebas.find((p) => p.isCurrent && p.yearIsCurrent) ??
     pruebas.find((p) => p.isCurrent) ??

@@ -17,6 +17,7 @@ import { isWideQuestion } from "@/modules/printing/domain/wide-question";
 import { resolveGroupDensity } from "@/modules/printing/domain/section-density";
 import { groupSectionsForPrint } from "@/modules/printing/domain/section-grouping";
 import { localStorage } from "@/shared/infrastructure/storage/local-storage";
+import { PrintImageSizer } from "../../_components/print-image-sizer";
 import { PrintButton } from "./print-button";
 
 export const metadata: Metadata = { title: "Vista previa de impresión" };
@@ -55,6 +56,9 @@ export default async function PrintEvaluationPage({
 
   return (
     <div className="booklet" style={cssVars}>
+      {/* Ajusta el tamaño de las imágenes al tamaño real del archivo, para
+          que no salgan ampliadas (y por tanto borrosas) en el papel. */}
+      <PrintImageSizer />
       <div className="no-print bg-card sticky top-0 z-10 flex w-full max-w-[900px] items-center gap-3 rounded-lg border p-3 text-sm">
         <span className="text-muted-foreground">
           Vista previa de impresión
@@ -147,10 +151,18 @@ export default async function PrintEvaluationPage({
                       Las preguntas wide (con imagen/tabla) ya tienen
                       column-span: all, así que cruzan ambas columnas
                       sin importar la densidad. */}
+                  {/* El className de cada pregunta va como string literal y no
+                      como template: prettier-plugin-tailwindcss normaliza las
+                      clases dentro de un template y se come el espacio de
+                      " wide", dejando `questionwide` (que no matchea la regla
+                      `.question.wide` de print.css). */}
                   <ul className="questions-list" data-density={density}>
                     {sectionsInGroup.flatMap((s) =>
                       s.questions.map((q) => (
-                        <div key={q.id} className={`question${isWideQuestion(q) ? " wide" : ""}`}>
+                        <div
+                          key={q.id}
+                          className={isWideQuestion(q) ? "question wide" : "question"}
+                        >
                           <p className="question-text">
                             <span className="item-number">{q.number}.</span>{" "}
                             <RichTextInline value={q.text} />

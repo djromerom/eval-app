@@ -7,6 +7,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { env } from "@/config/env";
 import { type PrintKind, signPrintToken } from "@/shared/infrastructure/crypto/print-token";
 import { imposeBooklet } from "@/shared/imposition/booklet-pdf";
+import { type BookletPageBudget, computeBookletPageBudget } from "@/shared/print/image-sizing";
 import {
   type PdfGenerationJob,
   type PdfGenerationResult,
@@ -137,6 +138,18 @@ async function stampFooterOnAllPages(
   return await doc.save();
 }
 
+/**
+ * Número de páginas de un PDF ya generado.
+ *
+ * Sirve para el presupuesto de papel del cuadernillo: la imposición reparte
+ * 4 páginas lógicas por pliego doble carta, así que las que sobran se
+ * pagina en blanco (ver `computeBookletPageBudget`).
+ */
+async function pageCountOf(pdfBytes: Uint8Array): Promise<number> {
+  const doc = await PDFDocument.load(pdfBytes);
+  return doc.getPageCount();
+}
+
 /** Genera el PDF lineal (carta o A4, 1 página por hoja lógica) con Puppeteer. */
 async function renderLinearPdf(
   url: string,
@@ -155,6 +168,27 @@ async function renderLinearPdf(
     if (page.url().includes("/login")) {
       throw new Error("Acceso a /print rechazado (token inválido)");
     }
+
+    // Espera a que el `PrintImageSizer` haya aplicado los topes de calidad
+    // de las imágenes. Sin esto, el PDF podría salir con las imágenes
+    // ampliadas (borrosas) mientras que la impresión desde el navegador
+    // sale correcta: el sizer corre en el cliente, después de la
+    // hidratación.
+    await page
+      .waitForFunction(
+        () => {
+          const imgs = document.querySelectorAll(".booklet img");
+          if (imgs.length === 0) return true;
+          return (
+            document.querySelectorAll('.booklet img[data-print-sized="1"]').length === imgs.length
+          );
+        },
+        { timeout: 10_000, polling: 100 },
+      )
+      .catch(() => {
+        log.warn("Timeout esperando el ajuste de imágenes; el PDF sale sin tope de calidad");
+      });
+
     return await page.pdf({
       // Carta por defecto. El informe por grupo pide A4 y lo pasa en opts;
       // los demás kinds siguen siendo carta (el worker compone el pliego
@@ -241,6 +275,9 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
     const isBundleFullKind = kind === "bundle";
 
     let out: Uint8Array;
+    // Presupuesto de papel del cuadernillo: páginas de contenido vs. las
+    // que se imprimen (múltiplo de 4) y cuántas quedan en blanco.
+    let pageBudget: BookletPageBudget | undefined;
 
     if (isInformeGrupoKind) {
       // sep 2026 — Informe detallado por grupo: A4 portrait, una página por
@@ -256,7 +293,11 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
       // Sin imposition saddle-stitch — el usuario configura booklet imposition
       // desde el driver de su impresora sobre pliego tabloid apaisado.
       out = await renderLinearPdf(url);
-      log.info({ jobId: job.id, bytes: out.length }, "PDF lineal (sin imposition) generado");
+      pageBudget = computeBookletPageBudget(await pageCountOf(out));
+      log.info(
+        { jobId: job.id, bytes: out.length, ...pageBudget },
+        "PDF lineal (sin imposition) generado",
+      );
     } else if (isBundleFullKind) {
       // Portada apaisada. Puppeteer/Chromium NO pueden emitir una página
       // apaisada con `@page { size: tabloid landscape }` (ni con named
@@ -282,7 +323,11 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
       });
       const bodyUrl = `${baseUrl}/print/bundle/${targetId}?t=${encodeURIComponent(bodyToken)}&bodyOnly=1`;
       const bodyLinear = await renderLinearPdf(bodyUrl);
-      log.info({ jobId: job.id, bodyBytes: bodyLinear.length }, "PDF body (letter) generado");
+      pageBudget = computeBookletPageBudget(await pageCountOf(bodyLinear));
+      log.info(
+        { jobId: job.id, bodyBytes: bodyLinear.length, ...pageBudget },
+        "PDF body (letter) generado",
+      );
 
       // Imponer solo el cuerpo (coverPages: 0 — la portada va aparte).
       const imposedBody = await imposeBooklet(bodyLinear, { coverPages: 0 });
@@ -343,7 +388,8 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
       // Flujo legacy: booklet / answer-key / answer-key-bundle — sí se
       // imponen como cuadernillo saddle-stitch sobre pliego doble carta.
       const linear = await renderLinearPdf(url);
-      log.info({ jobId: job.id, linearBytes: linear.length }, "PDF lineal generado");
+      pageBudget = computeBookletPageBudget(await pageCountOf(linear));
+      log.info({ jobId: job.id, linearBytes: linear.length, ...pageBudget }, "PDF lineal generado");
       out = await imposeBooklet(linear, { coverPages: 0 });
       log.info({ jobId: job.id, bytes: out.length }, "Imposición aplicada");
     }
@@ -378,7 +424,16 @@ const worker = new Worker<PdfGenerationJob, PdfGenerationResult>(
     const filePath = path.join(dir, `${targetId}-${kind}.pdf`);
     await writeFile(filePath, out);
 
-    return { evaluationId, bundleId, periodId, groupId, institutionId, kind, path: filePath };
+    return {
+      evaluationId,
+      bundleId,
+      periodId,
+      groupId,
+      institutionId,
+      kind,
+      path: filePath,
+      ...(pageBudget ? { pageBudget } : {}),
+    };
   },
   { connection: getRedisConnection(), prefix: getBullMQPrefix(), concurrency: 1 },
 );

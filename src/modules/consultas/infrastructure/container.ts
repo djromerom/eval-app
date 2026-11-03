@@ -4,11 +4,15 @@
  * configurado con sus dependencias Prisma.
  */
 import { ListFormulaciones } from "../application/list-formulaciones";
+import { ListAsignacionesPendientes } from "../application/list-asignaciones-pendientes";
+import { ListPruebas } from "../application/list-pruebas";
 import { ListFormuladores } from "../application/list-formuladores";
 import { ListCalificaciones } from "../application/list-calificaciones";
 import { ListReglasConteo } from "../application/list-reglas-conteo";
 import { GetInformeGrupo } from "../application/informe-grupo";
 import { PrismaFormulacionesReader } from "./formulaciones-fetcher";
+import { PrismaAsignacionesPendientesReader } from "./asignaciones-pendientes-fetcher";
+import { PrismaPruebasReader } from "./pruebas-fetcher";
 import { PrismaFormuladoresReader } from "./formuladores-fetcher";
 import { PrismaCalificacionesReader } from "./calificaciones-fetcher";
 import { PrismaReglasConteoReader } from "./reglas-conteo-fetcher";
@@ -17,12 +21,23 @@ import { PrismaLeaderAssignmentRepository } from "@/modules/leader-assignments/i
 
 /** Singletons (una sola instancia por proceso, sin estado entre requests). */
 const reader = new PrismaFormulacionesReader();
+const asignacionesPendientesReader = new PrismaAsignacionesPendientesReader();
+const pruebasReader = new PrismaPruebasReader();
 const formuladoresReader = new PrismaFormuladoresReader();
 const calificacionesReader = new PrismaCalificacionesReader();
 const reglasConteoReader = new PrismaReglasConteoReader();
 const informeGrupoReader = new PrismaInformeGrupoReader();
 
 export const makeListFormulaciones = () => new ListFormulaciones(reader);
+
+/** Asignaciones de las pruebas que todavía no tienen formulación (las que la
+ *  regla de conteo exige y nadie ha formulado). */
+export const makeListAsignacionesPendientes = () =>
+  new ListAsignacionesPendientes(asignacionesPendientesReader);
+
+/** Pruebas de la institución: opciones del filtro "Prueba" del listado de
+ *  formulaciones. */
+export const makeListPruebas = () => new ListPruebas(pruebasReader);
 
 /** Reglas de conteo de ítems con cuántas formulaciones lleva cada una. */
 export const makeListReglasConteo = () => new ListReglasConteo(reglasConteoReader);

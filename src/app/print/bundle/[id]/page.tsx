@@ -22,6 +22,7 @@ import { getResolvedBundleTheme } from "@/modules/theme/application/get-resolved
 import { themeToCssVars } from "@/modules/theme/domain/theme";
 import { RichText, RichTextInline } from "@/components/editor/rich-text";
 import { richTextHasRenderableContent } from "@/shared/domain/rich-text";
+import { PrintImageSizer } from "../../_components/print-image-sizer";
 import { PrintButton } from "../../evaluation/[id]/print-button";
 import type { EvaluationSection } from "@/modules/evaluations/domain/evaluation";
 
@@ -237,6 +238,9 @@ export default async function PrintBundlePage({
 
   return (
     <div className="booklet" style={cssVars}>
+      {/* Ajusta el tamaño de las imágenes al tamaño real del archivo, para
+          que no salgan ampliadas (y por tanto borrosas) en el papel. */}
+      <PrintImageSizer />
       {/* Modo linear (kind=bundle-linear): cover full bleed en la primera
         página. El `@page { margin: 2cm }` de print.css se aplica a TODAS
         las páginas — para que la portada salga sin borde blanco hay que
