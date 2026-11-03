@@ -5,9 +5,10 @@ import { buttonVariants } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { makeListBundles } from "@/modules/bundles/infrastructure/container";
-import { makeListPeriods } from "@/modules/academic/infrastructure/container";
+import { makeListPeriods, makeGetCurrentPeriod } from "@/modules/academic/infrastructure/container";
 import { makeListBookletTypesByInstitution } from "@/modules/booklet-types/infrastructure/container";
 import type { BundleStatus } from "@/modules/bundles/domain/bundle-status";
+import { resolvePeriodFilter } from "@/modules/academic/domain/period-filter";
 import { cn } from "@/lib/utils";
 import { BundlesFilterRow } from "./_components/bundles-filter-row";
 
@@ -42,19 +43,35 @@ export default async function BundlesListPage({ searchParams }: { searchParams: 
   const periodId = (params.periodId ?? "").trim();
   const bookletTypeId = (params.bookletTypeId ?? "").trim();
   const status = (params.status ?? "").trim();
+
+  // El listado arranca en la PRUEBA ACTUAL (la marcada con `isCurrent`),
+  // igual que el módulo de revisión y el Listado de Formulaciones: el
+  // admin trabaja sobre la prueba en curso, no sobre las de años
+  // anteriores. La regla (y el centinela "ver todas") vive en el dominio:
+  // `resolvePeriodFilter`.
+  const currentPeriodRes = await makeGetCurrentPeriod().execute({ actor });
+  const currentPeriod = currentPeriodRes.ok ? currentPeriodRes.value : null;
+  const periodFilter = resolvePeriodFilter(periodId, currentPeriod?.id ?? null);
+  const effectivePeriodId = periodFilter.periodId ?? "";
+
   const filters = {
-    ...(periodId ? { periodId } : {}),
+    ...(effectivePeriodId ? { periodId: effectivePeriodId } : {}),
     ...(bookletTypeId ? { bookletTypeId } : {}),
     ...(isBundleStatus(status) ? { status } : {}),
   };
 
-  const [bundlesRes, periodsRes, bookletTypesRes] = await Promise.all([
+  const [bundlesRes, allBundlesRes, periodsRes, bookletTypesRes] = await Promise.all([
     makeListBundles().execute({ actor, filters }),
+    // Listado SIN filtros: solo lo usamos para distinguir "no hay
+    // cuadernillos en la institución" de "no hay cuadernillos que
+    // coinciden con el filtro" en el estado vacío de la tabla.
+    makeListBundles().execute({ actor }),
     makeListPeriods().execute({ actor }),
     makeListBookletTypesByInstitution().execute({ actor }),
   ]);
 
   const bundles = bundlesRes.ok ? bundlesRes.value : [];
+  const hasAnyBundle = allBundlesRes.ok && allBundlesRes.value.length > 0;
   const periods = periodsRes.ok ? periodsRes.value.map((p) => ({ id: p.id, name: p.name })) : [];
   const bookletTypes = bookletTypesRes.ok
     ? bookletTypesRes.value.map((bt) => ({ id: bt.id, periodId: bt.periodId, name: bt.name }))
@@ -79,7 +96,7 @@ export default async function BundlesListPage({ searchParams }: { searchParams: 
           periods={periods}
           bookletTypes={bookletTypes}
           statuses={STATUS_OPTIONS}
-          currentPeriodId={periodId}
+          currentPeriodId={effectivePeriodId}
           currentBookletTypeId={bookletTypeId}
           currentStatus={status}
         />
@@ -103,7 +120,9 @@ export default async function BundlesListPage({ searchParams }: { searchParams: 
             {bundles.length === 0 ? (
               <tr>
                 <td colSpan={8} className="text-muted-foreground px-4 py-8 text-center">
-                  Aún no hay cuadernillos. Crea uno para empezar.
+                  {hasAnyBundle
+                    ? "Ninguna fila coincide con los filtros aplicados."
+                    : "Aún no hay cuadernillos. Crea uno para empezar."}
                 </td>
               </tr>
             ) : (
