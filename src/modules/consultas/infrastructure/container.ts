@@ -28,12 +28,21 @@ const calificacionesReader = new PrismaCalificacionesReader();
 const reglasConteoReader = new PrismaReglasConteoReader();
 const informeGrupoReader = new PrismaInformeGrupoReader();
 
-export const makeListFormulaciones = () => new ListFormulaciones(reader);
+/** El alcance por grado del ECU_LIDER sale del repo de asignaciones de
+ *  líderes, que ya expone `listAssignedCourseIds`. Se reutiliza esa clase en
+ *  vez de escribir otra query para que "a qué grados alcanza un líder" tenga
+ *  una sola definición en el sistema. */
+const leaderScope = new PrismaLeaderAssignmentRepository();
+
+/** Maestro de formulaciones. El ECU_LIDER ve solo los grados que tiene
+ *  asignados (lo aplica el use case). */
+export const makeListFormulaciones = () => new ListFormulaciones(reader, leaderScope);
 
 /** Asignaciones de las pruebas que todavía no tienen formulación (las que la
- *  regla de conteo exige y nadie ha formulado). */
+ *  regla de conteo exige y nadie ha formulado). Mismo alcance por grado que
+ *  las formulaciones. */
 export const makeListAsignacionesPendientes = () =>
-  new ListAsignacionesPendientes(asignacionesPendientesReader);
+  new ListAsignacionesPendientes(asignacionesPendientesReader, leaderScope);
 
 /** Pruebas de la institución: opciones del filtro "Prueba" del listado de
  *  formulaciones. */
@@ -45,12 +54,6 @@ export const makeListReglasConteo = () => new ListReglasConteo(reglasConteoReade
 /** Docentes formuladores por cuadernillo: asignaciones + formulaciones sin
  *  docente asignado. */
 export const makeListFormuladores = () => new ListFormuladores(formuladoresReader);
-
-/** El alcance por grado del ECU_LIDER sale del repo de asignaciones de
- *  líderes, que ya expone `listAssignedCourseIds`. Se reutiliza esa clase en
- *  vez de escribir otra query para que "a qué grados alcanza un líder" tenga
- *  una sola definición en el sistema. */
-const leaderScope = new PrismaLeaderAssignmentRepository();
 
 export const makeListCalificaciones = () =>
   new ListCalificaciones(calificacionesReader, leaderScope);

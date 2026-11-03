@@ -172,8 +172,8 @@ export function FormulacionesTable({
                 <th className="px-3 py-2 text-left">Tipo</th>
                 <th className="px-3 py-2 text-left">Estado</th>
                 <th className="px-3 py-2 text-left">Items</th>
-                <th className="px-3 py-2 text-left">Autor</th>
                 <th className="px-3 py-2 text-left">Asignados</th>
+                <th className="px-3 py-2 text-left">Formulador</th>
                 <th className="px-3 py-2 text-left">Actualizado</th>
               </tr>
             </thead>
@@ -209,7 +209,6 @@ export function FormulacionesTable({
                           badge={r.itemsBadge}
                         />
                       </td>
-                      <td className="px-3 py-2">{r.authorName}</td>
                       <td className="text-muted-foreground px-3 py-2">
                         {r.assignedTeachers.length === 0 ? (
                           <span aria-label="Sin docentes asignados">—</span>
@@ -222,6 +221,7 @@ export function FormulacionesTable({
                           </span>
                         )}
                       </td>
+                      <td className="px-3 py-2">{r.authorName}</td>
                       <td className="text-muted-foreground px-3 py-2 text-xs tabular-nums">
                         {fmtDate(r.updatedAt)}
                       </td>
@@ -251,7 +251,6 @@ export function FormulacionesTable({
                           badge={p.itemsExpected == null ? "none" : "low"}
                         />
                       </td>
-                      <td className="px-3 py-2">—</td>
                       <td className="px-3 py-2">
                         {p.assignedTeachers.length === 0 ? (
                           <span aria-label="Sin docentes asignados">—</span>
@@ -264,6 +263,7 @@ export function FormulacionesTable({
                           </span>
                         )}
                       </td>
+                      <td className="px-3 py-2">—</td>
                       <td className="px-3 py-2 text-xs tabular-nums">—</td>
                     </tr>
                   ))}

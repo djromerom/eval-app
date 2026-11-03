@@ -17,6 +17,7 @@ import {
   ListAsignacionesPendientes,
   type AsignacionesPendientesReader,
 } from "@/modules/consultas/application/list-asignaciones-pendientes";
+import type { LeaderScopeReader } from "@/modules/consultas/application/list-calificaciones";
 import type { AsignacionPendiente } from "@/modules/consultas/domain/queries/formulaciones/asignacion-pendiente";
 import { applyPendientesFilters } from "@/modules/consultas/domain/queries/formulaciones/filters";
 
@@ -30,6 +31,19 @@ const teacher: AuthenticatedUser = {
   institutionId: "inst-1",
   roles: ["TEACHER"],
 };
+const lider: AuthenticatedUser = {
+  userId: "u-lider",
+  institutionId: "inst-1",
+  roles: ["ECU_LIDER"],
+};
+
+/** Scope fake: los grados asignados al líder. */
+class ScopeFake implements LeaderScopeReader {
+  constructor(private readonly courseIds: string[]) {}
+  async listAssignedCourseIds() {
+    return this.courseIds;
+  }
+}
 
 function pendiente(over: Partial<AsignacionPendiente> = {}): AsignacionPendiente {
   return {
@@ -56,7 +70,9 @@ describe("ListAsignacionesPendientes — use case", () => {
         return [pendiente()];
       },
     };
-    const res = await new ListAsignacionesPendientes(reader).execute({ actor: ecuMaster });
+    const res = await new ListAsignacionesPendientes(reader, new ScopeFake([])).execute({
+      actor: ecuMaster,
+    });
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.value).toHaveLength(1);
     expect(calls).toEqual(["inst-1"]);
@@ -64,9 +80,41 @@ describe("ListAsignacionesPendientes — use case", () => {
 
   it("un docente no puede listar asignaciones pendientes", async () => {
     const reader: AsignacionesPendientesReader = { listPending: async () => [pendiente()] };
-    const res = await new ListAsignacionesPendientes(reader).execute({ actor: teacher });
+    const res = await new ListAsignacionesPendientes(reader, new ScopeFake([])).execute({
+      actor: teacher,
+    });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe("FORBIDDEN");
+  });
+
+  it("el ECU_LIDER solo ve las pendientes de sus grados", async () => {
+    const courseIds: (string[] | undefined)[] = [];
+    const reader: AsignacionesPendientesReader = {
+      listPending: async (_institutionId, ids) => {
+        courseIds.push(ids);
+        return [pendiente()];
+      },
+    };
+    const res = await new ListAsignacionesPendientes(reader, new ScopeFake(["c-8"])).execute({
+      actor: lider,
+    });
+    expect(res.ok).toBe(true);
+    expect(courseIds[0]).toEqual(["c-8"]);
+  });
+
+  it("un líder sin grados asignados no ve nada y no consulta la BD", async () => {
+    let llamadas = 0;
+    const reader: AsignacionesPendientesReader = {
+      listPending: async () => {
+        llamadas += 1;
+        return [pendiente()];
+      },
+    };
+    const res = await new ListAsignacionesPendientes(reader, new ScopeFake([])).execute({
+      actor: lider,
+    });
+    expect(res.ok && res.value).toEqual([]);
+    expect(llamadas).toBe(0);
   });
 });
 

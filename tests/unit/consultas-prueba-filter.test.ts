@@ -155,4 +155,14 @@ describe("ListPruebas — use case", () => {
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe("FORBIDDEN");
   });
+
+  it("el líder ECU puede listar las pruebas (opciones del filtro)", async () => {
+    // Las pruebas son los nombres del catálogo de la institución, no datos de
+    // otros grados: el recorte de las filas lo hace `ListFormulaciones`.
+    const reader: PruebasReader = { listByInstitution: async () => [prueba()] };
+    const res = await new ListPruebas(reader).execute({
+      actor: { userId: "u-lider", institutionId: "inst-1", roles: ["ECU_LIDER"] },
+    });
+    expect(res.ok).toBe(true);
+  });
 });

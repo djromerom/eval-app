@@ -47,6 +47,11 @@
  * Multi-tenant: las queries se acotan por `institutionId` (directo en
  * periodos, reglas y evaluaciones; vía `course.institutionId` en las
  * asignaciones y en el catálogo).
+ *
+ * Alcance por grado: `courseIds` acota reglas, asignaciones y catálogo a los
+ * grados del ECU_LIDER. Las evaluaciones ya formuladas NO se acotan (sirven
+ * para saber qué está pendiente: una fila de otro grado no genera trabajo en
+ * las tuplas acotadas).
  */
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import type { AsignacionesPendientesReader } from "../application/list-asignaciones-pendientes";
@@ -76,7 +81,7 @@ interface TuplaTrabajo {
 }
 
 export class PrismaAsignacionesPendientesReader implements AsignacionesPendientesReader {
-  async listPending(institutionId: string): Promise<AsignacionPendiente[]> {
+  async listPending(institutionId: string, courseIds?: string[]): Promise<AsignacionPendiente[]> {
     // (1) Las pruebas de la institución.
     const periods = await prisma.period.findMany({
       where: { institutionId },
@@ -90,9 +95,14 @@ export class PrismaAsignacionesPendientesReader implements AsignacionesPendiente
     });
     if (periods.length === 0) return [];
 
-    // (2) Lo que cada prueba exige (reglas de conteo).
+    // (2) Lo que cada prueba exige (reglas de conteo). Con `courseIds` (ECU
+    //     LIDER) solo las de sus grados: las reglas son por tupla, así que
+    //     acotar aquí equivale a acotar el resultado.
     const rules = await prisma.evaluationRule.findMany({
-      where: { institutionId },
+      where: {
+        institutionId,
+        ...(courseIds ? { course: { id: { in: courseIds } } } : {}),
+      },
       select: {
         id: true,
         exactQuestions: true,
@@ -131,9 +141,17 @@ export class PrismaAsignacionesPendientesReader implements AsignacionesPendiente
       formuladas.set(e.periodId, bucket);
     }
 
-    // (4) Los docentes asignados, agrupados por grado-asignatura.
+    // (4) Los docentes asignados, agrupados por grado-asignatura. Con
+    //     `courseIds` (ECU_LIDER) solo los de sus grados.
     const assignments = await prisma.teacherSubjectAssignment.findMany({
-      where: { courseSubject: { course: { institutionId } } },
+      where: {
+        courseSubject: {
+          course: {
+            institutionId,
+            ...(courseIds ? { id: { in: courseIds } } : {}),
+          },
+        },
+      },
       select: {
         bookletTypeId: true,
         bookletType: { select: { name: true } },
@@ -176,8 +194,14 @@ export class PrismaAsignacionesPendientesReader implements AsignacionesPendiente
     // (5) El catálogo de asignaturas por grado (`CourseSubject`): las
     //     asignaturas que el grado tiene y que todavía no tienen ni docente
     //     ni regla de conteo. También son trabajo pendiente de la prueba.
+    //     Con `courseIds` (ECU_LIDER) solo el catálogo de sus grados.
     const courseSubjects = await prisma.courseSubject.findMany({
-      where: { course: { institutionId } },
+      where: {
+        course: {
+          institutionId,
+          ...(courseIds ? { id: { in: courseIds } } : {}),
+        },
+      },
       select: {
         id: true,
         course: { select: { id: true, name: true } },

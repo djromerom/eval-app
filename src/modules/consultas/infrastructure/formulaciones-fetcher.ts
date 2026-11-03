@@ -21,6 +21,11 @@
  * los pasos 2 y 3 se cruzan contra courseSubject / institutionId que ya están
  * restringidos por la 1. Defensivo contra RLS inactiva (ver
  * `src/shared/infrastructure/db/tenant-context.ts`).
+ *
+ * Alcance por grado: `courseIds` acota el paso 1 a los grados del ECU_LIDER.
+ * Los pasos 2 y 3 no necesitan recorte: se derivan de las filas ya acotadas
+ * (las reglas se indexan por tupla, así que solo se usan las de las filas que
+ * se están mostrando).
  */
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import type { EvaluationStatus } from "@/modules/evaluations/domain/evaluation-status";
@@ -60,7 +65,7 @@ function assignedTeachersFor(
 }
 
 export class PrismaFormulacionesReader implements FormulacionesReader {
-  async listByInstitution(institutionId: string): Promise<FormulacionRow[]> {
+  async listByInstitution(institutionId: string, courseIds?: string[]): Promise<FormulacionRow[]> {
     // (1) Evaluations + joins base.
     const evaluations = await prisma.evaluation.findMany({
       where: {
@@ -70,6 +75,10 @@ export class PrismaFormulacionesReader implements FormulacionesReader {
         // Sprint ago 2026: cada aprobación crea una nueva fila con
         // parentVersionId → la cabeza; las anteriores quedan como histórico.
         parentVersionId: null,
+        // ECU_LIDER: solo las formulaciones de los grados que tiene
+        // asignados. El recorte va en la query, no en la UI: las filas de
+        // otros grados nunca llegan al cliente.
+        ...(courseIds ? { courseSubject: { courseId: { in: courseIds } } } : {}),
       },
       orderBy: { updatedAt: "desc" },
       include: {

@@ -2,7 +2,8 @@
  * Tests del use case `ListFormulaciones` con un `FormulacionesReader` in-memory
  * (fake). Cubre:
  *   - scoping multi-tenant: el use case llama al reader con `actor.institutionId`
- *   - scoping por rol: TEACHER y ECU_LIDER devuelven FORBIDDEN
+ *   - scoping por rol: TEACHER devuelve FORBIDDEN; el ECU_LIDER ve solo los
+ *     grados que tiene asignados (el recorte lo hace el use case, no la UI)
  *   - happy path: el reader devuelve lo que tiene y se entrega sin transformación
  *   - edge: institutionId vacío → array vacío
  *
@@ -16,6 +17,7 @@ import {
   ListFormulaciones,
   type FormulacionesReader,
 } from "@/modules/consultas/application/list-formulaciones";
+import type { LeaderScopeReader } from "@/modules/consultas/application/list-calificaciones";
 import type { FormulacionRow } from "@/modules/consultas/domain/queries/formulaciones/formulacion-row";
 import {
   applyFormulacionesFilters,
@@ -42,6 +44,11 @@ const lider: AuthenticatedUser = {
   institutionId: "inst-1",
   roles: ["ECU_LIDER"],
 };
+const liderYMaster: AuthenticatedUser = {
+  userId: "u-lider-master",
+  institutionId: "inst-1",
+  roles: ["ECU_LIDER", "ECU_MASTER"],
+};
 
 function fakeRow(overrides: Partial<FormulacionRow> = {}): FormulacionRow {
   return {
@@ -67,13 +74,26 @@ function fakeRow(overrides: Partial<FormulacionRow> = {}): FormulacionRow {
 
 class InMemoryFormulacionesReader implements FormulacionesReader {
   public lastInstitutionId: string | null = null;
+  /** `undefined` = sin acotar (master); `[]` = sin grados (nunca se llama). */
+  public lastCourseIds: string[] | undefined = undefined;
+  public calls = 0;
   constructor(private rows: FormulacionRow[]) {}
-  async listByInstitution(institutionId: string) {
+  async listByInstitution(institutionId: string, courseIds?: string[]) {
     this.lastInstitutionId = institutionId;
+    this.lastCourseIds = courseIds;
+    this.calls += 1;
     // El scoping multi-tenant real vive en el fetcher Prisma (es WHERE
     // institutionId = ... a nivel de BD). En el in-memory asumimos que el
     // set ya viene filtrado por institución.
     return this.rows;
+  }
+}
+
+/** Scope fake: los grados asignados al líder. */
+class ScopeFake implements LeaderScopeReader {
+  constructor(private readonly courseIds: string[]) {}
+  async listAssignedCourseIds() {
+    return this.courseIds;
   }
 }
 
@@ -96,7 +116,7 @@ describe("ListFormulaciones", () => {
       }),
     ];
     reader = new InMemoryFormulacionesReader(rows);
-    useCase = new ListFormulaciones(reader);
+    useCase = new ListFormulaciones(reader, new ScopeFake([]));
   });
 
   it("ECU_MASTER ve todas las de su institución", async () => {
@@ -106,6 +126,7 @@ describe("ListFormulaciones", () => {
       expect(result.value).toHaveLength(2);
     }
     expect(reader.lastInstitutionId).toBe("inst-1");
+    expect(reader.lastCourseIds).toBeUndefined();
   });
 
   it("SUPER_ADMIN también ve las de su institución (mismo scope)", async () => {
@@ -123,10 +144,27 @@ describe("ListFormulaciones", () => {
     if (!result.ok) expect(result.error.code).toBe("FORBIDDEN");
   });
 
-  it("rechaza ECU_LIDER con FORBIDDEN (consultas es solo admin)", async () => {
+  it("el ECU_LIDER se acota a los grados que tiene asignados", async () => {
+    useCase = new ListFormulaciones(reader, new ScopeFake(["c-8"]));
     const result = await useCase.execute({ actor: lider });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe("FORBIDDEN");
+    expect(result.ok).toBe(true);
+    // El recorte va en la query del reader: las filas de otros grados nunca
+    // llegan al cliente.
+    expect(reader.lastCourseIds).toEqual(["c-8"]);
+  });
+
+  it("un líder sin grados asignados no ve nada y no consulta la BD", async () => {
+    useCase = new ListFormulaciones(reader, new ScopeFake([]));
+    const result = await useCase.execute({ actor: lider });
+    expect(result.ok && result.value).toEqual([]);
+    // Clave: [] no debe degradar a "sin filtro" y devolver toda la institución.
+    expect(reader.calls).toBe(0);
+  });
+
+  it("si es líder y master a la vez, gana el rol más amplio", async () => {
+    useCase = new ListFormulaciones(reader, new ScopeFake(["c-8"]));
+    await useCase.execute({ actor: liderYMaster });
+    expect(reader.lastCourseIds).toBeUndefined();
   });
 
   it("pasa el institutionId del actor al reader", async () => {
@@ -138,7 +176,7 @@ describe("ListFormulaciones", () => {
 
   it("devuelve [] cuando no hay formulaciones", async () => {
     reader = new InMemoryFormulacionesReader([]);
-    useCase = new ListFormulaciones(reader);
+    useCase = new ListFormulaciones(reader, new ScopeFake([]));
     const result = await useCase.execute({ actor: ecuMaster });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toEqual([]);
