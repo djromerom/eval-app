@@ -7,6 +7,7 @@ import type { ReglaConteoRow } from "@/modules/consultas/domain/queries/reglas-c
 import {
   EMPTY_REGLAS_FILTERS,
   ReglasConteoFilterRow,
+  type OpcionPrueba,
   type ReglasConteoFilterState,
 } from "./reglas-conteo-filter-row";
 import { DownloadReglasXlsxButton } from "./download-reglas-xlsx-button";
@@ -26,16 +27,29 @@ export function ReglasConteoTable({
   title,
   description,
   actions,
+  pruebas,
+  defaultPeriodId,
 }: {
   rows: ReglaConteoRow[];
   title: string;
   description: ReactNode;
   actions?: ReactNode;
+  /** Pruebas de la institución: opciones del filtro "Prueba". Si viene
+   *  vacío (el actor no puede listar pruebas), se derivan de las filas. */
+  pruebas?: OpcionPrueba[];
+  /** Prueba preseleccionada en el filtro (la que está en curso). `null` =
+   *  el filtro queda en "todas las pruebas". */
+  defaultPeriodId?: string | null;
 }) {
-  const [filters, setFilters] = useState<ReglasConteoFilterState>(EMPTY_REGLAS_FILTERS);
+  // El filtro de prueba arranca en la prueba en curso: las reglas de conteo
+  // que se revisan son las de la prueba en curso, no el histórico.
+  const [filters, setFilters] = useState<ReglasConteoFilterState>(() => ({
+    ...EMPTY_REGLAS_FILTERS,
+    periodId: defaultPeriodId ?? "",
+  }));
 
   // Lookups: derivamos opciones de filtro de las filas mismas (sin fetch).
-  const { pruebas, courseOptions, subjectOptions } = useMemo(() => {
+  const { courseOptions, subjectOptions, pruebasOptions } = useMemo(() => {
     const byPeriod = new Map<string, { id: string; name: string; year: number }>();
     const courses = new Set<string>();
     const subjects = new Set<string>();
@@ -44,14 +58,19 @@ export function ReglasConteoTable({
       courses.add(r.courseName);
       subjects.add(r.subjectName);
     }
+    // Las opciones de prueba salen del catálogo de la institución (no de las
+    // filas): una prueba sin reglas debe aparecer igual, o el filtro
+    // arrancaría en una prueba que no está en la lista.
+    const opciones = new Map<string, OpcionPrueba>(byPeriod);
+    for (const p of pruebas ?? []) opciones.set(p.id, { id: p.id, name: p.name, year: p.year });
     return {
-      pruebas: Array.from(byPeriod.values()).sort(
+      pruebasOptions: Array.from(opciones.values()).sort(
         (a, b) => b.year - a.year || a.name.localeCompare(b.name, "es"),
       ),
       courseOptions: Array.from(courses).sort((a, b) => a.localeCompare(b, "es")),
       subjectOptions: Array.from(subjects).sort((a, b) => a.localeCompare(b, "es")),
     };
-  }, [rows]);
+  }, [rows, pruebas]);
 
   const visible = useMemo(() => {
     return rows.filter((r) => {
@@ -79,7 +98,7 @@ export function ReglasConteoTable({
         <ReglasConteoFilterRow
           filters={filters}
           onChange={setFilters}
-          pruebas={pruebas}
+          pruebas={pruebasOptions}
           courseOptions={courseOptions}
           subjectOptions={subjectOptions}
         />
