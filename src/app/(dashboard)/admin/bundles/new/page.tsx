@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/page-header";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { makeListEvaluations } from "@/modules/evaluations/infrastructure/container";
-import { makeListCourses, makeListPeriods } from "@/modules/academic/infrastructure/container";
+import {
+  makeListCourses,
+  makeListPeriods,
+  makeGetCurrentPeriod,
+} from "@/modules/academic/infrastructure/container";
 import { makeListBookletTypesByInstitution } from "@/modules/booklet-types/infrastructure/container";
 import { CreateBundleWizard } from "./wizard-form";
 
@@ -22,13 +26,21 @@ export const dynamic = "force-dynamic";
 export default async function NewBundlePage() {
   const actor = await requireAuthenticatedUser("ECU_MASTER", "ECU_LIDER");
 
-  const [approved, published, coursesRes, periodsRes, bookletTypesRes] = await Promise.all([
-    makeListEvaluations().execute({ actor, status: "APPROVED" }),
-    makeListEvaluations().execute({ actor, status: "PUBLISHED" }),
-    makeListCourses().execute({ actor }),
-    makeListPeriods().execute({ actor }),
-    makeListBookletTypesByInstitution().execute({ actor }),
-  ]);
+  const [approved, published, coursesRes, periodsRes, bookletTypesRes, currentPeriodRes] =
+    await Promise.all([
+      makeListEvaluations().execute({ actor, status: "APPROVED" }),
+      makeListEvaluations().execute({ actor, status: "PUBLISHED" }),
+      makeListCourses().execute({ actor }),
+      makeListPeriods().execute({ actor }),
+      makeListBookletTypesByInstitution().execute({ actor }),
+      makeGetCurrentPeriod().execute({ actor }),
+    ]);
+
+  // La prueba actual la resuelve el servidor con la regla year-aware
+  // (`GetCurrentPeriod`): `isCurrent` es una marca por año académico, así que
+  // buscar "el primero de la lista" podía devolver la prueba de un año ya
+  // cerrado (y bloquear el select de Prueba en esa).
+  const currentPeriod = currentPeriodRes.ok ? currentPeriodRes.value : null;
 
   const candidates = [
     ...(approved.ok ? approved.value : []),
@@ -67,6 +79,7 @@ export default async function NewBundlePage() {
         courses={courses}
         periods={periods}
         bookletTypes={bookletTypes}
+        currentPeriodId={currentPeriod?.id ?? null}
       />
     </>
   );

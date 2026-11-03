@@ -14,6 +14,10 @@ interface CandidateEvaluation {
   courseId: string;
   courseName: string;
   subjectName: string;
+  /** Prueba de la formulación (nullable). Un cuadernillo agrupa
+   *  formulaciones de UNA prueba: los candidatos se acotan a la prueba
+   *  seleccionada. */
+  periodId: string | null;
 }
 
 interface CourseOption {
@@ -61,11 +65,15 @@ export function CreateBundleWizard({
   courses,
   periods,
   bookletTypes,
+  currentPeriodId,
 }: {
   evaluations: CandidateEvaluation[];
   courses: CourseOption[];
   periods: PeriodOption[];
   bookletTypes: BookletTypeOption[];
+  /** Id de la prueba actual, resuelto en el servidor con la regla year-aware
+   *  (`GetCurrentPeriod`). `null` = no hay prueba actual marcada. */
+  currentPeriodId: string | null;
 }) {
   const [state, formAction] = useActionState(createBundleAction, {} as BundleFormState);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -75,9 +83,13 @@ export function CreateBundleWizard({
   const formRef = useRef<HTMLFormElement>(null);
 
   // Sprint Bundle-Period: preselección de la Prueba actual (mismo patrón que
-  // create-evaluation-form.tsx). Si la institución tiene un periodo con
-  // isCurrent=true, lo preseleccionamos y bloqueamos.
-  const currentPeriod = useMemo(() => periods.find((p) => p.isCurrent) ?? null, [periods]);
+  // create-evaluation-form.tsx). La prueba actual la resuelve el servidor
+  // (`GetCurrentPeriod`, regla year-aware): buscar "la primera marcada" en
+  // la lista podía devolver la de un año ya cerrado.
+  const currentPeriod = useMemo(
+    () => periods.find((p) => p.id === currentPeriodId) ?? null,
+    [periods, currentPeriodId],
+  );
   const [periodId, setPeriodId] = useState(() => currentPeriod?.id ?? "");
   const [bookletTypeId, setBookletTypeId] = useState("");
   const periodLocked = !!currentPeriod;
@@ -105,6 +117,9 @@ export function CreateBundleWizard({
 
   // Filtro por curso (duro: el use case rechaza mezclas) + búsqueda libre.
   const filtered = evaluations.filter((e) => {
+    // Un cuadernillo agrupa formulaciones de UNA prueba: los candidatos se
+    // acotan a la prueba seleccionada (por defecto, la actual).
+    if (periodId && e.periodId !== periodId) return false;
     if (courseId && e.courseId !== courseId) return false;
     if (!filter.trim()) return true;
     const q = filter.toLowerCase();
