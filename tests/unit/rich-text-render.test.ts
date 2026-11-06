@@ -70,6 +70,51 @@ describe("unwrapSingleParagraph", () => {
   });
 });
 
+describe("renderRichText con listas", () => {
+  /**
+   * Las listas deben emitir su propia clase (`rt-list-ordered` /
+   * `rt-list-bullet`): el enunciado y las opciones se renderizan con
+   * `RichTextInline`, que NO lleva `.prose-eval`, y Tailwind Preflight pone
+   * `ol, ul { list-style: none }`. Sin la clase pegada al `<ol>`/`<ul>` los
+   * numerales de las listas ordenadas desaparecen en el PDF y en el
+   * visualizador.
+   */
+  const docConLista = (tipo: "orderedList" | "bulletList") => ({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "Encuentre el mayor dado los siguientes numerales:" }],
+      },
+      {
+        type: tipo,
+        content: ["a", "b"].map((text) => ({
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+        })),
+      },
+    ],
+  });
+
+  it("la lista ordenada emite la clase rt-list-ordered", () => {
+    const html = renderRichText(docConLista("orderedList"));
+    expect(html).toContain('<ol class="rt-list-ordered">');
+    expect(html).toContain("<li>");
+    expect(html).toContain("a");
+  });
+
+  it("la lista con viñetas emite la clase rt-list-bullet", () => {
+    const html = renderRichText(docConLista("bulletList"));
+    expect(html).toContain('<ul class="rt-list-bullet">');
+    expect(html).toContain("<li>");
+  });
+
+  it("la lista no se desenvuelve: el enunciado conserva el <ol> completo", () => {
+    const html = renderRichText(docConLista("orderedList"));
+    expect(unwrapSingleParagraph(html)).toBe(html);
+  });
+});
+
 describe("renderRichText con nodos math", () => {
   it('inlineMath → emite HTML KaTeX dentro de un <span class="math-inline" data-tex>', () => {
     const docWithMath = {

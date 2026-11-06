@@ -483,12 +483,17 @@ export default async function PrintBundlePage({
                                 key={q.id}
                                 className={`question${isWideQuestion(q) ? "wide" : ""}`}
                               >
-                                <p className="question-text">
+                                {/* `div` y no `p`: ver el comentario en
+                                    src/app/print/evaluation/[id]/page.tsx —
+                                    con `<p>` el parser HTML cerraba el
+                                    contenedor y el enunciado con varios
+                                    bloques se salía de la pregunta. */}
+                                <div className="question-text">
                                   <span className="item-number">
                                     {(q as unknown as { globalNumber: number }).globalNumber}.
                                   </span>{" "}
                                   <RichTextInline value={q.text} />
-                                </p>
+                                </div>
                                 <ul className="question-options">
                                   {q.options.map((o) => (
                                     <li key={o.key}>
