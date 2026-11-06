@@ -140,6 +140,29 @@
   padding-left: 1.4rem;
   margin: 0.35rem 0;
 }
+
+/* Listas del contenido enriquecido que NO vive dentro de `.prose-eval`.
+ *
+ * `.prose-eval` solo alcanza a `RichText` (contextos). Enunciados y opciones
+ * se renderizan con `RichTextInline`, que emite un `<span>` sin esa clase, y
+ * Tailwind Preflight pone `ol, ul { list-style: none }`: las listas ordenadas
+ * salían SIN numerales (ni viñetas) en el PDF y en el visualizador.
+ *
+ * Por eso la clase va pegada al propio `<ol>`/`<ul>` (la emite la extensión
+ * de listas de TipTap, ver components/editor/extensions.ts) y no en un
+ * ancestro: el parser HTML cierra el `<p>` que envuelve al enunciado en
+ * cuanto encuentra el `<p>` de TipTap, y el `<ol>` queda como hermano — fuera
+ * del contenedor y sin clase. */
+.rt-list-ordered {
+  list-style: decimal;
+  padding-left: 1.4em;
+  margin: 0.35em 0;
+}
+.rt-list-bullet {
+  list-style: disc;
+  padding-left: 1.4em;
+  margin: 0.35em 0;
+}
 .prose-eval blockquote {
   border-left: 3px solid var(--border);
   padding-left: 0.75rem;

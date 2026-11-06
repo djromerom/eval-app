@@ -163,10 +163,19 @@ export default async function PrintEvaluationPage({
                           key={q.id}
                           className={isWideQuestion(q) ? "question wide" : "question"}
                         >
-                          <p className="question-text">
+                          {/* `div` y no `p`: el enunciado puede traer varios
+                              bloques (párrafo + lista, p.ej. "Encuentre el
+                              mayor dado los siguientes numerales: a b c d").
+                              Con `<p>` el parser HTML lo cerraba al encontrar
+                              el `<p>` de TipTap, el contenido se salía del
+                              contenedor y el número de la pregunta quedaba
+                              solo en su renglón. Con `div` los bloques
+                              quedan dentro del flex y el número alinea con
+                              la primera línea. */}
+                          <div className="question-text">
                             <span className="item-number">{q.number}.</span>{" "}
                             <RichTextInline value={q.text} />
-                          </p>
+                          </div>
                           <ul className="question-options">
                             {q.options.map((o) => (
                               <li key={o.key}>

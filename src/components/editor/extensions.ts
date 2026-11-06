@@ -218,7 +218,17 @@ export const ResizableTableRow = TableRow.extend({
 });
 
 export const richTextExtensions: Extensions = [
-  StarterKit,
+  StarterKit.configure({
+    // Las listas emiten su propia clase para poder restaurar los marcadores
+    // (numerales de las ordenadas, viñetas de las desordenadas) aunque se
+    // rendericen FUERA de `.prose-eval` — que es el caso del enunciado y las
+    // opciones, que van con `RichTextInline`. La clase viaja pegada al
+    // `<ol>`/`<ul>` porque el parser HTML puede cerrar antes de tiempo el
+    // contenedor que los envuelve. Ver globals.css (`.rt-list-ordered` /
+    // `.rt-list-bullet`).
+    orderedList: { HTMLAttributes: { class: "rt-list-ordered" } },
+    bulletList: { HTMLAttributes: { class: "rt-list-bullet" } },
+  }),
   TextAlign,
   ResizableImage,
   // `resizable: true` activa los tiradores de columna de prosemirror-tables.
