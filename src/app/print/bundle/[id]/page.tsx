@@ -476,12 +476,22 @@ export default async function PrintBundlePage({
                             en print.css; "high" mantiene el flujo vertical.
                             Las preguntas wide (con imagen/tabla) ya tienen
                             column-span: all, así que cruzan ambas columnas. */}
+                        {/* El className de cada pregunta va como string literal y no
+                            como template: prettier-plugin-tailwindcss normaliza las
+                            clases dentro de un template y se come el espacio de
+                            " wide", dejando `questionwide` (que no matchea la regla
+                            `.question` de print.css). Sin esa clase, las preguntas
+                            con imagen o tabla se imprimen SIN su recuadro (bordes
+                            derecho e inferior) y SIN `break-inside: avoid`, así que
+                            además se parten entre columnas y entre páginas.
+                            Mismo arreglo que se aplicó en la ruta de la
+                            formulación suelta (commit 7a1ce99). */}
                         <ul className="questions-list" data-density={density}>
                           {sectionsInGroup.flatMap((s) =>
                             s.questions.map((q) => (
                               <div
                                 key={q.id}
-                                className={`question${isWideQuestion(q) ? "wide" : ""}`}
+                                className={isWideQuestion(q) ? "question wide" : "question"}
                               >
                                 {/* `div` y no `p`: ver el comentario en
                                     src/app/print/evaluation/[id]/page.tsx —
