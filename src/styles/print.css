@@ -384,6 +384,12 @@
   text-align: center;
   text-transform: uppercase;
   margin-bottom: 0.15rem;
+  /* Cambio de asignatura (pedido del docente, nov 2026): el nombre del
+     área viaja pegado a su primera pregunta. Con `break-after: avoid` el
+     título no se queda huérfano al pie de la página anterior ni se separa
+     de la pregunta que introduce: si título + primera pregunta no caben
+     juntos en el espacio que queda, los dos cambian de página. */
+  break-after: avoid;
 }
 
 /* Imágenes dentro del booklet: centradas horizontalmente y limitadas al
@@ -539,6 +545,28 @@
    * X A LA Y..."), que mantiene su `font-size: 10pt` explícito por ser
    * una instrucción estructural. */
   font-size: var(--print-question-font-size, 10pt);
+}
+
+/* Flujo de 1 columna: se QUITA el multicolumna (`column-count: auto`).
+ *
+ * Dentro de un contexto multicolumna Chromium ignora `break-inside: avoid`
+ * en los descendientes: las preguntas se parten entre columnas y entre
+ * páginas. Caso real (nov 2026, cuadernillo de 9º): "ÉTICA Y VALORES" con
+ * el enunciado de la pregunta 36 al pie de la p18 y su imagen + opciones
+ * en la p19 — el enunciado, la imagen y las respuestas no quedaban en la
+ * misma página.
+ *
+ * Con una sola columna el multicolumna no aporta nada (una columna es una
+ * columna) y su único efecto era ese: activar el contexto de fragmentación
+ * que descarta `break-inside: avoid`. Pasando a `auto` el flujo es un bloque
+ * normal y `break-inside: avoid` se respeta: ninguna pregunta se parte, y
+ * con `break-after: avoid` del título el cambio de asignatura se lleva
+ * título + primera pregunta a la página siguiente cuando no caben juntos.
+ *
+ * El multicolumna de 2 columnas (tema con `questionColumns = 2`) se mantiene
+ * tal cual: ahí el flujo sí reparte en columnas y el arreglo no aplica. */
+.questions-flow[data-columns="1"] {
+  column-count: auto;
 }
 
 /* El encabezado de cada contexto cruza ambas columnas: es común a todas sus
