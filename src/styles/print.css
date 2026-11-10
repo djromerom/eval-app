@@ -585,8 +585,18 @@
    preguntas, NO se fuerza el salto: el bloque contexto+preguntas se queda
    pegado al anterior (más items = menos sentido el salto forzado, solo
    desperdicia espacio). Funciona tanto en la evaluación suelta (varios
-   bloques de 1 asignatura) como en el cuadernillo. */
-.questions-flow > .print-group ~ .print-group[data-items="1"] .block-intro {
+   bloques de 1 asignatura) como en el cuadernillo.
+ *
+ * SOLO en el flujo de 2 columnas (nov 2026). Con el flujo de 1 columna —que
+ * ya no es multicolumna, para que las preguntas no se partan— esta regla
+ * pasó a aplicarse de verdad y cada contexto de 1 pregunta se fue a una
+ * hoja sola: el cuadernillo de 2º pasó de 23 a 37 páginas con media hoja
+ * en blanco por página. Es el mismo efecto que tumbó el arreglo de
+ * paginación del commit 90c0885. El pedido vigente es el contrario ("los
+ * bloques de preguntas fluyen en la misma página", commit 2114886), así que
+ * en 1 columna los bloques fluyen y el salto forzado se queda solo en el
+ * flujo de 2 columnas, donde nunca dejó de ser un salto de columna. */
+.questions-flow[data-columns="2"] > .print-group ~ .print-group[data-items="1"] .block-intro {
   break-before: page;
 }
 
