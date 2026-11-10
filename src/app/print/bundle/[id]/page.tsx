@@ -397,11 +397,6 @@ export default async function PrintBundlePage({
         const competencyRows = buildCompetencyRows(evaluation.sections);
         const cs = csById.get(evaluation.courseSubjectId);
         const area = cs?.subjectName ?? "";
-        // Grupos de la formulación. El título de la asignatura viaja dentro
-        // del PRIMER grupo (ver `.intro-item` en print.css): así queda
-        // pegado a su contenido y no puede quedar huérfano al pie de una
-        // página. Sin grupos (formulación vacía), el título va suelto.
-        const groups = groupSectionsForPrint(evaluation.sections);
         return (
           <div key={item.id} className="bundle-eval-section">
             {/* UN solo contenedor por formulación, igual que en el booklet de
@@ -409,9 +404,9 @@ export default async function PrintBundlePage({
                 izquierda a la derecha y de ahí a la página siguiente. Con un
                 contenedor por contexto, Chrome balancea mal al fragmentar. */}
             <section className="sheet questions">
-              {area && groups.length === 0 ? <p className="subject-title">{area}</p> : null}
+              {area ? <p className="subject-title">{area}</p> : null}
               <div className="questions-flow" data-columns={theme.questionColumns}>
-                {groups.map((group, groupIndex) => {
+                {groupSectionsForPrint(evaluation.sections).map((group) => {
                   // Densidad a nivel de grupo: las "ninguno" consecutivas se
                   // suman y la heurística decide si el bloque entero cabe
                   // en 2-col. El override del docente se respeta solo en
@@ -432,43 +427,6 @@ export default async function PrintBundlePage({
                   const headSection = sectionsInGroup[0]!;
                   const headHasContext = richTextHasRenderableContent(headSection.content);
                   const showLead = allNumbers.length > 1 && (headHasContext || headSection.title);
-                  // La 1ª pregunta del grupo va dentro del bloque atómico
-                  // `.intro-item` (junto al contexto): así Chrome no puede
-                  // partirla (enunciado y opciones siempre juntos) ni dejar
-                  // el contexto huérfano al pie de la página. El resto de las
-                  // preguntas sigue en la lista y fluye entre páginas.
-                  const questions = sectionsInGroup.flatMap((s) => s.questions);
-                  const [firstQuestion, ...restQuestions] = questions;
-                  const questionNode = (q: (typeof questions)[number]) => (
-                    <div
-                      key={q.id}
-                      // String literal y no template: prettier-plugin-tailwindcss
-                      // normaliza las clases dentro de un template y se come el
-                      // espacio de " wide" (el className quedaba "questionwide"
-                      // y no matcheaba la regla `.question.wide` de print.css).
-                      className={isWideQuestion(q) ? "question wide" : "question"}
-                    >
-                      {/* `div` y no `p`: ver el comentario en
-                          src/app/print/evaluation/[id]/page.tsx —
-                          con `<p>` el parser HTML cerraba el
-                          contenedor y el enunciado con varios
-                          bloques se salía de la pregunta. */}
-                      <div className="question-text">
-                        <span className="item-number">
-                          {(q as unknown as { globalNumber: number }).globalNumber}.
-                        </span>{" "}
-                        <RichTextInline value={q.text} />
-                      </div>
-                      <ul className="question-options">
-                        {q.options.map((o) => (
-                          <li key={o.key}>
-                            <span className="option-letter">{o.key}.</span>{" "}
-                            <RichTextInline value={o.text} />
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  );
                   return (
                     <Fragment key={isMerged ? `merged-${headSection.id}` : headSection.id}>
                       {/* Wrapper común por grupo: pega el intro con sus preguntas
@@ -493,53 +451,61 @@ export default async function PrintBundlePage({
                         data-print-group-density={density}
                         data-items={allNumbers.length}
                       >
-                        {/* Título de la asignatura en su propia caja atómica:
-                            pegado al bloque de apertura para que no pueda
-                            quedar huérfano al pie de la página. Va dentro
-                            del flujo de preguntas (fuera del multicol el
-                            navegador no ata el título a lo que viene
-                            después). Ver `.subject-head` en print.css. */}
-                        {groupIndex === 0 && area ? (
-                          <div className="subject-head">
-                            <p className="subject-title">{area}</p>
-                          </div>
-                        ) : null}
-
-                        {/* Bloque atómico de apertura: el contexto y su 1ª
-                            pregunta viajan en la misma caja y no se separan
-                            ni se parten. Ver `.intro-item` en print.css. */}
-                        <div className="intro-item">
-                          <div
-                            className="block-intro"
-                            data-empty={!headSection.title && !headHasContext ? "true" : undefined}
-                          >
-                            {showLead && (
-                              <p className="block-lead">
-                                RESPONDA LAS PREGUNTAS {first} A LA {last} DE ACUERDO CON LA
-                                SIGUIENTE INFORMACIÓN
-                              </p>
-                            )}
-                            {headSection.title ? (
-                              <p className="block-text-title">{headSection.title}</p>
-                            ) : null}
-                            {headHasContext ? (
-                              <RichText value={headSection.content} className="context-paragraph" />
-                            ) : null}
-                          </div>
-                          {firstQuestion ? questionNode(firstQuestion) : null}
+                        {/* Agrupado para que el contexto no se separe de su 1ª
+                            pregunta. En `none-merged`, solo el head emite intro. */}
+                        <div
+                          className="block-intro"
+                          data-empty={!headSection.title && !headHasContext ? "true" : undefined}
+                        >
+                          {showLead && (
+                            <p className="block-lead">
+                              RESPONDA LAS PREGUNTAS {first} A LA {last} DE ACUERDO CON LA SIGUIENTE
+                              INFORMACIÓN
+                            </p>
+                          )}
+                          {headSection.title ? (
+                            <p className="block-text-title">{headSection.title}</p>
+                          ) : null}
+                          {headHasContext ? (
+                            <RichText value={headSection.content} className="context-paragraph" />
+                          ) : null}
                         </div>
 
-                        {/* Contenedor de las preguntas RESTANTES de ESTE grupo
-                            (la 1ª va en el bloque atómico de arriba).
+                        {/* Contenedor de las preguntas de ESTE grupo.
                             data-density="low" activa el layout de 2 columnas
                             en print.css; "high" mantiene el flujo vertical.
                             Las preguntas wide (con imagen/tabla) ya tienen
                             column-span: all, así que cruzan ambas columnas. */}
-                        {restQuestions.length > 0 ? (
-                          <ul className="questions-list" data-density={density}>
-                            {restQuestions.map((q) => questionNode(q))}
-                          </ul>
-                        ) : null}
+                        <ul className="questions-list" data-density={density}>
+                          {sectionsInGroup.flatMap((s) =>
+                            s.questions.map((q) => (
+                              <div
+                                key={q.id}
+                                className={`question${isWideQuestion(q) ? "wide" : ""}`}
+                              >
+                                {/* `div` y no `p`: ver el comentario en
+                                    src/app/print/evaluation/[id]/page.tsx —
+                                    con `<p>` el parser HTML cerraba el
+                                    contenedor y el enunciado con varios
+                                    bloques se salía de la pregunta. */}
+                                <div className="question-text">
+                                  <span className="item-number">
+                                    {(q as unknown as { globalNumber: number }).globalNumber}.
+                                  </span>{" "}
+                                  <RichTextInline value={q.text} />
+                                </div>
+                                <ul className="question-options">
+                                  {q.options.map((o) => (
+                                    <li key={o.key}>
+                                      <span className="option-letter">{o.key}.</span>{" "}
+                                      <RichTextInline value={o.text} />
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )),
+                          )}
+                        </ul>
                       </div>
                     </Fragment>
                   );
