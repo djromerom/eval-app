@@ -51,6 +51,11 @@ export default async function PrintEvaluationPage({
   const area = cs?.subjectName ?? "";
   const grade = cs?.courseName ?? "";
   const bookletLabel = evaluation.bookletNumber != null ? ` ${evaluation.bookletNumber}` : "";
+  // Grupos de la formulación. El título de la asignatura viaja dentro del
+  // PRIMER grupo (ver `.intro-item` en print.css): así queda pegado a su
+  // contenido y no puede quedar huérfano al pie de una página. Sin grupos
+  // (formulación vacía), el título va suelto.
+  const groups = groupSectionsForPrint(evaluation.sections);
 
   const cssVars = themeToCssVars(theme) as Record<string, string>;
 
@@ -84,9 +89,9 @@ export default async function PrintEvaluationPage({
           ECU {grade}
           {bookletLabel}
         </div>
-        {area ? <p className="subject-title">{area}</p> : null}
+        {area && groups.length === 0 ? <p className="subject-title">{area}</p> : null}
         <div className="questions-flow" data-columns={theme.questionColumns}>
-          {groupSectionsForPrint(evaluation.sections).map((group) => {
+          {groups.map((group, groupIndex) => {
             // Densidad a nivel de grupo: las "ninguno" consecutivas se
             // suman y la heurística por chars/ítem decide si el bloque
             // entero cabe en 2-col. El override del docente se respeta
@@ -107,6 +112,45 @@ export default async function PrintEvaluationPage({
             const headSection = sectionsInGroup[0]!;
             const headHasContext = richTextHasRenderableContent(headSection.content);
             const showLead = allNumbers.length > 1 && (headHasContext || headSection.title);
+            // La 1ª pregunta del grupo va dentro del bloque atómico
+            // `.intro-item` (junto al contexto): así Chrome no puede
+            // partirla (enunciado y opciones siempre juntos) ni dejar el
+            // contexto huérfano al pie de la página. El resto de las
+            // preguntas sigue en la lista y fluye entre páginas.
+            const questions = sectionsInGroup.flatMap((s) => s.questions);
+            const [firstQuestion, ...restQuestions] = questions;
+            const questionNode = (q: (typeof questions)[number]) => (
+              <div
+                key={q.id}
+                // El className de cada pregunta va como string literal y no
+                // como template: prettier-plugin-tailwindcss normaliza las
+                // clases dentro de un template y se come el espacio de
+                // " wide", dejando `questionwide` (que no matchea la regla
+                // `.question.wide` de print.css).
+                className={isWideQuestion(q) ? "question wide" : "question"}
+              >
+                {/* `div` y no `p`: el enunciado puede traer varios
+                    bloques (párrafo + lista, p.ej. "Encuentre el
+                    mayor dado los siguientes numerales: a b c d").
+                    Con `<p>` el parser HTML lo cerraba al encontrar
+                    el `<p>` de TipTap, el contenido se salía del
+                    contenedor y el número de la pregunta quedaba
+                    solo en su renglón. Con `div` los bloques
+                    quedan dentro del flex y el número alinea con
+                    la primera línea. */}
+                <div className="question-text">
+                  <span className="item-number">{q.number}.</span> <RichTextInline value={q.text} />
+                </div>
+                <ul className="question-options">
+                  {q.options.map((o) => (
+                    <li key={o.key}>
+                      <span className="option-letter">{o.key}.</span>{" "}
+                      <RichTextInline value={o.text} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
             return (
               <Fragment key={isMerged ? `merged-${headSection.id}` : headSection.id}>
                 {/* Wrapper común por grupo: pega el intro con sus preguntas
@@ -124,70 +168,54 @@ export default async function PrintEvaluationPage({
                     (la franja gris "ECU GRADO N°" entre asignaturas dentro
                     del cuadernillo) sigue intacto en otra capa. */}
                 <div className="print-group" data-print-group-density={density}>
-                  {/* Agrupado para que el contexto no se separe de su 1ª pregunta.
-                      En `none-merged`, el head emite intro; las demás secciones
-                      del grupo se renderean sin su propio intro ni divider. */}
-                  <div
-                    className="block-intro"
-                    data-empty={!headSection.title && !headHasContext ? "true" : undefined}
-                  >
-                    {showLead && (
-                      <p className="block-lead">
-                        RESPONDA LAS PREGUNTAS {first} A LA {last} DE ACUERDO CON LA SIGUIENTE
-                        INFORMACIÓN
-                      </p>
-                    )}
-                    {headSection.title ? (
-                      <p className="block-text-title">{headSection.title}</p>
-                    ) : null}
-                    {headHasContext ? (
-                      <RichText value={headSection.content} className="context-paragraph" />
-                    ) : null}
+                  {/* Título de la asignatura en su propia caja atómica:
+                      pegado al bloque de apertura para que no pueda quedar
+                      huérfano al pie de la página. Va dentro del flujo de
+                      preguntas (fuera del multicol el navegador no ata el
+                      título a lo que viene después). Ver `.subject-head` en
+                      print.css. */}
+                  {groupIndex === 0 && area ? (
+                    <div className="subject-head">
+                      <p className="subject-title">{area}</p>
+                    </div>
+                  ) : null}
+
+                  {/* Bloque atómico de apertura: el contexto y su 1ª
+                      pregunta viajan en la misma caja y no se separan ni se
+                      parten. Ver `.intro-item` en print.css. */}
+                  <div className="intro-item">
+                    <div
+                      className="block-intro"
+                      data-empty={!headSection.title && !headHasContext ? "true" : undefined}
+                    >
+                      {showLead && (
+                        <p className="block-lead">
+                          RESPONDA LAS PREGUNTAS {first} A LA {last} DE ACUERDO CON LA SIGUIENTE
+                          INFORMACIÓN
+                        </p>
+                      )}
+                      {headSection.title ? (
+                        <p className="block-text-title">{headSection.title}</p>
+                      ) : null}
+                      {headHasContext ? (
+                        <RichText value={headSection.content} className="context-paragraph" />
+                      ) : null}
+                    </div>
+                    {firstQuestion ? questionNode(firstQuestion) : null}
                   </div>
 
-                  {/* Contenedor de las preguntas de ESTE grupo.
+                  {/* Contenedor de las preguntas RESTANTES de ESTE grupo (la
+                      1ª va en el bloque atómico de arriba).
                       data-density="low" activa el layout de 2 columnas en
                       print.css; "high" mantiene el flujo vertical normal.
                       Las preguntas wide (con imagen/tabla) ya tienen
                       column-span: all, así que cruzan ambas columnas
                       sin importar la densidad. */}
-                  {/* El className de cada pregunta va como string literal y no
-                      como template: prettier-plugin-tailwindcss normaliza las
-                      clases dentro de un template y se come el espacio de
-                      " wide", dejando `questionwide` (que no matchea la regla
-                      `.question.wide` de print.css). */}
-                  <ul className="questions-list" data-density={density}>
-                    {sectionsInGroup.flatMap((s) =>
-                      s.questions.map((q) => (
-                        <div
-                          key={q.id}
-                          className={isWideQuestion(q) ? "question wide" : "question"}
-                        >
-                          {/* `div` y no `p`: el enunciado puede traer varios
-                              bloques (párrafo + lista, p.ej. "Encuentre el
-                              mayor dado los siguientes numerales: a b c d").
-                              Con `<p>` el parser HTML lo cerraba al encontrar
-                              el `<p>` de TipTap, el contenido se salía del
-                              contenedor y el número de la pregunta quedaba
-                              solo en su renglón. Con `div` los bloques
-                              quedan dentro del flex y el número alinea con
-                              la primera línea. */}
-                          <div className="question-text">
-                            <span className="item-number">{q.number}.</span>{" "}
-                            <RichTextInline value={q.text} />
-                          </div>
-                          <ul className="question-options">
-                            {q.options.map((o) => (
-                              <li key={o.key}>
-                                <span className="option-letter">{o.key}.</span>{" "}
-                                <RichTextInline value={o.text} />
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )),
-                    )}
-                  </ul>
+                  {restQuestions.length > 0 ? (
+                    <ul className="questions-list" data-density={density}>
+                      {restQuestions.map((q) => questionNode(q))}
+                    </ul>
+                  ) : null}
                 </div>
               </Fragment>
             );
