@@ -2,11 +2,12 @@
 
 import { useEffect } from "react";
 
+import { DEFAULT_IMAGE_MIN_DPI } from "@/shared/print/image-sizing";
 import {
-  computePrintImageCapPx,
-  computePrintImageMetrics,
-  DEFAULT_IMAGE_MIN_DPI,
-} from "@/shared/print/image-sizing";
+  applyPrintImagePlan,
+  describePrintImagePlan,
+  planPrintImageSizing,
+} from "@/shared/print/print-image-sizing";
 
 /**
  * Ajusta el tamaño de las imágenes al imprimir para que no salgan borrosas.
@@ -32,11 +33,35 @@ import {
  * El `min(…, 100%)` conserva el comportamiento anterior: la imagen nunca
  * se sale de su columna.
  *
+ * AJUSTE POR LEGIBILIDAD (además del tope de nitidez)
+ *
+ * El tope de arriba evita que una imagen salga BORROSA, pero no evita que
+ * salga ilegible: una captura de pantalla con rótulos de 10 px impresa a
+ * 35 mm deja esos rótulos en 2,4 pt. Aquí se mide el texto que hay DENTRO
+ * de la imagen y se calcula el ancho mínimo con el que ese texto llega a
+ * `MIN_PRINT_TEXT_PT` (6 pt) sin ampliar la imagen más allá de sus píxeles.
+ *
+ * El ancho se fija en MILÍMETROS, no en píxeles, para que la vista previa y
+ * el PDF coincidan: los píxeles CSS de la vista previa están a escala de
+ * pantalla (la hoja se ve a 800 px de ancho), mientras que el milímetro es
+ * absoluto y es lo mismo en el papel.
+ *
+ * DOS COLUMNAS
+ *
+ * El ancho mínimo se compara con la hoja completa, no con la columna: si el
+ * texto cabe en la hoja pero la imagen está en una columna de 85 mm, se
+ * agranda igual y el navegador la recorta al 100% del contenedor (`max-width`),
+ * que es lo que hace que la imagen ocupe su columna sin desbordarla. Una
+ * pregunta con imagen o tabla ya cruza las dos columnas por su cuenta
+ * (`.question.wide { column-span: all }`), así que el ancho real del
+ * contenedor es el que le toca a cada caso.
+ *
  * Se aplica en las rutas /print, no en el editor: el ancho que se ve en
  * pantalla es una preferencia de maquetación y se respeta tal cual (salvo
  * que la imagen se amplíe más allá de sus píxeles, que es el caso que se
  * corrige aquí).
  */
+
 export function PrintImageSizer({
   minDpi = DEFAULT_IMAGE_MIN_DPI,
 }: {
@@ -45,6 +70,9 @@ export function PrintImageSizer({
 }) {
   useEffect(() => {
     let cancelled = false;
+    // La misma imagen puede repetirse en varias preguntas: se analiza una
+    // sola vez.
+    const textHeightCache = new Map<string, number | null>();
 
     const apply = () => {
       if (cancelled) return;
@@ -56,35 +84,25 @@ export function PrintImageSizer({
         // fijo): un tope de calidad las deformaría.
         if (img.closest(".cover-logo, .cover-custom")) return;
 
-        const naturalWidth = img.naturalWidth;
-        const naturalHeight = img.naturalHeight;
-        // 0 = imagen rota o que no llegó a cargar.
-        if (!naturalWidth || !naturalHeight) return;
+        const plan = planPrintImageSizing(img, { minDpi, textHeightCache });
+        if (!plan) return;
 
-        // Ancho pedido por el docente (el `N%` ya resuelto contra el
-        // contenedor). Se mide ANTES de aplicar el tope.
-        const requestedWidth = img.getBoundingClientRect().width;
-        if (!requestedWidth) return;
-
-        const capPx = computePrintImageCapPx(naturalWidth, minDpi);
-        if (!capPx) return;
-
-        const metrics = computePrintImageMetrics({
-          naturalWidth,
-          naturalHeight,
-          requestedWidth,
-          capPx,
-        });
-
-        img.style.maxWidth = `min(${capPx}px, 100%)`;
+        applyPrintImagePlan(img, plan);
         img.dataset.printSized = "1";
 
-        if (metrics.clamped) {
+        if (plan.widthMm != null) {
           console.warn(
-            `[print-image] La imagen mide ${naturalWidth}×${naturalHeight} px y se iba a ` +
-              `imprimir a ${metrics.requestedWidthMm.toFixed(1)} mm ` +
-              `(${metrics.requestedDpi.toFixed(0)} DPI). Se recorta a ` +
-              `${metrics.finalWidthMm.toFixed(1)} mm (${metrics.dpi.toFixed(0)} DPI) ` +
+            `[print-image] ${describePrintImagePlan(plan)}`,
+            img.getAttribute("src") ?? "(sin src)",
+          );
+        }
+
+        if (plan.metrics.clamped) {
+          console.warn(
+            `[print-image] La imagen mide ${plan.naturalWidthPx}×${img.naturalHeight} px y se iba a ` +
+              `imprimir a ${plan.metrics.requestedWidthMm.toFixed(1)} mm ` +
+              `(${plan.metrics.requestedDpi.toFixed(0)} DPI). Se recorta a ` +
+              `${plan.metrics.finalWidthMm.toFixed(1)} mm (${plan.metrics.dpi.toFixed(0)} DPI) ` +
               `para que no salga borrosa. Si la quieres más grande, sube una ` +
               `versión de mayor resolución.`,
             img.getAttribute("src") ?? "(sin src)",

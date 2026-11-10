@@ -45,6 +45,20 @@ export const CSS_PX_PER_INCH = 96;
 export const MM_PER_INCH = 25.4;
 
 /**
+ * Ancho imprimible de la hoja, en mm.
+ *
+ * El `@page` de `src/styles/print.css` define `size: letter portrait` y
+ * `margin: 1.5cm 2cm`: la carta son 215,9 mm de ancho y con 20 mm de margen
+ * a cada lado quedan 175,9 mm de caja imprimible (medido en los PDF
+ * generados: el texto arranca en x = 20,1 mm).
+ *
+ * Sirve para saber si un ancho pedido cabe en la hoja y para convertir los
+ * píxeles de la vista previa (que se ve a escala de pantalla) a milímetros
+ * de papel.
+ */
+export const PRINT_SHEET_WIDTH_MM = 215.9 - 2 * 20;
+
+/**
  * DPI mínimo garantizado en la impresión.
  *
  * 96 = el tamaño natural de la imagen: el papel sale tan nítido como la

@@ -494,18 +494,68 @@
 
 /* Intro del bloque: "RESPONDA LAS PREGUNTAS X A LA Y" + título + contexto.
  *
- * `break-after: avoid` la mantiene pegada a la primera pregunta: si no caben
- * juntas al pie de la página, el bloque entero baja a la siguiente. Evita el
- * caso de un contexto largo (con gráfico) huérfano al final de una hoja y sus
- * preguntas en la de enfrente, obligando al estudiante a ir y volver.
+ * `break-inside: avoid` mantiene el contexto entero en una página (no se
+ * parte por la mitad).
  *
- * Un bloque de 5 preguntas sigue partiéndose de forma natural entre páginas —
- * lo que no se parte es el vínculo contexto → primera pregunta.
+ * DELIBERADAMENTE SIN `break-after: avoid`. Esa regla ("no separes el intro
+ * de lo que sigue") era lo que Chrome no podía cumplir dentro del flujo
+ * multicolumna: tenía que satisfacer a la vez el `break-after: avoid` del
+ * intro y el `break-inside: avoid` de la pregunta siguiente, y cuando no
+ * caben las dos cosas, resolvía el conflicto PARTIENDO la pregunta (el
+ * enunciado al pie de una hoja y las opciones en la siguiente).
+ *
+ * El vínculo contexto → primera pregunta lo garantiza ahora el bloque
+ * atómico `.intro-item` (abajo): contexto y 1ª pregunta en la misma caja,
+ * sin depender de que el navegador resuelva un `break-after: avoid`.
  *
  * Límite conocido: si el contexto por sí solo mide más que una página, el
  * navegador ignora la regla y parte igual. No hay forma de evitarlo en CSS.
  */
 .block-intro {
+  break-inside: avoid;
+}
+
+/* Bloque atómico de apertura de cada grupo: el contexto (.block-intro) + la
+ * PRIMERA pregunta del grupo.
+ *
+ * Sustituye al `break-after: avoid` del .block-intro: en vez de "no separar"
+ * (una regla que Chrome no sabe cumplir cuando la pregunta también lleva
+ * `break-inside: avoid`), se mete contexto y primera pregunta en la MISMA
+ * caja y se prohíbe que esa caja se parta. Con esto:
+ *   - ninguna pregunta se parte entre páginas ni entre columnas (el
+ *     enunciado y sus opciones siempre juntos);
+ *   - el contexto nunca queda huérfano al pie de una hoja.
+ *
+ * En 2 columnas el bloque ocupa el ancho completo: un bloque atómico no
+ * puede repartirse entre columnas, y su contenido (contexto + 1ª pregunta)
+ * se lee en vertical.
+ */
+.intro-item {
+  break-inside: avoid;
+}
+
+/* Título de la asignatura (el nombre del área).
+ *
+ * El título NO puede quedar huérfano al pie de una página: si la última
+ * línea de la hoja es "INFORMÁTICA" y el contexto arranca en la siguiente,
+ * el estudiante no sabe a qué corresponde el bloque.
+ *
+ * Para atarlo hace falta que el título esté DENTRO del flujo de preguntas:
+ * antes vivía fuera, como hijo directo de `.sheet`, y el navegador no ata
+ * un título a un bloque que está dos niveles más adentro. Medido: con el
+ * título fuera del flujo, 4 de 12 posiciones de corte lo dejaban huérfano;
+ * con el título dentro, 0.
+ *
+ * Va en su propia caja (`.subject-head`) y no dentro del `.intro-item` por
+ * dos razones: (1) en 2 columnas el spanner es la caja del título, que
+ * debe cruzar el ancho completo de la hoja; (2) el `break-after: avoid` de
+ * la caja ata el título al bloque de apertura que viene detrás.
+ *
+ * Medido en las 3 estructuras comparadas (título fuera / título dentro con
+ * la caja atómica / título dentro sin caja atómica): 0 títulos huérfanos y
+ * 0 ítems partidos en 1 y 2 columnas, con el flujo de 1 columna sin multicol.
+ */
+.subject-head {
   break-inside: avoid;
   break-after: avoid;
 }
@@ -526,6 +576,8 @@
   column-count: var(--print-question-columns, 1);
   column-gap: 1.2rem;
   column-fill: auto;
+  /* NOTA: la regla de abajo anula `column-count` cuando el flujo es de UNA
+   * columna (ver `.questions-flow[data-columns="1"]`). */
   /* Tamaño de fuente del cuerpo de las preguntas y del contexto (sep 2026).
    * El default 10pt coincide con `.booklet { font-size: 10pt }` que tenían
    * los items antes de este campo (print.css:59). La variable la emite
@@ -541,12 +593,50 @@
   font-size: var(--print-question-font-size, 10pt);
 }
 
+/* Flujo de UNA columna: NO es un contenedor multicolumna.
+ *
+ * `column-count: 1` sigue siendo un multicol (establece un contexto de
+ * fragmentación por columnas) y eso rompe las reglas de salto de página:
+ * dentro de un multicol Chrome IGNORA `break-inside: avoid`, así que una
+ * pregunta que no cabe al pie de la hoja se parte (enunciado en una página,
+ * opciones en la siguiente) en lugar de pasar entera a la siguiente.
+ *
+ * Medido con el mismo contenido en las dos variantes:
+ *   - flujo multicol de 1 columna → ítems partidos
+ *   - flujo normal (sin multicol) → 0 ítems partidos
+ * Y al revés: quitando el `break-inside: avoid` de la pregunta en un flujo
+ * normal, los ítems vuelven a partirse. La regla sí se respeta; lo que la
+ * anulaba era el multicol.
+ *
+ * El layout no cambia: con una sola columna el ancho, el interlineado y el
+ * salto entre páginas son los mismos. Lo que deja de existir es el contexto
+ * de fragmentación por columnas, que es justo lo que rompía los saltos.
+ *
+ * El modo de 2 columnas a nivel de flujo (tema "ICFES Clásico" / "Compacto")
+ * sigue siendo un multicol y conserva su comportamiento.
+ */
+.questions-flow[data-columns="1"] {
+  column-count: auto;
+}
+
 /* El encabezado de cada contexto cruza ambas columnas: es común a todas sus
- * preguntas y partirlo por la mitad haría ilegible el enunciado del texto. */
-.questions-flow[data-columns="2"] .block-intro,
-.questions-flow[data-columns="2"] .section-divider,
-.questions-flow[data-columns="2"] .subject-title {
+ * preguntas y partirlo por la mitad haría ilegible el enunciado del texto.
+ *
+ * Ahora el spanner es el bloque atómico `.intro-item` (contexto + 1ª
+ * pregunta). DENTRO del .intro-item (que ya ocupa el ancho completo) sus
+ * hijos NO son spanners: un spanner anidado (spanner dentro de spanner) es
+ * justo lo que Chrome no siempre resuelve bien. Lo mismo vale para el
+ * título de la asignatura: cruza las columnas desde su caja `.subject-head`
+ * (que lo mantiene centrado en toda la página, como antes). */
+.questions-flow[data-columns="2"] .intro-item,
+.questions-flow[data-columns="2"] .subject-head,
+.questions-flow[data-columns="2"] .section-divider {
   column-span: all;
+}
+
+.questions-flow[data-columns="2"] .intro-item > .block-intro,
+.questions-flow[data-columns="2"] .subject-head > .subject-title {
+  column-span: normal;
 }
 
 /* Cada bloque de ítems inicia al comienzo de una página SOLO si tiene
@@ -602,31 +692,20 @@
  * ("específico") o el bloque es "ninguno" (sin título ni contenido), el
  * intro y sus preguntas deben viajar pegados en la misma página.
  *
- * Las reglas existentes (`.block-intro { break-after: avoid }` arriba, y
- * `.question { break-inside: avoid }` más abajo) son insuficientes cuando:
- *   1) El intro está vacío (item "ninguno" suelto): el div queda <div></div>,
- *      sin contenido que empujar, y la primera .question puede quedar
- *      huérfana al pie de la página anterior.
- *   2) Contexto + 1 ítem: intro y .question son hermanos dentro de
- *      .questions-flow; no hay wrapper común que los ancle como bloque.
+ * El pegado lo garantiza hoy el bloque atómico `.intro-item` (contexto + 1ª
+ * pregunta en la misma caja con `break-inside: avoid`), que sustituye al
+ * `break-after: avoid` del .block-intro: esa regla, junto al
+ * `break-inside: avoid` de .question, llegaba a partir los ítems por la
+ * mitad (ver el comentario del .block-intro más arriba).
  *
- * El wrapper `.print-group` resuelve las dos variantes — pero SOLO cuando
- * data-items="1". Para grupos con 2+ ítems `break-inside: avoid` es
- * contraproducente: un block-intro largo (Lectura + tabla + imagen) hace
- * que el grupo entero no quepa en la página del subject-title, y Chrome lo
- * empuja entero a la siguiente, dejando el subject-title huérfano (vive en
- * `.sheet.questions`, fuera del wrapper).
+ * El wrapper `.print-group` cubre además el caso del ÍTEM SUELTO: un grupo
+ * con una sola pregunta no debe separarse de su intro vacío.
  *
- * Los dos casos que justificaron el wrapper siguen cubiertos con
- * data-items="1":
- *   1) Intro vacío + 1 ítem ("ninguno suelto"): sin break-inside: avoid,
- *      la .question queda huérfana al pie de página anterior.
- *   2) Contexto + 1 ítem: sin wrapper común, intro y pregunta se separan.
- *
- * Para grupos con 2+ ítems el pegado contexto→primera pregunta sigue
- * garantizado por `.block-intro { break-after: avoid }`; las preguntas
- * restantes fluyen entre páginas sin partirse dentro (cada `.question`
- * tiene `break-inside: avoid`).
+ * `.print-group[data-items="1"] { break-inside: avoid }` mantiene el grupo
+ * (intro + su única pregunta) entero en una página. Para grupos con 2+ ítems
+ * esa regla sería contraproducente: un block-intro largo (Lectura + tabla +
+ * imagen) hace que el grupo entero no quepa y Chrome lo empuja a la
+ * siguiente, dejando la hoja a medio llenar.
  *
  * Preserva comportamiento histórico de multicolumna:
  *  - density=low: cruza las 2 columnas del .questions-flow (igual que el
