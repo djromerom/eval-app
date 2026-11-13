@@ -87,9 +87,42 @@ export interface ImportError {
   message: string;
 }
 
+/** Aviso que NO detiene el proceso: la fila se procesó igual, pero hay
+ *  algo que el docente debe revisar (ej. el grupo del archivo no coincide
+ *  con el del estudiante y por seguridad no se movió). */
+export interface ImportWarning {
+  row: number; // 1-based, referido al archivo original
+  message: string;
+}
+
 export interface ImportResult {
   created: number;
+  /** Estudiantes que YA existían (mismo código) y se actualizaron. */
+  updated: number;
+  warnings: ImportWarning[];
   errors: ImportError[];
+}
+
+/** Campos que un archivo de roster puede ACTUALIZAR sobre un estudiante ya
+ *  existente. Deliberadamente EXCLUIDOS:
+ *  - `code`: va dentro del QR y tiene su propio flujo con historial
+ *    (`ChangeStudentCode` / `StudentCodeHistory`).
+ *  - `groupId`: los informes históricos por grupo leen el grupo ACTUAL del
+ *    estudiante, así que moverlo alteraría pruebas ya aplicadas.
+ *  - `isActive` / `deletedAt`: la baja lógica tiene su propio caso de uso.
+ *  La exclusión es de TIPO: el parche no puede portar esos campos ni por
+ *  error. */
+export interface StudentRosterPatch {
+  id: string;
+  lastName1?: string;
+  lastName2?: string;
+  firstName1?: string;
+  firstName2?: string;
+  idType?: string;
+  idNumber?: string;
+  enrollmentYear?: number;
+  grade?: string | null;
+  bookletTypeId?: string | null;
 }
 
 export interface StudentRepository {
@@ -102,6 +135,11 @@ export interface StudentRepository {
   create(institutionId: string, data: CreateStudentData): Promise<Student>;
   /** Alta masiva atómica (una transacción) de estudiantes ya validados. */
   createMany(institutionId: string, data: CreateStudentData[]): Promise<number>;
+  /** Aplica parches de roster (actualización masiva) a estudiantes ya
+   *  existentes. NO toca `code`, `groupId`, `isActive` ni `deletedAt` —
+   *  esos campos ni siquiera existen en `StudentRosterPatch`.
+   *  Devuelve el número de filas efectivamente actualizadas. */
+  applyRosterPatches(institutionId: string, patches: StudentRosterPatch[]): Promise<number>;
   /** Cambia el código dejando registro en el historial (§3.2). */
   changeCode(institutionId: string, studentId: string, newCode: string): Promise<void>;
   /** Edita los campos NO relacionados al código. Devuelve el estudiante

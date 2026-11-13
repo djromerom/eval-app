@@ -4,6 +4,7 @@ import type {
   CreateStudentData,
   Student,
   StudentRepository,
+  StudentRosterPatch,
   UpdateStudentData,
 } from "../domain/student";
 
@@ -94,6 +95,45 @@ export class PrismaStudentRepository implements StudentRepository {
       data: data.map((d) => ({ institutionId, ...d })),
     });
     return res.count;
+  }
+
+  /**
+   * Actualización masiva del roster (import modo "actualizar"). Solo escribe
+   * los campos que el parche trae: `code`, `groupId`, `isActive` y
+   * `deletedAt` NO se tocan — así la historia de las pruebas anteriores
+   * (hojas de respuesta, QR, informes por grupo) queda intacta.
+   *
+   * Va por lotes para no abrir miles de transacciones: cada lote es una
+   * transacción con un `updateMany` por estudiante (con filtro de
+   * institución y de baja lógica, por si la fila cambió entre la lectura y
+   * la escritura).
+   */
+  async applyRosterPatches(institutionId: string, patches: StudentRosterPatch[]): Promise<number> {
+    if (patches.length === 0) return 0;
+    const LOTE = 250;
+    let actualizados = 0;
+    for (let i = 0; i < patches.length; i += LOTE) {
+      const lote = patches.slice(i, i + LOTE);
+      const ops = lote.map((p) =>
+        prisma.student.updateMany({
+          where: { id: p.id, institutionId, ...notDeleted },
+          data: {
+            ...(p.lastName1 !== undefined ? { lastName1: p.lastName1 } : {}),
+            ...(p.lastName2 !== undefined ? { lastName2: p.lastName2 } : {}),
+            ...(p.firstName1 !== undefined ? { firstName1: p.firstName1 } : {}),
+            ...(p.firstName2 !== undefined ? { firstName2: p.firstName2 } : {}),
+            ...(p.idType !== undefined ? { idType: p.idType } : {}),
+            ...(p.idNumber !== undefined ? { idNumber: p.idNumber } : {}),
+            ...(p.enrollmentYear !== undefined ? { enrollmentYear: p.enrollmentYear } : {}),
+            ...(p.grade !== undefined ? { grade: p.grade } : {}),
+            ...(p.bookletTypeId !== undefined ? { bookletTypeId: p.bookletTypeId } : {}),
+          },
+        }),
+      );
+      const res = await prisma.$transaction(ops);
+      actualizados += res.reduce((acc, r) => acc + r.count, 0);
+    }
+    return actualizados;
   }
 
   async changeCode(institutionId: string, studentId: string, newCode: string): Promise<void> {

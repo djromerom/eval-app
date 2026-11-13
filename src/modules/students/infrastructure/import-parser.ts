@@ -25,6 +25,7 @@ export function parseStudentsImport(buffer: Buffer, filename: string): ParsedCsv
   return {
     rows: [],
     missing: REQUIRED,
+    present: [],
     error: `Formato no soportado: "${filename}". Usa .xlsx o .csv.`,
   };
 }

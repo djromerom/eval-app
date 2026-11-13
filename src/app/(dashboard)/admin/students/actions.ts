@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/session";
 import type { AdminFormState } from "@/components/admin/entity-form";
-import type { ImportError } from "@/modules/students/domain/student";
+import type { ImportError, ImportWarning } from "@/modules/students/domain/student";
+import { COLUMNAS_IMPRESCINDIBLES } from "@/modules/students/application/students";
 import {
   makeCreateStudent,
   makeDeleteStudent,
@@ -97,6 +98,8 @@ export async function deleteStudentAction(
 export interface ImportState {
   error?: string;
   created?: number;
+  updated?: number;
+  warnings?: ImportWarning[];
   errors?: ImportError[];
   done?: boolean;
 }
@@ -119,13 +122,28 @@ export async function importStudentsAction(
   const buffer = Buffer.from(await file.arrayBuffer());
   const parsed = parseStudentsImport(buffer, file.name);
   if (parsed.error) return { error: parsed.error };
-  if (parsed.missing.length > 0) {
-    return { error: `Faltan columnas en el archivo: ${parsed.missing.join(", ")}.` };
+  // Solo bloquean las columnas imprescindibles (código + nombres + grupo).
+  // El tipo/número de documento y el año de ingreso hacen falta únicamente
+  // para CREAR estudiantes nuevos: si el código ya existe, la fila actualiza
+  // al estudiante con lo que sí trae el archivo.
+  const faltantes = parsed.missing.filter((c) => COLUMNAS_IMPRESCINDIBLES.includes(c));
+  if (faltantes.length > 0) {
+    return { error: `Faltan columnas en el archivo: ${faltantes.join(", ")}.` };
   }
 
-  const result = await makeImportStudents().execute({ actor, rows: parsed.rows });
+  const result = await makeImportStudents().execute({
+    actor,
+    rows: parsed.rows,
+    present: parsed.present,
+  });
   if (!result.ok) return { error: result.error.message };
 
   revalidatePath(PATH);
-  return { done: true, created: result.value.created, errors: result.value.errors };
+  return {
+    done: true,
+    created: result.value.created,
+    updated: result.value.updated,
+    warnings: result.value.warnings,
+    errors: result.value.errors,
+  };
 }

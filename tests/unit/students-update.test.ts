@@ -65,6 +65,9 @@ class InMemoryStudents implements StudentRepository {
     }
     s.isActive = false;
   }
+  async applyRosterPatches(): Promise<number> {
+    return 0;
+  }
 }
 
 class InMemoryGroups implements GroupRepository {
