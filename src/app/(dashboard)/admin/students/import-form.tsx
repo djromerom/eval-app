@@ -29,6 +29,11 @@ export function ImportForm() {
         también la columna <code>prueba</code> (Periodo) para identificarlo. Acepta separador{" "}
         <code>,</code> o <code>;</code> en CSV.
       </p>
+      <p className="text-muted-foreground text-sm">
+        Si el <code>codigo</code> ya existe, el estudiante se actualiza en vez de duplicarse: solo
+        se escriben las columnas que trae el archivo y el <code>codigo</code> y el{" "}
+        <code>grupo</code> del estudiante no se cambian.
+      </p>
       <details className="text-muted-foreground text-sm">
         <summary className="cursor-pointer">Tipos de documento válidos</summary>
         <ul className="mt-2 flex flex-wrap gap-2">
@@ -66,7 +71,7 @@ export function ImportForm() {
       {state.done ? (
         <div className="bg-muted/30 space-y-2 rounded-md border p-3 text-sm">
           <p className="font-medium">
-            {state.created} estudiante(s) importado(s)
+            {state.created} estudiante(s) importado(s), {state.updated} actualizado(s)
             {state.errors && state.errors.length > 0
               ? `, ${state.errors.length} fila(s) con errores:`
               : "."}
@@ -79,6 +84,18 @@ export function ImportForm() {
                 </li>
               ))}
             </ul>
+          ) : null}
+          {state.warnings && state.warnings.length > 0 ? (
+            <>
+              <p className="font-medium">{state.warnings.length} fila(s) con avisos:</p>
+              <ul className="max-h-40 list-inside list-disc overflow-y-auto text-amber-700 dark:text-amber-400">
+                {state.warnings.map((w) => (
+                  <li key={w.row}>
+                    Fila {w.row}: {w.message}
+                  </li>
+                ))}
+              </ul>
+            </>
           ) : null}
         </div>
       ) : null}

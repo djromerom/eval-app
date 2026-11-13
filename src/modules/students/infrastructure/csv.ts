@@ -60,6 +60,9 @@ export const HEADER_ALIASES: Record<string, CanonicalKey> = {
   primerapellido: "lastName1",
   apellido2: "lastName2",
   segundoapellido: "lastName2",
+  // Typo de la planilla institucional ("SEGUBD APELLIDO" por "SEGUNDO
+  // APELLIDO"): se acepta para no obligar al docente a renombrar.
+  segubdapellido: "lastName2",
   nombre1: "firstName1",
   primernombre: "firstName1",
   nombre2: "firstName2",
@@ -79,6 +82,10 @@ export const HEADER_ALIASES: Record<string, CanonicalKey> = {
   doc: "idNumber",
   codigo: "code",
   codigoestudiantil: "code",
+  // La planilla institucional rotula el código como "ID" (y el tipo de
+  // cuadernillo con su nombre informal). Aceptamos ambos sin que el
+  // docente tenga que renombrar columnas.
+  id: "code",
   grupo: "groupName",
   grupos: "groupName",
   anioingreso: "enrollmentYear",
@@ -113,6 +120,11 @@ export interface ParsedCsv {
   rows: StudentImportRow[];
   /** Columnas canónicas ausentes en el encabezado. */
   missing: (keyof StudentImportRow)[];
+  /** Columnas canónicas PRESENTES en el encabezado. El import en modo
+   *  "actualizar" usa esta lista para escribir SOLO lo que el archivo trae
+   *  (si el archivo no trae `tipo_doc`, no se toca el tipo de documento que
+   *  ya tiene el estudiante). */
+  present: (keyof StudentImportRow)[];
   /** Mensaje de error fatal (archivo ilegible, etc.). */
   error?: string;
 }
@@ -168,6 +180,25 @@ export function canonicalHeaders(rawHeaders: string[]): (CanonicalKey | undefine
   return rawHeaders.map((h) => HEADER_ALIASES[normalizeHeader(h)]);
 }
 
+/** Claves canónicas que el encabezado trae. El legacy `nombre` cuenta como
+ *  las 4 partes del nombre (el row builder lo parte por whitespace), así
+ *  que un archivo con esa columna puede actualizar apellidos y nombres. */
+export function presentKeys(headers: (CanonicalKey | undefined)[]): (keyof StudentImportRow)[] {
+  const keys = new Set<keyof StudentImportRow>();
+  for (const header of headers) {
+    if (!header) continue;
+    if (header === "__legacyName") {
+      keys.add("lastName1");
+      keys.add("lastName2");
+      keys.add("firstName1");
+      keys.add("firstName2");
+      continue;
+    }
+    keys.add(header);
+  }
+  return [...keys];
+}
+
 /** Aplica el filtro de REQUIRED a los headers canónicos. `__legacyName`
  *  satisface `lastName1` + `firstName1` (backward-compat con CSVs viejos). */
 export function missingRequired(headers: (CanonicalKey | undefined)[]): (keyof StudentImportRow)[] {
@@ -200,17 +231,22 @@ export function parseStudentsCsv(text: string): ParsedCsv {
     .split(/\r?\n/)
     .filter((l) => l.trim().length > 0);
 
-  if (lines.length === 0) return { rows: [], missing: REQUIRED };
+  if (lines.length === 0) return { rows: [], missing: REQUIRED, present: [] };
 
   const delimiter = detectDelimiter(lines[0]!);
   const headers = splitLine(lines[0]!, delimiter).map((h) => HEADER_ALIASES[normalizeHeader(h)]);
   const missing = missingRequired(headers);
-  if (missing.length > 0) return { rows: [], missing };
+  const present = presentKeys(headers);
 
+  // Las filas se parsean aunque falten columnas: el use case valida fila a
+  // fila. Las columnas imprescindibles (código, nombres, grupo) las bloquea
+  // el caller; las demás (tipo/número de documento, año de ingreso) solo
+  // hacen falta para CREAR estudiantes nuevos — si el código ya existe, la
+  // fila actualiza al estudiante con lo que el archivo sí trae.
   const rows: StudentImportRow[] = [];
   for (let i = 1; i < lines.length; i++) {
     const cells = splitLine(lines[i]!, delimiter);
     rows.push(rowToStudentRow(headers, cells));
   }
-  return { rows, missing: [] };
+  return { rows, missing, present };
 }

@@ -6,6 +6,7 @@ import type {
   CreateStudentData,
   Student,
   StudentRepository,
+  StudentRosterPatch,
 } from "@/modules/students/domain/student";
 import type {
   Group,
@@ -28,7 +29,7 @@ class InMemoryStudents implements StudentRepository {
   async findByCode(institutionId: string, code: string) {
     return this.items.find((s) => s.institutionId === institutionId && s.code === code) ?? null;
   }
-  async findByCodeIncludingHistory() {
+  async findByCodeIncludingHistory(_institutionId: string, _code: string): Promise<Student | null> {
     return null;
   }
   async findByGroup() {
@@ -80,6 +81,26 @@ class InMemoryStudents implements StudentRepository {
     }
     s.isActive = false;
   }
+  /** Aplica el parche como el repo real: solo los campos presentes, nunca
+   *  `code`, `groupId`, `isActive` ni `deletedAt`. */
+  async applyRosterPatches(institutionId: string, patches: StudentRosterPatch[]) {
+    let n = 0;
+    for (const p of patches) {
+      const s = this.items.find((x) => x.institutionId === institutionId && x.id === p.id);
+      if (!s) continue;
+      if (p.lastName1 !== undefined) s.lastName1 = p.lastName1;
+      if (p.lastName2 !== undefined) s.lastName2 = p.lastName2;
+      if (p.firstName1 !== undefined) s.firstName1 = p.firstName1;
+      if (p.firstName2 !== undefined) s.firstName2 = p.firstName2;
+      if (p.idType !== undefined) s.idType = p.idType;
+      if (p.idNumber !== undefined) s.idNumber = p.idNumber;
+      if (p.enrollmentYear !== undefined) s.enrollmentYear = p.enrollmentYear;
+      if (p.grade !== undefined) s.grade = p.grade;
+      if (p.bookletTypeId !== undefined) s.bookletTypeId = p.bookletTypeId;
+      n++;
+    }
+    return n;
+  }
 }
 
 class InMemoryGroups implements GroupRepository {
@@ -106,8 +127,8 @@ class InMemoryBookletTypes implements BookletTypeRepository {
   async findById() {
     return null;
   }
-  async listByPeriod() {
-    return [];
+  async listByPeriod(_institutionId: string, periodId: string) {
+    return this.items.filter((b) => b.institutionId === _institutionId && b.periodId === periodId);
   }
   async listByInstitution() {
     return [];
@@ -229,6 +250,25 @@ Pérez Gómez Ana;T.I.;1;EST-1;11-03;2026`,
     expect(missing).toContain("groupName");
     expect(missing).toContain("idType");
   });
+
+  it("expone las columnas presentes en el encabezado", () => {
+    const { present } = parseStudentsCsv(
+      `apellido1;nombre1;codigo;grupo;prueba;tipo_cuadernillo
+Pérez;Ana;EST-1;11-03;2026-3;Estándar`,
+    );
+    expect(present).toEqual(
+      expect.arrayContaining([
+        "lastName1",
+        "firstName1",
+        "code",
+        "groupName",
+        "periodName",
+        "bookletTypeName",
+      ]),
+    );
+    expect(present).not.toContain("idType");
+    expect(present).not.toContain("enrollmentYear");
+  });
 });
 
 describe("ImportStudents", () => {
@@ -268,5 +308,215 @@ Dup;;Otro;;C.C.;3;EST-001;11-03;2026`,
     const r = await uc.execute({ actor: { ...admin, roles: ["TEACHER"] }, rows });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe("FORBIDDEN");
+  });
+});
+
+/**
+ * Modo "actualizar": el archivo de roster del docente trae el código de
+ * estudiantes que YA existen en la BD. La fila no debe duplicar al
+ * estudiante sino actualizarlo, y SOLO con las columnas que el archivo
+ * trae. Ni el código ni el grupo pueden cambiar (la historia de las
+ * pruebas anteriores depende de ellos).
+ */
+describe("ImportStudents (modo actualizar)", () => {
+  const groupsP3: Group[] = [{ id: "g1", institutionId: "i1", courseId: "c1", name: "11-03" }];
+  const groupsP2: Group[] = [{ id: "g0", institutionId: "i1", courseId: "c1", name: "11-02" }];
+  const periodP3: Period = {
+    id: "p3",
+    institutionId: "i1",
+    academicYearId: "ay1",
+    name: "2026-3",
+    order: 3,
+    startDate: new Date("2026-08-01"),
+    endDate: new Date("2026-12-20"),
+    isCurrent: true,
+  };
+
+  let students: InMemoryStudents;
+  let bookletTypes: InMemoryBookletTypes;
+  let uc: ImportStudents;
+
+  beforeEach(() => {
+    students = new InMemoryStudents();
+    // Estudiante que YA existe (apuntó al cuadernillo del 2026-2).
+    students.items.push({
+      id: "s1",
+      institutionId: "i1",
+      groupId: "g0",
+      lastName1: "Pérez",
+      lastName2: "Gómez",
+      firstName1: "Ana",
+      firstName2: "",
+      idType: "T.I.",
+      idNumber: "1",
+      code: "EST-001",
+      enrollmentYear: 2026,
+      isActive: true,
+      grade: "G11",
+      bookletTypeId: "bt-2026-2",
+    });
+    bookletTypes = new InMemoryBookletTypes();
+    bookletTypes.items.push({
+      id: "bt-2026-3",
+      institutionId: "i1",
+      periodId: "p3",
+      name: "Estándar",
+      description: null,
+      order: 1,
+    });
+    uc = new ImportStudents(
+      students,
+      new InMemoryGroups([...groupsP2, ...groupsP3]),
+      new InMemoryPeriods([periodP3]),
+      bookletTypes,
+    );
+  });
+
+  it("actualiza al estudiante existente en vez de duplicarlo", async () => {
+    const { rows, present } = parseStudentsCsv(
+      `apellido1;apellido2;nombre1;nombre2;codigo;grupo;prueba;tipo_cuadernillo
+Pérez;;Ana;María;EST-001;11-03;2026-3;Estándar`,
+    );
+    const r = await uc.execute({ actor: admin, rows, present });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.created).toBe(0);
+    expect(r.value.updated).toBe(1);
+    expect(r.value.errors).toHaveLength(0);
+    expect(students.items).toHaveLength(1);
+    const s = students.items[0]!;
+    expect(s.bookletTypeId).toBe("bt-2026-3");
+    expect(s.firstName2).toBe("María");
+    // Lo que NO se toca:
+    expect(s.code).toBe("EST-001");
+    expect(s.groupId).toBe("g0");
+    expect(s.idType).toBe("T.I.");
+    expect(s.idNumber).toBe("1");
+    expect(s.enrollmentYear).toBe(2026);
+    expect(s.grade).toBe("G11");
+    expect(s.isActive).toBe(true);
+  });
+
+  it("no mueve al estudiante de grupo y lo avisa", async () => {
+    const { rows, present } = parseStudentsCsv(
+      `apellido1;nombre1;codigo;grupo;prueba;tipo_cuadernillo
+Pérez;Ana;EST-001;11-03;2026-3;Estándar`,
+    );
+    const r = await uc.execute({ actor: admin, rows, present });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.updated).toBe(1);
+    expect(r.value.warnings).toHaveLength(1);
+    expect(r.value.warnings[0]!.message).toContain("no coincide");
+    expect(students.items[0]!.groupId).toBe("g0");
+  });
+
+  it("solo escribe las columnas que trae el archivo", async () => {
+    const { rows, present } = parseStudentsCsv(
+      `apellido1;nombre1;codigo;grupo
+Pérez;Ana;EST-001;11-03`,
+    );
+    const r = await uc.execute({ actor: admin, rows, present });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.updated).toBe(1);
+    const s = students.items[0]!;
+    // Sin columna de cuadernillo → el tipo de la P3 NO se escribe.
+    expect(s.bookletTypeId).toBe("bt-2026-2");
+    expect(s.idType).toBe("T.I.");
+  });
+
+  it("rechaza la fila si trae cuadernillo sin la columna PRUEBA", async () => {
+    const { rows, present } = parseStudentsCsv(
+      `apellido1;nombre1;codigo;grupo;tipo_cuadernillo
+Pérez;Ana;EST-001;11-03;Estándar`,
+    );
+    const r = await uc.execute({ actor: admin, rows, present });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.updated).toBe(0);
+    expect(r.value.errors).toHaveLength(1);
+    expect(r.value.errors[0]!.message).toContain("Falta la Prueba");
+    expect(students.items[0]!.bookletTypeId).toBe("bt-2026-2");
+  });
+
+  it("resuelve el tipo de cuadernillo por prefijo (planilla institucional)", async () => {
+    // La planilla escribe "Con ajuste razonable"; el tipo de la Prueba se
+    // llama "Con Ajuste".
+    bookletTypes.items.push({
+      id: "bt-2026-3-ajuste",
+      institutionId: "i1",
+      periodId: "p3",
+      name: "Con Ajuste",
+      description: null,
+      order: 2,
+    });
+    const { rows, present } = parseStudentsCsv(
+      `apellido1;nombre1;codigo;grupo;prueba;tipo_cuadernillo
+Pérez;Ana;EST-001;11-03;2026-3;Con ajuste razonable`,
+    );
+    const r = await uc.execute({ actor: admin, rows, present });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.updated).toBe(1);
+    expect(r.value.errors).toHaveLength(0);
+    expect(students.items[0]!.bookletTypeId).toBe("bt-2026-3-ajuste");
+  });
+
+  it("lee la planilla institucional tal cual (ID, SEGUBD APELLIDO, CUADERNILLO)", async () => {
+    const { rows, present, missing } = parseStudentsCsv(
+      `GRUPO;ID;PRIMER APELLIDO;SEGUBD APELLIDO;PRIMER NOMBRE;SEGUNDO NOMBRE;CUADERNILLO;PRUEBA
+11-03;EST-001;Pérez;Gómez;Ana;María;Estándar;2026-3`,
+    );
+    // Sin columna de documento ni año de ingreso: no bloquea porque el
+    // estudiante ya existe (solo hacen falta para crear de cero).
+    expect(missing).toContain("idType");
+    expect(missing).toContain("idNumber");
+    expect(missing).toContain("enrollmentYear");
+    expect(present).toContain("code");
+    const r = await uc.execute({ actor: admin, rows, present });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.updated).toBe(1);
+    expect(r.value.errors).toHaveLength(0);
+    const s = students.items[0]!;
+    expect(s.lastName1).toBe("Pérez");
+    expect(s.lastName2).toBe("Gómez");
+    expect(s.firstName1).toBe("Ana");
+    expect(s.firstName2).toBe("María");
+    expect(s.bookletTypeId).toBe("bt-2026-3");
+  });
+
+  it("crea el estudiante nuevo si el código no existe", async () => {
+    const { rows, present } = parseStudentsCsv(
+      `apellido1;apellido2;nombre1;nombre2;tipo_doc;num_doc;codigo;grupo;anio_ingreso
+Nuevo;;Luis;Carlos;C.C.;456;EST-777;11-03;2026`,
+    );
+    const r = await uc.execute({ actor: admin, rows, present });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.created).toBe(1);
+    expect(r.value.updated).toBe(0);
+    expect(students.items).toHaveLength(2);
+  });
+
+  it("no crea un estudiante nuevo si el código es un código antiguo (historial)", async () => {
+    const { rows, present } = parseStudentsCsv(
+      `apellido1;apellido2;nombre1;nombre2;tipo_doc;num_doc;codigo;grupo;anio_ingreso
+Nuevo;;Luis;Carlos;C.C.;456;EST-VIEJO;11-03;2026`,
+    );
+    // El doble en memoria simula el historial: "EST-VIEJO" es el código
+    // antiguo del estudiante que hoy se llama EST-001.
+    students.findByCodeIncludingHistory = async (institutionId: string, code: string) =>
+      code === "EST-VIEJO"
+        ? (students.items.find((s) => s.institutionId === institutionId) ?? null)
+        : null;
+    const r = await uc.execute({ actor: admin, rows, present });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.created).toBe(0);
+    expect(r.value.errors).toHaveLength(1);
+    expect(r.value.errors[0]!.message).toContain("código antiguo");
+    expect(students.items).toHaveLength(1);
   });
 });
