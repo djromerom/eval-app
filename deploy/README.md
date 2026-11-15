@@ -219,6 +219,46 @@ con sudo vía el wrapper SSH). `cd-wrapper.sh` debe seguir siendo propiedad
 de root y NO tener permiso de escritura para nadie más (es la única
 superficie de ataque de la deploy key).
 
+### Timeouts de PDF (worker → app → nginx)
+
+La descarga de un PDF grande (hoja de respuestas unificada de todo un grado,
+informe por grupo) pasa por tres timeouts, uno por eslabón:
+
+| Eslabón               | Variable                   | Dónde                   | Default |
+| --------------------- | -------------------------- | ----------------------- | ------- |
+| Worker PDF (Chromium) | `PDF_RENDER_TIMEOUT_MS`    | `workers/pdf.worker.ts` | 600 000 |
+| App (request HTTP)    | `PDF_QUEUE_WAIT_MS`        | rutas `/api/**/pdf` (7) | 900 000 |
+| nginx (reverse proxy) | `NGINX_PROXY_READ_TIMEOUT` | vhost del host          | 1200 s  |
+
+**Regla:** nginx tiene que aguantar **más** que la app. Si
+`NGINX_PROXY_READ_TIMEOUT` ≤ `PDF_QUEUE_WAIT_MS`, nginx corta la respuesta
+primero y el docente ve un 504 con la página de error de nginx en vez del JSON
+de la app (`"No se pudo generar el PDF…"`).
+
+Los tres valores viven en `.env.prod` (prod) y `.env.staging` (staging); los
+dos primeros los toma la app/los workers por `env_file` del compose, y el de
+nginx lo aplica `deploy/scripts/render-nginx-conf.sh` (nginx no lee el env
+solo):
+
+```bash
+# Ver si el vhost instalado está sincronizado con el env (sale 1 si difiere):
+bash /opt/eval/bin/render-nginx-conf.sh \
+  --conf /etc/nginx/sites-enabled/ecognia.conf \
+  --env-file /opt/eval/eval-app/.env.prod --check
+
+# Aplicar los valores del env y recargar nginx:
+bash /opt/eval/bin/render-nginx-conf.sh \
+  --conf /etc/nginx/sites-enabled/ecognia.conf \
+  --env-file /opt/eval/eval-app/.env.prod --reload
+```
+
+El script valida que nginx aguante más que `PDF_QUEUE_WAIT_MS` y **no escribe**
+si la relación no se cumple; si `nginx -t` falla, restaura el backup.
+
+Atajo sin tocar nada: bajar la hoja de respuestas **por tandas** de
+estudiantes (el selector permite elegir subconjuntos) — cada tanda es un PDF
+mucho más liviano y no depende de ningún timeout.
+
 ### Actualizar la app manualmente (sin CI)
 
 Si el CI está caído y necesitás desplegar a mano (no hay repo en el VPS,
@@ -407,7 +447,11 @@ feature/foo ──► PR ──► develop ──► (auto) test.ecognia.pro
 
    ```bash
    scp -i ~/.ssh/<admin-key> deploy/nginx/test.ecognia.conf root@<vps>:/etc/nginx/sites-enabled/
-   ssh -i ~/.ssh/<admin-key> root@<vps> 'nginx -t && systemctl reload nginx'
+   # los timeouts del proxy setaken del env (.env.staging):
+   scp -i ~/.ssh/<admin-key> deploy/scripts/render-nginx-conf.sh root@<vps>:/opt/eval/bin/
+   ssh -i ~/.ssh/<admin-key> root@<vps> 'bash /opt/eval/bin/render-nginx-conf.sh \
+     --conf /etc/nginx/sites-enabled/test.ecognia.conf \
+     --env-file /opt/eval/eval-app-staging/.env.staging --reload'
    ```
 
 4. **Layout del VPS** (stateless, igual que prod):
@@ -828,6 +872,8 @@ or directory` — porque el VPS es stateless (no tiene código fuente) y
 | `deploy/scripts/cd-wrapper.sh`                           | Versión de referencia del whitelist SSH (la del VPS está en `/opt/eval/bin`)            |
 | `deploy/scripts/first-cert.sh`                           | Helper para emisión inicial del cert (sólo en instalacion inicial)                      |
 | `deploy/scripts/deploy.sh`                               | Deploy manual con git local (dev/disaster recovery; NO usar en prod stateless)          |
+| `deploy/nginx/ecognia.conf` / `test.ecognia.conf`        | Vhosts del reverse proxy del host (prod / staging)                                      |
+| `deploy/scripts/render-nginx-conf.sh`                    | Sincroniza los timeouts del proxy con el env y recarga nginx                            |
 | `deploy/cron/eval-certbot`                               | Cron de renovación diaria                                                               |
 | `/opt/eval/bin/cd-wrapper.sh` (en el VPS)                | Whitelist SSH para la deploy key de GH Actions (sync con el repo)                       |
 | `/opt/eval/bin/cd.sh` (en el VPS)                        | Deploy script (sync con el repo)                                                        |

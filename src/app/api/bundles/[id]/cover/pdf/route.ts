@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
+import { env } from "@/config/env";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
 import {
@@ -9,7 +10,8 @@ import {
   getPdfQueueEvents,
 } from "@/shared/infrastructure/queue/queues";
 
-const WAIT_MS = 90_000;
+/** Espera máxima por el job del worker PDF (configurable: PDF_QUEUE_WAIT_MS). */
+const WAIT_MS = env.PDF_QUEUE_WAIT_MS;
 
 /**
  * GET /api/bundles/[id]/cover/pdf — encola un job al worker PDF para que

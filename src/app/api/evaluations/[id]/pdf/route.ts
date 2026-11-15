@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
+import { env } from "@/config/env";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { makeGetEvaluation } from "@/modules/evaluations/infrastructure/container";
 import { makeListCourseSubjects } from "@/modules/academic/infrastructure/container";
@@ -16,7 +17,8 @@ const KINDS: Array<Exclude<PrintKind, "bundle" | "answer-sheets-bundle" | "answe
   "answer-sheets",
   "answer-key",
 ];
-const WAIT_MS = 90_000;
+/** Espera máxima por el job del worker PDF (configurable: PDF_QUEUE_WAIT_MS). */
+const WAIT_MS = env.PDF_QUEUE_WAIT_MS;
 
 /**
  * Descarga del PDF de una formulación (cartilla, hojas o clave). Encola un job de

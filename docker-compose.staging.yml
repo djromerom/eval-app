@@ -14,7 +14,10 @@
 # SYNC: este archivo se copia al VPS junto con docker-compose.prod.yml:
 #   scp docker-compose.prod.yml     root@<vps>:/opt/eval/eval-app-staging/
 #   scp docker-compose.staging.yml  root@<vps>:/opt/eval/eval-app-staging/
-#   scp docker/nginx/test.ecognia.conf  root@<vps>:/etc/nginx/sites-enabled/
+#   scp deploy/nginx/test.ecognia.conf  root@<vps>:/etc/nginx/sites-enabled/
+#   # los timeouts del proxy se sincronizan con el env:
+#   #   bash deploy/scripts/render-nginx-conf.sh --conf /etc/nginx/sites-enabled/test.ecognia.conf \
+#   #        --env-file /opt/eval/eval-app-staging/.env.staging --reload
 #   cp .env.staging.example /opt/eval/eval-app-staging/.env.staging
 #
 # Uso en el VPS:

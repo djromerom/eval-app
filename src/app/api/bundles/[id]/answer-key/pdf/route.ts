@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
+import { env } from "@/config/env";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
 import {
@@ -9,7 +10,8 @@ import {
   getPdfQueueEvents,
 } from "@/shared/infrastructure/queue/queues";
 
-const WAIT_MS = 90_000;
+/** Espera máxima por el job del worker PDF (configurable: PDF_QUEUE_WAIT_MS). */
+const WAIT_MS = env.PDF_QUEUE_WAIT_MS;
 
 /**
  * GET /api/bundles/[id]/answer-key/pdf — clave de respuestas unificada
@@ -17,12 +19,7 @@ const WAIT_MS = 90_000;
  * Requiere que el bundle esté READY.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const actor = await requireAuthenticatedUser(
-    "TEACHER",
-    "ECU_LIDER",
-    "ECU_MASTER",
-    "SUPER_ADMIN",
-  );
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER", "SUPER_ADMIN");
   const { id } = await params;
 
   const bundleRes = await makeGetBundle().execute({ actor, bundleId: id });

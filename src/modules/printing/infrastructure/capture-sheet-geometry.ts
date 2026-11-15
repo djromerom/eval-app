@@ -70,7 +70,10 @@ export async function captureSheetGeometry(input: {
       height: LETTER_PX.height,
       deviceScaleFactor: SCREENSHOT_SCALE,
     });
-    const res = await page.goto(url, { waitUntil: "networkidle0", timeout: 60_000 });
+    const res = await page.goto(url, {
+      waitUntil: "networkidle0",
+      timeout: env.PDF_RENDER_TIMEOUT_MS,
+    });
     if (!res || !res.ok()) {
       throw new Error(`No se pudo cargar la hoja para medir (HTTP ${res?.status()})`);
     }
