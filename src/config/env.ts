@@ -33,6 +33,20 @@ const serverEnvSchema = z
      *  en toda la hoja y corre el OCR de identidad) puede pasar de 30 s en
      *  un servidor chico. */
     OMR_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
+    /** Tiempo (ms) que la request HTTP espera a que el worker PDF termine el
+     *  job encolado (BullMQ `waitUntilFinished`). Un cuadernillo con 1.400
+     *  estudiantes o un informe por grupo de 49 grupos puede tardar varios
+     *  minutos en Chromium; si la espera se corta antes, la ruta responde
+     *  504 aunque el worker siga trabajando. */
+    PDF_QUEUE_WAIT_MS: z.coerce.number().int().positive().default(900_000),
+    /** Tiempo (ms) que Chromium tarda en cargar una página /print
+     *  (`page.goto`). Lo usan el worker PDF (render del PDF) y la captura de
+     *  geometría de la hoja. Es el timeout que salta primero cuando la
+     *  plantilla es enorme (hoja de respuestas unificada de todo un grado). */
+    PDF_RENDER_TIMEOUT_MS: z.coerce.number().int().positive().default(600_000),
+    /** Tiempo (ms) que el worker espera a que el `PrintImageSizer` del
+     *  cliente termine de aplicar los topes de calidad de las imágenes. */
+    PDF_IMAGE_WAIT_MS: z.coerce.number().int().positive().default(120_000),
     /** Opciones con las que se inicializa el editor de preguntas nuevas. */
     EVAL_DEFAULT_OPTIONS: z.coerce
       .number()

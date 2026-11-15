@@ -19,6 +19,7 @@
 import { readFile } from "node:fs/promises";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { env } from "@/config/env";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { can } from "@/shared/application/capabilities";
 import {
@@ -30,7 +31,8 @@ import {
 
 export const dynamic = "force-dynamic"; // siempre fresco; no cachear
 
-const WAIT_MS = 90_000;
+/** Espera máxima por el job del worker PDF (configurable: PDF_QUEUE_WAIT_MS). */
+const WAIT_MS = env.PDF_QUEUE_WAIT_MS;
 
 /** Nombre de archivo seguro: sin tildes, espacios ni separadores. */
 function slug(s: string): string {

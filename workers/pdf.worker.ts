@@ -161,7 +161,10 @@ async function renderLinearPdf(
   });
   try {
     const page = await browser.newPage();
-    const res = await page.goto(url, { waitUntil: "networkidle0", timeout: 60_000 });
+    const res = await page.goto(url, {
+      waitUntil: "networkidle0",
+      timeout: env.PDF_RENDER_TIMEOUT_MS,
+    });
     if (!res || !res.ok()) {
       throw new Error(`No se pudo cargar la página de impresión (HTTP ${res?.status()})`);
     }
@@ -183,7 +186,7 @@ async function renderLinearPdf(
             document.querySelectorAll('.booklet img[data-print-sized="1"]').length === imgs.length
           );
         },
-        { timeout: 10_000, polling: 100 },
+        { timeout: env.PDF_IMAGE_WAIT_MS, polling: 100 },
       )
       .catch(() => {
         log.warn("Timeout esperando el ajuste de imágenes; el PDF sale sin tope de calidad");

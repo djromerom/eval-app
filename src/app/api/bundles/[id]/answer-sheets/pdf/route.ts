@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
+import { env } from "@/config/env";
 import { requireAuthenticatedUser } from "@/lib/session";
 import { makeGetBundle } from "@/modules/bundles/infrastructure/container";
 import { prisma } from "@/shared/infrastructure/db/prisma";
@@ -10,7 +11,8 @@ import {
   getPdfQueueEvents,
 } from "@/shared/infrastructure/queue/queues";
 
-const WAIT_MS = 120_000;
+/** Espera máxima por el job del worker PDF (configurable: PDF_QUEUE_WAIT_MS). */
+const WAIT_MS = env.PDF_QUEUE_WAIT_MS;
 
 /**
  * GET /api/bundles/[id]/answer-sheets/pdf?students=<csv> — genera la hoja
@@ -21,12 +23,7 @@ const WAIT_MS = 120_000;
  * es un csv de ids de estudiantes de la misma institución.
  */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const actor = await requireAuthenticatedUser(
-    "TEACHER",
-    "ECU_LIDER",
-    "ECU_MASTER",
-    "SUPER_ADMIN",
-  );
+  const actor = await requireAuthenticatedUser("TEACHER", "ECU_LIDER", "ECU_MASTER", "SUPER_ADMIN");
   const { id } = await params;
 
   const studentsParam = new URL(request.url).searchParams.get("students") ?? "";
