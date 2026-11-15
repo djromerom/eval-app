@@ -201,6 +201,13 @@ async function renderLinearPdf(
       format: opts.format ?? "letter",
       printBackground: true,
       preferCSSPageSize: false,
+      // CRÍTICO: `page.pdf()` usa el timeout POR DEFECTO de Puppeteer
+      // (30 s) si no se le pasa uno. Maquetar+pintar muchas páginas (la
+      // hoja de respuestas unificada de un grado entero son cientos de
+      // páginas carta con su rejilla de burbujas y su QR) se pasa de 30 s
+      // y el job moría con "Timed out after waiting 30000ms" — el mismo
+      // 504 engañoso que ve el docente. Este timeout es el del env.
+      timeout: env.PDF_RENDER_TIMEOUT_MS,
     });
   } finally {
     await browser.close();

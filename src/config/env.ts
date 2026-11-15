@@ -39,10 +39,11 @@ const serverEnvSchema = z
      *  minutos en Chromium; si la espera se corta antes, la ruta responde
      *  504 aunque el worker siga trabajando. */
     PDF_QUEUE_WAIT_MS: z.coerce.number().int().positive().default(900_000),
-    /** Tiempo (ms) que Chromium tarda en cargar una página /print
-     *  (`page.goto`). Lo usan el worker PDF (render del PDF) y la captura de
-     *  geometría de la hoja. Es el timeout que salta primero cuando la
-     *  plantilla es enorme (hoja de respuestas unificada de todo un grado). */
+    /** Tiempo (ms) de las operaciones de Chromium en la ruta /print: la
+     *  carga de la página (`page.goto`), la generación del PDF (`page.pdf`)
+     *  y la captura de la hoja. Sin timeout explícito, Puppeteer usa 30 s por
+     *  defecto y una hoja de respuestas unificada de un grado entero (cientos
+     *  de páginas carta) revienta con "Timed out after waiting 30000ms". */
     PDF_RENDER_TIMEOUT_MS: z.coerce.number().int().positive().default(600_000),
     /** Tiempo (ms) que el worker espera a que el `PrintImageSizer` del
      *  cliente termine de aplicar los topes de calidad de las imágenes. */
