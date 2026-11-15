@@ -137,6 +137,8 @@ export async function captureSheetGeometry(input: {
     // punto-a-punto (ver `SheetTemplate.qrFinders`).
     const shot = await page.screenshot({
       clip: { x: s.l, y: s.t, width: s.w, height: s.h },
+      // Igual que `page.pdf()`: sin timeout explícito, Puppeteer usa 30 s.
+      timeout: env.PDF_RENDER_TIMEOUT_MS,
       type: "png",
     });
     // Diagnóstico: `OMR_DEBUG_SHOT=/ruta.png` vuelca la captura que se usó
