@@ -49,6 +49,10 @@ export async function captureSheetGeometry(input: {
   });
   try {
     const page = await browser.newPage();
+    // Timeout por defecto de Puppeteer: 30 s. `page.screenshot()` no acepta
+    // la opción `timeout` (a diferencia de `page.pdf()`), así que el default
+    // se cambia a nivel de página.
+    page.setDefaultTimeout(env.PDF_RENDER_TIMEOUT_MS);
     // CRÍTICO: hay que medir en las MISMAS condiciones en que se imprime.
     // El layout usa CSS grid con `1fr`, así que las posiciones dependen del
     // ancho del contenedor: medir en un viewport de pantalla (p. ej.
@@ -137,8 +141,6 @@ export async function captureSheetGeometry(input: {
     // punto-a-punto (ver `SheetTemplate.qrFinders`).
     const shot = await page.screenshot({
       clip: { x: s.l, y: s.t, width: s.w, height: s.h },
-      // Igual que `page.pdf()`: sin timeout explícito, Puppeteer usa 30 s.
-      timeout: env.PDF_RENDER_TIMEOUT_MS,
       type: "png",
     });
     // Diagnóstico: `OMR_DEBUG_SHOT=/ruta.png` vuelca la captura que se usó
