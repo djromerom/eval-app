@@ -12,6 +12,7 @@ import { SheetMatrix } from "./sheet-matrix";
 import { ReprocessButton } from "./reprocess-button";
 import { MarcarRevisadaButton } from "./marcar-revisada-button";
 import { AsignarEstudianteButton, type StudentOption } from "./asignar-estudiante-button";
+import { DeleteSheetButton } from "../../delete-sheet-button";
 import type { BubbleCellRecord, GridLayoutRecord } from "@/modules/scanning/domain/answer-sheet";
 import { loadDisabledQuestionIds } from "@/modules/bundles/infrastructure/container";
 
@@ -321,6 +322,20 @@ export default async function SheetDetailPage({ params, searchParams }: PageProp
                 sheetId={sheet.id}
                 batchId={sheet.scanBatchId ?? batchId}
                 disabled={isProcessing}
+              />
+            </span>
+          )}
+          {/* Eliminar la hoja: la subió al lote equivocado, quedó mal
+              escaneada o el docente quiere reescanearla. Con la hoja
+              eliminada esta pantalla ya no tiene nada que mostrar, así que
+              el botón devuelve al lote. */}
+          {puedeReprocesar && !isProcessing && (
+            <span>
+              <DeleteSheetButton
+                batchId={sheet.scanBatchId ?? batchId}
+                sheetId={sheet.id}
+                shortId={sheet.id.slice(0, 8)}
+                redirectTo={`/teacher/scan/${sheet.scanBatchId ?? batchId}`}
               />
             </span>
           )}

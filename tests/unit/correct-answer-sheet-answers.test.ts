@@ -96,9 +96,11 @@ const correctAnswers = [
   { id: "q4", number: 4, correctAnswer: "C" as const, optionsLength: 4 },
 ];
 
-function makeQuestionsProvider(opts: {
-  withDisabled?: string[];
-} = {}): EvaluationQuestionsProvider {
+function makeQuestionsProvider(
+  opts: {
+    withDisabled?: string[];
+  } = {},
+): EvaluationQuestionsProvider {
   return {
     async getCorrectAnswers(_inst, _evalId) {
       return correctAnswers;
@@ -113,12 +115,14 @@ function makeQuestionsProvider(opts: {
   };
 }
 
-function makeInMemoryRepo(initial: {
-  batch?: ScanBatch | null;
-  sheets?: Map<string, AnswerSheet>;
-  answers?: Map<string, StudentAnswerRecord[]>;
-  existingGridThr?: number | null;
-} = {}) {
+function makeInMemoryRepo(
+  initial: {
+    batch?: ScanBatch | null;
+    sheets?: Map<string, AnswerSheet>;
+    answers?: Map<string, StudentAnswerRecord[]>;
+    existingGridThr?: number | null;
+  } = {},
+) {
   const batch = initial.batch ?? {
     id: BATCH,
     institutionId: INST,
@@ -155,6 +159,9 @@ function makeInMemoryRepo(initial: {
       return { studentId: null, duplicada: false };
     },
     async findSheetIdByQrSheetUuid() {
+      return null;
+    },
+    async findDuplicateSheet() {
       return null;
     },
     async updateBatchProgress() {},
@@ -221,11 +228,7 @@ describe("CorrectAnswerSheetAnswers", () => {
       makeRecord("q4", "A", false),
     ]);
 
-    const useCase = new CorrectAnswerSheetAnswers(
-      ctx.repo,
-      ctx.reader,
-      ctx.questionsProvider,
-    );
+    const useCase = new CorrectAnswerSheetAnswers(ctx.repo, ctx.reader, ctx.questionsProvider);
     const result = await useCase.execute({
       actor: ctx.actor,
       batchId: BATCH,
@@ -303,9 +306,7 @@ describe("CorrectAnswerSheetAnswers", () => {
     const result = await useCase.execute({
       actor: ctx.actor,
       batchId: BATCH,
-      patches: [
-        { sheetId: SHEET_A, corrections: [{ posicion: 3, selectedKey: "D" }] },
-      ],
+      patches: [{ sheetId: SHEET_A, corrections: [{ posicion: 3, selectedKey: "D" }] }],
     });
 
     expect(result.ok).toBe(true);
@@ -326,11 +327,7 @@ describe("CorrectAnswerSheetAnswers", () => {
     ctx.seedAnswers(SHEET_B, [makeRecord("q1", "B", true)]);
     ctx.sheets.set(SHEET_B, makeSheet({ id: SHEET_B, status: "PROCESSING" }));
 
-    const useCase = new CorrectAnswerSheetAnswers(
-      ctx.repo,
-      ctx.reader,
-      ctx.questionsProvider,
-    );
+    const useCase = new CorrectAnswerSheetAnswers(ctx.repo, ctx.reader, ctx.questionsProvider);
     const result = await useCase.execute({
       actor: ctx.actor,
       batchId: BATCH,
@@ -346,22 +343,13 @@ describe("CorrectAnswerSheetAnswers", () => {
 
   it("rechaza con POSITION_OUT_OF_RANGE si alguna posicion se pasa del total", async () => {
     const ctx = makeInMemoryRepo();
-    ctx.seedAnswers(SHEET_A, [
-      makeRecord("q1", "B", true),
-      makeRecord("q2", "A", true),
-    ]);
+    ctx.seedAnswers(SHEET_A, [makeRecord("q1", "B", true), makeRecord("q2", "A", true)]);
 
-    const useCase = new CorrectAnswerSheetAnswers(
-      ctx.repo,
-      ctx.reader,
-      ctx.questionsProvider,
-    );
+    const useCase = new CorrectAnswerSheetAnswers(ctx.repo, ctx.reader, ctx.questionsProvider);
     const result = await useCase.execute({
       actor: ctx.actor,
       batchId: BATCH,
-      patches: [
-        { sheetId: SHEET_A, corrections: [{ posicion: 5, selectedKey: "A" }] },
-      ],
+      patches: [{ sheetId: SHEET_A, corrections: [{ posicion: 5, selectedKey: "A" }] }],
     });
 
     expect(result.ok).toBe(false);
@@ -374,11 +362,7 @@ describe("CorrectAnswerSheetAnswers", () => {
     const ctx = makeInMemoryRepo();
     ctx.seedAnswers(SHEET_A, [makeRecord("q1", "B", true)]);
 
-    const useCase = new CorrectAnswerSheetAnswers(
-      ctx.repo,
-      ctx.reader,
-      ctx.questionsProvider,
-    );
+    const useCase = new CorrectAnswerSheetAnswers(ctx.repo, ctx.reader, ctx.questionsProvider);
     // Forzamos el tipo porque el compilador lo阻止 — es exactamente el caso
     // que queremos probar (cliente envía basura).
     const result = await useCase.execute({
@@ -402,11 +386,7 @@ describe("CorrectAnswerSheetAnswers", () => {
     const ctx = makeInMemoryRepo();
     ctx.seedAnswers(SHEET_A, [makeRecord("q1", "B", true)]);
 
-    const useCase = new CorrectAnswerSheetAnswers(
-      ctx.repo,
-      ctx.reader,
-      ctx.questionsProvider,
-    );
+    const useCase = new CorrectAnswerSheetAnswers(ctx.repo, ctx.reader, ctx.questionsProvider);
     const result = await useCase.execute({
       actor: ctx.actor,
       batchId: BATCH,
@@ -423,11 +403,7 @@ describe("CorrectAnswerSheetAnswers", () => {
   it("rechaza con BATCH_NOT_FOUND si el lote no existe", async () => {
     const ctx = makeInMemoryRepo();
 
-    const useCase = new CorrectAnswerSheetAnswers(
-      ctx.repo,
-      ctx.reader,
-      ctx.questionsProvider,
-    );
+    const useCase = new CorrectAnswerSheetAnswers(ctx.repo, ctx.reader, ctx.questionsProvider);
     const result = await useCase.execute({
       actor: ctx.actor,
       // Batch id que no matchea con el sembrado → getScanBatch devuelve null.
@@ -443,16 +419,9 @@ describe("CorrectAnswerSheetAnswers", () => {
   it("rechaza con SHEET_NOT_IN_BATCH si la hoja existe pero no es del batch", async () => {
     const ctx = makeInMemoryRepo();
     ctx.seedAnswers(SHEET_A, [makeRecord("q1", "B", true)]);
-    ctx.sheets.set(
-      SHEET_A,
-      makeSheet({ id: SHEET_A, scanBatchId: "otro-batch" }),
-    );
+    ctx.sheets.set(SHEET_A, makeSheet({ id: SHEET_A, scanBatchId: "otro-batch" }));
 
-    const useCase = new CorrectAnswerSheetAnswers(
-      ctx.repo,
-      ctx.reader,
-      ctx.questionsProvider,
-    );
+    const useCase = new CorrectAnswerSheetAnswers(ctx.repo, ctx.reader, ctx.questionsProvider);
     const result = await useCase.execute({
       actor: ctx.actor,
       batchId: BATCH,
@@ -466,20 +435,10 @@ describe("CorrectAnswerSheetAnswers", () => {
 
   it("procesa varias hojas en el mismo batch y devuelve todas las actualizadas", async () => {
     const ctx = makeInMemoryRepo();
-    ctx.seedAnswers(SHEET_A, [
-      makeRecord("q1", "B", true),
-      makeRecord("q2", "C", false),
-    ]);
-    ctx.seedAnswers(SHEET_B, [
-      makeRecord("q1", "C", false),
-      makeRecord("q2", "A", true),
-    ]);
+    ctx.seedAnswers(SHEET_A, [makeRecord("q1", "B", true), makeRecord("q2", "C", false)]);
+    ctx.seedAnswers(SHEET_B, [makeRecord("q1", "C", false), makeRecord("q2", "A", true)]);
 
-    const useCase = new CorrectAnswerSheetAnswers(
-      ctx.repo,
-      ctx.reader,
-      ctx.questionsProvider,
-    );
+    const useCase = new CorrectAnswerSheetAnswers(ctx.repo, ctx.reader, ctx.questionsProvider);
     const result = await useCase.execute({
       actor: ctx.actor,
       batchId: BATCH,

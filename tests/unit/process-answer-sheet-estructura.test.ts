@@ -109,6 +109,9 @@ function hacerRepo(qrContent: string, qrSignature: string, imagePath: string) {
     async findSheetIdByQrSheetUuid() {
       return null;
     },
+    async findDuplicateSheet() {
+      return null;
+    },
     async saveAnswers() {},
     async updateBatchProgress() {},
     async deleteSheet(_sheetId: string) {

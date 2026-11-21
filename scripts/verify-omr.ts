@@ -53,6 +53,9 @@ function inMemoryRepo(): ScanningRepository {
     async findSheetIdByQrSheetUuid() {
       return null;
     },
+    async findDuplicateSheet() {
+      return null;
+    },
     async saveAnswers(_id, ans) {
       const ok = ans.filter((a) => a.isCorrect).length;
       for (const a of ans) {
@@ -181,8 +184,11 @@ async function main() {
   });
 
   console.log("4. Result:");
-  if (result.ok) {
+  if (result.ok && "status" in result) {
     console.log(`   OK: status=${result.status} score=${result.score}/${mockQuestions.length}`);
+  } else if (result.ok) {
+    // Hoja descartada: el mismo papel ya estaba calificado en este lote.
+    console.log("   OK: hoja descartada (papel duplicado)");
   } else {
     console.log(`   FAIL: ${result.error.code} — ${result.error.message}`);
   }

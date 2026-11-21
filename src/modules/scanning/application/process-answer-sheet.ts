@@ -6,7 +6,12 @@ import { signedQrSchema } from "../domain/qr-payload";
 import { EMPTY_THRESHOLD } from "../domain/bubble-classification";
 import type { AnswerKey } from "../domain/bubble-classification";
 import type { BubbleCellRecord, AnswerKey as DomainAnswerKey } from "../domain/answer-sheet";
-import type { ScanningRepository, QrDecoder, StudentAnswerRecord } from "../domain/answer-sheet";
+import type {
+  DuplicateSheetInfo,
+  ScanningRepository,
+  QrDecoder,
+  StudentAnswerRecord,
+} from "../domain/answer-sheet";
 import type { OmrDetector, DetectedSheet, DetectedQuestion } from "../domain/omr-detector";
 import { ANSWER_KEYS_ORDER } from "@/modules/evaluations/domain/evaluation";
 import { localStorage } from "@/shared/infrastructure/storage/local-storage";
@@ -138,6 +143,9 @@ export type ProcessAnswerSheetError =
 
 export type ProcessAnswerSheetResult =
   | { ok: true; answerSheetId: string; status: "GRADED" | "REVIEW"; score: number }
+  /** La hoja se descartó: el mismo papel ya estaba calificado en otra hoja
+   *  del mismo lote y esta sobraba (se borró de la BD). */
+  | { ok: true; descartada: true; answerSheetId: string }
   | { ok: false; error: ProcessAnswerSheetError };
 
 /** Mapea el índice global de pregunta (0-based, recorre las preguntas en
@@ -255,7 +263,7 @@ export class ProcessAnswerSheet {
     if (aMano) {
       objetivo = aMano;
     } else if (decoded) {
-      const porQr = await this.identificarPorQr(answerSheetId, decoded.text);
+      const porQr = await this.identificarPorQr(answerSheetId, decoded.text, scanBatchId);
       if ("ok" in porQr) return porQr;
       objetivo = porQr;
     } else {
@@ -442,6 +450,7 @@ export class ProcessAnswerSheet {
   private async identificarPorQr(
     answerSheetId: string,
     qrText: string,
+    scanBatchId: string,
   ): Promise<ObjetivoHoja | ProcessAnswerSheetResult> {
     let qrData: Record<string, unknown>;
     let qrSignature: string;
@@ -483,19 +492,81 @@ export class ProcessAnswerSheet {
       };
     }
 
-    // Hoja duplicada: el campo `sheet` del QR identifica el PAPEL, no al
-    // estudiante ni la prueba. Si ya hay otra hoja con ese id, este papel ya
-    // pasó por el alimentador y volver a calificarlo crearía una segunda nota
-    // para el mismo examen físico, sin ninguna señal de que ocurrió.
+    // Papel duplicado: el campo `sheet` del QR identifica el PAPEL, no al
+    // estudiante ni la prueba. El mismo papel escaneado dos veces (doble
+    // pase del alimentador) o reescaneado y subido de nuevo llega con el
+    // mismo valor.
     //
-    // Se corta ANTES de puntuar: calificar y después descartar gastaría una
-    // llamada al motor OMR y dejaría respuestas huérfanas en la base.
+    // Antes esto se cortaba siempre: la hoja nueva quedaba en REVIEW con
+    // "hoja duplicada" y la vieja se quedaba con la nota vieja, así que el
+    // docente veía dos hojas del mismo papel y no podía deshacerse de la
+    // que no servía. Ahora se resuelve (docente, nov 2026):
+    //   - MISMO lote → se queda la que TIENE RESPUESTAS (la calificada) y la
+    //     que no las tiene se borra.
+    //   - OTRO lote → la carga nueva SOBREESCRIBE la que ya estaba
+    //     reprocesada: se borra la vieja y la nueva es la que vale.
+    //
+    // Se corta ANTES de puntuar cuando la hoja pierde: calificar y después
+    // descartar gastaría una llamada al motor OMR y dejaría respuestas
+    // huérfanas en la base.
     const qrSheetUuid = typeof parsedQr.data.sheet === "string" ? parsedQr.data.sheet : null;
+    const studentCode = typeof parsedQr.data.student === "string" ? parsedQr.data.student : null;
+
     if (qrSheetUuid) {
-      const otra = await this.repository.findSheetIdByQrSheetUuid(qrSheetUuid, answerSheetId);
-      if (otra) {
+      const dup = await this.repository.findDuplicateSheet(qrSheetUuid, answerSheetId);
+      if (dup) {
+        const resolucion = await this.resolverPapelDuplicado(dup, { answerSheetId, scanBatchId });
+        if (resolucion === "descartar-actual") {
+          return { ok: true, descartada: true, answerSheetId };
+        }
+        // La duplicada se borró: el id de papel quedó libre y esta hoja sigue
+        // su camino normal (calificarse y quedarse con la nota).
+      }
+    }
+
+    // Persistir el QR decodificado + asociar al estudiante por código.
+    let guardado = await this.repository.saveDecodedQr(
+      answerSheetId,
+      qrText,
+      qrSignature,
+      studentCode,
+      qrSheetUuid,
+    );
+    // El chequeo de arriba deja una ventana: dos duplicados procesándose a la
+    // vez lo pasan los dos. El índice único cierra esa ventana y el repo lo
+    // reporta acá.
+    if (guardado.duplicada) {
+      const dup = qrSheetUuid
+        ? await this.repository.findDuplicateSheet(qrSheetUuid, answerSheetId)
+        : null;
+      if (!dup) {
         await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
-          notes: `Hoja duplicada: este papel ya fue procesado (hoja ${otra.slice(0, 8)}).`,
+          notes: "Hoja duplicada: este papel ya fue procesado.",
+        });
+        return {
+          ok: false,
+          error: {
+            code: "DUPLICATE_SHEET",
+            message: "Este papel ya fue escaneado y calificado antes",
+          },
+        };
+      }
+      const resolucion = await this.resolverPapelDuplicado(dup, { answerSheetId, scanBatchId });
+      if (resolucion === "descartar-actual") {
+        return { ok: true, descartada: true, answerSheetId };
+      }
+      // La duplicada se borró y con ella el id de papel que tenía: se
+      // reintenta la escritura para que esta hoja quede registrada.
+      guardado = await this.repository.saveDecodedQr(
+        answerSheetId,
+        qrText,
+        qrSignature,
+        studentCode,
+        qrSheetUuid,
+      );
+      if (guardado.duplicada) {
+        await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
+          notes: "Hoja duplicada: este papel ya fue procesado.",
         });
         return {
           ok: false,
@@ -507,34 +578,42 @@ export class ProcessAnswerSheet {
       }
     }
 
-    // Persistir el QR decodificado + asociar al estudiante por código.
-    const studentCode = typeof parsedQr.data.student === "string" ? parsedQr.data.student : null;
-    const guardado = await this.repository.saveDecodedQr(
-      answerSheetId,
-      qrText,
-      qrSignature,
-      studentCode,
-      qrSheetUuid,
-    );
-    // El chequeo de arriba deja una ventana: dos duplicados procesándose a la
-    // vez lo pasan los dos. El índice único cierra esa ventana y el repo lo
-    // reporta acá.
-    if (guardado.duplicada) {
-      await this.repository.updateSheetStatus(answerSheetId, "REVIEW", {
-        notes: "Hoja duplicada: este papel ya fue procesado.",
-      });
-      return {
-        ok: false,
-        error: {
-          code: "DUPLICATE_SHEET",
-          message: "Este papel ya fue escaneado y calificado antes",
-        },
-      };
-    }
-
     return parsedQr.data.bundle
       ? { kind: "bundle", id: parsedQr.data.bundle }
       : { kind: "evaluation", id: parsedQr.data.eval! };
+  }
+
+  /**
+   * Resuelve el caso "el mismo papel entró dos veces" y deja la BD
+   * consistente. Devuelve:
+   *   - "descartar-actual": esta hoja se borró (ganó la otra).
+   *   - "continuar": esta hoja sigue su camino; la duplicada fue la que se
+   *     borró.
+   *
+   *  Las reglas (docente, nov 2026):
+   *   - MISMO lote → gana la que TIENE RESPUESTAS. Cubre el doble pase del
+   *     alimentador y el mismo archivo subido dos veces: el docente no
+   *     quiere ver dos hojas del mismo papel, quiere ver la que se calificó.
+   *   - OTRO lote → gana la que se está procesando: la carga nueva
+   *     SOBREESCRIBE la que ya estaba reprocesada (el docente la volvió a
+   *     subir porque la primera no servía).
+   */
+  private async resolverPapelDuplicado(
+    dup: DuplicateSheetInfo,
+    ctx: { answerSheetId: string; scanBatchId: string },
+  ): Promise<"descartar-actual" | "continuar"> {
+    const mismoLote = dup.scanBatchId != null && dup.scanBatchId === ctx.scanBatchId;
+    if (mismoLote && dup.tieneRespuestas) {
+      // Ganó la que ya se calificación: esta se borra. `forzar` porque la
+      // hoja está en PROCESSING (la pusimos así al empezar a procesarla).
+      await this.repository.deleteSheet(ctx.answerSheetId, { forzar: true });
+      return "descartar-actual";
+    }
+    // En el resto de los casos gana la hoja que se está procesando:
+    //   - mismo lote pero la otra no tiene respuestas: no aporta nada;
+    //   - otro lote: la carga nueva pisa a la que ya estaba reprocesada.
+    await this.repository.deleteSheet(dup.id);
+    return "continuar";
   }
 
   /** Persiste el diagnóstico de la hoja para la matriz de revisión sin

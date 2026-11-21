@@ -118,6 +118,9 @@ function hacerRepo(
     async findSheetIdByQrSheetUuid() {
       return null;
     },
+    async findDuplicateSheet() {
+      return null;
+    },
     async saveAnswers(_id, ans) {
       guardado.answers = ans;
     },
@@ -209,7 +212,7 @@ describe("ProcessAnswerSheet - QR ilegible en lote de cuadernillo", () => {
     ]);
     expect(guardado.status).toBe("REVIEW");
     expect(guardado.notes).toBe(NOTA_SIN_QR_CUADERNILLO);
-    if (r.ok) expect(r.status).toBe("REVIEW");
+    if (r.ok && "status" in r) expect(r.status).toBe("REVIEW");
   });
 
   it("con marcas múltiples, la nota menciona las dos cosas", async () => {

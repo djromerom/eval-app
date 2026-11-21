@@ -120,6 +120,9 @@ function makeRepo(
     async findSheetIdByQrSheetUuid() {
       return null;
     },
+    async findDuplicateSheet() {
+      return null;
+    },
     async saveAnswers() {},
     async updateBatchProgress() {},
     async findBatchAccess(batchId) {
@@ -135,12 +138,12 @@ function makeRepo(
     async deleteSheet(sheetId) {
       const s = sheets.get(sheetId);
       if (!s) return { batchId: null };
-      if (s.status !== "REVIEW") {
-        // Defensa final del repo: no borrar fuera de REVIEW aunque el use
-        // case haya fallado en chequear. Para los tests ASSERT este
-        // mensaje: si llegamos acá, fue porque el use case NO bloqueó a
-        // tiempo.
-        errors.push(`deleteSheet aceptó hoja no-REVIEW: ${sheetId}/${s.status}`);
+      if (s.status === "PROCESSING") {
+        // Defensa final del repo: no borrar una hoja que el worker está
+        // procesando, aunque el use case haya fallado en chequear. Para los
+        // tests ASSERT este mensaje: si llegamos acá, fue porque el use case
+        // NO bloqueó a tiempo.
+        errors.push(`deleteSheet aceptó hoja PROCESSING: ${sheetId}/${s.status}`);
         throw new Error(`deleteSheet rechazó la hoja ${sheetId}: status=${s.status}`);
       }
       deletes.push(sheetId);
@@ -239,8 +242,53 @@ describe("DeleteSheet — permisos y validaciones", () => {
     expect(deletes).toEqual(["sheet-b"]);
   });
 
-  it("GRADED → INVALID_STATE (no se borra)", async () => {
+  it("PROCESSING → INVALID_STATE (el worker la está procesando)", async () => {
     const { repo, deletes, errors } = makeRepo({
+      batches: new Map([
+        [
+          "batch-1",
+          {
+            institutionId: "inst-1",
+            uploadedBy: TEACHER.userId,
+            evaluation: { teacherId: TEACHER.userId },
+          },
+        ],
+      ]),
+      sheets: new Map([
+        [
+          "sheet-1",
+          {
+            institutionId: "inst-1",
+            status: "PROCESSING",
+            scanBatchId: "batch-1",
+            scannedImage: null,
+            processedImage: null,
+          },
+        ],
+      ]),
+    });
+
+    const useCase = new DeleteSheet(repo);
+    const r = await useCase.execute({
+      actor: TEACHER,
+      batchId: "batch-1",
+      sheetId: "sheet-1",
+    });
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe("INVALID_STATE");
+      expect(r.error.message).toMatch(/proces/i);
+    }
+    expect(deletes).toEqual([]);
+    expect(errors).toEqual([]); // la defensa del repo no se disparó
+  });
+
+  it("GRADED → ok y se borra (la nota no bloquea el borrado)", async () => {
+    // El docente necesita quitar una hoja ya calificada: la escaneó mal, la
+    // subió al lote equivocado o quiere reescanearla. Sólo PROCESSING es
+    // muro (el worker está escribiendo sobre esa fila).
+    const { repo, deletes } = makeRepo({
       batches: new Map([
         [
           "batch-1",
@@ -265,20 +313,14 @@ describe("DeleteSheet — permisos y validaciones", () => {
       ]),
     });
 
-    const useCase = new DeleteSheet(repo);
-    const r = await useCase.execute({
+    const r = await new DeleteSheet(repo).execute({
       actor: TEACHER,
       batchId: "batch-1",
       sheetId: "sheet-1",
     });
 
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.code).toBe("INVALID_STATE");
-      expect(r.error.message).toMatch(/revisi/i);
-    }
-    expect(deletes).toEqual([]);
-    expect(errors).toEqual([]); // la defensa del repo no se disparó
+    expect(r.ok).toBe(true);
+    expect(deletes).toEqual(["sheet-1"]);
   });
 
   it("Otro TEACHER (no dueño) sobre evaluation ajeno → FORBIDDEN", async () => {
@@ -597,7 +639,7 @@ describe("DeleteSheet — permisos y validaciones", () => {
     expect(audit.entityShortId).toBe("sheet-au");
   });
 
-  it("GRADED → NO se registra audit log (no hubo borrado)", async () => {
+  it("PROCESSING → NO se registra audit log (no hubo borrado)", async () => {
     const { repo, audits } = makeRepo({
       batches: new Map([
         [
@@ -614,7 +656,7 @@ describe("DeleteSheet — permisos y validaciones", () => {
           "sheet-1",
           {
             institutionId: "inst-1",
-            status: "GRADED",
+            status: "PROCESSING",
             scanBatchId: "batch-1",
             scannedImage: null,
             processedImage: null,

@@ -84,6 +84,9 @@ function makeRepo(opts: { batches?: Map<string, BatchAccessSeed> } = {}) {
     async findSheetIdByQrSheetUuid() {
       return null;
     },
+    async findDuplicateSheet() {
+      return null;
+    },
     async saveAnswers() {},
     async updateBatchProgress() {},
     async deleteSheet(_sheetId) {

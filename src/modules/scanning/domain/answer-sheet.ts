@@ -105,6 +105,24 @@ export interface GradingResult {
   totalQuestions: number;
 }
 
+/** Otra hoja que ya tiene el mismo PAPEL (el mismo `sheet` del QR).
+ *
+ *  El `sheet` del QR identifica el papel físico, no al estudiante ni la
+ *  prueba: el mismo papel escaneado dos veces (o reescaneado) llega con el
+ *  mismo valor. */
+export interface DuplicateSheetInfo {
+  id: string;
+  /** Lote al que pertenece la hoja duplicada. null si quedó sin lote. */
+  scanBatchId: string | null;
+  status: AnswerSheetStatus;
+  score: number | null;
+  totalCorrect: number | null;
+  /** ¿Tiene respuestas guardadas? Es lo que decide cuál de las dos gana
+   *  cuando el mismo papel entró dos veces en el MISMO lote: se queda la que
+   *  tiene respuestas. */
+  tieneRespuestas: boolean;
+}
+
 export interface ScanningRepository {
   getScanBatch(institutionId: string, batchId: string): Promise<ScanBatch | null>;
   getAnswerSheet(institutionId: string, sheetId: string): Promise<AnswerSheet | null>;
@@ -124,6 +142,13 @@ export interface ScanningRepository {
   /** ¿Ya hay OTRA hoja procesada con este id de papel? `exceptoSheetId` es la
    *  que se está procesando: reprocesar la misma hoja no es un duplicado. */
   findSheetIdByQrSheetUuid(qrSheetUuid: string, exceptoSheetId: string): Promise<string | null>;
+  /** Ficha de la otra hoja que ya tiene este id de papel: en qué lote está,
+   *  en qué estado y si tiene respuestas. La usa la aplicación para decidir
+   *  cuál de las dos se queda (mismo papel, dos veces). */
+  findDuplicateSheet(
+    qrSheetUuid: string,
+    exceptoSheetId: string,
+  ): Promise<DuplicateSheetInfo | null>;
   updateSheetStatus(
     sheetId: string,
     status: AnswerSheetStatus,
@@ -144,7 +169,11 @@ export interface ScanningRepository {
   updateBatchProgress(batchId: string, processed: number, status?: ScanBatchStatus): Promise<void>;
   /** Elimina una hoja física + su archivo + decrementa totalSheets del batch.
    *  Precondiciones validadas por el caller (use case):
-   *    - `sheet.status === "REVIEW"` (la única permitida para borrar).
+   *    - La hoja NO está en PROCESSING (el worker está escribiendo sobre ella:
+   *      borrarla en medio del procesamiento deja respuestas huérfanas).
+   *      Cualquier otro estado se puede borrar (REVIEW, GRADED, COMPLETED,
+   *      SCANNED, PENDING): el docente necesita poder quitar una hoja que
+   *      escaneó mal o que ya estaba reprocesada.
    *    - El actor tiene acceso al batch (filtro idéntico al de
    *      getBatchesAction:254).
    *  Efectos en una sola transacción:
@@ -156,8 +185,16 @@ export interface ScanningRepository {
    *  de storage. Esta impl Prisma los borra antes del tx (best-effort:
    *  si el archivo ya no existe, log warning). Para mocks/tests la action
    *  puede reusar `localStorage.delete` directamente.
+   *  `conservarArchivos` deja los archivos en disco: se usa cuando la hoja
+   *  se borra porque su contenido pasa a otra hoja (papel duplicado que se
+   *  reescaneó) y el archivo no debe desaparecer.
+   *  `forzar` saltea el veto de PROCESSING: lo usa el worker cuando descarta
+   *  un papel duplicado (la hoja que se está procesando es la que se borra).
    *  Devuelve {batchId} para que el caller revalide la ruta del lote. */
-  deleteSheet(sheetId: string): Promise<{ batchId: string | null }>;
+  deleteSheet(
+    sheetId: string,
+    opciones?: { conservarArchivos?: boolean; forzar?: boolean },
+  ): Promise<{ batchId: string | null }>;
   /** Devuelve info de un batch para que el use case valide el acceso del
    *  actor. Replica el OR del filtro de `getBatchesAction` (institución +
    *  teacherId para evaluations / bundle.institutionId para bundles /

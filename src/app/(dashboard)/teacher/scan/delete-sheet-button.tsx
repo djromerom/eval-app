@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buttonVariants, Button } from "@/components/ui/button";
@@ -41,24 +42,37 @@ function DeleteSubmit() {
 
 /** Botón "Eliminar hoja" + AlertDialog de confirmación.
  *
- *  Sólo se monta en hojas REVIEW (ver SheetsTable). El éxito se detecta
- *  cuando el state de `useActionState` viene sin `error` Y el form ya
- *  no está pendiente — un cleanup useEffect cierra el modal y el padre
- *  re-renderiza la tabla sin esa fila. Si hay error, se muestra inline
- *  en el footer del diálogo y NO se cierra. */
+ *  Se monta en las hojas REVIEW del listado (ver SheetsTable) y en el
+ *  detalle de la hoja, donde el docente también puede quitar una hoja ya
+ *  calificada (subió una hoja al lote equivocado, o quiere reescanearla).
+ *  El éxito se detecta cuando el state de `useActionState` viene sin
+ *  `error` Y el form ya no está pendiente — un cleanup useEffect cierra el
+ *  modal y el padre re-renderiza la tabla sin esa fila. Si hay error, se
+ *  muestra inline en el footer del diálogo y NO se cierra. */
 export function DeleteSheetButton({
   batchId,
   sheetId,
   shortId,
+  redirectTo,
 }: {
   batchId: string;
   sheetId: string;
   /** Slice corto del id de la hoja, sólo para personalizar el copy
    *  ("Eliminar hoja a08d05…"). */
   shortId: string;
+  /** A dónde ir cuando se elimina. En el detalle de la hoja la fila ya no
+   *  existe: quedarse en esa URL mostraría una hoja que el servidor no
+   *  encuentra, así que se vuelve al lote. */
+  redirectTo?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [state, formAction] = useActionState<SheetDeleteState, FormData>(deleteSheetAction, {});
+  // El estado inicial de `useActionState` es `{}` (mismo que el de éxito),
+  // así que sin este flag no se distingue "recién monté" de "el action
+  // terminó bien" — y con `redirectTo` eso era saltar al lote nada más
+  // abrir la pantalla.
+  const [enviado, setEnviado] = useState(false);
+  const router = useRouter();
 
   // Cerrar al éxito: el action devuelve `{}` cuando no hay error Y ya
   // revalidó las rutas. Usamos el flag `success` derivado de la ausencia
@@ -66,10 +80,11 @@ export function DeleteSheetButton({
   // request exitosa; como `state` se queda en `{}`, el effect no se
   // vuelve a disparar.
   useEffect(() => {
-    if (state && !state.error) {
+    if (enviado && state && !state.error) {
       setOpen(false);
+      if (redirectTo) router.push(redirectTo);
     }
-  }, [state]);
+  }, [enviado, state, redirectTo, router]);
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
@@ -94,7 +109,7 @@ export function DeleteSheetButton({
             lote. La nota NO se conserva.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <form action={formAction} className="contents">
+        <form action={formAction} className="contents" onSubmit={() => setEnviado(true)}>
           <input type="hidden" name="sheetId" value={sheetId} />
           <input type="hidden" name="batchId" value={batchId} />
           {state.error ? (

@@ -26,8 +26,12 @@ export interface DeleteSheetOutput {
  *      la formulación / bundle institucional / uploadedBy para
  *      unclassified). Defensa en profundidad contra id adivinados.
  *   3. La hoja existe y pertenece a la institución (otra defensa).
- *   4. La hoja está en REVIEW — único estado eliminable. GRADED/PENDING/
- *      SCANNED/PROCESSING/COMPLETED son muro duro (la nota ya cuenta).
+ *   4. La hoja NO está en PROCESSING (el worker está escribiendo sobre ella:
+ *      borrarla en mitad del procesamiento deja respuestas huérfanas).
+ *      Cualquier otro estado se puede eliminar: el docente necesita quitar
+ *      una hoja que escaneó mal, que ya estaba reprocesada o que subió al
+ *      lote equivocado — antes sólo se podían borrar las que estaban en
+ *      REVIEW.
  *   5. El repo borra fila + archivos físicos + decrementa totalSheets.
  *
  *  Decisiones explícitas:
@@ -71,8 +75,13 @@ export class DeleteSheet implements UseCase<DeleteSheetInput, DeleteSheetOutput>
     if (!sheet) {
       return fail(new DomainError("NOT_FOUND", "Hoja no encontrada."));
     }
-    if (sheet.status !== "REVIEW") {
-      return fail(new DomainError("INVALID_STATE", "Sólo se pueden eliminar hojas en revisión."));
+    if (sheet.status === "PROCESSING") {
+      return fail(
+        new DomainError(
+          "INVALID_STATE",
+          "La hoja se está procesando: esperá a que termine para eliminarla.",
+        ),
+      );
     }
 
     const { batchId } = await this.repo.deleteSheet(input.sheetId);

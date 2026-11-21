@@ -4,6 +4,7 @@ import { localStorage } from "@/shared/infrastructure/storage/local-storage";
 import type {
   AnswerSheet,
   AnswerSheetStatus,
+  DuplicateSheetInfo,
   GridLayoutRecord,
   ScanBatch,
   ScanBatchStatus,
@@ -138,6 +139,36 @@ export class PrismaScanningRepository implements ScanningRepository {
     return otra?.id ?? null;
   }
 
+  /** Ficha de la otra hoja que ya tiene este id de papel. La aplicación la
+   *  usa para decidir cuál se queda cuando el mismo papel entra dos veces
+   *  (mismo lote → la que tiene respuestas; otro lote → la nueva pisa a la
+   *  vieja). */
+  async findDuplicateSheet(
+    qrSheetUuid: string,
+    exceptoSheetId: string,
+  ): Promise<DuplicateSheetInfo | null> {
+    const otra = await prisma.answerSheet.findFirst({
+      where: { qrSheetUuid, id: { not: exceptoSheetId } },
+      select: {
+        id: true,
+        scanBatchId: true,
+        status: true,
+        score: true,
+        totalCorrect: true,
+        _count: { select: { answers: true } },
+      },
+    });
+    if (!otra) return null;
+    return {
+      id: otra.id,
+      scanBatchId: otra.scanBatchId,
+      status: mapSheetStatus(otra.status),
+      score: otra.score,
+      totalCorrect: otra.totalCorrect,
+      tieneRespuestas: otra._count.answers > 0 || otra.score !== null,
+    };
+  }
+
   async saveDecodedQr(
     sheetId: string,
     qrContent: string,
@@ -268,10 +299,15 @@ export class PrismaScanningRepository implements ScanningRepository {
    *  worker — bug preexistente); decrementarlo acá mezclaría dos temas.
    *  Total lo ve el docente como "X/200" en el encabezado del lote.
    *  Devuelve `{batchId: null}` si la hoja no existe (caller mapea a
-   *  NOT_FOUND). Si existe pero el status no es REVIEW, lanza — defensa
-   *  final: el use case ya filtra, pero si algo lo burla, esta capa no
-   *  borra una hoja calificada. */
-  async deleteSheet(sheetId: string): Promise<{ batchId: string | null }> {
+   *  NOT_FOUND). Si existe pero está PROCESSING, lanza — defensa final:
+   *  el worker está escribiendo sobre esa fila y borrarla en mitad del
+   *  procesamiento deja respuestas huérfanas. Cualquier otro estado se
+   *  borra: el docente necesita quitar una hoja mal escaneada o que ya
+   *  estaba reprocesada. */
+  async deleteSheet(
+    sheetId: string,
+    opciones?: { conservarArchivos?: boolean; forzar?: boolean },
+  ): Promise<{ batchId: string | null }> {
     console.log("[Prisma.deleteSheet] start", sheetId);
     const row = await prisma.answerSheet.findUnique({
       where: { id: sheetId },
@@ -289,13 +325,19 @@ export class PrismaScanningRepository implements ScanningRepository {
     }
     console.log("[Prisma.deleteSheet] row", { status: row.status, scanBatchId: row.scanBatchId });
 
-    if (row.status !== ScanStatus.REVIEW) {
-      throw new Error(`deleteSheet rechazó la hoja ${sheetId}: status=${row.status} (no-REVIEW).`);
+    if (row.status === ScanStatus.PROCESSING && !opciones?.forzar) {
+      throw new Error(
+        `deleteSheet rechazó la hoja ${sheetId}: status=${row.status} (el worker la está procesando).`,
+      );
     }
 
     // Best-effort: ENOENT ya está manejado dentro de localStorage.delete.
-    if (row.scannedImage) await localStorage.delete(row.scannedImage);
-    if (row.processedImage) await localStorage.delete(row.processedImage);
+    // `conservarArchivos` deja los archivos: el papel se está reescaneando y
+    // su imagen pasa a la hoja que queda.
+    if (!opciones?.conservarArchivos) {
+      if (row.scannedImage) await localStorage.delete(row.scannedImage);
+      if (row.processedImage) await localStorage.delete(row.processedImage);
+    }
 
     const batchId = row.scanBatchId;
 
