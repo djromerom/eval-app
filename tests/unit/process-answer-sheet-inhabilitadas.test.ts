@@ -112,6 +112,9 @@ function hacerRepo(qrContent: string, qrSignature: string, imagePath: string) {
     async findSheetIdByQrSheetUuid() {
       return null;
     },
+    async findDuplicateSheet() {
+      return null;
+    },
     async saveAnswers(_id, ans) {
       guardado.answers = ans;
     },

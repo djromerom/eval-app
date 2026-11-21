@@ -157,6 +157,9 @@ function inMemoryRepo(): RepoState {
       // repositorio (ver process-answer-sheet-duplicados.test.ts).
       return null;
     },
+    async findDuplicateSheet() {
+      return null;
+    },
     async saveAnswers(sheetId, ans) {
       answers.set(sheetId, ans);
     },
@@ -374,7 +377,7 @@ describe("ProcessAnswerSheet", () => {
     );
     expect(provider.getCorrectAnswers).not.toHaveBeenCalled();
 
-    if (result.ok) {
+    if (result.ok && "status" in result) {
       expect(result.status).toBe("GRADED");
       expect(typeof result.score).toBe("number");
       expect(result.score).toBeGreaterThanOrEqual(0);

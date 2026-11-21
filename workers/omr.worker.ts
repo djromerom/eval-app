@@ -31,6 +31,16 @@ const worker = new Worker<OmrScanJob>(
       return { answerSheetId, status: "REVIEW" as const, error: result.error.code };
     }
 
+    // Papel duplicado en el mismo lote: la hoja se descartó (ganó la que ya
+    // tenía respuestas). No es un error: la fila ya no existe.
+    if ("descartada" in result) {
+      log.info(
+        { jobId: job.id, answerSheetId },
+        "Hoja descartada: el mismo papel ya estaba calificado en este lote",
+      );
+      return { answerSheetId, status: "DESCARTADA" as const };
+    }
+
     log.info(
       { jobId: job.id, answerSheetId, status: result.status, score: result.score },
       "Answer sheet processed",
