@@ -46,7 +46,7 @@ import {
   makeListFormulaciones,
   makeListFormuladores,
   makeListReglasConteo,
-  makeListPendientesCalificacion,
+  makeListPendientesDePrueba,
 } from "@/modules/consultas/infrastructure/container";
 
 export const dynamic = "force-dynamic"; // siempre fresco; no cachear
@@ -121,32 +121,25 @@ async function exportInformeGrupo(req: NextRequest): Promise<Response> {
   );
 }
 
-/** Pendientes de calificación. El use case aplica el alcance del líder. */
+/** Pendientes de calificación. El Excel lleva TODOS los grados de la prueba
+ *  en una sola hoja (el pedido del docente): el filtro de grupo de la
+ *  pantalla no acota la exportación, solo la prueba. El use case aplica el
+ *  alcance del líder ECU (solo sus grados). */
 async function exportPendientesCalificacion(req: NextRequest): Promise<Response> {
   const actor = await requireAuthenticatedUser("SUPER_ADMIN", "ECU_MASTER", "ECU_LIDER");
   if (!can("run-queries", actor.roles)) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
   const periodId = req.nextUrl.searchParams.get("prueba") ?? "";
-  const groupId = req.nextUrl.searchParams.get("grupo") ?? "";
-  if (!periodId || !groupId) {
+  if (!periodId) {
     return NextResponse.json({ error: "VALIDATION" }, { status: 400 });
   }
 
-  const res = await makeListPendientesCalificacion().execute({ actor, periodId, groupId });
+  const res = await makeListPendientesDePrueba().execute({ actor, periodId });
   if (!res.ok) return NextResponse.json({ error: res.error.code }, { status: 403 });
-  const { informe, error } = res.value;
-  if (!informe) {
-    const code = error?.code ?? "NOT_FOUND";
-    const status = code === "FORBIDDEN" ? 403 : code === "VALIDATION" ? 400 : 404;
-    return NextResponse.json({ error: code }, { status });
-  }
 
-  const buffer = pendientesRowsToWorksheet(informe.filas);
-  return xlsxResponse(
-    buffer,
-    `pendientes-${slug(informe.grupo.name)}-${slug(informe.prueba.name)}.xlsx`,
-  );
+  const buffer = pendientesRowsToWorksheet(res.value.filas);
+  return xlsxResponse(buffer, `pendientes-${slug(res.value.periodo.name)}.xlsx`);
 }
 
 export async function GET(

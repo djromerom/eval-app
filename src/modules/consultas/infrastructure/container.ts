@@ -10,7 +10,10 @@ import { ListFormuladores } from "../application/list-formuladores";
 import { ListCalificaciones } from "../application/list-calificaciones";
 import { ListReglasConteo } from "../application/list-reglas-conteo";
 import { GetInformeGrupo } from "../application/informe-grupo";
-import { ListPendientesCalificacion } from "../application/list-pendientes-calificacion";
+import {
+  ListPendientesCalificacion,
+  ListPendientesDePrueba,
+} from "../application/list-pendientes-calificacion";
 import { PrismaFormulacionesReader } from "./formulaciones-fetcher";
 import { PrismaAsignacionesPendientesReader } from "./asignaciones-pendientes-fetcher";
 import { PrismaPruebasReader } from "./pruebas-fetcher";
@@ -68,3 +71,8 @@ export const makeGetInformeGrupo = () => new GetInformeGrupo(informeGrupoReader,
  *  calificaciones. */
 export const makeListPendientesCalificacion = () =>
   new ListPendientesCalificacion(pendientesCalificacionReader, leaderScope);
+
+/** Pendientes de TODOS los grados de una prueba (lo que exporta el Excel):
+ *  mismo alcance del líder que calificaciones. */
+export const makeListPendientesDePrueba = () =>
+  new ListPendientesDePrueba(pendientesCalificacionReader, leaderScope);

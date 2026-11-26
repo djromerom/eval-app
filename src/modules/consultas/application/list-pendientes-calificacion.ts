@@ -32,7 +32,10 @@ import {
   type ConsolidarPendientesInput,
   consolidarPendientes,
 } from "../domain/queries/pendientes-calificacion/consolidar";
-import type { PendientesInforme } from "../domain/queries/pendientes-calificacion/pendiente";
+import type {
+  FilaPendiente,
+  PendientesInforme,
+} from "../domain/queries/pendientes-calificacion/pendiente";
 import type { OpcionesPruebaGrupo } from "../domain/shared/opciones-prueba-grupo";
 import { pruebaPorDefecto } from "../domain/queries/informe-grupo/informe-grupo";
 import type { LeaderScopeReader } from "./list-calificaciones";
@@ -49,6 +52,14 @@ export interface PendientesCalificacionReader {
     periodId: string,
     groupId: string,
   ): Promise<DatosPendientes | null>;
+  /** Pendientes de TODOS los grados de la prueba, un `DatosPendientes` por
+   *  grupo. Es lo que exporta el Excel: una sola hoja con todos los cursos.
+   *  `courseIds` acota al alcance del líder ECU. */
+  listPendientesDePrueba(
+    institutionId: string,
+    periodId: string,
+    courseIds?: string[],
+  ): Promise<{ periodo: { id: string; name: string }; datos: DatosPendientes[] }>;
 }
 
 export interface ListPendientesCalificacionInput {
@@ -122,5 +133,75 @@ export class ListPendientesCalificacion implements UseCase<
     }
 
     return ok({ opciones, seleccion, informe: consolidarPendientes(datos), error: null });
+  }
+}
+
+export interface ListPendientesDePruebaInput {
+  actor: AuthenticatedUser;
+  /** Prueba (periodo) de la que se quiere el panorama completo. */
+  periodId: string;
+}
+
+export interface ListPendientesDePruebaOutput {
+  periodo: { id: string; name: string };
+  /** Filas de todos los grados, en el orden de los grupos de la institución. */
+  filas: FilaPendiente[];
+  resumen: { sinHoja: number; sinCalificar: number; sinMarcar: number; total: number };
+}
+
+/**
+ * Pendientes de TODOS los grados de una prueba — lo que se exporta a Excel.
+ *
+ * A diferencia de `ListPendientesCalificacion` (que es por grupo, para la
+ * pantalla), aquí no hay filtro de grupo: el archivo lleva todos los cursos de
+ * la prueba en una sola hoja. El alcance por rol se mantiene: el líder ECU solo
+ * ve los grados que tiene asignados.
+ *
+ * El número de lista de cada estudiante es su posición dentro de SU grupo
+ * (es el número impreso en la hoja de respuestas), así que la consolidación
+ * corre por grupo y las filas se concatenan sin reordenar esos números.
+ */
+export class ListPendientesDePrueba implements UseCase<
+  ListPendientesDePruebaInput,
+  ListPendientesDePruebaOutput
+> {
+  constructor(
+    private readonly reader: PendientesCalificacionReader,
+    private readonly scope: LeaderScopeReader,
+  ) {}
+
+  async execute({
+    actor,
+    periodId,
+  }: ListPendientesDePruebaInput): Promise<Result<ListPendientesDePruebaOutput>> {
+    const authorized = requireRole(actor, "ECU_MASTER", "SUPER_ADMIN", "ECU_LIDER");
+    if (!authorized.ok) return authorized;
+
+    const courseIds = hasRole(actor, "ECU_MASTER", "SUPER_ADMIN")
+      ? undefined
+      : await this.scope.listAssignedCourseIds(actor.institutionId, actor.userId);
+
+    const { periodo, datos } = await this.reader.listPendientesDePrueba(
+      actor.institutionId,
+      periodId,
+      courseIds,
+    );
+
+    const informes = datos.map((d) => consolidarPendientes(d));
+    const resumen = informes.reduce(
+      (acc, i) => ({
+        sinHoja: acc.sinHoja + i.resumen.sinHoja,
+        sinCalificar: acc.sinCalificar + i.resumen.sinCalificar,
+        sinMarcar: acc.sinMarcar + i.resumen.sinMarcar,
+        total: acc.total + i.resumen.total,
+      }),
+      { sinHoja: 0, sinCalificar: 0, sinMarcar: 0, total: 0 },
+    );
+
+    return ok({
+      periodo,
+      filas: informes.flatMap((i) => i.filas),
+      resumen,
+    });
   }
 }
