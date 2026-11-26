@@ -39,12 +39,14 @@ import { reglaConteoRowsToWorksheet } from "@/modules/consultas/domain/queries/r
 import { formuladorRowsToWorksheet } from "@/modules/consultas/domain/queries/formuladores/xlsx";
 import { formulacionRowsToWorksheet } from "@/modules/consultas/domain/shared/xlsx-formatter";
 import { informeGrupoToXlsx } from "@/modules/consultas/domain/queries/informe-grupo/xlsx";
+import { pendientesRowsToWorksheet } from "@/modules/consultas/domain/queries/pendientes-calificacion/xlsx";
 import {
   makeGetInformeGrupo,
   makeListAsignacionesPendientes,
   makeListFormulaciones,
   makeListFormuladores,
   makeListReglasConteo,
+  makeListPendientesCalificacion,
 } from "@/modules/consultas/infrastructure/container";
 
 export const dynamic = "force-dynamic"; // siempre fresco; no cachear
@@ -119,12 +121,41 @@ async function exportInformeGrupo(req: NextRequest): Promise<Response> {
   );
 }
 
+/** Pendientes de calificación. El use case aplica el alcance del líder. */
+async function exportPendientesCalificacion(req: NextRequest): Promise<Response> {
+  const actor = await requireAuthenticatedUser("SUPER_ADMIN", "ECU_MASTER", "ECU_LIDER");
+  if (!can("run-queries", actor.roles)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+  const periodId = req.nextUrl.searchParams.get("prueba") ?? "";
+  const groupId = req.nextUrl.searchParams.get("grupo") ?? "";
+  if (!periodId || !groupId) {
+    return NextResponse.json({ error: "VALIDATION" }, { status: 400 });
+  }
+
+  const res = await makeListPendientesCalificacion().execute({ actor, periodId, groupId });
+  if (!res.ok) return NextResponse.json({ error: res.error.code }, { status: 403 });
+  const { informe, error } = res.value;
+  if (!informe) {
+    const code = error?.code ?? "NOT_FOUND";
+    const status = code === "FORBIDDEN" ? 403 : code === "VALIDATION" ? 400 : 404;
+    return NextResponse.json({ error: code }, { status });
+  }
+
+  const buffer = pendientesRowsToWorksheet(informe.filas);
+  return xlsxResponse(
+    buffer,
+    `pendientes-${slug(informe.grupo.name)}-${slug(informe.prueba.name)}.xlsx`,
+  );
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params;
   if (id === "informe-grupo") return exportInformeGrupo(req);
+  if (id === "pendientes-calificacion") return exportPendientesCalificacion(req);
 
   const actor = await requireAuthenticatedUser("SUPER_ADMIN", "ECU_MASTER", "ECU_LIDER");
   if (!can("run-queries", actor.roles)) {

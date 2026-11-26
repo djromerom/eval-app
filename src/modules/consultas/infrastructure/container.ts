@@ -10,6 +10,7 @@ import { ListFormuladores } from "../application/list-formuladores";
 import { ListCalificaciones } from "../application/list-calificaciones";
 import { ListReglasConteo } from "../application/list-reglas-conteo";
 import { GetInformeGrupo } from "../application/informe-grupo";
+import { ListPendientesCalificacion } from "../application/list-pendientes-calificacion";
 import { PrismaFormulacionesReader } from "./formulaciones-fetcher";
 import { PrismaAsignacionesPendientesReader } from "./asignaciones-pendientes-fetcher";
 import { PrismaPruebasReader } from "./pruebas-fetcher";
@@ -17,6 +18,7 @@ import { PrismaFormuladoresReader } from "./formuladores-fetcher";
 import { PrismaCalificacionesReader } from "./calificaciones-fetcher";
 import { PrismaReglasConteoReader } from "./reglas-conteo-fetcher";
 import { PrismaInformeGrupoReader } from "./informe-grupo-fetcher";
+import { PrismaPendientesCalificacionReader } from "./pendientes-calificacion-fetcher";
 import { PrismaLeaderAssignmentRepository } from "@/modules/leader-assignments/infrastructure/prisma-leader-assignment-repository";
 
 /** Singletons (una sola instancia por proceso, sin estado entre requests). */
@@ -27,6 +29,7 @@ const formuladoresReader = new PrismaFormuladoresReader();
 const calificacionesReader = new PrismaCalificacionesReader();
 const reglasConteoReader = new PrismaReglasConteoReader();
 const informeGrupoReader = new PrismaInformeGrupoReader();
+const pendientesCalificacionReader = new PrismaPendientesCalificacionReader();
 
 /** El alcance por grado del ECU_LIDER sale del repo de asignaciones de
  *  líderes, que ya expone `listAssignedCourseIds`. Se reutiliza esa clase en
@@ -60,3 +63,8 @@ export const makeListCalificaciones = () =>
 
 /** Informe detallado por grupo: mismo alcance del líder que calificaciones. */
 export const makeGetInformeGrupo = () => new GetInformeGrupo(informeGrupoReader, leaderScope);
+
+/** Pendientes de calificación por grupo y prueba: mismo alcance del líder que
+ *  calificaciones. */
+export const makeListPendientesCalificacion = () =>
+  new ListPendientesCalificacion(pendientesCalificacionReader, leaderScope);
