@@ -2,22 +2,26 @@
  * Implementación Prisma del `PendientesCalificacionReader` (puerto en
  * `application/`).
  *
- * Cinco queries acotadas, sin N+1: grupo y prueba, estudiantes del grupo,
- * hojas de esos estudiantes en la prueba, cuadernillos de la prueba y las
- * respuestas de esas hojas. La consolidación vive en el dominio
- * (`consolidarPendientes`), acá solo se carga.
+ * Queries acotadas, sin N+1: grupo(s) y prueba, estudiantes, hojas de esos
+ * estudiantes en la prueba, cuadernillos de la prueba y las respuestas de esas
+ * hojas. La consolidación vive en el dominio (`consolidarPendientes`), acá solo
+ * se carga.
+ *
+ * **Dos alcances, la misma carga:**
+ *   - `cargarDatos` → un grupo (la vista en pantalla). Los cuadernillos que
+ *     "se esperan" son los READY de ese grado.
+ *   - `listPendientesDePrueba` → todos los grados de la prueba (el Excel). Los
+ *     cuadernillos que se esperan son los READY de todos los grados, y cada
+ *     estudiante se compara contra los de SU grado (lo hace el dominio, vía
+ *     `courseId`).
  *
  * **Solo hojas de cuadernillo.** Las hojas que cuelgan de una evaluación
  * legacy (`AnswerSheet.evaluationId`) no se cuentan: el camino canónico desde
  * el Sprint 1 es el cuadernillo, y una evaluación suelta que se "espera" de
  * todos los del grado generaría filas de "sin hoja" que nadie puede resolver.
  * Es la misma decisión que toma el informe por grupo.
- *
- * **Qué cuadernillos entran.** Los del grado del grupo que están `READY`
- * (sellados, o sea impresos) más cualquier cuadernillo de la prueba en el que
- * un estudiante del grupo tenga una hoja: así no se pierde una hoja que sí se
- * escaneó.
  */
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/shared/infrastructure/db/prisma";
 import type {
   DatosPendientes,
@@ -29,6 +33,22 @@ import type {
   HojaPendiente,
 } from "../domain/queries/pendientes-calificacion/consolidar";
 import type { OpcionesPruebaGrupo } from "../domain/shared/opciones-prueba-grupo";
+
+/** Grupo con el curso al que pertenece (el grado). */
+interface GrupoAlcance {
+  id: string;
+  name: string;
+  courseId: string;
+  course: { name: string; academicYearId: string };
+}
+
+/** Prueba con su año académico. */
+interface PruebaAlcance {
+  id: string;
+  name: string;
+  academicYearId: string;
+  academicYear: { year: number };
+}
 
 /** Orden de los cuadernillos: número de cuadernillo, luego creación, luego id. */
 function ordenarCuadernillos<
@@ -119,8 +139,71 @@ export class PrismaPendientesCalificacionReader implements PendientesCalificacio
     ]);
     if (!grupo || !prueba) return null;
 
+    // Un solo grupo: los cuadernillos que se esperan son los de su grado.
+    const datos = await this.cargar(institutionId, [grupo], grupo.courseId, prueba);
+    return datos[0] ?? null;
+  }
+
+  async listPendientesDePrueba(
+    institutionId: string,
+    periodId: string,
+    courseIds?: string[],
+  ): Promise<{ periodo: { id: string; name: string }; datos: DatosPendientes[] }> {
+    const [grupos, prueba] = await Promise.all([
+      courseIds && courseIds.length === 0
+        ? Promise.resolve([])
+        : prisma.group.findMany({
+            where: { institutionId, ...(courseIds ? { courseId: { in: courseIds } } : {}) },
+            select: {
+              id: true,
+              name: true,
+              courseId: true,
+              course: { select: { name: true, academicYearId: true } },
+            },
+          }),
+      prisma.period.findFirst({
+        where: { id: periodId, institutionId },
+        select: {
+          id: true,
+          name: true,
+          academicYearId: true,
+          academicYear: { select: { year: true } },
+        },
+      }),
+    ]);
+    if (!prueba) return { periodo: { id: periodId, name: "" }, datos: [] };
+    if (grupos.length === 0) return { periodo: { id: prueba.id, name: prueba.name }, datos: [] };
+
+    // Orden del Excel: por grado y luego por grupo, con collation numérica
+    // ("10" antes que "2"), como el listado de opciones.
+    const gruposOrdenados = [...grupos].sort(
+      (a, b) =>
+        a.course.name.localeCompare(b.course.name, "es", { numeric: true }) ||
+        a.name.localeCompare(b.name, "es", { numeric: true }),
+    );
+
+    // Todos los grados: los cuadernillos que se esperan son los READY de
+    // cualquier curso de la prueba (el dominio los filtra por el grado de
+    // cada estudiante).
+    const datos = await this.cargar(institutionId, gruposOrdenados, null, prueba);
+    return { periodo: { id: prueba.id, name: prueba.name }, datos };
+  }
+
+  /**
+   * Carga compartida por los dos alcances. Devuelve un `DatosPendientes` por
+   * grupo: el número de lista es la posición dentro del grupo, así que la
+   * consolidación tiene que correr por grupo.
+   */
+  private async cargar(
+    institutionId: string,
+    grupos: GrupoAlcance[],
+    courseIdDeCuadernillos: string | null,
+    prueba: PruebaAlcance,
+  ): Promise<DatosPendientes[]> {
+    const grupoIds = grupos.map((g) => g.id);
+
     const estudiantes = await prisma.student.findMany({
-      where: { institutionId, groupId },
+      where: { institutionId, groupId: { in: grupoIds } },
       select: {
         id: true,
         code: true,
@@ -131,6 +214,7 @@ export class PrismaPendientesCalificacionReader implements PendientesCalificacio
         isActive: true,
         deletedAt: true,
         bookletTypeId: true,
+        group: { select: { id: true, courseId: true } },
       },
     });
     const studentIds = estudiantes.map((e) => e.id);
@@ -141,7 +225,7 @@ export class PrismaPendientesCalificacionReader implements PendientesCalificacio
         : await prisma.answerSheet.findMany({
             where: {
               studentId: { in: studentIds },
-              bundle: { institutionId, periodId },
+              bundle: { institutionId, periodId: prueba.id },
             },
             select: {
               id: true,
@@ -160,15 +244,21 @@ export class PrismaPendientesCalificacionReader implements PendientesCalificacio
       ...new Set(hojas.map((h) => h.bundleId).filter((b): b is string => b !== null)),
     ];
 
+    const dondeCuadernillo: Prisma.EvaluationBundleWhereInput = {
+      institutionId,
+      periodId: prueba.id,
+      // Los READY: un DRAFT no se imprimió y sería una columna siempre vacía.
+      // Por hojas: cualquiera, para no perder hojas ya escaneadas.
+      OR: [
+        courseIdDeCuadernillos === null
+          ? { status: "READY" }
+          : { courseId: courseIdDeCuadernillos, status: "READY" },
+        { id: { in: bundleIdsDeHojas } },
+      ],
+    };
+
     const cuadernillos = await prisma.evaluationBundle.findMany({
-      where: {
-        institutionId,
-        periodId,
-        // Del grado: solo los READY (un DRAFT no se imprimió y sería una
-        // columna siempre vacía). Por hojas: cualquiera, para no perder
-        // hojas ya escaneadas.
-        OR: [{ courseId: grupo.courseId, status: "READY" }, { id: { in: bundleIdsDeHojas } }],
-      },
+      where: dondeCuadernillo,
       select: {
         id: true,
         name: true,
@@ -238,23 +328,42 @@ export class PrismaPendientesCalificacionReader implements PendientesCalificacio
             it.evaluation.courseSubject.subject.shortName?.trim() ||
             it.evaluation.courseSubject.subject.name,
         ),
-        delGrado: c.courseId === grupo.courseId,
+        courseId: c.courseId,
         listo: c.status === "READY",
       }),
     );
 
-    const estudiantesMapeados: EstudiantePendiente[] = estudiantes.map((e) => ({
-      id: e.id,
-      code: e.code,
-      lastName1: e.lastName1,
-      lastName2: e.lastName2,
-      firstName1: e.firstName1,
-      firstName2: e.firstName2,
-      activo: e.isActive && e.deletedAt === null,
-      bookletTypeId: e.bookletTypeId,
-    }));
+    const estudiantesPorGrupo = new Map<string, EstudiantePendiente[]>();
+    const grupoPorEstudiante = new Map<string, string>();
+    for (const e of estudiantes) {
+      const grupoId = e.group?.id ?? "";
+      const cursoId = e.group?.courseId ?? "";
+      grupoPorEstudiante.set(e.id, grupoId);
+      const lista = estudiantesPorGrupo.get(grupoId) ?? [];
+      lista.push({
+        id: e.id,
+        code: e.code,
+        lastName1: e.lastName1,
+        lastName2: e.lastName2,
+        firstName1: e.firstName1,
+        firstName2: e.firstName2,
+        activo: e.isActive && e.deletedAt === null,
+        bookletTypeId: e.bookletTypeId,
+        courseId: cursoId,
+      });
+      estudiantesPorGrupo.set(grupoId, lista);
+    }
 
-    return {
+    const hojasPorGrupo = new Map<string, HojaPendiente[]>();
+    for (const h of hojasMapeadas) {
+      const grupoId = grupoPorEstudiante.get(h.studentId);
+      if (!grupoId) continue;
+      const lista = hojasPorGrupo.get(grupoId) ?? [];
+      lista.push(h);
+      hojasPorGrupo.set(grupoId, lista);
+    }
+
+    return grupos.map((g) => ({
       prueba: {
         id: prueba.id,
         name: prueba.name,
@@ -262,15 +371,15 @@ export class PrismaPendientesCalificacionReader implements PendientesCalificacio
         academicYearId: prueba.academicYearId,
       },
       grupo: {
-        id: grupo.id,
-        name: grupo.name,
-        courseName: grupo.course.name,
-        courseId: grupo.courseId,
-        academicYearId: grupo.course.academicYearId,
+        id: g.id,
+        name: g.name,
+        courseName: g.course.name,
+        courseId: g.courseId,
+        academicYearId: g.course.academicYearId,
       },
-      estudiantes: estudiantesMapeados,
+      estudiantes: estudiantesPorGrupo.get(g.id) ?? [],
       cuadernillos: cuadernillosMapeados,
-      hojas: hojasMapeadas,
-    };
+      hojas: hojasPorGrupo.get(g.id) ?? [],
+    }));
   }
 }

@@ -69,7 +69,10 @@ export function PendientesCalificacionView({
         actions={
           informe ? (
             <a
-              href={`${pathname}/export.xlsx${buildQuery(informe.prueba.id, informe.grupo.id)}`}
+              // El Excel lleva TODOS los grados de la prueba en una sola
+              // hoja, así que solo necesita la prueba: el grupo de la
+              // pantalla no acota la exportación.
+              href={`${pathname}/export.xlsx${buildQuery(informe.prueba.id, null)}`}
               download
               className="border-input bg-background hover:bg-accent hover:text-accent-foreground inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
             >
