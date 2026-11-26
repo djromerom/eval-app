@@ -7,6 +7,7 @@ import type { AuthenticatedUser } from "@/shared/application/authenticated-user"
 import {
   type DatosPendientes,
   ListPendientesCalificacion,
+  ListPendientesDePrueba,
   type PendientesCalificacionReader,
 } from "@/modules/consultas/application/list-pendientes-calificacion";
 import {
@@ -34,6 +35,7 @@ function estudiante(id: string, over: Partial<EstudiantePendiente> = {}): Estudi
     firstName2: "",
     activo: true,
     bookletTypeId: null,
+    courseId: "c10",
     ...over,
   };
 }
@@ -44,7 +46,7 @@ function cuadernillo(id: string, over: Partial<CuadernilloPendiente> = {}): Cuad
     name: `Cuadernillo ${id}`,
     bookletTypeId: null,
     asignaturas: ["MAT", "FIS"],
-    delGrado: true,
+    courseId: "c10",
     listo: true,
     ...over,
   };
@@ -214,13 +216,36 @@ describe("consolidarPendientes", () => {
     const r = consolidarPendientes(
       input({
         estudiantes: [estudiante("e1")],
-        cuadernillos: [cuadernillo("b1", { delGrado: false })],
+        cuadernillos: [cuadernillo("b1", { courseId: "c11" })],
         hojas: [hoja("e1", "b1", { score: null, totalCorrect: null, totalQuestions: null })],
       }),
     );
 
     expect(r.filas).toHaveLength(1);
     expect(r.filas[0]?.motivo).toBe("sin-calificar");
+  });
+
+  it("un cuadernillo de otro grado no se le espera: no sale como 'sin-hoja'", () => {
+    const r = consolidarPendientes(
+      input({
+        estudiantes: [estudiante("e1")],
+        cuadernillos: [cuadernillo("b1", { courseId: "c11" })],
+      }),
+    );
+
+    expect(r.filas).toHaveLength(0);
+  });
+
+  it("un compendio sin curso (cross-grado) se le espera a todos", () => {
+    const r = consolidarPendientes(
+      input({
+        estudiantes: [estudiante("e1", { courseId: "c11" })],
+        cuadernillos: [cuadernillo("b1", { courseId: null })],
+      }),
+    );
+
+    expect(r.filas).toHaveLength(1);
+    expect(r.filas[0]?.motivo).toBe("sin-hoja");
   });
 
   it("con dos hojas del mismo estudiante y cuadernillo manda la más reciente", () => {
@@ -378,6 +403,9 @@ class ReaderFake implements PendientesCalificacionReader {
   opcionesPedidas: (string[] | undefined)[] = [];
   datosPedidos: [string, string][] = [];
   cargar: DatosPendientes | null = datos();
+  /** Datos que devuelve `listPendientesDePrueba` (uno por grupo). */
+  porGrupo: DatosPendientes[] = [];
+  pruebaPedida: [string, string[] | undefined][] = [];
   async listOpciones(_i: string, courseIds?: string[]) {
     this.opcionesPedidas.push(courseIds);
     return courseIds
@@ -390,6 +418,10 @@ class ReaderFake implements PendientesCalificacionReader {
   async cargarDatos(_i: string, periodId: string, groupId: string) {
     this.datosPedidos.push([periodId, groupId]);
     return this.cargar;
+  }
+  async listPendientesDePrueba(_i: string, periodId: string, courseIds?: string[]) {
+    this.pruebaPedida.push([periodId, courseIds]);
+    return { periodo: { id: periodId, name: "2026-2" }, datos: this.porGrupo };
   }
 }
 
@@ -481,5 +513,100 @@ describe("ListPendientesCalificacion - selección", () => {
     const r = await uc.execute({ actor: master, periodId: "p-2026", groupId: "g-ajeno" });
     if (r.ok) expect(r.value.error?.code).toBe("NOT_FOUND");
     expect(reader.datosPedidos).toEqual([]);
+  });
+});
+
+describe("ListPendientesDePrueba - Excel de todos los grados", () => {
+  let ucPrueba: ListPendientesDePrueba;
+
+  beforeEach(() => {
+    ucPrueba = new ListPendientesDePrueba(reader, new ScopeFake(["c10"]));
+  });
+
+  it("el docente no tiene acceso", async () => {
+    const r = await ucPrueba.execute({ actor: docente, periodId: "p-2026" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("FORBIDDEN");
+  });
+
+  it("el master pide la prueba sin acotar por grados", async () => {
+    reader.porGrupo = [
+      datos({
+        grupo: {
+          id: "g-1001",
+          name: "1001",
+          courseName: "10",
+          courseId: "c10",
+          academicYearId: "y26",
+        },
+        estudiantes: [estudiante("e1")],
+        cuadernillos: [cuadernillo("b1")],
+      }),
+    ];
+
+    const r = await ucPrueba.execute({ actor: master, periodId: "p-2026" });
+    expect(r.ok).toBe(true);
+    expect(reader.pruebaPedida).toEqual([["p-2026", undefined]]);
+    if (r.ok) {
+      expect(r.value.periodo.name).toBe("2026-2");
+      expect(r.value.filas).toHaveLength(1);
+      expect(r.value.filas[0]?.motivo).toBe("sin-hoja");
+      expect(r.value.resumen).toEqual({
+        sinHoja: 1,
+        sinCalificar: 0,
+        sinMarcar: 0,
+        total: 1,
+      });
+    }
+  });
+
+  it("el líder queda acotado a sus grados", async () => {
+    await ucPrueba.execute({ actor: lider, periodId: "p-2026" });
+    expect(reader.pruebaPedida).toEqual([["p-2026", ["c10"]]]);
+  });
+
+  it("concatena las filas de todos los grupos en una sola lista", async () => {
+    reader.porGrupo = [
+      datos({
+        grupo: {
+          id: "g-1001",
+          name: "1001",
+          courseName: "10",
+          courseId: "c10",
+          academicYearId: "y26",
+        },
+        estudiantes: [estudiante("e1")],
+        cuadernillos: [cuadernillo("b1")],
+      }),
+      datos({
+        grupo: {
+          id: "g-1101",
+          name: "1101",
+          courseName: "11",
+          courseId: "c11",
+          academicYearId: "y26",
+        },
+        estudiantes: [estudiante("e2", { courseId: "c11" })],
+        cuadernillos: [cuadernillo("b2", { courseId: "c11" })],
+      }),
+    ];
+
+    const r = await ucPrueba.execute({ actor: master, periodId: "p-2026" });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.filas.map((f) => f.groupName)).toEqual(["1001", "1101"]);
+      expect(r.value.filas.map((f) => f.courseName)).toEqual(["10", "11"]);
+      expect(r.value.resumen.total).toBe(2);
+    }
+  });
+
+  it("sin datos devuelve el panorama vacío, sin error", async () => {
+    reader.porGrupo = [];
+    const r = await ucPrueba.execute({ actor: master, periodId: "p-2026" });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.filas).toEqual([]);
+      expect(r.value.resumen.total).toBe(0);
+    }
   });
 });

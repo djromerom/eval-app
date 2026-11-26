@@ -18,15 +18,21 @@
  *     pendiente. `selectedKey` es `null` cuando el motor no vio marca
  *     (`BLANCO`) o vio varias (`MULTIPLE`), y el literal "BLANCO" se acepta
  *     por si quedó en datos viejos.
- *   - **A quién se le espera un cuadernillo**: a los del grado del grupo, y
- *     solo a los cuadernillos de ese tipo. El tipo importa porque así se
- *     imprime: un cuadernillo "Especial" solo se le entrega a los estudiantes
+ *   - **A quién se le espera un cuadernillo**: a los del mismo grado que el
+ *     estudiante, y solo a los cuadernillos de su tipo. El grado importa
+ *     porque así se imprime (un cuadernillo es de un curso), y el tipo
+ *     también: un cuadernillo "Especial" solo se le entrega a los estudiantes
  *     con ese tipo de cuadernillo, y un cuadernillo sin tipo se le entrega a
- *     todos. Un cuadernillo en DRAFT no se imprimió, así que nadie debe una
+ *     todos. Un compendio sin curso (cross-grado) se le espera a todo el
+ *     mundo, y un cuadernillo en DRAFT no se imprimió, así que nadie debe una
  *     hoja de él.
  *   - **Estudiantes**: solo los activos. Los retirados se los trae para
  *     calcular el número de lista (igual que la impresión), pero no se
  *     listan.
+ *   - **Un grupo por consolidación**: el número de lista es la posición del
+ *     estudiante dentro de SU grupo, así que la consolidación se corre por
+ *     grupo. El Excel de "todos los grados" concatena las filas de cada grupo
+ *     sin reordenar los números de lista.
  */
 import { listPositionByName } from "@/modules/students/domain/student";
 import { nombreCompleto } from "@/modules/students/domain/nombre-completo";
@@ -44,6 +50,8 @@ export interface EstudiantePendiente {
   activo: boolean;
   /** Tipo de cuadernillo del estudiante (`BookletType.id`). `null` = sin tipo. */
   bookletTypeId: string | null;
+  /** Grado del estudiante: el curso de su grupo. */
+  courseId: string;
 }
 
 export interface CuadernilloPendiente {
@@ -53,8 +61,9 @@ export interface CuadernilloPendiente {
   bookletTypeId: string | null;
   /** Siglas de las asignaturas que cubre el cuadernillo. */
   asignaturas: string[];
-  /** El cuadernillo es del grado del grupo. */
-  delGrado: boolean;
+  /** Grado del cuadernillo (`Course.id`). `null` = compendio cross-grado: se
+   *  le espera a todo el mundo. */
+  courseId: string | null;
   /** `READY` = sellado y por lo tanto impreso. Un DRAFT no se imprimió. */
   listo: boolean;
 }
@@ -115,7 +124,10 @@ export function esperaCuadernillo(
   cuadernillo: CuadernilloPendiente,
   estudiante: EstudiantePendiente,
 ): boolean {
-  if (!cuadernillo.delGrado || !cuadernillo.listo) return false;
+  if (!cuadernillo.listo) return false;
+  // Un compendio sin curso (cross-grado) se le espera a todo el mundo; uno
+  // con curso, solo a los estudiantes de ese grado.
+  if (cuadernillo.courseId !== null && cuadernillo.courseId !== estudiante.courseId) return false;
   // Un cuadernillo sin tipo se imprime para todos los del grado; uno con tipo
   // solo para los estudiantes de ese tipo.
   return (
