@@ -11,6 +11,7 @@ import {
   makeListCalificaciones,
   makeListReglasConteo,
   makeGetInformeGrupo,
+  makeListPendientesCalificacion,
 } from "@/modules/consultas/infrastructure/container";
 import { pruebaActual } from "@/modules/consultas/domain/shared/prueba-opcion";
 import { FormulacionesTable } from "./_components/formulaciones-table";
@@ -18,6 +19,7 @@ import { FormuladoresTable } from "./_components/formuladores-table";
 import { CalificacionesTable } from "./_components/calificaciones-table";
 import { ReglasConteoTable } from "./_components/reglas-conteo-table";
 import { InformeGrupoView } from "./_components/informe-grupo-view";
+import { PendientesCalificacionView } from "./_components/pendientes-calificacion-view";
 
 export const metadata: Metadata = { title: "Consulta" };
 
@@ -60,6 +62,30 @@ export default async function ConsultaDetallePage({
     });
     return (
       <InformeGrupoView
+        title={consulta.title}
+        description={consulta.description}
+        opciones={res.ok ? res.value.opciones : { pruebas: [], grupos: [] }}
+        seleccion={
+          res.ok ? res.value.seleccion : { periodId: sp.prueba ?? null, groupId: sp.grupo ?? null }
+        }
+        informe={res.ok ? res.value.informe : null}
+        error={res.ok ? (res.value.error?.message ?? null) : res.error.message}
+      />
+    );
+  }
+
+  // Pendientes de calificación: mismos filtros que el informe por grupo
+  // (prueba + grupo), porque el reporte se arma en el servidor para esa
+  // selección.
+  if (id === "pendientes-calificacion") {
+    const sp = (await searchParams) ?? {};
+    const res = await makeListPendientesCalificacion().execute({
+      actor,
+      periodId: sp.prueba || undefined,
+      groupId: sp.grupo || undefined,
+    });
+    return (
+      <PendientesCalificacionView
         title={consulta.title}
         description={consulta.description}
         opciones={res.ok ? res.value.opciones : { pruebas: [], grupos: [] }}

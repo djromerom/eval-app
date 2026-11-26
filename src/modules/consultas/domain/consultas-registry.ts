@@ -93,6 +93,24 @@ export const CONSULTAS: readonly ConsultaConfig[] = [
     ],
     roles: ["ECU_MASTER", "SUPER_ADMIN"],
   },
+  {
+    id: "pendientes-calificacion",
+    title: "Pendientes de calificación",
+    description:
+      "Estudiantes de un grupo, en una prueba, que no tienen calificación o que no marcaron ninguna opción de respuesta. Una fila por estudiante y cuadernillo: los que no entregaron la hoja, los que están sin calificar y los que no contestaron nada.",
+    columns: [
+      "Item",
+      "Estudiante",
+      "Código",
+      "Cuadernillo",
+      "Asignaturas",
+      "Motivo",
+      "Estado",
+      "Respuestas",
+      "Puntaje",
+    ],
+    roles: ["ECU_MASTER", "SUPER_ADMIN", "ECU_LIDER"],
+  },
 ] as const;
 
 /** Consultas visibles para un conjunto de roles. La usa `/admin/consultas`
